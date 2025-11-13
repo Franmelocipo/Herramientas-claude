@@ -21,7 +21,7 @@ dropZone.addEventListener('click', (e) => {
 
 // Prevenir comportamiento por defecto en drag & drop
 ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-    dropZone.addEventListener(eventName', preventDefaults, false);
+    dropZone.addEventListener(eventName, preventDefaults, false);
 });
 
 function preventDefaults(e) {
