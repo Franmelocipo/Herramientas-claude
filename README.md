@@ -19,6 +19,22 @@ Convierte resúmenes de Mercado Pago en formato de extracto bancario contable co
 
 [📖 Ver documentación completa](./herramientas/mercado-pago-converter/README.md)
 
+### 2. Conversor de Asientos Contables
+**📝 Estado:** ✅ Disponible
+
+Convierte datos de diferentes orígenes a formato de asientos contables listos para importar en sistemas contables.
+
+**Características:**
+- Soporte para múltiples orígenes: Extractos bancarios, VEPs ARCA, Compensaciones ARCA, Registros del cliente
+- Gestión de clientes con persistencia local (LocalStorage)
+- Importación y gestión de planes de cuentas por cliente
+- Buscador inteligente de cuentas con autocompletado
+- Agrupación automática de movimientos similares
+- Exportación lista para importar
+- 100% local (no envía datos a servidores externos)
+
+[📖 Ver documentación completa](./herramientas/conversor-asientos/README.md)
+
 ## Estructura del Proyecto
 
 ```
@@ -26,10 +42,15 @@ Herramientas-claude/
 ├── index.html                          # Página principal
 ├── README.md                           # Este archivo
 ├── herramientas/                       # Directorio de herramientas
-│   └── mercado-pago-converter/        # Convertidor Mercado Pago
+│   ├── mercado-pago-converter/        # Convertidor Mercado Pago
+│   │   ├── index.html                  # Aplicación
+│   │   ├── styles.css                  # Estilos
+│   │   ├── script.js                   # Lógica
+│   │   └── README.md                   # Documentación
+│   └── conversor-asientos/            # Conversor de Asientos Contables
 │       ├── index.html                  # Aplicación
 │       ├── styles.css                  # Estilos
-│       ├── script.js                   # Lógica
+│       ├── script.js                   # Lógica (con LocalStorage)
 │       └── README.md                   # Documentación
 └── assets/                             # Recursos compartidos (opcional)
     ├── css/

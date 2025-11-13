@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversor de Asientos Contables</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <!-- Header -->
+            <div class="header">
+                <div class="header-left">
+                    <div class="icon-title">📊</div>
+                    <div>
+                        <h1>Conversor de Asientos Contables</h1>
+                        <p class="subtitle" id="subtitle">Selecciona el origen</p>
+                        <p class="client-name" id="clientName"></p>
+                    </div>
+                </div>
+                <div class="header-buttons">
+                    <button id="btnClientManager" class="btn-secondary">Gestionar Clientes</button>
+                    <button id="btnReset" class="btn-secondary hidden">Nueva conversión</button>
+                </div>
+            </div>
+
+            <!-- Modal Gestión de Clientes -->
+            <div id="modalClientManager" class="modal hidden">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>Gestión de Clientes</h2>
+                        <button class="close-btn" id="btnCloseClientManager">✕</button>
+                    </div>
+                    <button id="btnNewClient" class="btn-primary mb-4">+ Nuevo Cliente</button>
+                    <div id="clientsList" class="clients-list"></div>
+                </div>
+            </div>
+
+            <!-- Modal Nuevo Cliente -->
+            <div id="modalNewClient" class="modal hidden">
+                <div class="modal-content-sm">
+                    <h3>Nuevo Cliente</h3>
+                    <input type="text" id="newClientName" placeholder="Nombre del cliente" class="input-text mb-4">
+                    <div class="btn-group">
+                        <button id="btnCancelNewClient" class="btn-secondary">Cancelar</button>
+                        <button id="btnCreateClient" class="btn-primary">Crear</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paso 0: Selección de tipo -->
+            <div id="step0" class="step">
+                <h3 class="step-title">Tipo de archivo origen</h3>
+                <div class="source-types-grid">
+                    <button class="source-type-btn" data-type="extracto">
+                        <div class="source-icon">🏦</div>
+                        <h4>Extracto Bancario</h4>
+                    </button>
+                    <button class="source-type-btn" data-type="registros">
+                        <div class="source-icon">📝</div>
+                        <h4>Registros del Cliente</h4>
+                    </button>
+                    <button class="source-type-btn" data-type="veps">
+                        <div class="source-icon">🧾</div>
+                        <h4>VEPs ARCA</h4>
+                    </button>
+                    <button class="source-type-btn" data-type="compensaciones">
+                        <div class="source-icon">🔄</div>
+                        <h4>Compensaciones ARCA</h4>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Paso 1: Upload -->
+            <div id="step1" class="step hidden">
+                <div class="upload-zone">
+                    <div class="upload-content">
+                        <div class="upload-icon">📤</div>
+                        <h3>Subir archivo</h3>
+                        <p class="upload-type">Tipo: <strong id="sourceTypeName"></strong></p>
+                        <input type="file" id="fileInput" accept=".xlsx,.xls" class="file-input hidden">
+                        <button id="btnSelectFile" class="btn-primary">Seleccionar Excel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paso 2: Asignación de cuentas -->
+            <div id="step2" class="step hidden">
+                <h3 class="step-title">Asignar códigos de cuenta</h3>
+                <p class="step-subtitle" id="groupStats"></p>
+
+                <!-- Cuenta de banco/contrapartida -->
+                <div id="bankAccountSection" class="bank-account-section hidden">
+                    <label id="bankAccountLabel">Cuenta del Banco (contrapartida)</label>
+                    <div class="input-with-dropdown">
+                        <input type="text" id="bankAccountInput" placeholder="Ej: 11010101" class="input-text">
+                        <div id="bankAccountDropdown" class="account-dropdown hidden"></div>
+                    </div>
+                </div>
+
+                <!-- Info para compensaciones -->
+                <div id="compensacionesInfo" class="info-box hidden">
+                    <p>💡 <strong>Compensaciones:</strong> ORIGEN (🔵) = HABER (sale). DESTINO (🟢) = DEBE (entra).</p>
+                </div>
+
+                <!-- Lista de grupos -->
+                <div id="groupsList" class="groups-list"></div>
+
+                <div class="btn-group mt-4">
+                    <button id="btnBackToUpload" class="btn-secondary">← Volver</button>
+                    <button id="btnGenerateFinal" class="btn-primary flex-1">Generar archivo final</button>
+                </div>
+            </div>
+
+            <!-- Paso 3: Descarga -->
+            <div id="step3" class="step hidden">
+                <h3 class="step-title">✅ Asientos generados</h3>
+                <p class="step-subtitle" id="finalStats"></p>
+
+                <div class="preview-container">
+                    <div class="preview-header">
+                        <h4>Vista Previa (primeras 30 líneas)</h4>
+                    </div>
+                    <div class="preview-table-container">
+                        <table class="preview-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Nº</th>
+                                    <th>Cuenta</th>
+                                    <th class="text-right">Debe</th>
+                                    <th class="text-right">Haber</th>
+                                    <th>Leyenda</th>
+                                </tr>
+                            </thead>
+                            <tbody id="previewTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="btn-group mt-4">
+                    <button id="btnBackToAssignment" class="btn-secondary">← Volver</button>
+                    <button id="btnDownloadExcel" class="btn-success flex-1">
+                        ⬇️ Descargar Excel con Asientos
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
