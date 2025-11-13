@@ -300,6 +300,9 @@ async function processFile() {
                     // Movimiento principal - USAR SALDO DEL ARCHIVO
                     const esCredito = montoBruto > 0;
 
+                    // Detectar si es una devolución
+                    const esDevolucion = String(descripcionBase).toLowerCase().includes('devolución de dinero');
+
                     todosLosMovimientos.push({
                         fecha,
                         descripcion: descripcionCompleta,
@@ -313,14 +316,17 @@ async function processFile() {
                     // MONTO BRUTO y MONTO NETO, por lo que NO debemos desagregarlas del saldo.
                     // Las mostramos solo como información y todas comparten el mismo saldo del archivo.
 
+                    // Si es una devolución, comisiones e impuestos también son devoluciones (créditos)
+                    // Si no es devolución, son débitos normales
+
                     // Mostrar comisiones como información (mismo saldo)
                     if (comisionMP > 0) {
                         todosLosMovimientos.push({
                             fecha,
-                            descripcion: 'Comisión Mercado Pago (incluye IVA)',
+                            descripcion: esDevolucion ? 'Devolución - Comisión Mercado Pago (incluye IVA)' : 'Comisión Mercado Pago (incluye IVA)',
                             origen: 'Mercado Pago',
-                            credito: 0,
-                            debito: comisionMP,
+                            credito: esDevolucion ? comisionMP : 0,
+                            debito: esDevolucion ? 0 : comisionMP,
                             saldo: saldoDelArchivo
                         });
                     }
@@ -328,10 +334,10 @@ async function processFile() {
                     if (comisionCuotas > 0) {
                         todosLosMovimientos.push({
                             fecha,
-                            descripcion: 'Comisión por ofrecer cuotas sin interés',
+                            descripcion: esDevolucion ? 'Devolución - Comisión por ofrecer cuotas sin interés' : 'Comisión por ofrecer cuotas sin interés',
                             origen: 'Mercado Pago',
-                            credito: 0,
-                            debito: comisionCuotas,
+                            credito: esDevolucion ? comisionCuotas : 0,
+                            debito: esDevolucion ? 0 : comisionCuotas,
                             saldo: saldoDelArchivo
                         });
                     }
@@ -339,10 +345,10 @@ async function processFile() {
                     if (costoEnvio > 0) {
                         todosLosMovimientos.push({
                             fecha,
-                            descripcion: 'Costo de envío',
+                            descripcion: esDevolucion ? 'Devolución - Costo de envío' : 'Costo de envío',
                             origen: 'Mercado Pago',
-                            credito: 0,
-                            debito: costoEnvio,
+                            credito: esDevolucion ? costoEnvio : 0,
+                            debito: esDevolucion ? 0 : costoEnvio,
                             saldo: saldoDelArchivo
                         });
                     }
@@ -350,10 +356,10 @@ async function processFile() {
                     if (cuponDescuento > 0) {
                         todosLosMovimientos.push({
                             fecha,
-                            descripcion: 'Cupón de descuento',
+                            descripcion: esDevolucion ? 'Devolución - Cupón de descuento' : 'Cupón de descuento',
                             origen: 'Mercado Pago',
-                            credito: 0,
-                            debito: cuponDescuento,
+                            credito: esDevolucion ? cuponDescuento : 0,
+                            debito: esDevolucion ? 0 : cuponDescuento,
                             saldo: saldoDelArchivo
                         });
                     }
@@ -404,12 +410,15 @@ async function processFile() {
                             if (impuesto.monto > 0) {
                                 const tipoImpuesto = getTipoImpuesto(impuesto.tipo, impuesto.entidad);
 
+                                // Si es devolución, agregar prefijo y mostrar como crédito
+                                const descripcionImpuesto = esDevolucion ? `Devolución - ${tipoImpuesto}` : tipoImpuesto;
+
                                 todosLosMovimientos.push({
                                     fecha,
-                                    descripcion: tipoImpuesto,
+                                    descripcion: descripcionImpuesto,
                                     origen: 'Mercado Pago',
-                                    credito: 0,
-                                    debito: impuesto.monto,
+                                    credito: esDevolucion ? impuesto.monto : 0,
+                                    debito: esDevolucion ? 0 : impuesto.monto,
                                     saldo: saldoDelArchivo
                                 });
                             }
@@ -417,10 +426,10 @@ async function processFile() {
                     } else if (impuestosIIBB > 0) {
                         todosLosMovimientos.push({
                             fecha,
-                            descripcion: 'Retenciones de Impuestos',
+                            descripcion: esDevolucion ? 'Devolución - Retenciones de Impuestos' : 'Retenciones de Impuestos',
                             origen: 'Mercado Pago',
-                            credito: 0,
-                            debito: impuestosIIBB,
+                            credito: esDevolucion ? impuestosIIBB : 0,
+                            debito: esDevolucion ? 0 : impuestosIIBB,
                             saldo: saldoDelArchivo
                         });
                     }
