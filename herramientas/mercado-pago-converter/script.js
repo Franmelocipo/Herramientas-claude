@@ -297,6 +297,9 @@ async function processFile() {
                     const impuestosIIBB = Math.abs(parseFloat(row['IMPUESTOS COBRADOS POR RETENCIONES IIBB']) || 0);
                     const cuponDescuento = Math.abs(parseFloat(row['CUPÓN DE DESCUENTO']) || 0);
 
+                    // Costo por ofrecer descuento (puede ser positivo o negativo)
+                    const costoOfrecerDescuento = parseFloat(row['COSTO POR OFRECER DESCUENTO']) || 0;
+
                     // Movimiento principal - USAR SALDO DEL ARCHIVO
                     const esCredito = montoBruto > 0;
 
@@ -360,6 +363,22 @@ async function processFile() {
                             origen: 'Mercado Pago',
                             credito: esDevolucion ? cuponDescuento : 0,
                             debito: esDevolucion ? 0 : cuponDescuento,
+                            saldo: saldoDelArchivo
+                        });
+                    }
+
+                    // Costo por ofrecer descuento (puede ser positivo o negativo)
+                    if (costoOfrecerDescuento !== 0) {
+                        // Si es negativo → débito, si es positivo → crédito
+                        const esDebitoDescuento = costoOfrecerDescuento < 0;
+                        const montoAbsoluto = Math.abs(costoOfrecerDescuento);
+
+                        todosLosMovimientos.push({
+                            fecha,
+                            descripcion: 'Costo por ofrecer descuento',
+                            origen: 'Mercado Pago',
+                            credito: esDebitoDescuento ? 0 : montoAbsoluto,
+                            debito: esDebitoDescuento ? montoAbsoluto : 0,
                             saldo: saldoDelArchivo
                         });
                     }
