@@ -367,23 +367,8 @@ async function processFile() {
                         });
                     }
 
-                    // Costo por ofrecer descuento (puede ser positivo o negativo)
-                    if (costoOfrecerDescuento !== 0) {
-                        // Si es negativo → débito, si es positivo → crédito
-                        const esDebitoDescuento = costoOfrecerDescuento < 0;
-                        const montoAbsoluto = Math.abs(costoOfrecerDescuento);
-
-                        todosLosMovimientos.push({
-                            fecha,
-                            descripcion: 'Costo por ofrecer descuento',
-                            origen: 'Mercado Pago',
-                            credito: esDebitoDescuento ? 0 : montoAbsoluto,
-                            debito: esDebitoDescuento ? montoAbsoluto : 0,
-                            saldo: saldoDelArchivo
-                        });
-                    }
-
-                    // Procesar OPERATION_TAGS para reintegros/cupones
+                    // Procesar OPERATION_TAGS para reintegros/cupones primero
+                    let tieneOperationTags = false;
                     const operationTags = row['OPERATION_TAGS'];
                     if (operationTags && String(operationTags) !== 'nan' && String(operationTags) !== '') {
                         try {
@@ -400,6 +385,7 @@ async function processFile() {
                             if (Array.isArray(tags)) {
                                 tags.forEach(tag => {
                                     if (tag.amount && tag.amount > 0) {
+                                        tieneOperationTags = true;
                                         const tipoReintegro = tag.coupon_type || 'reintegro';
                                         const descripcionReintegro = tipoReintegro === 'coupon'
                                             ? 'Reintegro por cupón/descuento'
@@ -419,6 +405,23 @@ async function processFile() {
                         } catch (e) {
                             console.warn('Error parseando OPERATION_TAGS:', operationTags, e);
                         }
+                    }
+
+                    // Costo por ofrecer descuento (solo si NO hay OPERATION_TAGS)
+                    // Esto evita duplicar la información del mismo concepto
+                    if (costoOfrecerDescuento !== 0 && !tieneOperationTags) {
+                        // Si es negativo → débito, si es positivo → crédito
+                        const esDebitoDescuento = costoOfrecerDescuento < 0;
+                        const montoAbsoluto = Math.abs(costoOfrecerDescuento);
+
+                        todosLosMovimientos.push({
+                            fecha,
+                            descripcion: 'Costo por ofrecer descuento',
+                            origen: 'Mercado Pago',
+                            credito: esDebitoDescuento ? 0 : montoAbsoluto,
+                            debito: esDebitoDescuento ? montoAbsoluto : 0,
+                            saldo: saldoDelArchivo
+                        });
                     }
 
                     // Mostrar impuestos desagregados como información (mismo saldo)
