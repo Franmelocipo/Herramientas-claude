@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convertidor de Extractos - Mercado Pago</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <div class="icon">📊</div>
+                <div>
+                    <h1>Convertidor de Extractos Mercado Pago</h1>
+                    <div class="subtitle">
+                        Convierte tus resúmenes de Mercado Pago a formato extracto bancario
+                    </div>
+                </div>
+            </div>
+
+            <div class="file-input-wrapper">
+                <label>Seleccionar archivo(s) de Excel de Mercado Pago</label>
+                <div id="dropZone">
+                    <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
+                    <div style="font-size: 16px; color: #4a5568; margin-bottom: 10px;">
+                        <strong>Arrastra archivos aquí</strong> o haz clic para seleccionar
+                    </div>
+                    <div style="font-size: 14px; color: #718096;">
+                        Puedes seleccionar múltiples archivos (Ctrl+Click o Cmd+Click)
+                    </div>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" multiple style="display: none;">
+                </div>
+                <div id="fileList">
+                    <strong>Archivos seleccionados:</strong>
+                    <ul id="fileListItems"></ul>
+                </div>
+            </div>
+
+            <button id="processBtn" disabled>Procesar archivo</button>
+
+            <div id="errorBox" class="error-box hidden"></div>
+
+            <div class="info-box">
+                <h3>ℹ️ Instrucciones:</h3>
+                <ul>
+                    <li>Puedes seleccionar uno o varios archivos de Excel simultáneamente</li>
+                    <li>Solo se procesarán registros de tipo "Dinero liquidado"</li>
+                    <li><strong>Se incluirán</strong>: "Pago", "Extracción de efectivo" y "Devolución de dinero"</li>
+                    <li><strong>Se excluirán</strong>: "Reserva para pago" y "Consumos pendientes de confirmación"</li>
+                    <li>Cada movimiento se desagrega mostrando comisiones, impuestos y reintegros</li>
+                    <li>Los reintegros por cupones/descuentos (OPERATION_TAGS) se muestran como créditos</li>
+                    <li>El saldo se calcula con MONTO NETO y coincide exactamente con el archivo original</li>
+                </ul>
+            </div>
+        </div>
+
+        <div id="resultCard" class="card hidden">
+            <div class="result-header">
+                <div>
+                    <h2 style="font-size: 24px; font-weight: bold; color: #2d3748; margin-bottom: 5px;">
+                        Resultado del Procesamiento
+                    </h2>
+                    <div id="resultStats"></div>
+                </div>
+                <button id="downloadBtn" class="download-btn">
+                    ⬇️ Descargar Excel
+                </button>
+            </div>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Descripción</th>
+                            <th>Origen</th>
+                            <th class="text-right">Crédito</th>
+                            <th class="text-right">Débito</th>
+                            <th class="text-right">Saldo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    </tbody>
+                </table>
+                <div id="tableFooter"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

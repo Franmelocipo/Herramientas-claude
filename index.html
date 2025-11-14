@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Herramientas Contables - Estudio</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 50px;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 20px;
+            opacity: 0.95;
+        }
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .tool-card {
+            background: white;
+            border-radius: 16px;
+            padding: 35px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .tool-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 25px 70px rgba(0,0,0,0.4);
+        }
+
+        .tool-icon {
+            width: 70px;
+            height: 70px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        .tool-card h2 {
+            color: #2d3748;
+            font-size: 24px;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        .tool-card p {
+            color: #718096;
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .tool-features {
+            list-style: none;
+            padding: 0;
+        }
+
+        .tool-features li {
+            color: #4a5568;
+            font-size: 14px;
+            padding: 8px 0;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .tool-features li:first-child {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .tool-features li:before {
+            content: "✓";
+            color: #48bb78;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 12px;
+            background: #48bb78;
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 15px;
+        }
+
+        .badge.coming-soon {
+            background: #cbd5e0;
+            color: #4a5568;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .footer p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 36px;
+            }
+
+            .tools-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧮 Herramientas Contables</h1>
+            <p>Suite de herramientas desarrolladas para optimizar procesos del estudio</p>
+        </div>
+
+        <div class="tools-grid">
+            <!-- Herramienta 1: Convertidor Mercado Pago -->
+            <a href="herramientas/mercado-pago-converter/" class="tool-card">
+                <div class="tool-icon">📊</div>
+                <h2>Convertidor Mercado Pago</h2>
+                <p>Convierte extractos de Mercado Pago a formato de extracto bancario contable con desagregación completa de movimientos.</p>
+                <ul class="tool-features">
+                    <li>Procesamiento múltiple de archivos</li>
+                    <li>Desagregación de comisiones e impuestos</li>
+                    <li>Exportación a Excel</li>
+                    <li>Validación automática de saldos</li>
+                </ul>
+                <span class="badge">Disponible</span>
+            </a>
+
+            <!-- Herramienta 2: Conversor de Asientos Contables -->
+            <a href="herramientas/conversor-asientos/" class="tool-card">
+                <div class="tool-icon">📝</div>
+                <h2>Conversor de Asientos Contables</h2>
+                <p>Convierte datos de diferentes orígenes (extractos bancarios, VEPs, compensaciones, registros) a formato de asientos contables para importar.</p>
+                <ul class="tool-features">
+                    <li>Soporte para múltiples orígenes</li>
+                    <li>Gestión de clientes y planes de cuentas</li>
+                    <li>Asignación inteligente de cuentas</li>
+                    <li>Exportación lista para importar</li>
+                </ul>
+                <span class="badge">Disponible</span>
+            </a>
+        </div>
+
+        <div class="footer">
+            <p>Desarrollado con Claude Code para el estudio contable</p>
+            <p style="margin-top: 10px; font-size: 12px; opacity: 0.7;">
+                Todas las herramientas funcionan localmente en tu navegador. No se envían datos a servidores externos.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
