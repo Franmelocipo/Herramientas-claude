@@ -963,7 +963,7 @@ function generateFinalExcel() {
 
     state.groupedData.forEach((g, idx) => {
         const code = state.accountCodes[idx] || '';
-        let numeroAsiento = (state.sourceType === 'veps' || state.sourceType === 'compensaciones') ? numeroAsientoGlobal : 1;
+        let numeroAsiento = numeroAsientoGlobal;
 
         if (state.sourceType === 'compensaciones') {
             processCompensaciones(g, code, allData);
@@ -974,6 +974,7 @@ function generateFinalExcel() {
             processRegistros(g, code, allData);
         } else if (state.sourceType === 'extracto') {
             numeroAsiento = processExtracto(g, code, allData, numeroAsiento);
+            numeroAsientoGlobal = numeroAsiento;
         }
     });
 
@@ -1037,7 +1038,7 @@ function processCompensaciones(g, code, allData) {
             Haber: haber,
             'Tipo de auxiliar': 1,
             Auxiliar: 1,
-            Importe: parseFloat(importe.toFixed(2)),
+            Importe: parseFloat((debe - haber).toFixed(2)),
             Leyenda: leyenda,
             ExtraContable: 's',
             _transaccion: transaccion
@@ -1076,30 +1077,34 @@ function processVeps(g, code, allData, numeroAsiento) {
 
             const leyenda = `${impuesto} - ${concepto} - ${subconcepto} / ${periodo} / VEP ${nroVep}`;
 
+            const debe = parseFloat(importe.toFixed(2));
+            const haber = 0;
             allData.push({
                 Fecha: fecha,
                 Numero: numeroAsiento,
                 Cuenta: code,
-                Debe: parseFloat(importe.toFixed(2)),
-                Haber: 0,
+                Debe: debe,
+                Haber: haber,
                 'Tipo de auxiliar': 1,
                 Auxiliar: 1,
-                Importe: parseFloat(importe.toFixed(2)),
+                Importe: parseFloat((debe - haber).toFixed(2)),
                 Leyenda: leyenda,
                 ExtraContable: 's'
             });
         });
 
         const leyendaContrapartida = `VEP ${nroVep} / ${periodo}`;
+        const debeContra = 0;
+        const haberContra = parseFloat(totalVep.toFixed(2));
         allData.push({
             Fecha: fecha,
             Numero: numeroAsiento,
             Cuenta: state.bankAccount,
-            Debe: 0,
-            Haber: parseFloat(totalVep.toFixed(2)),
+            Debe: debeContra,
+            Haber: haberContra,
             'Tipo de auxiliar': 1,
             Auxiliar: 1,
-            Importe: parseFloat(totalVep.toFixed(2)),
+            Importe: parseFloat((debeContra - haberContra).toFixed(2)),
             Leyenda: leyendaContrapartida,
             ExtraContable: 's'
         });
@@ -1129,7 +1134,8 @@ function processRegistros(g, code, allData) {
             haberVal = typeof item['HABER'] === 'number' ? item['HABER'] : parseFloat(String(item['HABER']).replace(/\./g, '').replace(',', '.')) || 0;
         }
 
-        let importe = debeVal > 0 ? debeVal : haberVal;
+        const debe = debeVal > 0 ? parseFloat(debeVal.toFixed(2)) : 0;
+        const haber = haberVal > 0 ? parseFloat(haberVal.toFixed(2)) : 0;
 
         const leyendaParts = [];
         if (concepto) leyendaParts.push(concepto);
@@ -1141,11 +1147,11 @@ function processRegistros(g, code, allData) {
             Fecha: fecha,
             Numero: nInter,
             Cuenta: code,
-            Debe: debeVal > 0 ? parseFloat(debeVal.toFixed(2)) : 0,
-            Haber: haberVal > 0 ? parseFloat(haberVal.toFixed(2)) : 0,
+            Debe: debe,
+            Haber: haber,
             'Tipo de auxiliar': 1,
             Auxiliar: 1,
-            Importe: parseFloat(importe.toFixed(2)),
+            Importe: parseFloat((debe - haber).toFixed(2)),
             Leyenda: leyenda,
             ExtraContable: 's',
             _sortOrder: parseInt(nInter) || 0
@@ -1171,36 +1177,44 @@ function processExtracto(g, code, allData, numeroAsiento) {
         const leyenda = `EXTRACTO - ${descripcion}`;
 
         if (debitoVal > 0) {
+            const debe1 = parseFloat(debitoVal.toFixed(2));
+            const haber1 = 0;
             allData.push({
                 Fecha: fecha, Numero: numeroAsiento, Cuenta: code,
-                Debe: parseFloat(debitoVal.toFixed(2)), Haber: 0,
+                Debe: debe1, Haber: haber1,
                 'Tipo de auxiliar': 1, Auxiliar: 1,
-                Importe: parseFloat(debitoVal.toFixed(2)),
+                Importe: parseFloat((debe1 - haber1).toFixed(2)),
                 Leyenda: leyenda, ExtraContable: 's'
             });
+            const debe2 = 0;
+            const haber2 = parseFloat(debitoVal.toFixed(2));
             allData.push({
                 Fecha: fecha, Numero: numeroAsiento, Cuenta: state.bankAccount,
-                Debe: 0, Haber: parseFloat(debitoVal.toFixed(2)),
+                Debe: debe2, Haber: haber2,
                 'Tipo de auxiliar': 1, Auxiliar: 1,
-                Importe: parseFloat(debitoVal.toFixed(2)),
+                Importe: parseFloat((debe2 - haber2).toFixed(2)),
                 Leyenda: leyenda, ExtraContable: 's'
             });
             numeroAsiento++;
         }
 
         if (creditoVal > 0) {
+            const debe3 = parseFloat(creditoVal.toFixed(2));
+            const haber3 = 0;
             allData.push({
                 Fecha: fecha, Numero: numeroAsiento, Cuenta: state.bankAccount,
-                Debe: parseFloat(creditoVal.toFixed(2)), Haber: 0,
+                Debe: debe3, Haber: haber3,
                 'Tipo de auxiliar': 1, Auxiliar: 1,
-                Importe: parseFloat(creditoVal.toFixed(2)),
+                Importe: parseFloat((debe3 - haber3).toFixed(2)),
                 Leyenda: leyenda, ExtraContable: 's'
             });
+            const debe4 = 0;
+            const haber4 = parseFloat(creditoVal.toFixed(2));
             allData.push({
                 Fecha: fecha, Numero: numeroAsiento, Cuenta: code,
-                Debe: 0, Haber: parseFloat(creditoVal.toFixed(2)),
+                Debe: debe4, Haber: haber4,
                 'Tipo de auxiliar': 1, Auxiliar: 1,
-                Importe: parseFloat(creditoVal.toFixed(2)),
+                Importe: parseFloat((debe4 - haber4).toFixed(2)),
                 Leyenda: leyenda, ExtraContable: 's'
             });
             numeroAsiento++;
