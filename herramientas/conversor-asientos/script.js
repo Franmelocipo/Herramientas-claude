@@ -11,7 +11,8 @@ const state = {
     bankAccount: '',
     clients: [],
     selectedClient: null,
-    activeSearchField: null
+    activeSearchField: null,
+    taxDatabase: [] // Base de datos de impuestos: {impuesto, concepto, subconcepto}
 };
 
 // ============================================
@@ -33,6 +34,22 @@ function saveClients() {
     localStorage.setItem('contable_clients', JSON.stringify(state.clients));
 }
 
+function loadTaxDatabase() {
+    const saved = localStorage.getItem('contable_tax_database');
+    if (saved) {
+        try {
+            state.taxDatabase = JSON.parse(saved);
+        } catch (e) {
+            console.error('Error cargando base de impuestos:', e);
+            state.taxDatabase = [];
+        }
+    }
+}
+
+function saveTaxDatabase() {
+    localStorage.setItem('contable_tax_database', JSON.stringify(state.taxDatabase));
+}
+
 // ============================================
 // ELEMENTOS DEL DOM
 // ============================================
@@ -48,7 +65,7 @@ const elements = {
     clientName: document.getElementById('clientName'),
     btnReset: document.getElementById('btnReset'),
 
-    // Modals
+    // Modals - Clients
     modalClientManager: document.getElementById('modalClientManager'),
     modalNewClient: document.getElementById('modalNewClient'),
     btnClientManager: document.getElementById('btnClientManager'),
@@ -57,7 +74,18 @@ const elements = {
     btnCancelNewClient: document.getElementById('btnCancelNewClient'),
     btnCreateClient: document.getElementById('btnCreateClient'),
     newClientName: document.getElementById('newClientName'),
+    newClientCuit: document.getElementById('newClientCuit'),
     clientsList: document.getElementById('clientsList'),
+    importClientsFile: document.getElementById('importClientsFile'),
+
+    // Modals - Tax Database
+    modalTaxDatabase: document.getElementById('modalTaxDatabase'),
+    btnTaxDatabase: document.getElementById('btnTaxDatabase'),
+    btnCloseTaxDatabase: document.getElementById('btnCloseTaxDatabase'),
+    importTaxFile: document.getElementById('importTaxFile'),
+    taxStats: document.getElementById('taxStats'),
+    taxTableBody: document.getElementById('taxTableBody'),
+    btnClearTaxDatabase: document.getElementById('btnClearTaxDatabase'),
 
     // Step 1
     sourceTypeName: document.getElementById('sourceTypeName'),
@@ -97,6 +125,7 @@ const sourceTypes = {
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
     loadClients();
+    loadTaxDatabase();
     updateClientName();
     attachEventListeners();
 });
@@ -104,13 +133,20 @@ document.addEventListener('DOMContentLoaded', () => {
 function attachEventListeners() {
     // Header
     elements.btnClientManager.addEventListener('click', () => showClientManager());
+    elements.btnTaxDatabase.addEventListener('click', () => showTaxDatabase());
     elements.btnReset.addEventListener('click', () => reset());
 
-    // Modals
+    // Modals - Clients
     elements.btnCloseClientManager.addEventListener('click', () => hideClientManager());
     elements.btnNewClient.addEventListener('click', () => showNewClientModal());
     elements.btnCancelNewClient.addEventListener('click', () => hideNewClientModal());
     elements.btnCreateClient.addEventListener('click', () => createClient());
+    elements.importClientsFile.addEventListener('change', (e) => importClients(e));
+
+    // Modals - Tax Database
+    elements.btnCloseTaxDatabase.addEventListener('click', () => hideTaxDatabase());
+    elements.importTaxFile.addEventListener('change', (e) => importTaxDatabase(e));
+    elements.btnClearTaxDatabase.addEventListener('click', () => clearTaxDatabase());
 
     // Step 0: Source type selection
     document.querySelectorAll('.source-type-btn').forEach(btn => {
@@ -213,6 +249,7 @@ function hideClientManager() {
 function showNewClientModal() {
     elements.modalNewClient.classList.remove('hidden');
     elements.newClientName.value = '';
+    elements.newClientCuit.value = '';
     elements.newClientName.focus();
 }
 
@@ -223,13 +260,16 @@ function hideNewClientModal() {
 function createClient() {
     const name = elements.newClientName.value.trim();
     if (!name) {
-        alert('Ingresa un nombre para el cliente');
+        alert('Ingresa una razón social para el cliente');
         return;
     }
+
+    const cuit = elements.newClientCuit.value.trim();
 
     const newClient = {
         id: Date.now(),
         name: name,
+        cuit: cuit || '',
         accountPlan: []
     };
 
@@ -279,7 +319,7 @@ function renderClientsList() {
                 <div class="client-header">
                     <div>
                         <h3>${client.name}</h3>
-                        <p>${client.accountPlan?.length || 0} cuentas</p>
+                        <p>${client.cuit ? `CUIT: ${client.cuit} | ` : ''}${client.accountPlan?.length || 0} cuentas</p>
                     </div>
                     <div class="client-actions">
                         <button class="btn-select" onclick="selectClient(${client.id})">Seleccionar</button>
@@ -329,6 +369,135 @@ function getClientAccounts() {
     if (!state.selectedClient) return [];
     const client = state.clients.find(c => c.id === state.selectedClient);
     return client?.accountPlan || [];
+}
+
+// ============================================
+// IMPORTACIÓN MASIVA DE CLIENTES
+// ============================================
+async function importClients(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { raw: true });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
+
+        const clientsToImport = jsonData.slice(1).map(row => ({
+            name: String(row[0] || '').trim(),
+            cuit: String(row[1] || '').trim()
+        })).filter(c => c.name);
+
+        if (clientsToImport.length === 0) {
+            alert('No se encontraron clientes válidos en el archivo');
+            return;
+        }
+
+        // Agregar clientes evitando duplicados por nombre
+        const existingNames = state.clients.map(c => c.name.toLowerCase());
+        const newClients = clientsToImport
+            .filter(c => !existingNames.includes(c.name.toLowerCase()))
+            .map(c => ({
+                id: Date.now() + Math.random(),
+                name: c.name,
+                cuit: c.cuit,
+                accountPlan: []
+            }));
+
+        if (newClients.length === 0) {
+            alert('Todos los clientes ya existen');
+            return;
+        }
+
+        state.clients.push(...newClients);
+        saveClients();
+        renderClientsList();
+
+        alert(`Se importaron ${newClients.length} cliente(s) nuevo(s). Total: ${state.clients.length}`);
+    } catch (error) {
+        alert('Error al importar clientes: ' + error.message);
+    }
+
+    event.target.value = '';
+}
+
+// ============================================
+// GESTIÓN DE BASE DE DATOS DE IMPUESTOS
+// ============================================
+function showTaxDatabase() {
+    elements.modalTaxDatabase.classList.remove('hidden');
+    renderTaxDatabase();
+}
+
+function hideTaxDatabase() {
+    elements.modalTaxDatabase.classList.add('hidden');
+}
+
+async function importTaxDatabase(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { raw: true });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
+
+        const taxes = jsonData.slice(1).map(row => ({
+            impuesto: String(row[0] || '').trim(),
+            concepto: String(row[1] || '').trim(),
+            subconcepto: String(row[2] || '').trim()
+        })).filter(t => t.impuesto && t.concepto && t.subconcepto);
+
+        if (taxes.length === 0) {
+            alert('No se encontraron registros válidos en el archivo');
+            return;
+        }
+
+        state.taxDatabase = taxes;
+        saveTaxDatabase();
+        renderTaxDatabase();
+
+        alert(`Base de datos de impuestos importada: ${taxes.length} registros`);
+    } catch (error) {
+        alert('Error al importar base de datos: ' + error.message);
+    }
+
+    event.target.value = '';
+}
+
+function renderTaxDatabase() {
+    const stats = state.taxDatabase.length === 0
+        ? 'No hay datos en la base de impuestos'
+        : `Total de registros: ${state.taxDatabase.length}`;
+
+    elements.taxStats.textContent = stats;
+
+    if (state.taxDatabase.length === 0) {
+        elements.taxTableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 32px; color: #64748b;">No hay datos. Importa un archivo Excel para comenzar.</td></tr>';
+        return;
+    }
+
+    const preview = state.taxDatabase.slice(0, 50);
+    const html = preview.map(tax => `
+        <tr>
+            <td>${tax.impuesto}</td>
+            <td>${tax.concepto}</td>
+            <td>${tax.subconcepto}</td>
+        </tr>
+    `).join('');
+
+    elements.taxTableBody.innerHTML = html;
+}
+
+function clearTaxDatabase() {
+    if (confirm('¿Estás seguro de que deseas limpiar toda la base de datos de impuestos?')) {
+        state.taxDatabase = [];
+        saveTaxDatabase();
+        renderTaxDatabase();
+        alert('Base de datos limpiada');
+    }
 }
 
 // ============================================
