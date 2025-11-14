@@ -126,8 +126,8 @@ function formatFecha(fechaStr) {
 }
 
 function getTipoImpuesto(detail, entidad) {
-    // Si el detalle es genérico (tax_withholding o tax_withholding_payer), usar la entidad financiera para identificar
-    if ((detail === 'tax_withholding' || detail === 'tax_withholding_payer') && entidad) {
+    // Si el detalle es genérico (tax_withholding, tax_withholding_payer o tax_withholding_payout), usar la entidad financiera para identificar
+    if ((detail === 'tax_withholding' || detail === 'tax_withholding_payer' || detail === 'tax_withholding_payout') && entidad) {
         const tiposEntidad = {
             'retencion_ganancias': 'Retención de Ganancias',
             'retencion_iva': 'Retención de IVA',
