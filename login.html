@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔐 Acceso Restringido - Herramientas Contables</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            padding: 50px 40px;
+            box-shadow: 0 25px 70px rgba(0,0,0,0.4);
+            max-width: 450px;
+            width: 100%;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .login-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .login-header h1 {
+            color: #2d3748;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .login-header p {
+            color: #718096;
+            font-size: 16px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            color: #4a5568;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .password-input-wrapper {
+            position: relative;
+        }
+
+        input[type="password"] {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+
+        input[type="password"]:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .error-message {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 20px;
+            border-left: 4px solid #c53030;
+            display: none;
+            animation: shake 0.5s;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+
+        .info-box {
+            background: #ebf8ff;
+            border-left: 4px solid #4299e1;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-top: 25px;
+        }
+
+        .info-box p {
+            color: #2c5282;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 40px 30px;
+            }
+
+            .login-header h1 {
+                font-size: 24px;
+            }
+
+            .login-icon {
+                font-size: 48px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <div class="login-icon">🔐</div>
+            <h1>Acceso Restringido</h1>
+            <p>Herramientas en Desarrollo</p>
+        </div>
+
+        <div id="errorMessage" class="error-message">
+            ❌ Contraseña incorrecta. Por favor, intenta nuevamente.
+        </div>
+
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="password">Contraseña</label>
+                <div class="password-input-wrapper">
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        placeholder="Ingresa la contraseña"
+                        autocomplete="off"
+                        required
+                        autofocus
+                    >
+                </div>
+            </div>
+
+            <button type="submit" class="btn-login">
+                Ingresar
+            </button>
+        </form>
+
+        <div class="info-box">
+            <p>🔒 Esta es una aplicación de desarrollo. La sesión expirará al cerrar el navegador.</p>
+        </div>
+    </div>
+
+    <script>
+        const CORRECT_PASSWORD = 'ContadorCipo2024';
+        const loginForm = document.getElementById('loginForm');
+        const passwordInput = document.getElementById('password');
+        const errorMessage = document.getElementById('errorMessage');
+
+        // Verificar si ya está autenticado
+        if (sessionStorage.getItem('herramientas_auth') === 'authenticated') {
+            window.location.href = 'index.html';
+        }
+
+        loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const enteredPassword = passwordInput.value;
+
+            if (enteredPassword === CORRECT_PASSWORD) {
+                // Autenticación exitosa
+                sessionStorage.setItem('herramientas_auth', 'authenticated');
+
+                // Animación de éxito antes de redirigir
+                loginForm.style.opacity = '0.5';
+                loginForm.style.pointerEvents = 'none';
+
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 300);
+            } else {
+                // Contraseña incorrecta
+                errorMessage.classList.add('show');
+                passwordInput.value = '';
+                passwordInput.focus();
+
+                // Ocultar mensaje de error después de 3 segundos
+                setTimeout(() => {
+                    errorMessage.classList.remove('show');
+                }, 3000);
+            }
+        });
+
+        // Ocultar mensaje de error al empezar a escribir
+        passwordInput.addEventListener('input', function() {
+            if (errorMessage.classList.contains('show')) {
+                errorMessage.classList.remove('show');
+            }
+        });
+    </script>
+</body>
+</html>
