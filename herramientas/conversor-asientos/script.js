@@ -143,6 +143,14 @@ function attachEventListeners() {
     elements.btnCreateClient.addEventListener('click', () => createClient());
     elements.importClientsFile.addEventListener('change', (e) => importClients(e));
 
+    // Client search
+    const clientSearchInput = document.getElementById('clientSearchInput');
+    if (clientSearchInput) {
+        clientSearchInput.addEventListener('input', (e) => {
+            renderClientsList(e.target.value);
+        });
+    }
+
     // Modals - Tax Database
     elements.btnCloseTaxDatabase.addEventListener('click', () => hideTaxDatabase());
     elements.importTaxFile.addEventListener('change', (e) => importTaxDatabase(e));
@@ -244,6 +252,11 @@ function showClientManager() {
 
 function hideClientManager() {
     elements.modalClientManager.classList.add('hidden');
+    // Limpiar campo de búsqueda al cerrar
+    const clientSearchInput = document.getElementById('clientSearchInput');
+    if (clientSearchInput) {
+        clientSearchInput.value = '';
+    }
 }
 
 function showNewClientModal() {
@@ -311,10 +324,32 @@ function updateClientName() {
     }
 }
 
-function renderClientsList() {
+function renderClientsList(searchTerm = '') {
+    // Filtrar clientes según el término de búsqueda
+    const filteredClients = searchTerm.trim() === ''
+        ? state.clients
+        : state.clients.filter(client => {
+            const term = searchTerm.toLowerCase();
+            const nameMatch = client.name.toLowerCase().includes(term);
+            const cuitMatch = client.cuit && client.cuit.toLowerCase().includes(term);
+            return nameMatch || cuitMatch;
+        });
+
+    // Actualizar estadísticas
+    const statsElement = document.getElementById('clientsStats');
+    if (searchTerm.trim() !== '' && state.clients.length > 0) {
+        statsElement.textContent = `Mostrando ${filteredClients.length} de ${state.clients.length} clientes`;
+        statsElement.classList.add('show');
+    } else {
+        statsElement.classList.remove('show');
+    }
+
+    // Renderizar lista
     const html = state.clients.length === 0
         ? '<div class="empty-state">No hay clientes. Crea uno para comenzar.</div>'
-        : state.clients.map(client => `
+        : filteredClients.length === 0
+        ? '<div class="empty-state">No se encontraron clientes con ese criterio de búsqueda.</div>'
+        : filteredClients.map(client => `
             <div class="client-item">
                 <div class="client-header">
                     <div>

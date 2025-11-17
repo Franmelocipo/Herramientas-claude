@@ -45,6 +45,15 @@
                         <h2>Gestión de Clientes</h2>
                         <button class="close-btn" id="btnCloseClientManager">✕</button>
                     </div>
+
+                    <!-- Campo de búsqueda -->
+                    <div class="search-box">
+                        <input type="text"
+                               id="clientSearchInput"
+                               class="search-input"
+                               placeholder="🔍 Buscar cliente por nombre o CUIT...">
+                    </div>
+
                     <div class="btn-group mb-4">
                         <button id="btnNewClient" class="btn-primary flex-1">+ Nuevo Cliente</button>
                         <label class="btn-secondary flex-1" style="cursor: pointer; text-align: center;">
@@ -55,6 +64,10 @@
                     <div class="info-box" style="font-size: 12px; padding: 10px; margin-bottom: 16px;">
                         <strong>Formato Excel para importar:</strong> Razón Social | CUIT
                     </div>
+
+                    <!-- Estadísticas de resultados -->
+                    <div id="clientsStats" class="clients-stats"></div>
+
                     <div id="clientsList" class="clients-list"></div>
                 </div>
             </div>
