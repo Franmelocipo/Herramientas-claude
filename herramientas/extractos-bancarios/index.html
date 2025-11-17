@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversor de Extractos Bancarios</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../supabase-config.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <script src="../../check-auth.js"></script>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <h1>Conversor de Extractos Bancarios</h1>
+                <p class="subtitle">Convierte tus extractos bancarios y de inversiones de PDF a Excel fácilmente</p>
+            </div>
+
+            <!-- Paso 1: Tipo de extracto -->
+            <div class="step">
+                <h2 class="step-title">
+                    <span class="step-number">1</span>
+                    Tipo de extracto
+                </h2>
+                <div class="type-grid">
+                    <button class="type-btn" data-type="bancario">
+                        <div class="type-btn-title">Extractos Bancarios</div>
+                        <div class="type-btn-subtitle">Cuentas corrientes y cajas de ahorro</div>
+                    </button>
+                    <button class="type-btn" data-type="inversiones">
+                        <div class="type-btn-title">Extractos de Inversiones</div>
+                        <div class="type-btn-subtitle">Bonos, acciones y fondos comunes</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Paso 2: Seleccionar banco -->
+            <div class="step hidden" id="step-bank">
+                <h2 class="step-title">
+                    <span class="step-number">2</span>
+                    Selecciona tu <span id="entity-type">banco</span>
+                </h2>
+                <div class="bank-grid" id="bank-grid">
+                    <!-- Los bancos se llenarán dinámicamente -->
+                </div>
+            </div>
+
+            <!-- Paso 3: Cargar archivo -->
+            <div class="step hidden" id="step-file">
+                <h2 class="step-title">
+                    <span class="step-number">3</span>
+                    Carga tu extracto PDF
+                </h2>
+                <div class="file-drop-zone" id="dropZone">
+                    <div class="upload-icon">📤</div>
+                    <div class="upload-text">Haz clic para seleccionar un archivo</div>
+                    <div class="upload-subtext">o arrastra tu PDF aquí</div>
+                    <input type="file" id="fileInput" accept=".pdf" style="display: none;">
+                </div>
+                <div id="selectedFile" class="selected-file hidden">
+                    <span class="file-icon">📄</span>
+                    <span id="fileName"></span>
+                </div>
+            </div>
+
+            <!-- Paso 4: Convertir -->
+            <div class="step hidden" id="step-convert">
+                <h2 class="step-title">
+                    <span class="step-number">4</span>
+                    Convertir a Excel
+                </h2>
+                <button id="convertBtn" class="convert-btn">Convertir archivo</button>
+            </div>
+
+            <!-- Mensajes de error y éxito -->
+            <div id="errorBox" class="message-box error-box hidden"></div>
+            <div id="successBox" class="message-box success-box hidden"></div>
+
+            <!-- Vista previa de datos -->
+            <div id="previewSection" class="preview-section hidden">
+                <h2>Vista previa de datos</h2>
+                <div class="table-wrapper">
+                    <table id="previewTable">
+                        <thead id="previewHeader"></thead>
+                        <tbody id="previewBody"></tbody>
+                    </table>
+                    <div id="previewFooter" class="preview-footer"></div>
+                </div>
+                <button id="downloadBtn" class="download-btn">
+                    <span>⬇️</span>
+                    Descargar Excel (<span id="rowCount">0</span> movimientos)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
