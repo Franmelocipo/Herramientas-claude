@@ -1,0 +1,374 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+    min-height: 100vh;
+    padding: 40px 20px;
+}
+
+.container {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    padding: 40px;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    color: #6b7280;
+    font-size: 16px;
+}
+
+.step {
+    margin-bottom: 32px;
+}
+
+.step.hidden {
+    display: none;
+}
+
+.step-title {
+    display: flex;
+    align-items: center;
+    font-size: 20px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 16px;
+}
+
+.step-number {
+    background: #4f46e5;
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    margin-right: 12px;
+}
+
+.type-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 16px;
+}
+
+.type-btn {
+    padding: 24px;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: left;
+}
+
+.type-btn:hover {
+    border-color: #4f46e5;
+    background: #eef2ff;
+}
+
+.type-btn.active {
+    border-color: #4f46e5;
+    background: #eef2ff;
+}
+
+.type-btn-title {
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 18px;
+    margin-bottom: 4px;
+}
+
+.type-btn-subtitle {
+    font-size: 14px;
+    color: #6b7280;
+}
+
+.bank-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.bank-btn {
+    padding: 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.bank-btn:hover:not(:disabled) {
+    border-color: #4f46e5;
+    background: #eef2ff;
+}
+
+.bank-btn.active {
+    border-color: #4f46e5;
+    background: #eef2ff;
+}
+
+.bank-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #f9fafb;
+}
+
+.bank-btn-subtitle {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: normal;
+    margin-top: 4px;
+}
+
+.file-drop-zone {
+    border: 2px dashed #d1d5db;
+    border-radius: 12px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.file-drop-zone:hover {
+    border-color: #4f46e5;
+    background: #f9fafb;
+}
+
+.file-drop-zone.dragover {
+    border-color: #4f46e5;
+    background: #eef2ff;
+}
+
+.upload-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
+
+.upload-text {
+    color: #374151;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.upload-subtext {
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.selected-file {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 16px;
+    color: #059669;
+    font-weight: 500;
+}
+
+.selected-file.hidden {
+    display: none;
+}
+
+.file-icon {
+    margin-right: 8px;
+    font-size: 20px;
+}
+
+.convert-btn {
+    width: 100%;
+    padding: 16px;
+    background: #4f46e5;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.convert-btn:hover:not(:disabled) {
+    background: #4338ca;
+}
+
+.convert-btn:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+}
+
+.message-box {
+    padding: 16px;
+    border-radius: 8px;
+    margin-top: 16px;
+    display: flex;
+    align-items: flex-start;
+}
+
+.message-box.hidden {
+    display: none;
+}
+
+.error-box {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+}
+
+.error-box::before {
+    content: "⚠️";
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+.success-box {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+}
+
+.success-box::before {
+    content: "✓";
+    margin-right: 12px;
+    flex-shrink: 0;
+    font-weight: bold;
+}
+
+.preview-section {
+    margin-top: 40px;
+}
+
+.preview-section.hidden {
+    display: none;
+}
+
+.preview-section h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 16px;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+thead {
+    background: #f9fafb;
+}
+
+th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+th.text-right {
+    text-align: right;
+}
+
+td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+td.text-right {
+    text-align: right;
+}
+
+tbody tr:hover {
+    background: #f9fafb;
+}
+
+.text-green {
+    color: #059669;
+}
+
+.text-red {
+    color: #dc2626;
+}
+
+.preview-footer {
+    padding: 12px 16px;
+    background: #f9fafb;
+    text-align: center;
+    color: #6b7280;
+    font-size: 14px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.download-btn {
+    width: 100%;
+    padding: 16px;
+    background: #059669;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.download-btn span {
+    margin-right: 8px;
+}
+
+.download-btn:hover {
+    background: #047857;
+}
+
+@media (max-width: 768px) {
+    .card {
+        padding: 24px;
+    }
+
+    .header h1 {
+        font-size: 24px;
+    }
+
+    .type-grid,
+    .bank-grid {
+        grid-template-columns: 1fr;
+    }
+}
