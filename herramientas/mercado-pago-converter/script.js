@@ -467,9 +467,19 @@ async function processFile() {
                         console.warn(`   Saldo en archivo: $${saldoDelArchivo.toFixed(2)}`);
                         console.warn(`   Diferencia: $${diferenciaSaldo.toFixed(2)}`);
                     }
+resultCard.classList.remove('hidden');
+
+        // ===== GUARDAR EN SUPABASE =====
+        try {
+            await guardarEnSupabase(todosLosMovimientos, selectedFiles.map(f => f.name).join(', '));
+        } catch (supabaseError) {
+            console.error('Error al guardar en Supabase:', supabaseError);
+            // No bloqueamos el flujo si falla Supabase
+        }
+        // ===============================
+
+    } catch (error) {
                 } catch (rowError) {
-                    console.error(`Error procesando fila ${index} del archivo ${file.name}:`, rowError);
-                }
             });
 
             console.log(`  Movimientos generados hasta ahora: ${todosLosMovimientos.length}`);
