@@ -277,6 +277,11 @@ body {
     padding: 16px;
 }
 
+.client-item-selected {
+    border-color: #6366f1;
+    background: #eef2ff;
+}
+
 .client-header {
     display: flex;
     justify-between: space-between;
