@@ -321,17 +321,28 @@ function createClient() {
 }
 
 function selectClient(clientId) {
-    state.selectedClient = clientId;
+    // Convertir a número si viene como string del HTML onclick
+    const numericId = typeof clientId === 'string' ? parseFloat(clientId) : clientId;
+    state.selectedClient = numericId;
     saveSelectedClient();
     updateClientName();
+
+    // Limpiar campo de búsqueda
+    const clientSearchInput = document.getElementById('clientSearchInput');
+    if (clientSearchInput) {
+        clientSearchInput.value = '';
+    }
+
     hideClientManager();
 }
 
 function deleteClient(clientId) {
+    // Convertir a número si viene como string del HTML onclick
+    const numericId = typeof clientId === 'string' ? parseFloat(clientId) : clientId;
     if (confirm('¿Eliminar este cliente?')) {
-        state.clients = state.clients.filter(c => c.id !== clientId);
+        state.clients = state.clients.filter(c => c.id !== numericId);
         saveClients();
-        if (state.selectedClient === clientId) {
+        if (state.selectedClient === numericId) {
             state.selectedClient = null;
             saveSelectedClient();
             updateClientName();
@@ -345,6 +356,14 @@ function updateClientName() {
         const client = state.clients.find(c => c.id === state.selectedClient);
         if (client) {
             elements.clientName.textContent = `Cliente: ${client.name}`;
+            console.log('Cliente seleccionado:', {
+                id: state.selectedClient,
+                nombre: client.name,
+                cuentas: client.accountPlan?.length || 0
+            });
+        } else {
+            console.error('No se encontró el cliente con ID:', state.selectedClient);
+            elements.clientName.textContent = '';
         }
     } else {
         elements.clientName.textContent = '';
@@ -403,6 +422,9 @@ async function importAccountPlan(event, clientId) {
     if (!file) return;
 
     try {
+        // Convertir a número si viene como string del HTML onchange
+        const numericId = typeof clientId === 'string' ? parseFloat(clientId) : clientId;
+
         const data = await file.arrayBuffer();
         const workbook = XLSX.read(data, { raw: true });
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -413,7 +435,7 @@ async function importAccountPlan(event, clientId) {
             description: String(row[1] || '')
         })).filter(a => a.code && a.description);
 
-        const client = state.clients.find(c => c.id === clientId);
+        const client = state.clients.find(c => c.id === numericId);
         if (client) {
             client.accountPlan = accounts;
             saveClients();
@@ -460,8 +482,8 @@ async function importClients(event) {
         const existingNames = state.clients.map(c => c.name.toLowerCase());
         const newClients = clientsToImport
             .filter(c => !existingNames.includes(c.name.toLowerCase()))
-            .map(c => ({
-                id: Date.now() + Math.random(),
+            .map((c, idx) => ({
+                id: Date.now() + idx, // Usar índice en lugar de random para evitar decimales
                 name: c.name,
                 cuit: c.cuit,
                 accountPlan: []
