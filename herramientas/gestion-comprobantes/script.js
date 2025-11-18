@@ -55,19 +55,39 @@ async function checkAuth() {
             return;
         }
 
-        // Obtener datos del usuario desde la tabla usuarios
-        const { data: userData, error } = await supabase
-            .from('usuarios')
-            .select('*, clients(nombre, cuit)')
-            .eq('email', userEmail)
-            .eq('activo', true)
-            .single();
+        // MODO DESARROLLO: Si no hay Supabase configurado, usar usuario de prueba
+        let userData = null;
 
-        if (error || !userData) {
-            console.error('Error obteniendo usuario:', error);
-            showNotification('No se pudo obtener la información del usuario', 'error');
-            redirectToLogin();
-            return;
+        try {
+            // Intentar obtener datos del usuario desde la tabla usuarios
+            const { data, error } = await supabase
+                .from('usuarios')
+                .select('*, clients(nombre, cuit)')
+                .eq('email', userEmail)
+                .eq('activo', true)
+                .single();
+
+            if (!error && data) {
+                userData = data;
+            }
+        } catch (err) {
+            console.warn('Supabase no disponible o usuario no existe, usando modo desarrollo');
+        }
+
+        // Si no se pudo obtener de Supabase, usar usuario de desarrollo
+        if (!userData) {
+            console.log('🔧 MODO DESARROLLO: Usando usuario de prueba');
+            userData = {
+                id: 'dev-user-id',
+                email: userEmail,
+                nombre: 'Usuario de Desarrollo',
+                rol: 'personal_estudio', // Por defecto personal del estudio para testing
+                client_id: null,
+                activo: true,
+                clients: null
+            };
+
+            showNotification('Modo desarrollo: Usando usuario de prueba. Configura Supabase para producción.', 'warning', 5000);
         }
 
         currentUserData = userData;
@@ -147,6 +167,8 @@ function loadInitialView(rol) {
  */
 async function updatePendientesBadge() {
     try {
+        if (!supabase) return; // Protección si Supabase no está inicializado
+
         const { data, error } = await supabase
             .from('comprobantes')
             .select('id', { count: 'exact' })
@@ -161,7 +183,7 @@ async function updatePendientesBadge() {
             }
         }
     } catch (error) {
-        console.error('Error actualizando badge:', error);
+        console.warn('No se pudo actualizar badge (modo desarrollo)');
     }
 }
 
@@ -324,13 +346,40 @@ async function initializeViewFunctionality(viewName) {
  */
 async function loadSubirComprobantes() {
     // Obtener períodos abiertos del cliente
-    const periodos = await getPeriodosAbiertos(currentUserData.client_id);
+    let periodos = [];
+    try {
+        if (currentUserData.client_id) {
+            periodos = await getPeriodosAbiertos(currentUserData.client_id);
+        }
+    } catch (error) {
+        console.warn('No se pudieron cargar períodos (modo desarrollo)');
+    }
 
     return `
         <div class="content-header">
             <h1>📤 Subir Comprobantes</h1>
             <p>Sube tus comprobantes de gastos y facturas</p>
         </div>
+
+        ${periodos.length === 0 && !currentUserData.client_id ? `
+        <div class="card" style="background: #fff3cd; border-left: 4px solid #ffc107;">
+            <div class="card-body">
+                <h3 style="color: #856404; margin-bottom: 12px;">🔧 Modo Desarrollo</h3>
+                <p style="color: #856404; margin-bottom: 12px;">
+                    Para usar esta funcionalidad necesitas:
+                </p>
+                <ol style="color: #856404; margin-left: 20px;">
+                    <li>Configurar Supabase (ejecutar supabase-schema-comprobantes.sql)</li>
+                    <li>Crear un cliente en la tabla <code>clients</code></li>
+                    <li>Crear un usuario en la tabla <code>usuarios</code> con rol 'cliente'</li>
+                    <li>Abrir un período en la tabla <code>periods</code></li>
+                </ol>
+                <p style="color: #856404; margin-top: 12px;">
+                    Ver <code>herramientas/gestion-comprobantes/README.md</code> para instrucciones completas.
+                </p>
+            </div>
+        </div>
+        ` : ''}
 
         <div class="card">
             <div class="card-header">
@@ -605,7 +654,10 @@ async function initMisComprobantes() {
     const container = document.getElementById('comprobantesContainer');
 
     try {
-        const comprobantes = await getComprobantes({ clientId: currentUserData.client_id });
+        let comprobantes = [];
+        if (currentUserData.client_id) {
+            comprobantes = await getComprobantes({ clientId: currentUserData.client_id });
+        }
 
         if (comprobantes.length === 0) {
             container.innerHTML = `
@@ -688,7 +740,10 @@ async function initMisOrdenes() {
     const container = document.getElementById('ordenesContainer');
 
     try {
-        const ordenes = await getOrdenesPago({ clientId: currentUserData.client_id });
+        let ordenes = [];
+        if (currentUserData.client_id) {
+            ordenes = await getOrdenesPago({ clientId: currentUserData.client_id });
+        }
 
         if (ordenes.length === 0) {
             container.innerHTML = `
