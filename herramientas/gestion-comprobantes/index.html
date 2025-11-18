@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Comprobantes - Estudio Contable</title>
+
+    <!-- Estilos -->
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <!-- Verificar autenticación -->
+    <script src="../../check-auth.js"></script>
+
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h1>📋 Comprobantes</h1>
+                <div class="user-info">
+                    <div id="userDisplayName">Cargando...</div>
+                    <span class="user-role" id="userRole">...</span>
+                </div>
+            </div>
+
+            <!-- Navegación Cliente -->
+            <nav class="sidebar-nav" id="navCliente" style="display: none;">
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Comprobantes</h3>
+                    <ul class="nav-menu">
+                        <li class="nav-item">
+                            <a href="#subir-comprobantes" class="nav-link active" data-view="subir-comprobantes">
+                                <span class="icon">📤</span>
+                                <span>Subir Comprobantes</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#mis-comprobantes" class="nav-link" data-view="mis-comprobantes">
+                                <span class="icon">📄</span>
+                                <span>Mis Comprobantes</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#mis-ordenes" class="nav-link" data-view="mis-ordenes">
+                                <span class="icon">💰</span>
+                                <span>Órdenes de Pago</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Navegación Personal del Estudio -->
+            <nav class="sidebar-nav" id="navEstudio" style="display: none;">
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Gestión</h3>
+                    <ul class="nav-menu">
+                        <li class="nav-item">
+                            <a href="#dashboard" class="nav-link active" data-view="dashboard">
+                                <span class="icon">📊</span>
+                                <span>Dashboard</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#periodos" class="nav-link" data-view="periodos">
+                                <span class="icon">📅</span>
+                                <span>Períodos</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#vinculacion" class="nav-link" data-view="vinculacion">
+                                <span class="icon">🔗</span>
+                                <span>Vinculación</span>
+                                <span class="badge" id="badgePendientes">0</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#ordenes-pago" class="nav-link" data-view="ordenes-pago">
+                                <span class="icon">💳</span>
+                                <span>Órdenes de Pago</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#reportes" class="nav-link" data-view="reportes">
+                                <span class="icon">📈</span>
+                                <span>Reportes</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Administración</h3>
+                    <ul class="nav-menu">
+                        <li class="nav-item">
+                            <a href="#clientes" class="nav-link" data-view="clientes">
+                                <span class="icon">👥</span>
+                                <span>Clientes</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#usuarios" class="nav-link" data-view="usuarios">
+                                <span class="icon">⚙️</span>
+                                <span>Usuarios</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="btn-logout" id="btnLogout">
+                    <span class="icon">🚪</span>
+                    Cerrar Sesión
+                </button>
+            </div>
+        </aside>
+
+        <!-- Contenido Principal -->
+        <main class="main-content" id="mainContent">
+            <!-- El contenido se cargará dinámicamente aquí -->
+            <div id="viewContainer">
+                <div class="loader-content">
+                    <div class="spinner"></div>
+                    <p>Cargando...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="../../supabase-config.js"></script>
+    <script src="lib/utils.js"></script>
+    <script src="lib/retenciones.js"></script>
+    <script src="lib/supabase-helper.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
