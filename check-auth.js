@@ -23,6 +23,9 @@
             loginPath = '../../login.html';
         }
 
+        // Guardar la URL actual para redirigir después del login
+        sessionStorage.setItem('return_url', window.location.href);
+
         // Redirigir inmediatamente
         window.location.replace(loginPath);
     }

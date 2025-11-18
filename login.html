@@ -227,12 +227,22 @@
                 // Autenticación exitosa
                 sessionStorage.setItem('herramientas_auth', 'authenticated');
 
+                // También guardar email del usuario para la app de comprobantes
+                localStorage.setItem('user_email', 'dev@herramientas.com');
+
                 // Animación de éxito antes de redirigir
                 loginForm.style.opacity = '0.5';
                 loginForm.style.pointerEvents = 'none';
 
                 setTimeout(() => {
-                    window.location.href = 'index.html';
+                    // Redirigir a la URL guardada o a index.html por defecto
+                    const returnUrl = sessionStorage.getItem('return_url');
+                    if (returnUrl) {
+                        sessionStorage.removeItem('return_url');
+                        window.location.href = returnUrl;
+                    } else {
+                        window.location.href = 'index.html';
+                    }
                 }, 300);
             } else {
                 // Contraseña incorrecta
