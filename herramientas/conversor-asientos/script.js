@@ -1,6 +1,7 @@
 // ============================================
 // ESTADO DE LA APLICACIÓN
 // ============================================
+// NOTA: Ahora usamos ClientManager y TaxManager para gestión centralizada de datos
 const state = {
     step: 0,
     sourceType: '',
@@ -9,99 +10,25 @@ const state = {
     accountCodes: {},
     finalData: [],
     bankAccount: '',
-    clients: [],
-    selectedClient: null,
     activeSearchField: null,
-    taxDatabase: [], // Base de datos de impuestos: {impuesto, concepto, subconcepto}
     expandedGroups: {} // Rastrear qué grupos están expandidos
 };
 
 // ============================================
-// PERSISTENCIA CON LOCALSTORAGE
+// HELPERS PARA COMPATIBILIDAD CON CÓDIGO EXISTENTE
 // ============================================
-function loadClients() {
-    const saved = localStorage.getItem('contable_clients');
-    let needsMigration = false;
+// Estas funciones adaptan el código existente al nuevo sistema centralizado
 
-    if (saved) {
-        try {
-            state.clients = JSON.parse(saved);
-
-            // Migrar IDs corruptos (decimales) a enteros
-            state.clients.forEach((client, idx) => {
-                // Detectar si el ID tiene decimales
-                if (!Number.isInteger(client.id)) {
-                    console.warn(`Cliente "${client.name}" tiene ID corrupto:`, client.id);
-                    needsMigration = true;
-                }
-            });
-
-            if (needsMigration) {
-                console.log('Iniciando migración de IDs...');
-                const baseTimestamp = Date.now();
-                state.clients = state.clients.map((client, idx) => ({
-                    ...client,
-                    id: baseTimestamp + idx
-                }));
-                saveClients();
-                // Limpiar selección para evitar referencias a IDs antiguos
-                state.selectedClient = null;
-                localStorage.removeItem('contable_selected_client');
-                console.log('Migración completada. Por favor, selecciona nuevamente tu cliente.');
-                alert('Se detectaron datos corruptos y fueron corregidos. Por favor, selecciona nuevamente tu cliente.');
-                return; // No cargar cliente seleccionado después de migración
-            }
-        } catch (e) {
-            console.error('Error cargando clientes:', e);
-            state.clients = [];
-        }
-    }
-
-    // Cargar cliente seleccionado solo si no hubo migración
-    const savedSelectedClient = localStorage.getItem('contable_selected_client');
-    if (savedSelectedClient) {
-        try {
-            const clientId = JSON.parse(savedSelectedClient);
-            // Verificar que el cliente aún existe
-            const client = state.clients.find(c => c.id === clientId);
-            if (client) {
-                state.selectedClient = clientId;
-                console.log('Cliente restaurado desde localStorage:', client.name);
-            } else {
-                console.warn('Cliente guardado no existe, ID:', clientId);
-            }
-        } catch (e) {
-            console.error('Error cargando cliente seleccionado:', e);
-        }
-    }
+function getClients() {
+    return ClientManager.getAllClients();
 }
 
-function saveClients() {
-    localStorage.setItem('contable_clients', JSON.stringify(state.clients));
+function getSelectedClientId() {
+    return ClientManager.getSelectedClientId();
 }
 
-function saveSelectedClient() {
-    if (state.selectedClient) {
-        localStorage.setItem('contable_selected_client', JSON.stringify(state.selectedClient));
-    } else {
-        localStorage.removeItem('contable_selected_client');
-    }
-}
-
-function loadTaxDatabase() {
-    const saved = localStorage.getItem('contable_tax_database');
-    if (saved) {
-        try {
-            state.taxDatabase = JSON.parse(saved);
-        } catch (e) {
-            console.error('Error cargando base de impuestos:', e);
-            state.taxDatabase = [];
-        }
-    }
-}
-
-function saveTaxDatabase() {
-    localStorage.setItem('contable_tax_database', JSON.stringify(state.taxDatabase));
+function getTaxDatabase() {
+    return TaxManager.getAllTaxes();
 }
 
 // ============================================
@@ -180,26 +107,30 @@ const sourceTypes = {
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
     console.log('=== INICIANDO APLICACIÓN ===');
-    loadClients();
-    loadTaxDatabase();
+    console.log('Usando sistema centralizado de datos compartidos');
+
     updateClientName();
     attachEventListeners();
 
-    // Log de diagnóstico
+    // Log de diagnóstico usando ClientManager
+    const clients = getClients();
     console.log('Estado inicial de clientes:');
-    console.table(state.clients.map(c => ({
+    console.table(clients.map(c => ({
         nombre: c.name,
         id: c.id,
         idValido: Number.isInteger(c.id) ? 'SI' : 'NO',
         cuentas: c.accountPlan?.length || 0
     })));
 
-    if (state.selectedClient) {
-        const selected = state.clients.find(c => c.id === state.selectedClient);
+    const selectedClientId = getSelectedClientId();
+    if (selectedClientId) {
+        const selected = ClientManager.getClient(selectedClientId);
         console.log('Cliente seleccionado actual:', selected ? selected.name : 'NO ENCONTRADO');
     } else {
         console.log('No hay cliente seleccionado');
     }
+
+    console.log(`Base de impuestos: ${getTaxDatabase().length} registros`);
     console.log('======================');
 });
 
@@ -241,7 +172,7 @@ function attachEventListeners() {
 
     // Step 2: Account assignment
     elements.bankAccountInput.addEventListener('click', () => {
-        if (state.selectedClient) {
+        if (getSelectedClientId()) {
             state.activeSearchField = 'bank';
             showAccountDropdown('bank');
         }
@@ -354,21 +285,16 @@ function createClient() {
 
     const cuit = elements.newClientCuit.value.trim();
 
-    const newClient = {
-        id: Date.now(),
-        name: name,
-        cuit: cuit || '',
-        accountPlan: []
-    };
+    try {
+        const newClient = ClientManager.createClient({ name, cuit });
+        ClientManager.selectClient(newClient.id);
+        updateClientName();
 
-    state.clients.push(newClient);
-    saveClients();
-    state.selectedClient = newClient.id;
-    saveSelectedClient();
-    updateClientName();
-
-    hideNewClientModal();
-    renderClientsList();
+        hideNewClientModal();
+        renderClientsList();
+    } catch (error) {
+        alert('Error al crear cliente: ' + error.message);
+    }
 }
 
 function selectClient(clientId) {
@@ -379,18 +305,13 @@ function selectClient(clientId) {
     const numericId = typeof clientId === 'string' ? parseFloat(clientId) : clientId;
     console.log('ID convertido:', numericId, 'tipo:', typeof numericId);
 
-    // Buscar el cliente antes de asignarlo
-    const client = state.clients.find(c => c.id === numericId);
-    console.log('Cliente encontrado:', client ? client.name : 'NO ENCONTRADO');
+    const success = ClientManager.selectClient(numericId);
 
-    if (client) {
-        state.selectedClient = numericId;
-        saveSelectedClient();
+    if (success) {
         updateClientName();
         console.log('Cliente asignado exitosamente');
     } else {
         console.error('ERROR: No se encontró el cliente con ID:', numericId);
-        console.log('IDs disponibles:', state.clients.map(c => ({ id: c.id, nombre: c.name })));
     }
 
     // Limpiar campo de búsqueda
@@ -406,30 +327,30 @@ function selectClient(clientId) {
 function deleteClient(clientId) {
     // Convertir a número si viene como string del HTML onclick
     const numericId = typeof clientId === 'string' ? parseFloat(clientId) : clientId;
+
     if (confirm('¿Eliminar este cliente?')) {
-        state.clients = state.clients.filter(c => c.id !== numericId);
-        saveClients();
-        if (state.selectedClient === numericId) {
-            state.selectedClient = null;
-            saveSelectedClient();
+        const deleted = ClientManager.deleteClient(numericId);
+        if (deleted) {
             updateClientName();
+            renderClientsList();
         }
-        renderClientsList();
     }
 }
 
 function updateClientName() {
-    if (state.selectedClient) {
-        const client = state.clients.find(c => c.id === state.selectedClient);
+    const selectedClientId = getSelectedClientId();
+
+    if (selectedClientId) {
+        const client = ClientManager.getClient(selectedClientId);
         if (client) {
             elements.clientName.textContent = `Cliente: ${client.name}`;
             console.log('Cliente seleccionado:', {
-                id: state.selectedClient,
+                id: selectedClientId,
                 nombre: client.name,
                 cuentas: client.accountPlan?.length || 0
             });
         } else {
-            console.error('No se encontró el cliente con ID:', state.selectedClient);
+            console.error('No se encontró el cliente con ID:', selectedClientId);
             elements.clientName.textContent = '';
         }
     } else {
@@ -438,32 +359,28 @@ function updateClientName() {
 }
 
 function renderClientsList(searchTerm = '') {
-    // Filtrar clientes según el término de búsqueda
-    const filteredClients = searchTerm.trim() === ''
-        ? state.clients
-        : state.clients.filter(client => {
-            const term = searchTerm.toLowerCase();
-            const nameMatch = client.name.toLowerCase().includes(term);
-            const cuitMatch = client.cuit && client.cuit.toLowerCase().includes(term);
-            return nameMatch || cuitMatch;
-        });
+    // Usar ClientManager para buscar clientes
+    const allClients = getClients();
+    const filteredClients = ClientManager.searchClients(searchTerm);
 
     // Actualizar estadísticas
     const statsElement = document.getElementById('clientsStats');
-    if (searchTerm.trim() !== '' && state.clients.length > 0) {
-        statsElement.textContent = `Mostrando ${filteredClients.length} de ${state.clients.length} clientes`;
+    if (searchTerm.trim() !== '' && allClients.length > 0) {
+        statsElement.textContent = `Mostrando ${filteredClients.length} de ${allClients.length} clientes`;
         statsElement.classList.add('show');
     } else {
         statsElement.classList.remove('show');
     }
 
+    const selectedClientId = getSelectedClientId();
+
     // Renderizar lista
-    const html = state.clients.length === 0
+    const html = allClients.length === 0
         ? '<div class="empty-state">No hay clientes. Crea uno para comenzar.</div>'
         : filteredClients.length === 0
         ? '<div class="empty-state">No se encontraron clientes con ese criterio de búsqueda.</div>'
         : filteredClients.map(client => {
-            const isSelected = state.selectedClient === client.id;
+            const isSelected = selectedClientId === client.id;
             const selectedClass = isSelected ? 'client-item-selected' : '';
             const accountCount = client.accountPlan?.length || 0;
             const idType = Number.isInteger(client.id) ? '✓' : '⚠️';
@@ -509,10 +426,8 @@ async function importAccountPlan(event, clientId) {
             description: String(row[1] || '')
         })).filter(a => a.code && a.description);
 
-        const client = state.clients.find(c => c.id === numericId);
-        if (client) {
-            client.accountPlan = accounts;
-            saveClients();
+        const success = ClientManager.importAccountPlan(numericId, accounts);
+        if (success) {
             alert(`Plan de cuentas importado: ${accounts.length} cuentas`);
             renderClientsList();
         }
@@ -524,88 +439,38 @@ async function importAccountPlan(event, clientId) {
 }
 
 function getClientAccounts() {
-    if (!state.selectedClient) return [];
-    const client = state.clients.find(c => c.id === state.selectedClient);
-    return client?.accountPlan || [];
+    const selectedClientId = getSelectedClientId();
+    if (!selectedClientId) return [];
+    return ClientManager.getAccountPlan(selectedClientId);
 }
 
 function repairClientData() {
     console.log('=== REPARACIÓN DE DATOS DE CLIENTES ===');
 
-    if (state.clients.length === 0) {
+    const allClients = getClients();
+
+    if (allClients.length === 0) {
         alert('No hay clientes para reparar');
         return;
     }
 
-    // Detectar problemas
-    const problems = [];
-    const corruptedIds = [];
-    const missingAccountPlans = [];
+    // Usar ClientManager para validar y reparar
+    const result = ClientManager.validateAndRepair();
 
-    state.clients.forEach((client, idx) => {
-        // Verificar IDs corruptos
-        if (!Number.isInteger(client.id)) {
-            corruptedIds.push(client.name);
-            problems.push(`- ${client.name}: ID corrupto (${client.id})`);
-        }
-
-        // Verificar accountPlan
-        if (!client.accountPlan) {
-            missingAccountPlans.push(client.name);
-            problems.push(`- ${client.name}: accountPlan faltante`);
-        }
-    });
-
-    if (problems.length === 0) {
+    if (result.totalRepaired === 0) {
         alert('✓ No se detectaron problemas en los datos de clientes');
         console.log('No se detectaron problemas');
         return;
     }
 
-    // Mostrar problemas encontrados
-    const message = `Se encontraron ${problems.length} problema(s):\n\n` +
-                    problems.join('\n') +
-                    '\n\n¿Deseas reparar estos problemas?';
-
-    if (!confirm(message)) {
-        return;
-    }
-
-    // Reparar IDs corruptos
-    const baseTimestamp = Date.now();
-    state.clients = state.clients.map((client, idx) => {
-        const repaired = { ...client };
-
-        // Reparar ID si es necesario
-        if (!Number.isInteger(client.id)) {
-            const oldId = client.id;
-            repaired.id = baseTimestamp + idx;
-            console.log(`Reparado: ${client.name} - ID ${oldId} → ${repaired.id}`);
-        }
-
-        // Asegurar que accountPlan existe
-        if (!repaired.accountPlan) {
-            repaired.accountPlan = [];
-            console.log(`Reparado: ${client.name} - accountPlan inicializado`);
-        }
-
-        return repaired;
-    });
-
-    // Guardar cambios
-    saveClients();
-
-    // Limpiar selección si estaba corrupta
-    state.selectedClient = null;
-    localStorage.removeItem('contable_selected_client');
-
     // Re-renderizar
+    updateClientName();
     renderClientsList();
 
     console.log('=== REPARACIÓN COMPLETADA ===');
     alert(`✓ Reparación completada exitosamente.\n\n` +
-          `IDs corruptos reparados: ${corruptedIds.length}\n` +
-          `AccountPlans corregidos: ${missingAccountPlans.length}\n\n` +
+          `IDs corruptos reparados: ${result.corruptedIds}\n` +
+          `AccountPlans corregidos: ${result.missingAccountPlans}\n\n` +
           `Por favor, selecciona nuevamente tu cliente.`);
 }
 
@@ -632,27 +497,18 @@ async function importClients(event) {
             return;
         }
 
-        // Agregar clientes evitando duplicados por nombre
-        const existingNames = state.clients.map(c => c.name.toLowerCase());
-        const newClients = clientsToImport
-            .filter(c => !existingNames.includes(c.name.toLowerCase()))
-            .map((c, idx) => ({
-                id: Date.now() + idx, // Usar índice en lugar de random para evitar decimales
-                name: c.name,
-                cuit: c.cuit,
-                accountPlan: []
-            }));
+        // Usar ClientManager para importar
+        const result = ClientManager.importClients(clientsToImport, true);
 
-        if (newClients.length === 0) {
+        if (result.imported === 0 && result.skipped > 0) {
             alert('Todos los clientes ya existen');
-            return;
+        } else {
+            renderClientsList();
+            const totalClients = getClients().length;
+            alert(`Se importaron ${result.imported} cliente(s) nuevo(s).\n` +
+                  `Omitidos (duplicados): ${result.skipped}\n` +
+                  `Total de clientes: ${totalClients}`);
         }
-
-        state.clients.push(...newClients);
-        saveClients();
-        renderClientsList();
-
-        alert(`Se importaron ${newClients.length} cliente(s) nuevo(s). Total: ${state.clients.length}`);
     } catch (error) {
         alert('Error al importar clientes: ' + error.message);
     }
@@ -693,11 +549,13 @@ async function importTaxDatabase(event) {
             return;
         }
 
-        state.taxDatabase = taxes;
-        saveTaxDatabase();
-        renderTaxDatabase();
+        // Usar TaxManager para importar
+        const result = TaxManager.importFromArray(taxes, true);
 
-        alert(`Base de datos de impuestos importada: ${taxes.length} registros`);
+        if (result.success) {
+            renderTaxDatabase();
+            alert(`Base de datos de impuestos importada: ${result.imported} registros`);
+        }
     } catch (error) {
         alert('Error al importar base de datos: ' + error.message);
     }
@@ -706,18 +564,20 @@ async function importTaxDatabase(event) {
 }
 
 function renderTaxDatabase() {
-    const stats = state.taxDatabase.length === 0
+    const taxDatabase = getTaxDatabase();
+
+    const stats = taxDatabase.length === 0
         ? 'No hay datos en la base de impuestos'
-        : `Total de registros: ${state.taxDatabase.length}`;
+        : `Total de registros: ${taxDatabase.length}`;
 
     elements.taxStats.textContent = stats;
 
-    if (state.taxDatabase.length === 0) {
+    if (taxDatabase.length === 0) {
         elements.taxTableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 32px; color: #64748b;">No hay datos. Importa un archivo Excel para comenzar.</td></tr>';
         return;
     }
 
-    const preview = state.taxDatabase.slice(0, 50);
+    const preview = taxDatabase.slice(0, 50);
     const html = preview.map(tax => `
         <tr>
             <td>${tax.impuesto}</td>
@@ -731,8 +591,7 @@ function renderTaxDatabase() {
 
 function clearTaxDatabase() {
     if (confirm('¿Estás seguro de que deseas limpiar toda la base de datos de impuestos?')) {
-        state.taxDatabase = [];
-        saveTaxDatabase();
+        TaxManager.clear();
         renderTaxDatabase();
         alert('Base de datos limpiada');
     }
@@ -1018,7 +877,7 @@ function renderGroupsList() {
         elements.bankAccountLabel.textContent = state.sourceType === 'extracto'
             ? 'Cuenta del Banco (contrapartida)'
             : 'Cuenta de Contrapartida (para totales de VEP)';
-        elements.bankAccountInput.placeholder = state.selectedClient ? 'Click para buscar cuenta...' : 'Ej: 11010101';
+        elements.bankAccountInput.placeholder = getSelectedClientId() ? 'Click para buscar cuenta...' : 'Ej: 11010101';
         elements.bankAccountInput.value = state.bankAccount;
     } else {
         elements.bankAccountSection.classList.add('hidden');
@@ -1096,7 +955,7 @@ function renderGroupsList() {
                                 class="input-text"
                                 data-group-idx="${idx}"
                                 value="${state.accountCodes[idx] || ''}"
-                                placeholder="${state.selectedClient ? 'Click para buscar...' : 'Código'}"
+                                placeholder="${getSelectedClientId() ? 'Click para buscar...' : 'Código'}"
                             >
                             <div class="account-dropdown hidden" id="dropdown-${idx}"></div>
                         </div>
@@ -1116,7 +975,7 @@ function renderGroupsList() {
             state.accountCodes[idx] = e.target.value;
         });
         input.addEventListener('click', () => {
-            if (state.selectedClient) {
+            if (getSelectedClientId()) {
                 state.activeSearchField = idx;
                 showAccountDropdown(idx);
             }

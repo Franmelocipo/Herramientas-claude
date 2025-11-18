@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ejemplo - Sistema Centralizado de Datos</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2d3748; }
+        h2 { color: #4a5568; margin-top: 0; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            background: #667eea;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #5568d3; }
+        pre {
+            background: #2d3748;
+            color: #f7fafc;
+            padding: 16px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .output {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-family: monospace;
+            min-height: 50px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧮 Ejemplo de Integración - Sistema Centralizado de Datos</h1>
+
+    <div class="card">
+        <h2>1. Incluir los módulos (en tu HTML)</h2>
+        <pre>&lt;!-- Cargar módulos compartidos ANTES de tu script --&gt;
+&lt;script src="/shared/dataStore.js"&gt;&lt;/script&gt;
+&lt;script src="/shared/clientManager.js"&gt;&lt;/script&gt;
+&lt;script src="/shared/taxManager.js"&gt;&lt;/script&gt;
+
+&lt;!-- Tu script --&gt;
+&lt;script src="script.js"&gt;&lt;/script&gt;</pre>
+    </div>
+
+    <div class="card">
+        <h2>2. ClientManager - Gestión de Clientes</h2>
+        <button onclick="testGetAllClients()">Obtener Clientes</button>
+        <button onclick="testCreateClient()">Crear Cliente de Prueba</button>
+        <button onclick="testSelectClient()">Seleccionar Primer Cliente</button>
+        <button onclick="testGetSelectedClient()">Ver Cliente Seleccionado</button>
+        <button onclick="testSearchClients()">Buscar Clientes</button>
+        <div class="output" id="clientOutput"></div>
+    </div>
+
+    <div class="card">
+        <h2>3. TaxManager - Base de Datos de Impuestos</h2>
+        <button onclick="testGetAllTaxes()">Obtener Impuestos</button>
+        <button onclick="testAddTax()">Agregar Impuesto de Prueba</button>
+        <button onclick="testSearchTaxes()">Buscar "IVA"</button>
+        <button onclick="testGetStats()">Ver Estadísticas</button>
+        <div class="output" id="taxOutput"></div>
+    </div>
+
+    <div class="card">
+        <h2>4. DataStore - Persistencia Personalizada</h2>
+        <button onclick="testSaveCustomData()">Guardar Datos Custom</button>
+        <button onclick="testLoadCustomData()">Cargar Datos Custom</button>
+        <button onclick="testGetAllKeys()">Ver Todas las Claves</button>
+        <button onclick="testGetStorageStats()">Ver Estadísticas de Almacenamiento</button>
+        <div class="output" id="dataStoreOutput"></div>
+    </div>
+
+    <div class="card">
+        <h2>5. Event System - Escuchar Cambios</h2>
+        <button onclick="testAddListener()">Agregar Listener de Clientes</button>
+        <button onclick="testTriggerChange()">Crear Cliente (dispara evento)</button>
+        <div class="output" id="eventOutput">Los eventos se mostrarán aquí...</div>
+    </div>
+
+    <!-- Módulos compartidos -->
+    <script src="dataStore.js"></script>
+    <script src="clientManager.js"></script>
+    <script src="taxManager.js"></script>
+
+    <!-- Script de ejemplo -->
+    <script>
+        // ============================================
+        // EJEMPLOS DE ClientManager
+        // ============================================
+
+        function testGetAllClients() {
+            const clients = ClientManager.getAllClients();
+            showOutput('clientOutput', `Clientes (${clients.length}):`, clients);
+        }
+
+        function testCreateClient() {
+            try {
+                const testClient = ClientManager.createClient({
+                    name: 'Empresa Test ' + Date.now(),
+                    cuit: '20-12345678-9'
+                });
+                showOutput('clientOutput', 'Cliente creado:', testClient);
+            } catch (error) {
+                showOutput('clientOutput', 'Error:', error.message);
+            }
+        }
+
+        function testSelectClient() {
+            const clients = ClientManager.getAllClients();
+            if (clients.length > 0) {
+                ClientManager.selectClient(clients[0].id);
+                showOutput('clientOutput', 'Cliente seleccionado:', clients[0]);
+            } else {
+                showOutput('clientOutput', 'No hay clientes. Crea uno primero.');
+            }
+        }
+
+        function testGetSelectedClient() {
+            const client = ClientManager.getSelectedClient();
+            if (client) {
+                showOutput('clientOutput', 'Cliente seleccionado actual:', client);
+            } else {
+                showOutput('clientOutput', 'No hay cliente seleccionado');
+            }
+        }
+
+        function testSearchClients() {
+            const results = ClientManager.searchClients('test');
+            showOutput('clientOutput', `Resultados búsqueda "test" (${results.length}):`, results);
+        }
+
+        // ============================================
+        // EJEMPLOS DE TaxManager
+        // ============================================
+
+        function testGetAllTaxes() {
+            const taxes = TaxManager.getAllTaxes();
+            showOutput('taxOutput', `Impuestos (${taxes.length}):`, taxes.slice(0, 10));
+        }
+
+        function testAddTax() {
+            const added = TaxManager.addTax({
+                impuesto: 'IVA',
+                concepto: 'Test',
+                subconcepto: 'Ejemplo ' + Date.now()
+            });
+            if (added) {
+                showOutput('taxOutput', 'Impuesto agregado exitosamente');
+            } else {
+                showOutput('taxOutput', 'El impuesto ya existe');
+            }
+        }
+
+        function testSearchTaxes() {
+            const results = TaxManager.searchTaxes('IVA');
+            showOutput('taxOutput', `Resultados búsqueda "IVA" (${results.length}):`, results.slice(0, 5));
+        }
+
+        function testGetStats() {
+            const stats = TaxManager.getStats();
+            showOutput('taxOutput', 'Estadísticas:', stats);
+        }
+
+        // ============================================
+        // EJEMPLOS DE DataStore
+        // ============================================
+
+        function testSaveCustomData() {
+            const data = {
+                theme: 'dark',
+                language: 'es',
+                settings: {
+                    notifications: true,
+                    autoSave: false
+                },
+                timestamp: new Date().toISOString()
+            };
+            DataStore.save('my_app_config', data);
+            showOutput('dataStoreOutput', 'Datos guardados:', data);
+        }
+
+        function testLoadCustomData() {
+            const data = DataStore.load('my_app_config', { theme: 'light' });
+            showOutput('dataStoreOutput', 'Datos cargados:', data);
+        }
+
+        function testGetAllKeys() {
+            const keys = DataStore.getAllKeys();
+            showOutput('dataStoreOutput', `Claves en localStorage (${keys.length}):`, keys);
+        }
+
+        function testGetStorageStats() {
+            const stats = DataStore.getStats();
+            showOutput('dataStoreOutput', 'Estadísticas de almacenamiento:', stats);
+        }
+
+        // ============================================
+        // EJEMPLOS DE EVENT SYSTEM
+        // ============================================
+
+        let listenerAdded = false;
+
+        function testAddListener() {
+            if (!listenerAdded) {
+                ClientManager.onClientsChange((clients) => {
+                    const output = document.getElementById('eventOutput');
+                    output.innerHTML = `
+                        <strong>🔔 Evento recibido!</strong><br>
+                        Clientes actualizados: ${clients.length} total<br>
+                        Último evento: ${new Date().toLocaleTimeString()}
+                    `;
+                });
+                listenerAdded = true;
+                showOutput('eventOutput', '✓ Listener agregado. Ahora crea un cliente para ver el evento.');
+            } else {
+                showOutput('eventOutput', 'Listener ya está activo.');
+            }
+        }
+
+        function testTriggerChange() {
+            try {
+                const testClient = ClientManager.createClient({
+                    name: 'Cliente Evento ' + Date.now(),
+                    cuit: ''
+                });
+                showOutput('eventOutput', `Cliente creado. El evento debería dispararse arriba.`, testClient);
+            } catch (error) {
+                showOutput('eventOutput', 'Error:', error.message);
+            }
+        }
+
+        // ============================================
+        // HELPER PARA MOSTRAR RESULTADOS
+        // ============================================
+
+        function showOutput(elementId, title, data = null) {
+            const element = document.getElementById(elementId);
+            let html = `<strong>${title}</strong>`;
+            if (data !== null) {
+                html += '<br><pre style="margin:8px 0 0 0;background:#2d3748;color:#f7fafc;padding:12px;border-radius:4px;overflow-x:auto;">';
+                html += JSON.stringify(data, null, 2);
+                html += '</pre>';
+            }
+            element.innerHTML = html;
+        }
+
+        // ============================================
+        // LOG INICIAL
+        // ============================================
+
+        console.log('=== SISTEMA CENTRALIZADO CARGADO ===');
+        console.log('ClientManager:', window.ClientManager);
+        console.log('TaxManager:', window.TaxManager);
+        console.log('DataStore:', window.DataStore);
+        console.log('====================================');
+    </script>
+</body>
+</html>
