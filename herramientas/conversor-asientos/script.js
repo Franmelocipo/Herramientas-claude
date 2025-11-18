@@ -107,63 +107,7 @@ function saveTaxDatabase() {
 // ============================================
 // ELEMENTOS DEL DOM
 // ============================================
-const elements = {
-    // Steps
-    step0: document.getElementById('step0'),
-    step1: document.getElementById('step1'),
-    step2: document.getElementById('step2'),
-    step3: document.getElementById('step3'),
-
-    // Header
-    subtitle: document.getElementById('subtitle'),
-    clientName: document.getElementById('clientName'),
-    btnReset: document.getElementById('btnReset'),
-
-    // Modals - Clients
-    modalClientManager: document.getElementById('modalClientManager'),
-    modalNewClient: document.getElementById('modalNewClient'),
-    btnClientManager: document.getElementById('btnClientManager'),
-    btnCloseClientManager: document.getElementById('btnCloseClientManager'),
-    btnNewClient: document.getElementById('btnNewClient'),
-    btnCancelNewClient: document.getElementById('btnCancelNewClient'),
-    btnCreateClient: document.getElementById('btnCreateClient'),
-    btnRepairClients: document.getElementById('btnRepairClients'),
-    newClientName: document.getElementById('newClientName'),
-    newClientCuit: document.getElementById('newClientCuit'),
-    clientsList: document.getElementById('clientsList'),
-    importClientsFile: document.getElementById('importClientsFile'),
-
-    // Modals - Tax Database
-    modalTaxDatabase: document.getElementById('modalTaxDatabase'),
-    btnTaxDatabase: document.getElementById('btnTaxDatabase'),
-    btnCloseTaxDatabase: document.getElementById('btnCloseTaxDatabase'),
-    importTaxFile: document.getElementById('importTaxFile'),
-    taxStats: document.getElementById('taxStats'),
-    taxTableBody: document.getElementById('taxTableBody'),
-    btnClearTaxDatabase: document.getElementById('btnClearTaxDatabase'),
-
-    // Step 1
-    sourceTypeName: document.getElementById('sourceTypeName'),
-    fileInput: document.getElementById('fileInput'),
-    btnSelectFile: document.getElementById('btnSelectFile'),
-
-    // Step 2
-    groupStats: document.getElementById('groupStats'),
-    bankAccountSection: document.getElementById('bankAccountSection'),
-    bankAccountLabel: document.getElementById('bankAccountLabel'),
-    bankAccountInput: document.getElementById('bankAccountInput'),
-    bankAccountDropdown: document.getElementById('bankAccountDropdown'),
-    compensacionesInfo: document.getElementById('compensacionesInfo'),
-    groupsList: document.getElementById('groupsList'),
-    btnBackToUpload: document.getElementById('btnBackToUpload'),
-    btnGenerateFinal: document.getElementById('btnGenerateFinal'),
-
-    // Step 3
-    finalStats: document.getElementById('finalStats'),
-    previewTableBody: document.getElementById('previewTableBody'),
-    btnBackToAssignment: document.getElementById('btnBackToAssignment'),
-    btnDownloadExcel: document.getElementById('btnDownloadExcel')
-};
+let elements = {};
 
 // ============================================
 // TIPOS DE FUENTE
@@ -178,11 +122,85 @@ const sourceTypes = {
 // ============================================
 // INICIALIZACIÓN
 // ============================================
+function initializeElements() {
+    elements = {
+        // Steps
+        step0: document.getElementById('step0'),
+        step1: document.getElementById('step1'),
+        step2: document.getElementById('step2'),
+        step3: document.getElementById('step3'),
+
+        // Header
+        subtitle: document.getElementById('subtitle'),
+        clientName: document.getElementById('clientName'),
+        btnReset: document.getElementById('btnReset'),
+
+        // Modals - Clients
+        modalClientManager: document.getElementById('modalClientManager'),
+        modalNewClient: document.getElementById('modalNewClient'),
+        btnClientManager: document.getElementById('btnClientManager'),
+        btnCloseClientManager: document.getElementById('btnCloseClientManager'),
+        btnNewClient: document.getElementById('btnNewClient'),
+        btnCancelNewClient: document.getElementById('btnCancelNewClient'),
+        btnCreateClient: document.getElementById('btnCreateClient'),
+        btnRepairClients: document.getElementById('btnRepairClients'),
+        newClientName: document.getElementById('newClientName'),
+        newClientCuit: document.getElementById('newClientCuit'),
+        clientsList: document.getElementById('clientsList'),
+        importClientsFile: document.getElementById('importClientsFile'),
+
+        // Modals - Tax Database
+        modalTaxDatabase: document.getElementById('modalTaxDatabase'),
+        btnTaxDatabase: document.getElementById('btnTaxDatabase'),
+        btnCloseTaxDatabase: document.getElementById('btnCloseTaxDatabase'),
+        importTaxFile: document.getElementById('importTaxFile'),
+        taxStats: document.getElementById('taxStats'),
+        taxTableBody: document.getElementById('taxTableBody'),
+        btnClearTaxDatabase: document.getElementById('btnClearTaxDatabase'),
+
+        // Step 1
+        sourceTypeName: document.getElementById('sourceTypeName'),
+        fileInput: document.getElementById('fileInput'),
+        btnSelectFile: document.getElementById('btnSelectFile'),
+
+        // Step 2
+        groupStats: document.getElementById('groupStats'),
+        bankAccountSection: document.getElementById('bankAccountSection'),
+        bankAccountLabel: document.getElementById('bankAccountLabel'),
+        bankAccountInput: document.getElementById('bankAccountInput'),
+        bankAccountDropdown: document.getElementById('bankAccountDropdown'),
+        compensacionesInfo: document.getElementById('compensacionesInfo'),
+        groupsList: document.getElementById('groupsList'),
+        btnBackToUpload: document.getElementById('btnBackToUpload'),
+        btnGenerateFinal: document.getElementById('btnGenerateFinal'),
+
+        // Step 3
+        finalStats: document.getElementById('finalStats'),
+        previewTableBody: document.getElementById('previewTableBody'),
+        btnBackToAssignment: document.getElementById('btnBackToAssignment'),
+        btnDownloadExcel: document.getElementById('btnDownloadExcel')
+    };
+
+    // Log de elementos no encontrados para debugging
+    Object.keys(elements).forEach(key => {
+        if (!elements[key]) {
+            console.warn(`Elemento no encontrado: ${key}`);
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     console.log('=== INICIANDO APLICACIÓN ===');
+
+    // Inicializar elementos del DOM
+    initializeElements();
+
+    // Cargar datos
     loadClients();
     loadTaxDatabase();
     updateClientName();
+
+    // Adjuntar event listeners
     attachEventListeners();
 
     // Log de diagnóstico
@@ -205,17 +223,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function attachEventListeners() {
     // Header
-    elements.btnClientManager.addEventListener('click', () => showClientManager());
-    elements.btnTaxDatabase.addEventListener('click', () => showTaxDatabase());
-    elements.btnReset.addEventListener('click', () => reset());
+    if (elements.btnClientManager) {
+        elements.btnClientManager.addEventListener('click', () => showClientManager());
+    } else {
+        console.error('btnClientManager no encontrado');
+    }
+
+    if (elements.btnTaxDatabase) {
+        elements.btnTaxDatabase.addEventListener('click', () => showTaxDatabase());
+    } else {
+        console.error('btnTaxDatabase no encontrado');
+    }
+
+    if (elements.btnReset) {
+        elements.btnReset.addEventListener('click', () => reset());
+    } else {
+        console.error('btnReset no encontrado');
+    }
 
     // Modals - Clients
-    elements.btnCloseClientManager.addEventListener('click', () => hideClientManager());
-    elements.btnNewClient.addEventListener('click', () => showNewClientModal());
-    elements.btnCancelNewClient.addEventListener('click', () => hideNewClientModal());
-    elements.btnCreateClient.addEventListener('click', () => createClient());
-    elements.btnRepairClients.addEventListener('click', () => repairClientData());
-    elements.importClientsFile.addEventListener('change', (e) => importClients(e));
+    if (elements.btnCloseClientManager) {
+        elements.btnCloseClientManager.addEventListener('click', () => hideClientManager());
+    }
+    if (elements.btnNewClient) {
+        elements.btnNewClient.addEventListener('click', () => showNewClientModal());
+    }
+    if (elements.btnCancelNewClient) {
+        elements.btnCancelNewClient.addEventListener('click', () => hideNewClientModal());
+    }
+    if (elements.btnCreateClient) {
+        elements.btnCreateClient.addEventListener('click', () => createClient());
+    }
+    if (elements.btnRepairClients) {
+        elements.btnRepairClients.addEventListener('click', () => repairClientData());
+    }
+    if (elements.importClientsFile) {
+        elements.importClientsFile.addEventListener('change', (e) => importClients(e));
+    }
 
     // Client search
     const clientSearchInput = document.getElementById('clientSearchInput');
@@ -226,9 +270,15 @@ function attachEventListeners() {
     }
 
     // Modals - Tax Database
-    elements.btnCloseTaxDatabase.addEventListener('click', () => hideTaxDatabase());
-    elements.importTaxFile.addEventListener('change', (e) => importTaxDatabase(e));
-    elements.btnClearTaxDatabase.addEventListener('click', () => clearTaxDatabase());
+    if (elements.btnCloseTaxDatabase) {
+        elements.btnCloseTaxDatabase.addEventListener('click', () => hideTaxDatabase());
+    }
+    if (elements.importTaxFile) {
+        elements.importTaxFile.addEventListener('change', (e) => importTaxDatabase(e));
+    }
+    if (elements.btnClearTaxDatabase) {
+        elements.btnClearTaxDatabase.addEventListener('click', () => clearTaxDatabase());
+    }
 
     // Step 0: Source type selection
     document.querySelectorAll('.source-type-btn').forEach(btn => {
@@ -236,22 +286,36 @@ function attachEventListeners() {
     });
 
     // Step 1: File upload
-    elements.btnSelectFile.addEventListener('click', () => elements.fileInput.click());
-    elements.fileInput.addEventListener('change', handleFileUpload);
+    if (elements.btnSelectFile) {
+        elements.btnSelectFile.addEventListener('click', () => elements.fileInput.click());
+    }
+    if (elements.fileInput) {
+        elements.fileInput.addEventListener('change', handleFileUpload);
+    }
 
     // Step 2: Account assignment
-    elements.bankAccountInput.addEventListener('click', () => {
-        if (state.selectedClient) {
-            state.activeSearchField = 'bank';
-            showAccountDropdown('bank');
-        }
-    });
-    elements.btnBackToUpload.addEventListener('click', () => goToStep(1));
-    elements.btnGenerateFinal.addEventListener('click', () => generateFinalExcel());
+    if (elements.bankAccountInput) {
+        elements.bankAccountInput.addEventListener('click', () => {
+            if (state.selectedClient) {
+                state.activeSearchField = 'bank';
+                showAccountDropdown('bank');
+            }
+        });
+    }
+    if (elements.btnBackToUpload) {
+        elements.btnBackToUpload.addEventListener('click', () => goToStep(1));
+    }
+    if (elements.btnGenerateFinal) {
+        elements.btnGenerateFinal.addEventListener('click', () => generateFinalExcel());
+    }
 
     // Step 3: Download
-    elements.btnBackToAssignment.addEventListener('click', () => goToStep(2));
-    elements.btnDownloadExcel.addEventListener('click', () => downloadExcel());
+    if (elements.btnBackToAssignment) {
+        elements.btnBackToAssignment.addEventListener('click', () => goToStep(2));
+    }
+    if (elements.btnDownloadExcel) {
+        elements.btnDownloadExcel.addEventListener('click', () => downloadExcel());
+    }
 
     // Close dropdowns when clicking outside
     document.addEventListener('click', (e) => {
