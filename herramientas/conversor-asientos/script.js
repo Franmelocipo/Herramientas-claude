@@ -21,23 +21,54 @@ const state = {
 // ============================================
 function loadClients() {
     const saved = localStorage.getItem('contable_clients');
+    let needsMigration = false;
+
     if (saved) {
         try {
             state.clients = JSON.parse(saved);
+
+            // Migrar IDs corruptos (decimales) a enteros
+            state.clients.forEach((client, idx) => {
+                // Detectar si el ID tiene decimales
+                if (!Number.isInteger(client.id)) {
+                    console.warn(`Cliente "${client.name}" tiene ID corrupto:`, client.id);
+                    needsMigration = true;
+                }
+            });
+
+            if (needsMigration) {
+                console.log('Iniciando migración de IDs...');
+                const baseTimestamp = Date.now();
+                state.clients = state.clients.map((client, idx) => ({
+                    ...client,
+                    id: baseTimestamp + idx
+                }));
+                saveClients();
+                // Limpiar selección para evitar referencias a IDs antiguos
+                state.selectedClient = null;
+                localStorage.removeItem('contable_selected_client');
+                console.log('Migración completada. Por favor, selecciona nuevamente tu cliente.');
+                alert('Se detectaron datos corruptos y fueron corregidos. Por favor, selecciona nuevamente tu cliente.');
+                return; // No cargar cliente seleccionado después de migración
+            }
         } catch (e) {
             console.error('Error cargando clientes:', e);
             state.clients = [];
         }
     }
 
-    // Cargar cliente seleccionado
+    // Cargar cliente seleccionado solo si no hubo migración
     const savedSelectedClient = localStorage.getItem('contable_selected_client');
     if (savedSelectedClient) {
         try {
             const clientId = JSON.parse(savedSelectedClient);
             // Verificar que el cliente aún existe
-            if (state.clients.find(c => c.id === clientId)) {
+            const client = state.clients.find(c => c.id === clientId);
+            if (client) {
                 state.selectedClient = clientId;
+                console.log('Cliente restaurado desde localStorage:', client.name);
+            } else {
+                console.warn('Cliente guardado no existe, ID:', clientId);
             }
         } catch (e) {
             console.error('Error cargando cliente seleccionado:', e);
@@ -96,6 +127,7 @@ const elements = {
     btnNewClient: document.getElementById('btnNewClient'),
     btnCancelNewClient: document.getElementById('btnCancelNewClient'),
     btnCreateClient: document.getElementById('btnCreateClient'),
+    btnRepairClients: document.getElementById('btnRepairClients'),
     newClientName: document.getElementById('newClientName'),
     newClientCuit: document.getElementById('newClientCuit'),
     clientsList: document.getElementById('clientsList'),
@@ -147,10 +179,28 @@ const sourceTypes = {
 // INICIALIZACIÓN
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('=== INICIANDO APLICACIÓN ===');
     loadClients();
     loadTaxDatabase();
     updateClientName();
     attachEventListeners();
+
+    // Log de diagnóstico
+    console.log('Estado inicial de clientes:');
+    console.table(state.clients.map(c => ({
+        nombre: c.name,
+        id: c.id,
+        idValido: Number.isInteger(c.id) ? 'SI' : 'NO',
+        cuentas: c.accountPlan?.length || 0
+    })));
+
+    if (state.selectedClient) {
+        const selected = state.clients.find(c => c.id === state.selectedClient);
+        console.log('Cliente seleccionado actual:', selected ? selected.name : 'NO ENCONTRADO');
+    } else {
+        console.log('No hay cliente seleccionado');
+    }
+    console.log('======================');
 });
 
 function attachEventListeners() {
@@ -164,6 +214,7 @@ function attachEventListeners() {
     elements.btnNewClient.addEventListener('click', () => showNewClientModal());
     elements.btnCancelNewClient.addEventListener('click', () => hideNewClientModal());
     elements.btnCreateClient.addEventListener('click', () => createClient());
+    elements.btnRepairClients.addEventListener('click', () => repairClientData());
     elements.importClientsFile.addEventListener('change', (e) => importClients(e));
 
     // Client search
@@ -321,11 +372,26 @@ function createClient() {
 }
 
 function selectClient(clientId) {
+    console.log('=== SELECCIONANDO CLIENTE ===');
+    console.log('ID recibido (raw):', clientId, 'tipo:', typeof clientId);
+
     // Convertir a número si viene como string del HTML onclick
     const numericId = typeof clientId === 'string' ? parseFloat(clientId) : clientId;
-    state.selectedClient = numericId;
-    saveSelectedClient();
-    updateClientName();
+    console.log('ID convertido:', numericId, 'tipo:', typeof numericId);
+
+    // Buscar el cliente antes de asignarlo
+    const client = state.clients.find(c => c.id === numericId);
+    console.log('Cliente encontrado:', client ? client.name : 'NO ENCONTRADO');
+
+    if (client) {
+        state.selectedClient = numericId;
+        saveSelectedClient();
+        updateClientName();
+        console.log('Cliente asignado exitosamente');
+    } else {
+        console.error('ERROR: No se encontró el cliente con ID:', numericId);
+        console.log('IDs disponibles:', state.clients.map(c => ({ id: c.id, nombre: c.name })));
+    }
 
     // Limpiar campo de búsqueda
     const clientSearchInput = document.getElementById('clientSearchInput');
@@ -333,6 +399,7 @@ function selectClient(clientId) {
         clientSearchInput.value = '';
     }
 
+    console.log('========================');
     hideClientManager();
 }
 
@@ -395,24 +462,31 @@ function renderClientsList(searchTerm = '') {
         ? '<div class="empty-state">No hay clientes. Crea uno para comenzar.</div>'
         : filteredClients.length === 0
         ? '<div class="empty-state">No se encontraron clientes con ese criterio de búsqueda.</div>'
-        : filteredClients.map(client => `
-            <div class="client-item">
-                <div class="client-header">
-                    <div>
-                        <h3>${client.name}</h3>
-                        <p>${client.cuit ? `CUIT: ${client.cuit} | ` : ''}${client.accountPlan?.length || 0} cuentas</p>
+        : filteredClients.map(client => {
+            const isSelected = state.selectedClient === client.id;
+            const selectedClass = isSelected ? 'client-item-selected' : '';
+            const accountCount = client.accountPlan?.length || 0;
+            const idType = Number.isInteger(client.id) ? '✓' : '⚠️';
+
+            return `
+                <div class="client-item ${selectedClass}">
+                    <div class="client-header">
+                        <div>
+                            <h3>${client.name} ${isSelected ? '(Seleccionado)' : ''}</h3>
+                            <p>${client.cuit ? `CUIT: ${client.cuit} | ` : ''}${accountCount} cuentas | ID: ${client.id} ${idType}</p>
+                        </div>
+                        <div class="client-actions">
+                            <button class="btn-select" onclick="selectClient(${client.id})">Seleccionar</button>
+                            <button class="btn-delete" onclick="deleteClient(${client.id})">Eliminar</button>
+                        </div>
                     </div>
-                    <div class="client-actions">
-                        <button class="btn-select" onclick="selectClient(${client.id})">Seleccionar</button>
-                        <button class="btn-delete" onclick="deleteClient(${client.id})">Eliminar</button>
-                    </div>
+                    <label class="file-input-label">
+                        <span>Plan de Cuentas (Excel: Código | Descripción)</span>
+                        <input type="file" accept=".xlsx,.xls" onchange="importAccountPlan(event, ${client.id})">
+                    </label>
                 </div>
-                <label class="file-input-label">
-                    <span>Plan de Cuentas (Excel: Código | Descripción)</span>
-                    <input type="file" accept=".xlsx,.xls" onchange="importAccountPlan(event, ${client.id})">
-                </label>
-            </div>
-        `).join('');
+            `;
+        }).join('');
 
     elements.clientsList.innerHTML = html;
 }
@@ -453,6 +527,86 @@ function getClientAccounts() {
     if (!state.selectedClient) return [];
     const client = state.clients.find(c => c.id === state.selectedClient);
     return client?.accountPlan || [];
+}
+
+function repairClientData() {
+    console.log('=== REPARACIÓN DE DATOS DE CLIENTES ===');
+
+    if (state.clients.length === 0) {
+        alert('No hay clientes para reparar');
+        return;
+    }
+
+    // Detectar problemas
+    const problems = [];
+    const corruptedIds = [];
+    const missingAccountPlans = [];
+
+    state.clients.forEach((client, idx) => {
+        // Verificar IDs corruptos
+        if (!Number.isInteger(client.id)) {
+            corruptedIds.push(client.name);
+            problems.push(`- ${client.name}: ID corrupto (${client.id})`);
+        }
+
+        // Verificar accountPlan
+        if (!client.accountPlan) {
+            missingAccountPlans.push(client.name);
+            problems.push(`- ${client.name}: accountPlan faltante`);
+        }
+    });
+
+    if (problems.length === 0) {
+        alert('✓ No se detectaron problemas en los datos de clientes');
+        console.log('No se detectaron problemas');
+        return;
+    }
+
+    // Mostrar problemas encontrados
+    const message = `Se encontraron ${problems.length} problema(s):\n\n` +
+                    problems.join('\n') +
+                    '\n\n¿Deseas reparar estos problemas?';
+
+    if (!confirm(message)) {
+        return;
+    }
+
+    // Reparar IDs corruptos
+    const baseTimestamp = Date.now();
+    state.clients = state.clients.map((client, idx) => {
+        const repaired = { ...client };
+
+        // Reparar ID si es necesario
+        if (!Number.isInteger(client.id)) {
+            const oldId = client.id;
+            repaired.id = baseTimestamp + idx;
+            console.log(`Reparado: ${client.name} - ID ${oldId} → ${repaired.id}`);
+        }
+
+        // Asegurar que accountPlan existe
+        if (!repaired.accountPlan) {
+            repaired.accountPlan = [];
+            console.log(`Reparado: ${client.name} - accountPlan inicializado`);
+        }
+
+        return repaired;
+    });
+
+    // Guardar cambios
+    saveClients();
+
+    // Limpiar selección si estaba corrupta
+    state.selectedClient = null;
+    localStorage.removeItem('contable_selected_client');
+
+    // Re-renderizar
+    renderClientsList();
+
+    console.log('=== REPARACIÓN COMPLETADA ===');
+    alert(`✓ Reparación completada exitosamente.\n\n` +
+          `IDs corruptos reparados: ${corruptedIds.length}\n` +
+          `AccountPlans corregidos: ${missingAccountPlans.length}\n\n` +
+          `Por favor, selecciona nuevamente tu cliente.`);
 }
 
 // ============================================
