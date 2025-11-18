@@ -4,159 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Herramientas Contables - Estudio</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 40px 20px;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 50px;
-        }
-
-        .header h1 {
-            font-size: 48px;
-            font-weight: 700;
-            margin-bottom: 15px;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        }
-
-        .header p {
-            font-size: 20px;
-            opacity: 0.95;
-        }
-
-        .tools-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 30px;
-            margin-bottom: 40px;
-        }
-
-        .tool-card {
-            background: white;
-            border-radius: 16px;
-            padding: 35px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            transition: all 0.3s ease;
-            cursor: pointer;
-            text-decoration: none;
-            color: inherit;
-            display: block;
-        }
-
-        .tool-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 25px 70px rgba(0,0,0,0.4);
-        }
-
-        .tool-icon {
-            width: 70px;
-            height: 70px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 36px;
-            margin-bottom: 20px;
-        }
-
-        .tool-card h2 {
-            color: #2d3748;
-            font-size: 24px;
-            margin-bottom: 12px;
-            font-weight: 700;
-        }
-
-        .tool-card p {
-            color: #718096;
-            font-size: 16px;
-            line-height: 1.6;
-            margin-bottom: 20px;
-        }
-
-        .tool-features {
-            list-style: none;
-            padding: 0;
-        }
-
-        .tool-features li {
-            color: #4a5568;
-            font-size: 14px;
-            padding: 8px 0;
-            border-top: 1px solid #e2e8f0;
-        }
-
-        .tool-features li:first-child {
-            border-top: none;
-            padding-top: 0;
-        }
-
-        .tool-features li:before {
-            content: "✓";
-            color: #48bb78;
-            font-weight: bold;
-            margin-right: 10px;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 6px 12px;
-            background: #48bb78;
-            color: white;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-top: 15px;
-        }
-
-        .badge.coming-soon {
-            background: #cbd5e0;
-            color: #4a5568;
-        }
-
-        .footer {
-            text-align: center;
-            color: white;
-            margin-top: 60px;
-            padding-top: 30px;
-            border-top: 1px solid rgba(255,255,255,0.2);
-        }
-
-        .footer p {
-            font-size: 14px;
-            opacity: 0.9;
-        }
-
-        @media (max-width: 768px) {
-            .header h1 {
-                font-size: 36px;
-            }
-
-            .tools-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="index-styles.css">
 </head>
 <body>
     <script src="check-auth.js"></script>
+
+    <!-- Menú superior de bases de datos compartidas -->
+    <div class="data-menu">
+        <div class="data-menu-container">
+            <div class="data-menu-title">
+                <span class="data-menu-icon">🗄️</span>
+                <span>Bases de Datos Compartidas</span>
+            </div>
+            <div class="data-menu-buttons">
+                <button id="btnClients" class="data-btn">
+                    <span>👥</span>
+                    <span>Clientes</span>
+                    <span class="data-count" id="clientCount">0</span>
+                </button>
+                <button id="btnTaxes" class="data-btn">
+                    <span>📊</span>
+                    <span>Impuestos</span>
+                    <span class="data-count" id="taxCount">0</span>
+                </button>
+                <button id="btnStorage" class="data-btn">
+                    <span>💾</span>
+                    <span>Almacenamiento</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <div class="header">
             <h1>🧮 Herramientas Contables</h1>
@@ -228,5 +107,104 @@
             </p>
         </div>
     </div>
+
+    <!-- Modal Gestión de Clientes -->
+    <div id="modalClients" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>👥 Gestión de Clientes</h2>
+                <button class="close-btn" id="btnCloseClients">✕</button>
+            </div>
+
+            <div class="search-box">
+                <input type="text" id="clientSearchInput" class="search-input" placeholder="🔍 Buscar cliente por nombre o CUIT...">
+            </div>
+
+            <div class="btn-group mb-4">
+                <button id="btnNewClient" class="btn-primary flex-1">+ Nuevo Cliente</button>
+                <label class="btn-secondary flex-1" style="cursor: pointer; text-align: center;">
+                    📥 Importar Clientes
+                    <input type="file" id="importClientsFile" accept=".xlsx,.xls" style="display: none;">
+                </label>
+                <button id="btnRepairClients" class="btn-secondary flex-1" title="Reparar IDs corruptos">🔧 Reparar Datos</button>
+            </div>
+            <div class="info-box" style="font-size: 12px; padding: 10px; margin-bottom: 16px;">
+                <strong>Formato Excel para importar:</strong> Razón Social | CUIT<br>
+                <strong>Reparar Datos:</strong> Usa este botón si ves IDs con ⚠️ o si un cliente muestra datos incorrectos
+            </div>
+
+            <div id="clientsStats" class="clients-stats"></div>
+            <div id="clientsList" class="clients-list"></div>
+        </div>
+    </div>
+
+    <!-- Modal Nuevo Cliente -->
+    <div id="modalNewClient" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>Nuevo Cliente</h3>
+            <input type="text" id="newClientName" placeholder="Razón Social" class="input-text mb-4">
+            <input type="text" id="newClientCuit" placeholder="CUIT (Opcional)" class="input-text mb-4">
+            <div class="btn-group">
+                <button id="btnCancelNewClient" class="btn-secondary">Cancelar</button>
+                <button id="btnCreateClient" class="btn-primary">Crear</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Gestión de Impuestos -->
+    <div id="modalTaxes" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 Base de Datos de Impuestos</h2>
+                <button class="close-btn" id="btnCloseTaxes">✕</button>
+            </div>
+            <label class="btn-primary mb-4" style="cursor: pointer; text-align: center; display: block;">
+                📥 Importar Base de Impuestos
+                <input type="file" id="importTaxFile" accept=".xlsx,.xls" style="display: none;">
+            </label>
+            <div class="info-box" style="font-size: 12px; padding: 10px; margin-bottom: 16px;">
+                <strong>Formato Excel:</strong> Impuesto | Concepto | Subconcepto
+            </div>
+            <div id="taxStats" style="margin-bottom: 16px; color: #64748b;"></div>
+            <div class="preview-container">
+                <div class="preview-header">
+                    <h4>Vista Previa de la Base (Primeras 50 filas)</h4>
+                </div>
+                <div class="preview-table-container" style="max-height: 400px;">
+                    <table class="preview-table">
+                        <thead>
+                            <tr>
+                                <th>Impuesto</th>
+                                <th>Concepto</th>
+                                <th>Subconcepto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="taxTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <button id="btnClearTaxDatabase" class="btn-secondary mt-4" style="width: 100%;">Limpiar Base de Datos</button>
+        </div>
+    </div>
+
+    <!-- Modal Almacenamiento -->
+    <div id="modalStorage" class="modal hidden">
+        <div class="modal-content-sm">
+            <div class="modal-header">
+                <h2>💾 Estadísticas de Almacenamiento</h2>
+                <button class="close-btn" id="btnCloseStorage">✕</button>
+            </div>
+            <div id="storageStats"></div>
+            <button id="btnRefreshStorage" class="btn-secondary mt-4" style="width: 100%;">Actualizar</button>
+        </div>
+    </div>
+
+    <!-- Módulos compartidos -->
+    <script src="shared/dataStore.js"></script>
+    <script src="shared/clientManager.js"></script>
+    <script src="shared/taxManager.js"></script>
+
+    <!-- Script principal -->
+    <script src="index-script.js"></script>
 </body>
 </html>
