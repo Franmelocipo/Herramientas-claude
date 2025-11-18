@@ -12,7 +12,8 @@ const state = {
     clients: [],
     selectedClient: null,
     activeSearchField: null,
-    taxDatabase: [] // Base de datos de impuestos: {impuesto, concepto, subconcepto}
+    taxDatabase: [], // Base de datos de impuestos: {impuesto, concepto, subconcepto}
+    expandedGroups: {} // Rastrear qué grupos están expandidos
 };
 
 // ============================================
@@ -28,10 +29,32 @@ function loadClients() {
             state.clients = [];
         }
     }
+
+    // Cargar cliente seleccionado
+    const savedSelectedClient = localStorage.getItem('contable_selected_client');
+    if (savedSelectedClient) {
+        try {
+            const clientId = JSON.parse(savedSelectedClient);
+            // Verificar que el cliente aún existe
+            if (state.clients.find(c => c.id === clientId)) {
+                state.selectedClient = clientId;
+            }
+        } catch (e) {
+            console.error('Error cargando cliente seleccionado:', e);
+        }
+    }
 }
 
 function saveClients() {
     localStorage.setItem('contable_clients', JSON.stringify(state.clients));
+}
+
+function saveSelectedClient() {
+    if (state.selectedClient) {
+        localStorage.setItem('contable_selected_client', JSON.stringify(state.selectedClient));
+    } else {
+        localStorage.removeItem('contable_selected_client');
+    }
 }
 
 function loadTaxDatabase() {
@@ -235,6 +258,7 @@ function reset() {
     state.finalData = [];
     state.bankAccount = '';
     state.activeSearchField = null;
+    state.expandedGroups = {};
 
     elements.fileInput.value = '';
     elements.bankAccountInput.value = '';
@@ -289,6 +313,7 @@ function createClient() {
     state.clients.push(newClient);
     saveClients();
     state.selectedClient = newClient.id;
+    saveSelectedClient();
     updateClientName();
 
     hideNewClientModal();
@@ -297,6 +322,7 @@ function createClient() {
 
 function selectClient(clientId) {
     state.selectedClient = clientId;
+    saveSelectedClient();
     updateClientName();
     hideClientManager();
 }
@@ -307,6 +333,7 @@ function deleteClient(clientId) {
         saveClients();
         if (state.selectedClient === clientId) {
             state.selectedClient = null;
+            saveSelectedClient();
             updateClientName();
         }
         renderClientsList();
@@ -838,28 +865,68 @@ function renderGroupsList() {
             ? (g.isOrigen ? ' (HABER)' : ' (DEBE)')
             : '';
 
+        const isExpanded = state.expandedGroups[idx] || false;
+        const expandIcon = isExpanded ? '▼' : '▶';
+
+        // Generar tabla de detalle de movimientos
+        let detailsHtml = '';
+        if (isExpanded && g.items && g.items.length > 0) {
+            const headers = Object.keys(g.items[0]).filter(k => !k.startsWith('_'));
+            detailsHtml = `
+                <div class="group-details">
+                    <div class="group-details-table-container">
+                        <table class="group-details-table">
+                            <thead>
+                                <tr>
+                                    ${headers.map(h => `<th>${h}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${g.items.map(item => `
+                                    <tr>
+                                        ${headers.map(h => {
+                                            const val = item[h];
+                                            if (val === undefined || val === null || val === '') return '<td>-</td>';
+                                            if (typeof val === 'number') return `<td class="text-right">${val.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>`;
+                                            return `<td>${val}</td>`;
+                                        }).join('')}
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
         return `
             <div class="group-item ${classType}">
-                <div class="group-info">
-                    <div class="group-concepto">${g.concepto}</div>
-                    <div class="group-ejemplo">${g.ejemploCompleto}</div>
-                    <div class="group-stats">
-                        ${g.count} mov | Debe: $${g.totalDebe.toFixed(2)} | Haber: $${g.totalHaber.toFixed(2)}
+                <div class="group-main-row">
+                    <button class="group-expand-btn" onclick="toggleGroupExpansion(${idx})" title="Ver detalle de movimientos">
+                        ${expandIcon}
+                    </button>
+                    <div class="group-info">
+                        <div class="group-concepto">${g.concepto}</div>
+                        <div class="group-ejemplo">${g.ejemploCompleto}</div>
+                        <div class="group-stats">
+                            ${g.count} mov | Debe: $${g.totalDebe.toFixed(2)} | Haber: $${g.totalHaber.toFixed(2)}
+                        </div>
+                    </div>
+                    <div class="group-account">
+                        <label>Código de cuenta${extraLabel}</label>
+                        <div class="input-with-dropdown">
+                            <input
+                                type="text"
+                                class="input-text"
+                                data-group-idx="${idx}"
+                                value="${state.accountCodes[idx] || ''}"
+                                placeholder="${state.selectedClient ? 'Click para buscar...' : 'Código'}"
+                            >
+                            <div class="account-dropdown hidden" id="dropdown-${idx}"></div>
+                        </div>
                     </div>
                 </div>
-                <div class="group-account">
-                    <label>Código de cuenta${extraLabel}</label>
-                    <div class="input-with-dropdown">
-                        <input
-                            type="text"
-                            class="input-text"
-                            data-group-idx="${idx}"
-                            value="${state.accountCodes[idx] || ''}"
-                            placeholder="${state.selectedClient ? 'Click para buscar...' : 'Código'}"
-                        >
-                        <div class="account-dropdown hidden" id="dropdown-${idx}"></div>
-                    </div>
-                </div>
+                ${detailsHtml}
             </div>
         `;
     }).join('');
@@ -879,6 +946,14 @@ function renderGroupsList() {
             }
         });
     });
+}
+
+// ============================================
+// EXPANSIÓN DE GRUPOS
+// ============================================
+function toggleGroupExpansion(idx) {
+    state.expandedGroups[idx] = !state.expandedGroups[idx];
+    renderGroupsList();
 }
 
 // ============================================

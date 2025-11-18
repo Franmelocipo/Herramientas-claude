@@ -563,8 +563,8 @@ body {
     border-radius: 8px;
     padding: 16px;
     display: flex;
-    gap: 16px;
-    align-items: start;
+    flex-direction: column;
+    gap: 12px;
 }
 
 .group-item.origen {
@@ -575,6 +575,30 @@ body {
 .group-item.destino {
     background: #d1fae5;
     border-color: #6ee7b7;
+}
+
+.group-main-row {
+    display: flex;
+    gap: 16px;
+    align-items: start;
+    width: 100%;
+}
+
+.group-expand-btn {
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    color: #6366f1;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    margin-top: 4px;
+}
+
+.group-expand-btn:hover {
+    background: rgba(99, 102, 241, 0.1);
+    border-radius: 4px;
 }
 
 .group-info {
@@ -698,4 +722,56 @@ body {
 
 .leyenda-col {
     color: #64748b;
+}
+
+/* Group Details */
+.group-details {
+    margin-top: 8px;
+    border-top: 2px solid rgba(0, 0, 0, 0.1);
+    padding-top: 12px;
+}
+
+.group-details-table-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+
+.group-details-table {
+    width: 100%;
+    font-size: 12px;
+    border-collapse: collapse;
+    background: white;
+}
+
+.group-details-table thead {
+    background: #f8fafc;
+    position: sticky;
+    top: 0;
+}
+
+.group-details-table th {
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.group-details-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 12px;
+}
+
+.group-details-table tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
+
+.group-details-table tbody tr:hover {
+    background: #eef2ff;
 }
