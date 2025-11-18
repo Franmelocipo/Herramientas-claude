@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Comprobantes - Estudio Contable</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            border: none;
+            background: transparent;
+            font-size: 1em;
+        }
+
+        .tab:hover {
+            background: #e9ecef;
+        }
+
+        .tab.active {
+            background: white;
+            border-bottom: 3px solid #667eea;
+            color: #667eea;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-right: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th {
+            background: #f8f9fa;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .badge-pendiente {
+            background: #ffc107;
+            color: #856404;
+        }
+
+        .badge-pagado {
+            background: #28a745;
+            color: white;
+        }
+
+        .badge-vencido {
+            background: #dc3545;
+            color: white;
+        }
+
+        .badge-anulado {
+            background: #6c757d;
+            color: white;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h3 {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            font-size: 2em;
+            font-weight: bold;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Gestión de Comprobantes</h1>
+            <p>Sistema integrado de administración contable con Supabase</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('clientes')">👥 Clientes</button>
+            <button class="tab" onclick="showTab('comprobantes')">📄 Comprobantes</button>
+            <button class="tab" onclick="showTab('nuevo-comprobante')">➕ Nuevo Comprobante</button>
+            <button class="tab" onclick="showTab('dashboard')">📈 Dashboard</button>
+        </div>
+
+        <div class="content">
+            <!-- Tab Clientes -->
+            <div id="clientes" class="tab-content active">
+                <h2>Gestión de Clientes</h2>
+                <div id="alert-clientes"></div>
+                
+                <div class="form-group">
+                    <h3>Agregar Nuevo Cliente</h3>
+                    <div class="row">
+                        <div>
+                            <label>CUIT *</label>
+                            <input type="text" id="cliente-cuit" placeholder="20-12345678-9" maxlength="13">
+                        </div>
+                        <div>
+                            <label>Razón Social *</label>
+                            <input type="text" id="cliente-razon-social" placeholder="Empresa S.A.">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div>
+                            <label>Email</label>
+                            <input type="email" id="cliente-email" placeholder="contacto@empresa.com">
+                        </div>
+                        <div>
+                            <label>Teléfono</label>
+                            <input type="tel" id="cliente-telefono" placeholder="+54 9 299 123-4567">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Dirección</label>
+                        <textarea id="cliente-direccion" rows="2" placeholder="Calle, número, ciudad, provincia"></textarea>
+                    </div>
+                    <button class="btn btn-primary" onclick="guardarCliente()">💾 Guardar Cliente</button>
+                </div>
+
+                <div class="table-container">
+                    <h3>Listado de Clientes</h3>
+                    <table id="tabla-clientes">
+                        <thead>
+                            <tr>
+                                <th>CUIT</th>
+                                <th>Razón Social</th>
+                                <th>Email</th>
+                                <th>Teléfono</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clientes-body">
+                            <tr><td colspan="6" class="loading">Cargando clientes...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab Comprobantes -->
+            <div id="comprobantes" class="tab-content">
+                <h2>Listado de Comprobantes</h2>
+                <div id="alert-comprobantes"></div>
+                
+                <div class="row">
+                    <div class="form-group">
+                        <label>Filtrar por Cliente</label>
+                        <select id="filtro-cliente">
+                            <option value="">Todos los clientes</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Filtrar por Estado</label>
+                        <select id="filtro-estado" onchange="cargarComprobantes()">
+                            <option value="">Todos</option>
+                            <option value="pendiente">Pendientes</option>
+                            <option value="pagado">Pagados</option>
+                            <option value="vencido">Vencidos</option>
+                            <option value="anulado">Anulados</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table id="tabla-comprobantes">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Tipo</th>
+                                <th>Número</th>
+                                <th>Cliente</th>
+                                <th>Total</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="comprobantes-body">
+                            <tr><td colspan="7" class="loading">Cargando comprobantes...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab Nuevo Comprobante -->
+            <div id="nuevo-comprobante" class="tab-content">
+                <h2>Crear Nuevo Comprobante</h2>
+                <div id="alert-nuevo"></div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label>Cliente *</label>
+                        <select id="nuevo-cliente" required>
+                            <option value="">Seleccione un cliente</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Tipo de Comprobante *</label>
+                        <select id="nuevo-tipo">
+                            <option value="factura">Factura</option>
+                            <option value="nota_credito">Nota de Crédito</option>
+                            <option value="nota_debito">Nota de Débito</option>
+                            <option value="recibo">Recibo</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label>Número de Comprobante *</label>
+                        <input type="text" id="nuevo-numero" placeholder="0001-00000001">
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha de Emisión *</label>
+                        <input type="date" id="nuevo-fecha-emision">
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha de Vencimiento</label>
+                        <input type="date" id="nuevo-fecha-vencimiento">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label>Subtotal *</label>
+                        <input type="number" id="nuevo-subtotal" step="0.01" placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label>IVA</label>
+                        <input type="number" id="nuevo-iva" step="0.01" placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label>Percepciones</label>
+                        <input type="number" id="nuevo-percepciones" step="0.01" placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label>Retenciones</label>
+                        <input type="number" id="nuevo-retenciones" step="0.01" placeholder="0.00">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Total *</label>
+                    <input type="number" id="nuevo-total" step="0.01" placeholder="0.00" readonly>
+                </div>
+
+                <div class="form-group">
+                    <label>Observaciones</label>
+                    <textarea id="nuevo-observaciones" rows="3" placeholder="Notas adicionales..."></textarea>
+                </div>
+
+                <button class="btn btn-primary" onclick="guardarComprobante()">💾 Guardar Comprobante</button>
+                <button class="btn btn-secondary" onclick="limpiarFormulario()">🔄 Limpiar</button>
+            </div>
+
+            <!-- Tab Dashboard -->
+            <div id="dashboard" class="tab-content">
+                <h2>Dashboard - Resumen Contable</h2>
+                
+                <div class="stats-grid" id="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Pendiente</h3>
+                        <div class="value" id="stat-pendiente">$0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Pagado</h3>
+                        <div class="value" id="stat-pagado">$0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Vencido</h3>
+                        <div class="value" id="stat-vencido">$0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Clientes Activos</h3>
+                        <div class="value" id="stat-clientes">0</div>
+                    </div>
+                </div>
+
+                <h3>Comprobantes Próximos a Vencer</h3>
+                <div class="table-container">
+                    <table id="tabla-proximos-vencer">
+                        <thead>
+                            <tr>
+                                <th>Fecha Venc.</th>
+                                <th>Cliente</th>
+                                <th>Número</th>
+                                <th>Total</th>
+                                <th>Días</th>
+                            </tr>
+                        </thead>
+                        <tbody id="proximos-vencer-body">
+                            <tr><td colspan="5" class="loading">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuración de Supabase
+        const SUPABASE_URL = 'https://wnpjvnmyfkgtpwqnbmxa.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InducGp2bm15ZmtndHB3cW5ibXhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzEwNDYxNjksImV4cCI6MjA0NjYyMjE2OX0.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InducGp2bm15ZmtndHB3cW5ibXhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzEwNDYxNjksImV4cCI6MjA0NjYyMjE2OX0';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Estado global
+        let clientes = [];
+        let comprobantes = [];
+
+        // Inicializar aplicación
+        document.addEventListener('DOMContentLoaded', async () => {
+            await cargarClientes();
+            await cargarComprobantes();
+            await cargarDashboard();
+            calcularTotal();
+        });
+
+        // Cambiar tabs
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+
+            if (tabName === 'dashboard') {
+                cargarDashboard();
+            }
+        }
+
+        // Mostrar alertas
+        function showAlert(containerId, message, type = 'success') {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => container.innerHTML = '', 5000);
+        }
+
+        // === CLIENTES ===
+        async function cargarClientes() {
+            try {
+                const { data, error } = await supabase
+                    .from('clientes')
+                    .select('*')
+                    .eq('activo', true)
+                    .order('razon_social');
+
+                if (error) throw error;
+
+                clientes = data || [];
+                mostrarClientes();
+                actualizarSelectClientes();
+            } catch (error) {
+                console.error('Error cargando clientes:', error);
+                showAlert('alert-clientes', 'Error al cargar clientes: ' + error.message, 'error');
+            }
+        }
+
+        function mostrarClientes() {
+            const tbody = document.getElementById('clientes-body');
+            
+            if (clientes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">No hay clientes registrados</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = clientes.map(c => `
+                <tr>
+                    <td>${c.cuit}</td>
+                    <td>${c.razon_social}</td>
+                    <td>${c.email || '-'}</td>
+                    <td>${c.telefono || '-'}</td>
+                    <td><span class="badge badge-pagado">Activo</span></td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-sm btn-secondary" onclick="editarCliente('${c.id}')">✏️</button>
+                            <button class="btn btn-sm btn-danger" onclick="eliminarCliente('${c.id}')">🗑️</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function guardarCliente() {
+            const cuit = document.getElementById('cliente-cuit').value.trim();
+            const razonSocial = document.getElementById('cliente-razon-social').value.trim();
+            const email = document.getElementById('cliente-email').value.trim();
+            const telefono = document.getElementById('cliente-telefono').value.trim();
+            const direccion = document.getElementById('cliente-direccion').value.trim();
+
+            if (!cuit || !razonSocial) {
+                showAlert('alert-clientes', 'CUIT y Razón Social son obligatorios', 'error');
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase
+                    .from('clientes')
+                    .insert([{
+                        cuit,
+                        razon_social: razonSocial,
+                        email: email || null,
+                        telefono: telefono || null,
+                        direccion: direccion || null
+                    }])
+                    .select();
+
+                if (error) throw error;
+
+                showAlert('alert-clientes', '✅ Cliente guardado exitosamente');
+                limpiarFormularioCliente();
+                await cargarClientes();
+            } catch (error) {
+                console.error('Error guardando cliente:', error);
+                showAlert('alert-clientes', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        function limpiarFormularioCliente() {
+            document.getElementById('cliente-cuit').value = '';
+            document.getElementById('cliente-razon-social').value = '';
+            document.getElementById('cliente-email').value = '';
+            document.getElementById('cliente-telefono').value = '';
+            document.getElementById('cliente-direccion').value = '';
+        }
+
+        async function eliminarCliente(id) {
+            if (!confirm('¿Está seguro de eliminar este cliente?')) return;
+
+            try {
+                const { error } = await supabase
+                    .from('clientes')
+                    .update({ activo: false })
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                showAlert('alert-clientes', '✅ Cliente eliminado');
+                await cargarClientes();
+            } catch (error) {
+                showAlert('alert-clientes', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        // === COMPROBANTES ===
+        async function cargarComprobantes() {
+            try {
+                const filtroEstado = document.getElementById('filtro-estado')?.value || '';
+                
+                let query = supabase
+                    .from('comprobantes')
+                    .select(`
+                        *,
+                        clientes (razon_social, cuit)
+                    `)
+                    .order('fecha_emision', { ascending: false });
+
+                if (filtroEstado) {
+                    query = query.eq('estado', filtroEstado);
+                }
+
+                const { data, error } = await query;
+
+                if (error) throw error;
+
+                comprobantes = data || [];
+                mostrarComprobantes();
+            } catch (error) {
+                console.error('Error cargando comprobantes:', error);
+                showAlert('alert-comprobantes', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        function mostrarComprobantes() {
+            const tbody = document.getElementById('comprobantes-body');
+            
+            if (comprobantes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">No hay comprobantes registrados</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = comprobantes.map(c => `
+                <tr>
+                    <td>${new Date(c.fecha_emision).toLocaleDateString()}</td>
+                    <td>${formatTipo(c.tipo_comprobante)}</td>
+                    <td>${c.numero_comprobante}</td>
+                    <td>${c.clientes?.razon_social || 'N/A'}</td>
+                    <td>$${parseFloat(c.total).toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                    <td><span class="badge badge-${c.estado}">${c.estado.toUpperCase()}</span></td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-sm btn-primary" onclick="verComprobante('${c.id}')">👁️</button>
+                            <button class="btn btn-sm btn-secondary" onclick="cambiarEstado('${c.id}')">🔄</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function formatTipo(tipo) {
+            const tipos = {
+                factura: 'Factura',
+                nota_credito: 'N. Crédito',
+                nota_debito: 'N. Débito',
+                recibo: 'Recibo'
+            };
+            return tipos[tipo] || tipo;
+        }
+
+        function actualizarSelectClientes() {
+            const selects = ['nuevo-cliente', 'filtro-cliente'];
+            
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                if (!select) return;
+                
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">Seleccione un cliente</option>' +
+                    clientes.map(c => `<option value="${c.id}">${c.razon_social} (${c.cuit})</option>`).join('');
+                select.value = currentValue;
+            });
+        }
+
+        // Calcular total automáticamente
+        function calcularTotal() {
+            ['nuevo-subtotal', 'nuevo-iva', 'nuevo-percepciones', 'nuevo-retenciones'].forEach(id => {
+                document.getElementById(id)?.addEventListener('input', () => {
+                    const subtotal = parseFloat(document.getElementById('nuevo-subtotal').value) || 0;
+                    const iva = parseFloat(document.getElementById('nuevo-iva').value) || 0;
+                    const percepciones = parseFloat(document.getElementById('nuevo-percepciones').value) || 0;
+                    const retenciones = parseFloat(document.getElementById('nuevo-retenciones').value) || 0;
+                    
+                    const total = subtotal + iva + percepciones - retenciones;
+                    document.getElementById('nuevo-total').value = total.toFixed(2);
+                });
+            });
+        }
+
+        async function guardarComprobante() {
+            const clienteId = document.getElementById('nuevo-cliente').value;
+            const tipo = document.getElementById('nuevo-tipo').value;
+            const numero = document.getElementById('nuevo-numero').value.trim();
+            const fechaEmision = document.getElementById('nuevo-fecha-emision').value;
+            const fechaVencimiento = document.getElementById('nuevo-fecha-vencimiento').value;
+            const subtotal = parseFloat(document.getElementById('nuevo-subtotal').value) || 0;
+            const iva = parseFloat(document.getElementById('nuevo-iva').value) || 0;
+            const percepciones = parseFloat(document.getElementById('nuevo-percepciones').value) || 0;
+            const retenciones = parseFloat(document.getElementById('nuevo-retenciones').value) || 0;
+            const total = parseFloat(document.getElementById('nuevo-total').value) || 0;
+            const observaciones = document.getElementById('nuevo-observaciones').value.trim();
+
+            if (!clienteId || !numero || !fechaEmision || subtotal === 0) {
+                showAlert('alert-nuevo', 'Complete los campos obligatorios', 'error');
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase
+                    .from('comprobantes')
+                    .insert([{
+                        cliente_id: clienteId,
+                        tipo_comprobante: tipo,
+                        numero_comprobante: numero,
+                        fecha_emision: fechaEmision,
+                        fecha_vencimiento: fechaVencimiento || null,
+                        subtotal,
+                        iva,
+                        percepciones,
+                        retenciones,
+                        total,
+                        observaciones: observaciones || null,
+                        estado: 'pendiente'
+                    }])
+                    .select();
+
+                if (error) throw error;
+
+                showAlert('alert-nuevo', '✅ Comprobante guardado exitosamente');
+                limpiarFormulario();
+                await cargarComprobantes();
+            } catch (error) {
+                console.error('Error guardando comprobante:', error);
+                showAlert('alert-nuevo', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        function limpiarFormulario() {
+            document.getElementById('nuevo-cliente').value = '';
+            document.getElementById('nuevo-tipo').value = 'factura';
+            document.getElementById('nuevo-numero').value = '';
+            document.getElementById('nuevo-fecha-emision').value = '';
+            document.getElementById('nuevo-fecha-vencimiento').value = '';
+            document.getElementById('nuevo-subtotal').value = '';
+            document.getElementById('nuevo-iva').value = '';
+            document.getElementById('nuevo-percepciones').value = '';
+            document.getElementById('nuevo-retenciones').value = '';
+            document.getElementById('nuevo-total').value = '';
+            document.getElementById('nuevo-observaciones').value = '';
+        }
+
+        async function cambiarEstado(id) {
+            const nuevoEstado = prompt('Nuevo estado (pendiente/pagado/vencido/anulado):');
+            const estados = ['pendiente', 'pagado', 'vencido', 'anulado'];
+            
+            if (!nuevoEstado || !estados.includes(nuevoEstado)) {
+                alert('Estado inválido');
+                return;
+            }
+
+            try {
+                const { error } = await supabase
+                    .from('comprobantes')
+                    .update({ estado: nuevoEstado })
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                showAlert('alert-comprobantes', '✅ Estado actualizado');
+                await cargarComprobantes();
+                await cargarDashboard();
+            } catch (error) {
+                showAlert('alert-comprobantes', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        // === DASHBOARD ===
+        async function cargarDashboard() {
+            try {
+                // Cargar estadísticas
+                const { data: stats, error: statsError } = await supabase
+                    .from('comprobantes')
+                    .select('estado, total');
+
+                if (statsError) throw statsError;
+
+                const pendiente = stats.filter(c => c.estado === 'pendiente').reduce((sum, c) => sum + parseFloat(c.total), 0);
+                const pagado = stats.filter(c => c.estado === 'pagado').reduce((sum, c) => sum + parseFloat(c.total), 0);
+                const vencido = stats.filter(c => c.estado === 'vencido').reduce((sum, c) => sum + parseFloat(c.total), 0);
+
+                document.getElementById('stat-pendiente').textContent = '$' + pendiente.toLocaleString('es-AR', {minimumFractionDigits: 2});
+                document.getElementById('stat-pagado').textContent = '$' + pagado.toLocaleString('es-AR', {minimumFractionDigits: 2});
+                document.getElementById('stat-vencido').textContent = '$' + vencido.toLocaleString('es-AR', {minimumFractionDigits: 2});
+                document.getElementById('stat-clientes').textContent = clientes.length;
+
+                // Próximos a vencer
+                const hoy = new Date();
+                const en30Dias = new Date();
+                en30Dias.setDate(hoy.getDate() + 30);
+
+                const { data: proximos, error: proximosError } = await supabase
+                    .from('comprobantes')
+                    .select(`
+                        *,
+                        clientes (razon_social)
+                    `)
+                    .eq('estado', 'pendiente')
+                    .gte('fecha_vencimiento', hoy.toISOString().split('T')[0])
+                    .lte('fecha_vencimiento', en30Dias.toISOString().split('T')[0])
+                    .order('fecha_vencimiento');
+
+                if (proximosError) throw proximosError;
+
+                const tbody = document.getElementById('proximos-vencer-body');
+                
+                if (!proximos || proximos.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">No hay comprobantes próximos a vencer</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = proximos.map(c => {
+                    const diasRestantes = Math.ceil((new Date(c.fecha_vencimiento) - hoy) / (1000 * 60 * 60 * 24));
+                    return `
+                        <tr>
+                            <td>${new Date(c.fecha_vencimiento).toLocaleDateString()}</td>
+                            <td>${c.clientes?.razon_social || 'N/A'}</td>
+                            <td>${c.numero_comprobante}</td>
+                            <td>$${parseFloat(c.total).toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                            <td style="color: ${diasRestantes <= 7 ? '#dc3545' : '#ffc107'}">${diasRestantes} días</td>
+                        </tr>
+                    `;
+                }).join('');
+
+            } catch (error) {
+                console.error('Error cargando dashboard:', error);
+            }
+        }
+
+        function verComprobante(id) {
+            const comp = comprobantes.find(c => c.id === id);
+            if (!comp) return;
+
+            alert(`
+Comprobante: ${comp.numero_comprobante}
+Cliente: ${comp.clientes?.razon_social || 'N/A'}
+Tipo: ${formatTipo(comp.tipo_comprobante)}
+Fecha: ${new Date(comp.fecha_emision).toLocaleDateString()}
+Subtotal: $${parseFloat(comp.subtotal).toFixed(2)}
+IVA: $${parseFloat(comp.iva).toFixed(2)}
+Total: $${parseFloat(comp.total).toFixed(2)}
+Estado: ${comp.estado.toUpperCase()}
+${comp.observaciones ? '\nObservaciones: ' + comp.observaciones : ''}
+            `);
+        }
+    </script>
+</body>
+</html>
