@@ -35,23 +35,85 @@ Convierte datos de diferentes orígenes a formato de asientos contables listos p
 
 [📖 Ver documentación completa](./herramientas/conversor-asientos/README.md)
 
+### 3. Conversor de Extractos Bancarios
+**🏦 Estado:** ✅ Disponible
+
+Convierte extractos bancarios y de inversiones de PDF a Excel para facilitar el análisis y la contabilización.
+
+**Características:**
+- Soporte para Banco Galicia y BBVA
+- Extractos bancarios e inversiones
+- Extracción automática de movimientos
+- Exportación a Excel con formato
+- 100% local (no envía datos a servidores externos)
+
+[📖 Ver documentación completa](./herramientas/extractos-bancarios/README.md)
+
+### 4. Gestión de Comprobantes
+**📋 Estado:** ✅ Disponible (MVP)
+
+Sistema web completo para la carga y gestión de comprobantes de clientes remotos del estudio contable, con integración a Supabase.
+
+**Características:**
+- **Para Clientes:**
+  - Subir comprobantes (PDF/imágenes) a períodos abiertos
+  - Ver historial de comprobantes subidos
+  - Consultar estado de órdenes de pago
+  - Acceso limitado solo a sus propios datos
+
+- **Para Personal del Estudio:**
+  - Gestión de períodos contables (apertura/cierre)
+  - Vinculación de comprobantes con registros contables
+  - Cálculo automático de retenciones RG 830
+  - Creación y gestión de órdenes de pago
+  - Dashboard con estadísticas y reportes
+  - Acceso completo a todos los clientes
+
+- **Base de Datos:**
+  - Integración completa con Supabase (PostgreSQL)
+  - Row Level Security (RLS) para control de acceso
+  - Storage para archivos de comprobantes
+  - Códigos de retención RG 830 precargados
+
+[📖 Ver documentación completa](./herramientas/gestion-comprobantes/README.md)
+
 ## Estructura del Proyecto
 
 ```
 Herramientas-claude/
 ├── index.html                          # Página principal
+├── login.html                          # Página de login
 ├── README.md                           # Este archivo
+├── supabase-config.js                  # Configuración de Supabase
+├── supabase-schema-comprobantes.sql    # Schema SQL para gestión de comprobantes
+├── check-auth.js                       # Verificación de autenticación
 ├── herramientas/                       # Directorio de herramientas
 │   ├── mercado-pago-converter/        # Convertidor Mercado Pago
-│   │   ├── index.html                  # Aplicación
-│   │   ├── styles.css                  # Estilos
-│   │   ├── script.js                   # Lógica
-│   │   └── README.md                   # Documentación
-│   └── conversor-asientos/            # Conversor de Asientos Contables
-│       ├── index.html                  # Aplicación
+│   │   ├── index.html
+│   │   ├── styles.css
+│   │   ├── script.js
+│   │   └── README.md
+│   ├── conversor-asientos/            # Conversor de Asientos Contables
+│   │   ├── index.html
+│   │   ├── styles.css
+│   │   ├── script.js
+│   │   └── README.md
+│   ├── extractos-bancarios/           # Conversor de Extractos Bancarios
+│   │   ├── index.html
+│   │   ├── styles.css
+│   │   ├── script.js
+│   │   └── README.md
+│   └── gestion-comprobantes/          # Gestión de Comprobantes
+│       ├── index.html                  # Aplicación principal
 │       ├── styles.css                  # Estilos
-│       ├── script.js                   # Lógica (con LocalStorage)
-│       └── README.md                   # Documentación
+│       ├── script.js                   # Lógica principal
+│       ├── README.md                   # Documentación
+│       ├── lib/                        # Librerías
+│       │   ├── utils.js                # Utilidades generales
+│       │   ├── retenciones.js          # Cálculo de retenciones
+│       │   └── supabase-helper.js      # Helper de Supabase
+│       ├── cliente/                    # Vistas de cliente (futuro)
+│       └── estudio/                    # Vistas del estudio (futuro)
 └── assets/                             # Recursos compartidos (opcional)
     ├── css/
     └── js/
