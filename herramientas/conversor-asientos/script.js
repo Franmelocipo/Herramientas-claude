@@ -62,29 +62,6 @@ function initializeElements() {
         clientName: document.getElementById('clientName'),
         btnReset: document.getElementById('btnReset'),
 
-        // Modals - Clients
-        modalClientManager: document.getElementById('modalClientManager'),
-        modalNewClient: document.getElementById('modalNewClient'),
-        btnClientManager: document.getElementById('btnClientManager'),
-        btnCloseClientManager: document.getElementById('btnCloseClientManager'),
-        btnNewClient: document.getElementById('btnNewClient'),
-        btnCancelNewClient: document.getElementById('btnCancelNewClient'),
-        btnCreateClient: document.getElementById('btnCreateClient'),
-        btnRepairClients: document.getElementById('btnRepairClients'),
-        newClientName: document.getElementById('newClientName'),
-        newClientCuit: document.getElementById('newClientCuit'),
-        clientsList: document.getElementById('clientsList'),
-        importClientsFile: document.getElementById('importClientsFile'),
-
-        // Modals - Tax Database
-        modalTaxDatabase: document.getElementById('modalTaxDatabase'),
-        btnTaxDatabase: document.getElementById('btnTaxDatabase'),
-        btnCloseTaxDatabase: document.getElementById('btnCloseTaxDatabase'),
-        importTaxFile: document.getElementById('importTaxFile'),
-        taxStats: document.getElementById('taxStats'),
-        taxTableBody: document.getElementById('taxTableBody'),
-        btnClearTaxDatabase: document.getElementById('btnClearTaxDatabase'),
-
         // Step 1
         sourceTypeName: document.getElementById('sourceTypeName'),
         fileInput: document.getElementById('fileInput'),
