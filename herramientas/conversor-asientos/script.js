@@ -29,6 +29,7 @@ function getTaxDatabase() {
 // ELEMENTOS DEL DOM
 // ============================================
 let elements = {};
+let planCuentas = [];
 
 // ============================================
 // TIPOS DE FUENTE
@@ -55,6 +56,11 @@ function initializeElements() {
         subtitle: document.getElementById('subtitle'),
         clientName: document.getElementById('clientName'),
         btnReset: document.getElementById('btnReset'),
+
+        // Step 0 - Client warning and template
+        noClientWarning: document.getElementById('noClientWarning'),
+        templateDownloadSection: document.getElementById('templateDownloadSection'),
+        btnDownloadTemplate: document.getElementById('btnDownloadTemplate'),
 
         // Step 1
         sourceTypeName: document.getElementById('sourceTypeName'),
@@ -87,7 +93,7 @@ function initializeElements() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     console.log('=== INICIANDO APLICACIÓN ===');
 
     // Inicializar elementos del DOM
@@ -96,7 +102,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cargar datos - usando sistema centralizado
     console.log('Usando sistema centralizado de datos compartidos');
 
-    updateClientName();
+    await updateClientName();
+    await checkClientAndLoadPlanCuentas();
 
     // Adjuntar event listeners
     attachEventListeners();
@@ -105,6 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectedClientId = getSelectedClientId();
     if (selectedClientId) {
         console.log('Cliente activo ID:', selectedClientId);
+        console.log('Plan de cuentas cargado:', planCuentas.length, 'cuentas');
     } else {
         console.log('No hay cliente seleccionado');
     }
@@ -117,6 +125,11 @@ function attachEventListeners() {
     // Header
     if (elements.btnReset) {
         elements.btnReset.addEventListener('click', () => reset());
+    }
+
+    // Step 0: Template download
+    if (elements.btnDownloadTemplate) {
+        elements.btnDownloadTemplate.addEventListener('click', () => downloadTemplate());
     }
 
     // Step 0: Source type selection
@@ -248,15 +261,52 @@ async function updateClientName() {
     }
 }
 
-async function getClientAccounts() {
-    const selectedClientId = getSelectedClientId();
-    if (!selectedClientId) return [];
+async function checkClientAndLoadPlanCuentas() {
+    const clienteActivo = window.obtenerClienteActivo ? window.obtenerClienteActivo() : null;
 
-    // Usar window.obtenerPlanCuentas() si está disponible
-    if (typeof window.obtenerPlanCuentas === 'function') {
-        return await window.obtenerPlanCuentas(selectedClientId);
+    if (!clienteActivo || !clienteActivo.id) {
+        // No hay cliente activo - mostrar advertencia
+        if (elements.noClientWarning) {
+            elements.noClientWarning.classList.remove('hidden');
+        }
+        // Deshabilitar botones de selección de tipo
+        document.querySelectorAll('.source-type-btn').forEach(btn => {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.style.cursor = 'not-allowed';
+        });
+        console.warn('⚠️ No hay cliente activo seleccionado');
+        return;
     }
-    return [];
+
+    // Hay cliente activo - ocultar advertencia
+    if (elements.noClientWarning) {
+        elements.noClientWarning.classList.add('hidden');
+    }
+
+    // Cargar plan de cuentas
+    try {
+        if (typeof window.obtenerPlanCuentas === 'function') {
+            planCuentas = await window.obtenerPlanCuentas(clienteActivo.id);
+
+            if (!planCuentas || planCuentas.length === 0) {
+                console.warn('⚠️ El cliente no tiene plan de cuentas configurado');
+                alert('Este cliente no tiene plan de cuentas configurado.\n\nPor favor, configure el plan de cuentas antes de usar el conversor.');
+            } else {
+                console.log('✅ Plan de cuentas cargado:', planCuentas.length, 'cuentas');
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error cargando plan de cuentas:', error);
+        alert('Error al cargar el plan de cuentas del cliente');
+    }
+}
+
+async function getClientAccounts() {
+    return planCuentas.map(cuenta => ({
+        code: cuenta.codigo,
+        description: cuenta.cuenta
+    }));
 }
 
 // ============================================
@@ -656,12 +706,12 @@ function toggleGroupExpansion(idx) {
 // ============================================
 // DROPDOWN DE CUENTAS
 // ============================================
-function showAccountDropdown(fieldId) {
+async function showAccountDropdown(fieldId) {
     closeAllDropdowns();
 
-    const accounts = getClientAccounts();
+    const accounts = await getClientAccounts();
     if (accounts.length === 0) {
-        alert('El cliente no tiene plan de cuentas');
+        alert('El cliente no tiene plan de cuentas configurado.\n\nPor favor, configure el plan de cuentas antes de continuar.');
         return;
     }
 
@@ -1051,6 +1101,88 @@ function postProcessCompensaciones(allData) {
         });
         nuevoNumero++;
     });
+}
+
+// ============================================
+// DESCARGA DE PLANTILLA EXCEL
+// ============================================
+function downloadTemplate() {
+    // Crear workbook
+    const wb = XLSX.utils.book_new();
+
+    // ========== HOJA 1: DATOS ==========
+    const datosEjemplo = [
+        ['fecha', 'descripcion', 'debe', 'haber'],
+        ['2025-01-15', 'Pago proveedor', 10000, 0],
+        ['2025-01-15', 'Banco cuenta corriente', 0, 10000],
+        ['2025-01-20', 'Venta producto', 0, 5000],
+        ['2025-01-20', 'Caja', 5000, 0],
+        ['2025-01-25', 'Compra mercadería', 15000, 0],
+        ['2025-01-25', 'Proveedores', 0, 15000],
+        ['2025-01-28', 'Cobro de cliente', 0, 8000],
+        ['2025-01-28', 'Banco cuenta corriente', 8000, 0]
+    ];
+
+    const wsDatos = XLSX.utils.aoa_to_sheet(datosEjemplo);
+
+    // Configurar anchos de columna
+    wsDatos['!cols'] = [
+        { wch: 12 },  // fecha
+        { wch: 30 },  // descripcion
+        { wch: 12 },  // debe
+        { wch: 12 }   // haber
+    ];
+
+    XLSX.utils.book_append_sheet(wb, wsDatos, 'Datos');
+
+    // ========== HOJA 2: INSTRUCCIONES ==========
+    const instrucciones = [
+        ['INSTRUCCIONES DE USO DE LA PLANTILLA'],
+        [''],
+        ['1. Complete la columna "fecha" en formato YYYY-MM-DD (ejemplo: 2025-01-15)'],
+        [''],
+        ['2. Complete la columna "descripcion" con el detalle del movimiento'],
+        [''],
+        ['3. La columna "debe" es para débitos (cargos/entradas)'],
+        ['   - Ingrese el importe numérico sin símbolos'],
+        ['   - Si el movimiento no tiene débito, deje en 0'],
+        [''],
+        ['4. La columna "haber" es para créditos (abonos/salidas)'],
+        ['   - Ingrese el importe numérico sin símbolos'],
+        ['   - Si el movimiento no tiene crédito, deje en 0'],
+        [''],
+        ['5. IMPORTANTE: Cada movimiento debe tener DEBE o HABER (no ambos simultáneamente)'],
+        [''],
+        ['6. Los asientos deben estar balanceados:'],
+        ['   - Por cada debe, debe haber un haber de igual importe'],
+        ['   - O viceversa'],
+        [''],
+        ['7. Una vez completada la plantilla:'],
+        ['   - Guarde el archivo en formato Excel (.xlsx)'],
+        ['   - Súbalo al conversor de asientos contables'],
+        ['   - El sistema agrupará automáticamente los movimientos similares'],
+        [''],
+        ['8. Tipos de archivo que puede procesar el conversor:'],
+        ['   - Extractos Bancarios'],
+        ['   - Registros del Cliente'],
+        ['   - VEPs de ARCA'],
+        ['   - Compensaciones de ARCA'],
+        [''],
+        ['Para más información, consulte la documentación del sistema.']
+    ];
+
+    const wsInstrucciones = XLSX.utils.aoa_to_sheet(instrucciones);
+
+    // Configurar ancho de columna para instrucciones
+    wsInstrucciones['!cols'] = [{ wch: 80 }];
+
+    XLSX.utils.book_append_sheet(wb, wsInstrucciones, 'Instrucciones');
+
+    // Descargar archivo
+    const fileName = 'plantilla_extracto_bancario.xlsx';
+    XLSX.writeFile(wb, fileName);
+
+    console.log('✅ Plantilla descargada:', fileName);
 }
 
 // ============================================
