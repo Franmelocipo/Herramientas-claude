@@ -32,94 +32,7 @@
                     </div>
                 </div>
                 <div class="header-buttons">
-                    <button id="btnTaxDatabase" class="btn-secondary">Base de Impuestos</button>
-                    <button id="btnClientManager" class="btn-secondary">Gestionar Clientes</button>
                     <button id="btnReset" class="btn-secondary hidden">Nueva conversión</button>
-                </div>
-            </div>
-
-            <!-- Modal Gestión de Clientes -->
-            <div id="modalClientManager" class="modal hidden">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h2>Gestión de Clientes</h2>
-                        <button class="close-btn" id="btnCloseClientManager">✕</button>
-                    </div>
-
-                    <!-- Campo de búsqueda -->
-                    <div class="search-box">
-                        <input type="text"
-                               id="clientSearchInput"
-                               class="search-input"
-                               placeholder="🔍 Buscar cliente por nombre o CUIT...">
-                    </div>
-
-                    <div class="btn-group mb-4">
-                        <button id="btnNewClient" class="btn-primary flex-1">+ Nuevo Cliente</button>
-                        <label class="btn-secondary flex-1" style="cursor: pointer; text-align: center;">
-                            📥 Importar Clientes
-                            <input type="file" id="importClientsFile" accept=".xlsx,.xls" style="display: none;">
-                        </label>
-                        <button id="btnRepairClients" class="btn-secondary flex-1" title="Reparar IDs corruptos">🔧 Reparar Datos</button>
-                    </div>
-                    <div class="info-box" style="font-size: 12px; padding: 10px; margin-bottom: 16px;">
-                        <strong>Formato Excel para importar:</strong> Razón Social | CUIT<br>
-                        <strong>Reparar Datos:</strong> Usa este botón si ves IDs con ⚠️ o si un cliente muestra datos incorrectos
-                    </div>
-
-                    <!-- Estadísticas de resultados -->
-                    <div id="clientsStats" class="clients-stats"></div>
-
-                    <div id="clientsList" class="clients-list"></div>
-                </div>
-            </div>
-
-            <!-- Modal Nuevo Cliente -->
-            <div id="modalNewClient" class="modal hidden">
-                <div class="modal-content-sm">
-                    <h3>Nuevo Cliente</h3>
-                    <input type="text" id="newClientName" placeholder="Razón Social" class="input-text mb-4">
-                    <input type="text" id="newClientCuit" placeholder="CUIT (Opcional)" class="input-text mb-4">
-                    <div class="btn-group">
-                        <button id="btnCancelNewClient" class="btn-secondary">Cancelar</button>
-                        <button id="btnCreateClient" class="btn-primary">Crear</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Modal Gestión de Base de Impuestos -->
-            <div id="modalTaxDatabase" class="modal hidden">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h2>Base de Datos de Impuestos</h2>
-                        <button class="close-btn" id="btnCloseTaxDatabase">✕</button>
-                    </div>
-                    <label class="btn-primary mb-4" style="cursor: pointer; text-align: center; display: block;">
-                        📥 Importar Base de Impuestos
-                        <input type="file" id="importTaxFile" accept=".xlsx,.xls" style="display: none;">
-                    </label>
-                    <div class="info-box" style="font-size: 12px; padding: 10px; margin-bottom: 16px;">
-                        <strong>Formato Excel:</strong> Impuesto | Concepto | Subconcepto
-                    </div>
-                    <div id="taxStats" style="margin-bottom: 16px; color: #64748b;"></div>
-                    <div class="preview-container">
-                        <div class="preview-header">
-                            <h4>Vista Previa de la Base (Primeras 50 filas)</h4>
-                        </div>
-                        <div class="preview-table-container" style="max-height: 400px;">
-                            <table class="preview-table">
-                                <thead>
-                                    <tr>
-                                        <th>Impuesto</th>
-                                        <th>Concepto</th>
-                                        <th>Subconcepto</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="taxTableBody"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <button id="btnClearTaxDatabase" class="btn-secondary mt-4" style="width: 100%;">Limpiar Base de Datos</button>
                 </div>
             </div>
 
@@ -223,6 +136,12 @@
         </div>
     </div>
 
+    <!-- Módulos compartidos - Sistema centralizado de datos -->
+    <script src="../../shared/dataStore.js"></script>
+    <script src="../../shared/clientManager.js"></script>
+    <script src="../../shared/taxManager.js"></script>
+
+    <!-- Script de la herramienta -->
     <script src="script.js"></script>
 </body>
 </html>

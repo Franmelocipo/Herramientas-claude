@@ -1,6 +1,7 @@
 // ============================================
 // ESTADO DE LA APLICACIÓN
 // ============================================
+// NOTA: Ahora usamos ClientManager y TaxManager para gestión centralizada de datos
 const state = {
     step: 0,
     sourceType: '',
@@ -9,105 +10,68 @@ const state = {
     accountCodes: {},
     finalData: [],
     bankAccount: '',
-    clients: [],
-    selectedClient: null,
     activeSearchField: null,
-    taxDatabase: [], // Base de datos de impuestos: {impuesto, concepto, subconcepto}
     expandedGroups: {} // Rastrear qué grupos están expandidos
 };
 
 // ============================================
-// PERSISTENCIA CON LOCALSTORAGE
+// HELPERS PARA COMPATIBILIDAD CON CÓDIGO EXISTENTE
 // ============================================
-function loadClients() {
-    const saved = localStorage.getItem('contable_clients');
-    let needsMigration = false;
+// Estas funciones adaptan el código existente al nuevo sistema centralizado
 
-    if (saved) {
-        try {
-            state.clients = JSON.parse(saved);
-
-            // Migrar IDs corruptos (decimales) a enteros
-            state.clients.forEach((client, idx) => {
-                // Detectar si el ID tiene decimales
-                if (!Number.isInteger(client.id)) {
-                    console.warn(`Cliente "${client.name}" tiene ID corrupto:`, client.id);
-                    needsMigration = true;
-                }
-            });
-
-            if (needsMigration) {
-                console.log('Iniciando migración de IDs...');
-                const baseTimestamp = Date.now();
-                state.clients = state.clients.map((client, idx) => ({
-                    ...client,
-                    id: baseTimestamp + idx
-                }));
-                saveClients();
-                // Limpiar selección para evitar referencias a IDs antiguos
-                state.selectedClient = null;
-                localStorage.removeItem('contable_selected_client');
-                console.log('Migración completada. Por favor, selecciona nuevamente tu cliente.');
-                alert('Se detectaron datos corruptos y fueron corregidos. Por favor, selecciona nuevamente tu cliente.');
-                return; // No cargar cliente seleccionado después de migración
-            }
-        } catch (e) {
-            console.error('Error cargando clientes:', e);
-            state.clients = [];
-        }
-    }
-
-    // Cargar cliente seleccionado solo si no hubo migración
-    const savedSelectedClient = localStorage.getItem('contable_selected_client');
-    if (savedSelectedClient) {
-        try {
-            const clientId = JSON.parse(savedSelectedClient);
-            // Verificar que el cliente aún existe
-            const client = state.clients.find(c => c.id === clientId);
-            if (client) {
-                state.selectedClient = clientId;
-                console.log('Cliente restaurado desde localStorage:', client.name);
-            } else {
-                console.warn('Cliente guardado no existe, ID:', clientId);
-            }
-        } catch (e) {
-            console.error('Error cargando cliente seleccionado:', e);
-        }
-    }
+function getClients() {
+    return ClientManager.getAllClients();
 }
 
-function saveClients() {
-    localStorage.setItem('contable_clients', JSON.stringify(state.clients));
+function getSelectedClientId() {
+    return ClientManager.getSelectedClientId();
 }
 
-function saveSelectedClient() {
-    if (state.selectedClient) {
-        localStorage.setItem('contable_selected_client', JSON.stringify(state.selectedClient));
-    } else {
-        localStorage.removeItem('contable_selected_client');
-    }
-}
-
-function loadTaxDatabase() {
-    const saved = localStorage.getItem('contable_tax_database');
-    if (saved) {
-        try {
-            state.taxDatabase = JSON.parse(saved);
-        } catch (e) {
-            console.error('Error cargando base de impuestos:', e);
-            state.taxDatabase = [];
-        }
-    }
-}
-
-function saveTaxDatabase() {
-    localStorage.setItem('contable_tax_database', JSON.stringify(state.taxDatabase));
+function getTaxDatabase() {
+    return TaxManager.getAllTaxes();
 }
 
 // ============================================
 // ELEMENTOS DEL DOM
 // ============================================
+ claude/fix-converter-client-display-01TB1MNRd6dbzc31RxcaLtBJ
 let elements = {};
+
+const elements = {
+    // Steps
+    step0: document.getElementById('step0'),
+    step1: document.getElementById('step1'),
+    step2: document.getElementById('step2'),
+    step3: document.getElementById('step3'),
+
+    // Header
+    subtitle: document.getElementById('subtitle'),
+    clientName: document.getElementById('clientName'),
+    btnReset: document.getElementById('btnReset'),
+
+    // Step 1
+    sourceTypeName: document.getElementById('sourceTypeName'),
+    fileInput: document.getElementById('fileInput'),
+    btnSelectFile: document.getElementById('btnSelectFile'),
+
+    // Step 2
+    groupStats: document.getElementById('groupStats'),
+    bankAccountSection: document.getElementById('bankAccountSection'),
+    bankAccountLabel: document.getElementById('bankAccountLabel'),
+    bankAccountInput: document.getElementById('bankAccountInput'),
+    bankAccountDropdown: document.getElementById('bankAccountDropdown'),
+    compensacionesInfo: document.getElementById('compensacionesInfo'),
+    groupsList: document.getElementById('groupsList'),
+    btnBackToUpload: document.getElementById('btnBackToUpload'),
+    btnGenerateFinal: document.getElementById('btnGenerateFinal'),
+
+    // Step 3
+    finalStats: document.getElementById('finalStats'),
+    previewTableBody: document.getElementById('previewTableBody'),
+    btnBackToAssignment: document.getElementById('btnBackToAssignment'),
+    btnDownloadExcel: document.getElementById('btnDownloadExcel')
+};
+ main
 
 // ============================================
 // TIPOS DE FUENTE
@@ -191,6 +155,7 @@ function initializeElements() {
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('=== INICIANDO APLICACIÓN ===');
+ claude/fix-converter-client-display-01TB1MNRd6dbzc31RxcaLtBJ
 
     // Inicializar elementos del DOM
     initializeElements();
@@ -198,31 +163,40 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cargar datos
     loadClients();
     loadTaxDatabase();
+
+    console.log('Usando sistema centralizado de datos compartidos');
+
+ main
     updateClientName();
 
     // Adjuntar event listeners
     attachEventListeners();
 
-    // Log de diagnóstico
+    // Log de diagnóstico usando ClientManager
+    const clients = getClients();
     console.log('Estado inicial de clientes:');
-    console.table(state.clients.map(c => ({
+    console.table(clients.map(c => ({
         nombre: c.name,
         id: c.id,
         idValido: Number.isInteger(c.id) ? 'SI' : 'NO',
         cuentas: c.accountPlan?.length || 0
     })));
 
-    if (state.selectedClient) {
-        const selected = state.clients.find(c => c.id === state.selectedClient);
+    const selectedClientId = getSelectedClientId();
+    if (selectedClientId) {
+        const selected = ClientManager.getClient(selectedClientId);
         console.log('Cliente seleccionado actual:', selected ? selected.name : 'NO ENCONTRADO');
     } else {
         console.log('No hay cliente seleccionado');
     }
+
+    console.log(`Base de impuestos: ${getTaxDatabase().length} registros`);
     console.log('======================');
 });
 
 function attachEventListeners() {
     // Header
+ claude/fix-converter-client-display-01TB1MNRd6dbzc31RxcaLtBJ
     if (elements.btnClientManager) {
         elements.btnClientManager.addEventListener('click', () => showClientManager());
     } else {
@@ -280,6 +254,10 @@ function attachEventListeners() {
         elements.btnClearTaxDatabase.addEventListener('click', () => clearTaxDatabase());
     }
 
+
+    elements.btnReset.addEventListener('click', () => reset());
+
+ main
     // Step 0: Source type selection
     document.querySelectorAll('.source-type-btn').forEach(btn => {
         btn.addEventListener('click', () => selectSourceType(btn.dataset.type));
@@ -294,6 +272,7 @@ function attachEventListeners() {
     }
 
     // Step 2: Account assignment
+ claude/fix-converter-client-display-01TB1MNRd6dbzc31RxcaLtBJ
     if (elements.bankAccountInput) {
         elements.bankAccountInput.addEventListener('click', () => {
             if (state.selectedClient) {
@@ -308,6 +287,16 @@ function attachEventListeners() {
     if (elements.btnGenerateFinal) {
         elements.btnGenerateFinal.addEventListener('click', () => generateFinalExcel());
     }
+
+    elements.bankAccountInput.addEventListener('click', () => {
+        if (getSelectedClientId()) {
+            state.activeSearchField = 'bank';
+            showAccountDropdown('bank');
+        }
+    });
+    elements.btnBackToUpload.addEventListener('click', () => goToStep(1));
+    elements.btnGenerateFinal.addEventListener('click', () => generateFinalExcel());
+ main
 
     // Step 3: Download
     if (elements.btnBackToAssignment) {
@@ -382,118 +371,22 @@ function reset() {
 }
 
 // ============================================
-// GESTIÓN DE CLIENTES
+// FUNCIONES AUXILIARES PARA LA HERRAMIENTA
 // ============================================
-function showClientManager() {
-    elements.modalClientManager.classList.remove('hidden');
-    renderClientsList();
-}
-
-function hideClientManager() {
-    elements.modalClientManager.classList.add('hidden');
-    // Limpiar campo de búsqueda al cerrar
-    const clientSearchInput = document.getElementById('clientSearchInput');
-    if (clientSearchInput) {
-        clientSearchInput.value = '';
-    }
-}
-
-function showNewClientModal() {
-    elements.modalNewClient.classList.remove('hidden');
-    elements.newClientName.value = '';
-    elements.newClientCuit.value = '';
-    elements.newClientName.focus();
-}
-
-function hideNewClientModal() {
-    elements.modalNewClient.classList.add('hidden');
-}
-
-function createClient() {
-    const name = elements.newClientName.value.trim();
-    if (!name) {
-        alert('Ingresa una razón social para el cliente');
-        return;
-    }
-
-    const cuit = elements.newClientCuit.value.trim();
-
-    const newClient = {
-        id: Date.now(),
-        name: name,
-        cuit: cuit || '',
-        accountPlan: []
-    };
-
-    state.clients.push(newClient);
-    saveClients();
-    state.selectedClient = newClient.id;
-    saveSelectedClient();
-    updateClientName();
-
-    hideNewClientModal();
-    renderClientsList();
-}
-
-function selectClient(clientId) {
-    console.log('=== SELECCIONANDO CLIENTE ===');
-    console.log('ID recibido (raw):', clientId, 'tipo:', typeof clientId);
-
-    // Convertir a número si viene como string del HTML onclick
-    const numericId = typeof clientId === 'string' ? parseFloat(clientId) : clientId;
-    console.log('ID convertido:', numericId, 'tipo:', typeof numericId);
-
-    // Buscar el cliente antes de asignarlo
-    const client = state.clients.find(c => c.id === numericId);
-    console.log('Cliente encontrado:', client ? client.name : 'NO ENCONTRADO');
-
-    if (client) {
-        state.selectedClient = numericId;
-        saveSelectedClient();
-        updateClientName();
-        console.log('Cliente asignado exitosamente');
-    } else {
-        console.error('ERROR: No se encontró el cliente con ID:', numericId);
-        console.log('IDs disponibles:', state.clients.map(c => ({ id: c.id, nombre: c.name })));
-    }
-
-    // Limpiar campo de búsqueda
-    const clientSearchInput = document.getElementById('clientSearchInput');
-    if (clientSearchInput) {
-        clientSearchInput.value = '';
-    }
-
-    console.log('========================');
-    hideClientManager();
-}
-
-function deleteClient(clientId) {
-    // Convertir a número si viene como string del HTML onclick
-    const numericId = typeof clientId === 'string' ? parseFloat(clientId) : clientId;
-    if (confirm('¿Eliminar este cliente?')) {
-        state.clients = state.clients.filter(c => c.id !== numericId);
-        saveClients();
-        if (state.selectedClient === numericId) {
-            state.selectedClient = null;
-            saveSelectedClient();
-            updateClientName();
-        }
-        renderClientsList();
-    }
-}
-
 function updateClientName() {
-    if (state.selectedClient) {
-        const client = state.clients.find(c => c.id === state.selectedClient);
+    const selectedClientId = getSelectedClientId();
+
+    if (selectedClientId) {
+        const client = ClientManager.getClient(selectedClientId);
         if (client) {
             elements.clientName.textContent = `Cliente: ${client.name}`;
             console.log('Cliente seleccionado:', {
-                id: state.selectedClient,
+                id: selectedClientId,
                 nombre: client.name,
                 cuentas: client.accountPlan?.length || 0
             });
         } else {
-            console.error('No se encontró el cliente con ID:', state.selectedClient);
+            console.error('No se encontró el cliente con ID:', selectedClientId);
             elements.clientName.textContent = '';
         }
     } else {
@@ -501,305 +394,10 @@ function updateClientName() {
     }
 }
 
-function renderClientsList(searchTerm = '') {
-    // Filtrar clientes según el término de búsqueda
-    const filteredClients = searchTerm.trim() === ''
-        ? state.clients
-        : state.clients.filter(client => {
-            const term = searchTerm.toLowerCase();
-            const nameMatch = client.name.toLowerCase().includes(term);
-            const cuitMatch = client.cuit && client.cuit.toLowerCase().includes(term);
-            return nameMatch || cuitMatch;
-        });
-
-    // Actualizar estadísticas
-    const statsElement = document.getElementById('clientsStats');
-    if (searchTerm.trim() !== '' && state.clients.length > 0) {
-        statsElement.textContent = `Mostrando ${filteredClients.length} de ${state.clients.length} clientes`;
-        statsElement.classList.add('show');
-    } else {
-        statsElement.classList.remove('show');
-    }
-
-    // Renderizar lista
-    const html = state.clients.length === 0
-        ? '<div class="empty-state">No hay clientes. Crea uno para comenzar.</div>'
-        : filteredClients.length === 0
-        ? '<div class="empty-state">No se encontraron clientes con ese criterio de búsqueda.</div>'
-        : filteredClients.map(client => {
-            const isSelected = state.selectedClient === client.id;
-            const selectedClass = isSelected ? 'client-item-selected' : '';
-            const accountCount = client.accountPlan?.length || 0;
-            const idType = Number.isInteger(client.id) ? '✓' : '⚠️';
-
-            return `
-                <div class="client-item ${selectedClass}">
-                    <div class="client-header">
-                        <div>
-                            <h3>${client.name} ${isSelected ? '(Seleccionado)' : ''}</h3>
-                            <p>${client.cuit ? `CUIT: ${client.cuit} | ` : ''}${accountCount} cuentas | ID: ${client.id} ${idType}</p>
-                        </div>
-                        <div class="client-actions">
-                            <button class="btn-select" onclick="selectClient(${client.id})">Seleccionar</button>
-                            <button class="btn-delete" onclick="deleteClient(${client.id})">Eliminar</button>
-                        </div>
-                    </div>
-                    <label class="file-input-label">
-                        <span>Plan de Cuentas (Excel: Código | Descripción)</span>
-                        <input type="file" accept=".xlsx,.xls" onchange="importAccountPlan(event, ${client.id})">
-                    </label>
-                </div>
-            `;
-        }).join('');
-
-    elements.clientsList.innerHTML = html;
-}
-
-async function importAccountPlan(event, clientId) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    try {
-        // Convertir a número si viene como string del HTML onchange
-        const numericId = typeof clientId === 'string' ? parseFloat(clientId) : clientId;
-
-        const data = await file.arrayBuffer();
-        const workbook = XLSX.read(data, { raw: true });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
-
-        const accounts = jsonData.slice(1).map(row => ({
-            code: String(row[0] || ''),
-            description: String(row[1] || '')
-        })).filter(a => a.code && a.description);
-
-        const client = state.clients.find(c => c.id === numericId);
-        if (client) {
-            client.accountPlan = accounts;
-            saveClients();
-            alert(`Plan de cuentas importado: ${accounts.length} cuentas`);
-            renderClientsList();
-        }
-    } catch (error) {
-        alert('Error al importar plan de cuentas: ' + error.message);
-    }
-
-    event.target.value = '';
-}
-
 function getClientAccounts() {
-    if (!state.selectedClient) return [];
-    const client = state.clients.find(c => c.id === state.selectedClient);
-    return client?.accountPlan || [];
-}
-
-function repairClientData() {
-    console.log('=== REPARACIÓN DE DATOS DE CLIENTES ===');
-
-    if (state.clients.length === 0) {
-        alert('No hay clientes para reparar');
-        return;
-    }
-
-    // Detectar problemas
-    const problems = [];
-    const corruptedIds = [];
-    const missingAccountPlans = [];
-
-    state.clients.forEach((client, idx) => {
-        // Verificar IDs corruptos
-        if (!Number.isInteger(client.id)) {
-            corruptedIds.push(client.name);
-            problems.push(`- ${client.name}: ID corrupto (${client.id})`);
-        }
-
-        // Verificar accountPlan
-        if (!client.accountPlan) {
-            missingAccountPlans.push(client.name);
-            problems.push(`- ${client.name}: accountPlan faltante`);
-        }
-    });
-
-    if (problems.length === 0) {
-        alert('✓ No se detectaron problemas en los datos de clientes');
-        console.log('No se detectaron problemas');
-        return;
-    }
-
-    // Mostrar problemas encontrados
-    const message = `Se encontraron ${problems.length} problema(s):\n\n` +
-                    problems.join('\n') +
-                    '\n\n¿Deseas reparar estos problemas?';
-
-    if (!confirm(message)) {
-        return;
-    }
-
-    // Reparar IDs corruptos
-    const baseTimestamp = Date.now();
-    state.clients = state.clients.map((client, idx) => {
-        const repaired = { ...client };
-
-        // Reparar ID si es necesario
-        if (!Number.isInteger(client.id)) {
-            const oldId = client.id;
-            repaired.id = baseTimestamp + idx;
-            console.log(`Reparado: ${client.name} - ID ${oldId} → ${repaired.id}`);
-        }
-
-        // Asegurar que accountPlan existe
-        if (!repaired.accountPlan) {
-            repaired.accountPlan = [];
-            console.log(`Reparado: ${client.name} - accountPlan inicializado`);
-        }
-
-        return repaired;
-    });
-
-    // Guardar cambios
-    saveClients();
-
-    // Limpiar selección si estaba corrupta
-    state.selectedClient = null;
-    localStorage.removeItem('contable_selected_client');
-
-    // Re-renderizar
-    renderClientsList();
-
-    console.log('=== REPARACIÓN COMPLETADA ===');
-    alert(`✓ Reparación completada exitosamente.\n\n` +
-          `IDs corruptos reparados: ${corruptedIds.length}\n` +
-          `AccountPlans corregidos: ${missingAccountPlans.length}\n\n` +
-          `Por favor, selecciona nuevamente tu cliente.`);
-}
-
-// ============================================
-// IMPORTACIÓN MASIVA DE CLIENTES
-// ============================================
-async function importClients(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    try {
-        const data = await file.arrayBuffer();
-        const workbook = XLSX.read(data, { raw: true });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
-
-        const clientsToImport = jsonData.slice(1).map(row => ({
-            name: String(row[0] || '').trim(),
-            cuit: String(row[1] || '').trim()
-        })).filter(c => c.name);
-
-        if (clientsToImport.length === 0) {
-            alert('No se encontraron clientes válidos en el archivo');
-            return;
-        }
-
-        // Agregar clientes evitando duplicados por nombre
-        const existingNames = state.clients.map(c => c.name.toLowerCase());
-        const newClients = clientsToImport
-            .filter(c => !existingNames.includes(c.name.toLowerCase()))
-            .map((c, idx) => ({
-                id: Date.now() + idx, // Usar índice en lugar de random para evitar decimales
-                name: c.name,
-                cuit: c.cuit,
-                accountPlan: []
-            }));
-
-        if (newClients.length === 0) {
-            alert('Todos los clientes ya existen');
-            return;
-        }
-
-        state.clients.push(...newClients);
-        saveClients();
-        renderClientsList();
-
-        alert(`Se importaron ${newClients.length} cliente(s) nuevo(s). Total: ${state.clients.length}`);
-    } catch (error) {
-        alert('Error al importar clientes: ' + error.message);
-    }
-
-    event.target.value = '';
-}
-
-// ============================================
-// GESTIÓN DE BASE DE DATOS DE IMPUESTOS
-// ============================================
-function showTaxDatabase() {
-    elements.modalTaxDatabase.classList.remove('hidden');
-    renderTaxDatabase();
-}
-
-function hideTaxDatabase() {
-    elements.modalTaxDatabase.classList.add('hidden');
-}
-
-async function importTaxDatabase(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    try {
-        const data = await file.arrayBuffer();
-        const workbook = XLSX.read(data, { raw: true });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
-
-        const taxes = jsonData.slice(1).map(row => ({
-            impuesto: String(row[0] || '').trim(),
-            concepto: String(row[1] || '').trim(),
-            subconcepto: String(row[2] || '').trim()
-        })).filter(t => t.impuesto && t.concepto && t.subconcepto);
-
-        if (taxes.length === 0) {
-            alert('No se encontraron registros válidos en el archivo');
-            return;
-        }
-
-        state.taxDatabase = taxes;
-        saveTaxDatabase();
-        renderTaxDatabase();
-
-        alert(`Base de datos de impuestos importada: ${taxes.length} registros`);
-    } catch (error) {
-        alert('Error al importar base de datos: ' + error.message);
-    }
-
-    event.target.value = '';
-}
-
-function renderTaxDatabase() {
-    const stats = state.taxDatabase.length === 0
-        ? 'No hay datos en la base de impuestos'
-        : `Total de registros: ${state.taxDatabase.length}`;
-
-    elements.taxStats.textContent = stats;
-
-    if (state.taxDatabase.length === 0) {
-        elements.taxTableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 32px; color: #64748b;">No hay datos. Importa un archivo Excel para comenzar.</td></tr>';
-        return;
-    }
-
-    const preview = state.taxDatabase.slice(0, 50);
-    const html = preview.map(tax => `
-        <tr>
-            <td>${tax.impuesto}</td>
-            <td>${tax.concepto}</td>
-            <td>${tax.subconcepto}</td>
-        </tr>
-    `).join('');
-
-    elements.taxTableBody.innerHTML = html;
-}
-
-function clearTaxDatabase() {
-    if (confirm('¿Estás seguro de que deseas limpiar toda la base de datos de impuestos?')) {
-        state.taxDatabase = [];
-        saveTaxDatabase();
-        renderTaxDatabase();
-        alert('Base de datos limpiada');
-    }
+    const selectedClientId = getSelectedClientId();
+    if (!selectedClientId) return [];
+    return ClientManager.getAccountPlan(selectedClientId);
 }
 
 // ============================================
@@ -1082,7 +680,7 @@ function renderGroupsList() {
         elements.bankAccountLabel.textContent = state.sourceType === 'extracto'
             ? 'Cuenta del Banco (contrapartida)'
             : 'Cuenta de Contrapartida (para totales de VEP)';
-        elements.bankAccountInput.placeholder = state.selectedClient ? 'Click para buscar cuenta...' : 'Ej: 11010101';
+        elements.bankAccountInput.placeholder = getSelectedClientId() ? 'Click para buscar cuenta...' : 'Ej: 11010101';
         elements.bankAccountInput.value = state.bankAccount;
     } else {
         elements.bankAccountSection.classList.add('hidden');
@@ -1160,7 +758,7 @@ function renderGroupsList() {
                                 class="input-text"
                                 data-group-idx="${idx}"
                                 value="${state.accountCodes[idx] || ''}"
-                                placeholder="${state.selectedClient ? 'Click para buscar...' : 'Código'}"
+                                placeholder="${getSelectedClientId() ? 'Click para buscar...' : 'Código'}"
                             >
                             <div class="account-dropdown hidden" id="dropdown-${idx}"></div>
                         </div>
@@ -1180,7 +778,7 @@ function renderGroupsList() {
             state.accountCodes[idx] = e.target.value;
         });
         input.addEventListener('click', () => {
-            if (state.selectedClient) {
+            if (getSelectedClientId()) {
                 state.activeSearchField = idx;
                 showAccountDropdown(idx);
             }
