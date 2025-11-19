@@ -48,35 +48,47 @@ class ClientManager {
 
     /**
      * Obtener todos los clientes
-     * @returns {Array} Lista de clientes
+     * @returns {Promise<Array>} Lista de clientes
      */
-    getAllClients() {
+    async getAllClients() {
+        try {
+            // Intentar obtener de Supabase primero
+            if (typeof getSupabaseClients === 'function') {
+                const clients = await getSupabaseClients();
+                if (clients && clients.length > 0) {
+                    return clients;
+                }
+            }
+        } catch (error) {
+            console.warn('Error obteniendo clientes de Supabase, usando localStorage:', error);
+        }
+        // Fallback a localStorage
         return this.dataStore.load(this.CLIENTS_KEY, []);
     }
 
     /**
      * Obtener un cliente por ID
      * @param {number} clientId - ID del cliente
-     * @returns {Object|null} Cliente o null si no existe
+     * @returns {Promise<Object|null>} Cliente o null si no existe
      */
-    getClient(clientId) {
-        const clients = this.getAllClients();
+    async getClient(clientId) {
+        const clients = await this.getAllClients();
         return clients.find(c => c.id === clientId) || null;
     }
 
     /**
      * Crear un nuevo cliente
      * @param {Object} clientData - Datos del cliente { name, cuit }
-     * @returns {Object} Cliente creado
+     * @returns {Promise<Object>} Cliente creado
      */
-    createClient(clientData) {
+    async createClient(clientData) {
         const { name, cuit = '' } = clientData;
 
         if (!name || name.trim() === '') {
             throw new Error('El nombre del cliente es requerido');
         }
 
-        const clients = this.getAllClients();
+        const clients = await this.getAllClients();
 
         // Verificar duplicados por nombre
         const existingClient = clients.find(c =>
@@ -87,6 +99,20 @@ class ClientManager {
             throw new Error('Ya existe un cliente con ese nombre');
         }
 
+        // Intentar crear en Supabase primero
+        try {
+            if (typeof createSupabaseClient === 'function') {
+                const supabaseClient = await createSupabaseClient(clientData);
+                if (supabaseClient) {
+                    console.log('Cliente creado en Supabase:', supabaseClient);
+                    return supabaseClient;
+                }
+            }
+        } catch (error) {
+            console.warn('Error creando cliente en Supabase, usando localStorage:', error);
+        }
+
+        // Fallback a localStorage
         const newClient = {
             id: Date.now(),
             name: name.trim(),
@@ -98,7 +124,7 @@ class ClientManager {
         clients.push(newClient);
         this.dataStore.save(this.CLIENTS_KEY, clients);
 
-        console.log('Cliente creado:', newClient);
+        console.log('Cliente creado en localStorage:', newClient);
         return newClient;
     }
 
@@ -106,10 +132,10 @@ class ClientManager {
      * Actualizar un cliente
      * @param {number} clientId - ID del cliente
      * @param {Object} updates - Datos a actualizar
-     * @returns {Object|null} Cliente actualizado o null si no existe
+     * @returns {Promise<Object|null>} Cliente actualizado o null si no existe
      */
-    updateClient(clientId, updates) {
-        const clients = this.getAllClients();
+    async updateClient(clientId, updates) {
+        const clients = await this.getAllClients();
         const index = clients.findIndex(c => c.id === clientId);
 
         if (index === -1) {
@@ -128,6 +154,20 @@ class ClientManager {
             }
         }
 
+        // Intentar actualizar en Supabase primero
+        try {
+            if (typeof updateSupabaseClient === 'function') {
+                const supabaseClient = await updateSupabaseClient(clientId, updates);
+                if (supabaseClient) {
+                    console.log('Cliente actualizado en Supabase:', supabaseClient);
+                    return supabaseClient;
+                }
+            }
+        } catch (error) {
+            console.warn('Error actualizando cliente en Supabase, usando localStorage:', error);
+        }
+
+        // Fallback a localStorage
         clients[index] = {
             ...clients[index],
             ...updates,
@@ -137,23 +177,41 @@ class ClientManager {
 
         this.dataStore.save(this.CLIENTS_KEY, clients);
 
-        console.log('Cliente actualizado:', clients[index]);
+        console.log('Cliente actualizado en localStorage:', clients[index]);
         return clients[index];
     }
 
     /**
      * Eliminar un cliente
      * @param {number} clientId - ID del cliente
-     * @returns {boolean} true si se eliminó, false si no existe
+     * @returns {Promise<boolean>} true si se eliminó, false si no existe
      */
-    deleteClient(clientId) {
-        const clients = this.getAllClients();
+    async deleteClient(clientId) {
+        const clients = await this.getAllClients();
         const filteredClients = clients.filter(c => c.id !== clientId);
 
         if (filteredClients.length === clients.length) {
             return false; // No se encontró el cliente
         }
 
+        // Intentar eliminar de Supabase primero
+        try {
+            if (typeof deleteSupabaseClient === 'function') {
+                const success = await deleteSupabaseClient(clientId);
+                if (success) {
+                    console.log('Cliente eliminado de Supabase:', clientId);
+                    // Si el cliente eliminado era el seleccionado, limpiar selección
+                    if (this.getSelectedClientId() === clientId) {
+                        this.clearSelectedClient();
+                    }
+                    return true;
+                }
+            }
+        } catch (error) {
+            console.warn('Error eliminando cliente de Supabase, usando localStorage:', error);
+        }
+
+        // Fallback a localStorage
         this.dataStore.save(this.CLIENTS_KEY, filteredClients);
 
         // Si el cliente eliminado era el seleccionado, limpiar selección
@@ -161,7 +219,7 @@ class ClientManager {
             this.clearSelectedClient();
         }
 
-        console.log('Cliente eliminado:', clientId);
+        console.log('Cliente eliminado de localStorage:', clientId);
         return true;
     }
 
@@ -169,10 +227,28 @@ class ClientManager {
      * Importar clientes desde un array
      * @param {Array} clientsData - Array de objetos { name, cuit }
      * @param {boolean} skipDuplicates - Si true, ignora duplicados; si false, lanza error
-     * @returns {Object} { imported: number, skipped: number, errors: Array }
+     * @returns {Promise<Object>} { imported: number, skipped: number, errors: Array }
      */
-    importClients(clientsData, skipDuplicates = true) {
-        const clients = this.getAllClients();
+    async importClients(clientsData, skipDuplicates = true) {
+        // Intentar importar a Supabase primero
+        try {
+            if (typeof importSupabaseClients === 'function') {
+                const result = await importSupabaseClients(clientsData);
+                if (result && result.imported > 0) {
+                    console.log(`Importación a Supabase completada: ${result.imported} clientes`);
+                    return {
+                        imported: result.imported,
+                        skipped: 0,
+                        errors: result.errors || []
+                    };
+                }
+            }
+        } catch (error) {
+            console.warn('Error importando a Supabase, usando localStorage:', error);
+        }
+
+        // Fallback a localStorage
+        const clients = await this.getAllClients();
         const existingNames = clients.map(c => c.name.toLowerCase());
 
         let imported = 0;
@@ -227,10 +303,10 @@ class ClientManager {
      * Importar plan de cuentas para un cliente
      * @param {number} clientId - ID del cliente
      * @param {Array} accountPlan - Array de { code, description }
-     * @returns {boolean} true si tuvo éxito
+     * @returns {Promise<boolean>} true si tuvo éxito
      */
-    importAccountPlan(clientId, accountPlan) {
-        const client = this.getClient(clientId);
+    async importAccountPlan(clientId, accountPlan) {
+        const client = await this.getClient(clientId);
 
         if (!client) {
             throw new Error('Cliente no encontrado');
@@ -244,27 +320,27 @@ class ClientManager {
                 description: String(acc.description).trim()
             }));
 
-        return this.updateClient(clientId, { accountPlan: validatedPlan }) !== null;
+        return (await this.updateClient(clientId, { accountPlan: validatedPlan })) !== null;
     }
 
     /**
      * Obtener plan de cuentas de un cliente
      * @param {number} clientId - ID del cliente
-     * @returns {Array} Plan de cuentas o array vacío
+     * @returns {Promise<Array>} Plan de cuentas o array vacío
      */
-    getAccountPlan(clientId) {
-        const client = this.getClient(clientId);
-        return client?.accountPlan || [];
+    async getAccountPlan(clientId) {
+        const client = await this.getClient(clientId);
+        return client?.accountPlan || client?.account_plan || [];
     }
 
     /**
      * Buscar cuentas en el plan de cuentas de un cliente
      * @param {number} clientId - ID del cliente
      * @param {string} query - Término de búsqueda
-     * @returns {Array} Cuentas que coinciden con la búsqueda
+     * @returns {Promise<Array>} Cuentas que coinciden con la búsqueda
      */
-    searchAccounts(clientId, query) {
-        const accountPlan = this.getAccountPlan(clientId);
+    async searchAccounts(clientId, query) {
+        const accountPlan = await this.getAccountPlan(clientId);
 
         if (!query || query.trim() === '') {
             return accountPlan.slice(0, 20); // Primeras 20 si no hay búsqueda
@@ -280,10 +356,10 @@ class ClientManager {
     /**
      * Seleccionar un cliente como activo
      * @param {number} clientId - ID del cliente a seleccionar
-     * @returns {boolean} true si tuvo éxito, false si el cliente no existe
+     * @returns {Promise<boolean>} true si tuvo éxito, false si el cliente no existe
      */
-    selectClient(clientId) {
-        const client = this.getClient(clientId);
+    async selectClient(clientId) {
+        const client = await this.getClient(clientId);
 
         if (!client) {
             console.error('Cliente no encontrado:', clientId);
@@ -305,11 +381,11 @@ class ClientManager {
 
     /**
      * Obtener el cliente seleccionado actual
-     * @returns {Object|null} Cliente o null
+     * @returns {Promise<Object|null>} Cliente o null
      */
-    getSelectedClient() {
+    async getSelectedClient() {
         const clientId = this.getSelectedClientId();
-        return clientId ? this.getClient(clientId) : null;
+        return clientId ? await this.getClient(clientId) : null;
     }
 
     /**
@@ -323,15 +399,17 @@ class ClientManager {
     /**
      * Buscar clientes por nombre o CUIT
      * @param {string} query - Término de búsqueda
-     * @returns {Array} Clientes que coinciden
+     * @returns {Promise<Array>} Clientes que coinciden
      */
-    searchClients(query) {
+    async searchClients(query) {
+        const clients = await this.getAllClients();
+
         if (!query || query.trim() === '') {
-            return this.getAllClients();
+            return clients;
         }
 
         const lowerQuery = query.toLowerCase();
-        return this.getAllClients().filter(client =>
+        return clients.filter(client =>
             client.name.toLowerCase().includes(lowerQuery) ||
             (client.cuit && client.cuit.toLowerCase().includes(lowerQuery))
         );
@@ -339,10 +417,10 @@ class ClientManager {
 
     /**
      * Validar y reparar datos de clientes
-     * @returns {Object} Resultado de la reparación
+     * @returns {Promise<Object>} Resultado de la reparación
      */
-    validateAndRepair() {
-        const clients = this.getAllClients();
+    async validateAndRepair() {
+        const clients = await this.getAllClients();
         let corruptedIds = 0;
         let missingAccountPlans = 0;
         let totalRepaired = 0;
@@ -359,7 +437,7 @@ class ClientManager {
             }
 
             // Asegurar que accountPlan existe
-            if (!client.accountPlan) {
+            if (!client.accountPlan && !client.account_plan) {
                 repaired.accountPlan = [];
                 missingAccountPlans++;
                 needsRepair = true;
@@ -390,10 +468,10 @@ class ClientManager {
 
     /**
      * Exportar todos los clientes a formato JSON
-     * @returns {string} JSON string de los clientes
+     * @returns {Promise<string>} JSON string de los clientes
      */
-    exportClients() {
-        return JSON.stringify(this.getAllClients(), null, 2);
+    async exportClients() {
+        return JSON.stringify(await this.getAllClients(), null, 2);
     }
 
     /**
