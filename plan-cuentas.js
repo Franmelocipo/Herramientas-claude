@@ -84,16 +84,23 @@ waitForSupabasePlanCuentas(() => {
 
     if (clienteActivo) {
       indicador.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-weight: 600; color: #1e293b;">Cliente activo:</span>
-          <span style="color: #3b82f6;">${clienteActivo.razon_social}</span>
-          <button onclick="limpiarClienteActivo()" style="background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;">✕</button>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span class="badge-cliente-activo">✓ ACTIVO</span>
+            <strong>Cliente activo:</strong>
+            <span style="font-weight: 600;">${clienteActivo.razon_social}</span>
+          </div>
+          <button onclick="limpiarClienteActivo()" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">✕ Desmarcar</button>
         </div>
       `;
-      indicador.style.display = 'block';
+      indicador.classList.add('visible');
     } else {
-      indicador.innerHTML = '';
-      indicador.style.display = 'none';
+      indicador.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="color: #64748b;">⚠️ <strong>Cliente activo: Ninguno</strong> - Seleccione un cliente desde el menú de Clientes</span>
+        </div>
+      `;
+      indicador.classList.add('visible');
     }
   };
 
