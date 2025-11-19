@@ -106,19 +106,19 @@ body {
     opacity: 0.95;
 }
 
-/* Grilla de herramientas - ICONOS MÁS PEQUEÑOS */
+/* Grilla de herramientas - TARJETAS MÁS COMPACTAS */
 .tools-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
     margin-bottom: 40px;
 }
 
 .tool-card {
     background: white;
-    border-radius: 12px;
-    padding: 24px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
     transition: all 0.3s ease;
     cursor: pointer;
     text-decoration: none;
@@ -127,34 +127,35 @@ body {
 }
 
 .tool-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.25);
 }
 
 .tool-icon {
-    width: 48px;
-    height: 48px;
+    width: 32px;
+    height: 32px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 12px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
-    margin-bottom: 16px;
+    font-size: 16px;
+    margin-bottom: 12px;
 }
 
 .tool-card h2 {
     color: #2d3748;
-    font-size: 20px;
-    margin-bottom: 10px;
+    font-size: 15px;
+    margin-bottom: 8px;
     font-weight: 700;
+    line-height: 1.3;
 }
 
 .tool-card p {
     color: #718096;
-    font-size: 14px;
-    line-height: 1.5;
-    margin-bottom: 16px;
+    font-size: 12px;
+    line-height: 1.4;
+    margin-bottom: 12px;
 }
 
 .tool-features {
@@ -164,8 +165,8 @@ body {
 
 .tool-features li {
     color: #4a5568;
-    font-size: 13px;
-    padding: 6px 0;
+    font-size: 11px;
+    padding: 4px 0;
     border-top: 1px solid #e2e8f0;
 }
 
@@ -178,18 +179,18 @@ body {
     content: "✓";
     color: #48bb78;
     font-weight: bold;
-    margin-right: 8px;
+    margin-right: 6px;
 }
 
 .badge {
     display: inline-block;
-    padding: 4px 10px;
+    padding: 3px 8px;
     background: #48bb78;
     color: white;
-    border-radius: 16px;
-    font-size: 11px;
+    border-radius: 12px;
+    font-size: 10px;
     font-weight: 600;
-    margin-top: 12px;
+    margin-top: 10px;
 }
 
 .badge.coming-soon {

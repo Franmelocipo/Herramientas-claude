@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Herramientas Contables - Estudio</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="index-styles.css">
 </head>
 <body>
@@ -198,6 +199,10 @@
             <button id="btnRefreshStorage" class="btn-secondary mt-4" style="width: 100%;">Actualizar</button>
         </div>
     </div>
+
+    <!-- Configuración de Supabase -->
+    <script src="supabase-config.js"></script>
+    <script src="supabase-integration.js"></script>
 
     <!-- Módulos compartidos -->
     <script src="shared/dataStore.js"></script>
