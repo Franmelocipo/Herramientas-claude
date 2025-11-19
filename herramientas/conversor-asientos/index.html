@@ -38,6 +38,31 @@
 
             <!-- Paso 0: Selección de tipo -->
             <div id="step0" class="step">
+                <!-- Mensaje de advertencia si no hay cliente -->
+                <div id="noClientWarning" class="warning-box hidden">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 24px;">⚠️</span>
+                        <div>
+                            <strong>Debe seleccionar un cliente primero</strong>
+                            <p style="margin: 4px 0 0 0; color: #64748b;">Vaya a Clientes y seleccione uno para continuar.</p>
+                        </div>
+                    </div>
+                    <a href="../../clientes.html" style="background: #3b82f6; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 600; display: inline-block; margin-top: 12px;">
+                        Ir a Clientes
+                    </a>
+                </div>
+
+                <!-- Botón de descarga de plantilla -->
+                <div id="templateDownloadSection" class="template-download-section">
+                    <h3 class="step-title">¿Necesita una plantilla?</h3>
+                    <button id="btnDownloadTemplate" class="btn-template">
+                        📥 Descargar Plantilla Excel
+                    </button>
+                    <p style="margin-top: 8px; color: #64748b; font-size: 14px;">
+                        Descargue esta plantilla con ejemplos para preparar sus datos correctamente
+                    </p>
+                </div>
+
                 <h3 class="step-title">Tipo de archivo origen</h3>
                 <div class="source-types-grid">
                     <button class="source-type-btn" data-type="extracto">

@@ -780,3 +780,59 @@ body {
 .group-details-table tbody tr:hover {
     background: #eef2ff;
 }
+
+/* Warning box for no client selected */
+.warning-box {
+    background: #fef3c7;
+    border: 2px solid #fbbf24;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.warning-box strong {
+    color: #92400e;
+    font-size: 16px;
+}
+
+.warning-box p {
+    color: #78350f;
+}
+
+/* Template download section */
+.template-download-section {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 2px solid #3b82f6;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 32px;
+    text-align: center;
+}
+
+.template-download-section .step-title {
+    color: #1e40af;
+    margin-bottom: 16px;
+}
+
+.btn-template {
+    background: #3b82f6;
+    color: white;
+    padding: 14px 28px;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn-template:hover {
+    background: #2563eb;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+}
+
+.btn-template:active {
+    transform: translateY(0);
+}
