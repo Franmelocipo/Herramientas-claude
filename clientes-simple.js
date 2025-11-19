@@ -20,14 +20,14 @@ waitForSupabase(() => {
   );
 
   // Función: Crear cliente
-  window.crearClienteSimple = async function(nombre, cuit) {
+  window.crearClienteSimple = async function(razon_social, cuit) {
     try {
-      console.log('📝 Creando cliente:', nombre, cuit);
+      console.log('📝 Creando cliente:', razon_social, cuit);
 
       const { data, error } = await supabaseClient
         .from('clientes')
         .insert([
-          { nombre: nombre, cuit: cuit }
+          { razon_social: razon_social, cuit: cuit }
         ])
         .select();
 
@@ -53,7 +53,7 @@ waitForSupabase(() => {
       const { data, error } = await supabaseClient
         .from('clientes')
         .select('*')
-        .order('nombre', { ascending: true });
+        .order('razon_social', { ascending: true });
 
       if (error) {
         console.error('❌ Error:', error);

@@ -125,15 +125,15 @@ function attachEventListeners() {
     document.getElementById('btnNewClient').addEventListener('click', () => showNewClientModal());
     document.getElementById('btnCancelNewClient').addEventListener('click', () => hideNewClientModal());
     document.getElementById('btnCreateClient').addEventListener('click', async () => {
-        const nombre = document.getElementById('newClientName').value;
+        const razon_social = document.getElementById('newClientName').value;
         const cuit = document.getElementById('newClientCuit').value;
 
-        if (!nombre) {
-            alert('El nombre es obligatorio');
+        if (!razon_social) {
+            alert('La razón social es obligatoria');
             return;
         }
 
-        await crearClienteSimple(nombre, cuit);
+        await crearClienteSimple(razon_social, cuit);
 
         // Recargar lista de clientes
         const clientes = await obtenerClientes();
