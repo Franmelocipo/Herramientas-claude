@@ -11,8 +11,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Sincronizar con Supabase en segundo plano
     await syncWithSupabase();
 
-    const allClients = await ClientManager.getAllClients();
-    console.log('Clientes (localStorage):', allClients.length);
     console.log('Impuestos (localStorage):', TaxManager.getAllTaxes().length);
     console.log('====================================================');
 
@@ -102,8 +100,9 @@ async function updateCounts() {
 }
 
 async function updateCountsFromLocalStorage() {
-    const allClients = await ClientManager.getAllClients();
-    const clientCount = allClients.length;
+    // Obtener clientes desde localStorage via obtenerClientes()
+    const clientes = await obtenerClientes();
+    const clientCount = clientes.length;
     const taxCount = TaxManager.getAllTaxes().length;
 
     document.getElementById('clientCount').textContent = clientCount;
@@ -169,11 +168,6 @@ function attachEventListeners() {
     document.getElementById('btnCrearCuenta').addEventListener('click', () => crearCuentaUI());
 
     // Listeners para cambios en los datos
-    ClientManager.onClientsChange(() => {
-        updateCounts();
-        renderClientsList();
-    });
-
     TaxManager.onTaxDatabaseChange(() => {
         updateCounts();
     });
@@ -213,23 +207,15 @@ async function createClient() {
     const cuit = document.getElementById('newClientCuit').value.trim();
 
     try {
-        if (supabase) {
-            // Crear en Supabase
-            const result = await createSupabaseClient({ name, cuit, accountPlan: [] });
-            if (result) {
-                hideNewClientModal();
-                alert(`Cliente "${name}" creado exitosamente en Supabase`);
-                await renderClientsList();
-                await updateCounts();
-            } else {
-                throw new Error('No se pudo crear el cliente en Supabase');
-            }
-        } else {
-            // Fallback a localStorage
-            await ClientManager.createClient({ name, cuit });
+        // Crear usando crearClienteSimple (usa Supabase o localStorage)
+        const result = await crearClienteSimple(name, cuit);
+        if (result) {
             hideNewClientModal();
             alert(`Cliente "${name}" creado exitosamente`);
             await renderClientsList();
+            await updateCounts();
+        } else {
+            throw new Error('No se pudo crear el cliente');
         }
     } catch (error) {
         alert('Error al crear cliente: ' + error.message);
@@ -237,14 +223,8 @@ async function createClient() {
 }
 
 async function selectClient(clientId) {
-    // Esta función mantiene compatibilidad con localStorage
-    const numericId = typeof clientId === 'string' ? parseFloat(clientId) : clientId;
-    const success = await ClientManager.selectClient(numericId);
-
-    if (success) {
-        const client = await ClientManager.getClient(numericId);
-        alert(`Cliente "${client.name}" seleccionado como activo`);
-    }
+    // Esta función ya no es necesaria - usar seleccionarClienteUI directamente
+    console.warn('selectClient está obsoleta, usa seleccionarClienteUI');
 }
 
 async function deleteClient(clientId) {
@@ -276,12 +256,8 @@ async function deleteClient(clientId) {
                 }
             }
         } else {
-            // Fallback a localStorage
-            const client = await ClientManager.getClient(numericId);
-            if (confirm(`¿Eliminar el cliente "${client.name}"?`)) {
-                await ClientManager.deleteClient(numericId);
-                await renderClientsList();
-            }
+            // Fallback: este caso no debería ocurrir ya que usamos eliminarClienteUI
+            alert('Error: Supabase no está disponible');
         }
     } catch (error) {
         console.error('❌ [deleteClient] Error general:', error);
@@ -403,12 +379,8 @@ async function importAccountPlan(event, clientId) {
                 alert('Error al guardar el plan de cuentas en Supabase');
             }
         } else {
-            // Fallback a localStorage
-            const success = await ClientManager.importAccountPlan(numericId, accounts);
-            if (success) {
-                alert(`Plan de cuentas importado: ${accounts.length} cuentas`);
-                await renderClientsList();
-            }
+            // Fallback: este caso no debería ocurrir
+            alert('Error: Supabase no está disponible');
         }
     } catch (error) {
         alert('Error al importar plan de cuentas: ' + error.message);
@@ -583,25 +555,8 @@ function downloadClientTemplate() {
 }
 
 async function repairClients() {
-    const allClients = await ClientManager.getAllClients();
-
-    if (allClients.length === 0) {
-        alert('No hay clientes para reparar');
-        return;
-    }
-
-    const result = await ClientManager.validateAndRepair();
-
-    if (result.totalRepaired === 0) {
-        alert('✓ No se detectaron problemas en los datos de clientes');
-        return;
-    }
-
-    await renderClientsList();
-    alert(`✓ Reparación completada exitosamente.\n\n` +
-          `IDs corruptos reparados: ${result.corruptedIds}\n` +
-          `AccountPlans corregidos: ${result.missingAccountPlans}\n\n` +
-          `Total reparado: ${result.totalRepaired}`);
+    // Esta función ya no es necesaria con el nuevo sistema
+    alert('La función de reparación ya no está disponible. El nuevo sistema maneja la integridad automáticamente.');
 }
 
 // ============================================
