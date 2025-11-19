@@ -11,7 +11,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Sincronizar con Supabase en segundo plano
     await syncWithSupabase();
 
-    console.log('Clientes (localStorage):', ClientManager.getAllClients().length);
+    const allClients = await ClientManager.getAllClients();
+    console.log('Clientes (localStorage):', allClients.length);
     console.log('Impuestos (localStorage):', TaxManager.getAllTaxes().length);
     console.log('====================================================');
 });
@@ -93,16 +94,17 @@ async function updateCounts() {
         } catch (error) {
             console.error('Error actualizando contadores desde Supabase:', error);
             // Fallback a localStorage
-            updateCountsFromLocalStorage();
+            await updateCountsFromLocalStorage();
         }
     } else {
         // Usar localStorage como fallback
-        updateCountsFromLocalStorage();
+        await updateCountsFromLocalStorage();
     }
 }
 
-function updateCountsFromLocalStorage() {
-    const clientCount = ClientManager.getAllClients().length;
+async function updateCountsFromLocalStorage() {
+    const allClients = await ClientManager.getAllClients();
+    const clientCount = allClients.length;
     const taxCount = TaxManager.getAllTaxes().length;
 
     document.getElementById('clientCount').textContent = clientCount;
@@ -198,7 +200,7 @@ async function createClient() {
             }
         } else {
             // Fallback a localStorage
-            ClientManager.createClient({ name, cuit });
+            await ClientManager.createClient({ name, cuit });
             hideNewClientModal();
             alert(`Cliente "${name}" creado exitosamente`);
             await renderClientsList();
@@ -211,10 +213,10 @@ async function createClient() {
 async function selectClient(clientId) {
     // Esta función mantiene compatibilidad con localStorage
     const numericId = typeof clientId === 'string' ? parseFloat(clientId) : clientId;
-    const success = ClientManager.selectClient(numericId);
+    const success = await ClientManager.selectClient(numericId);
 
     if (success) {
-        const client = ClientManager.getClient(numericId);
+        const client = await ClientManager.getClient(numericId);
         alert(`Cliente "${client.name}" seleccionado como activo`);
     }
 }
@@ -249,9 +251,9 @@ async function deleteClient(clientId) {
             }
         } else {
             // Fallback a localStorage
-            const client = ClientManager.getClient(numericId);
+            const client = await ClientManager.getClient(numericId);
             if (confirm(`¿Eliminar el cliente "${client.name}"?`)) {
-                ClientManager.deleteClient(numericId);
+                await ClientManager.deleteClient(numericId);
                 await renderClientsList();
             }
         }
@@ -287,8 +289,8 @@ async function renderClientsList(searchTerm = '') {
         }
     } else {
         // Fallback a localStorage
-        allClients = ClientManager.getAllClients();
-        filteredClients = ClientManager.searchClients(searchTerm);
+        allClients = await ClientManager.getAllClients();
+        filteredClients = await ClientManager.searchClients(searchTerm);
     }
 
     const selectedClientId = ClientManager.getSelectedClientId();
@@ -372,7 +374,7 @@ async function importAccountPlan(event, clientId) {
             }
         } else {
             // Fallback a localStorage
-            const success = ClientManager.importAccountPlan(numericId, accounts);
+            const success = await ClientManager.importAccountPlan(numericId, accounts);
             if (success) {
                 alert(`Plan de cuentas importado: ${accounts.length} cuentas`);
                 await renderClientsList();
@@ -419,15 +421,15 @@ async function importClients(event) {
             }
         } else {
             // Fallback a localStorage
-            const result = ClientManager.importClients(clientsToImport, true);
+            const result = await ClientManager.importClients(clientsToImport, true);
 
             if (result.imported === 0 && result.skipped > 0) {
                 alert('Todos los clientes ya existen');
             } else {
-                const totalClients = ClientManager.getAllClients().length;
+                const allClients = await ClientManager.getAllClients();
                 alert(`Se importaron ${result.imported} cliente(s) nuevo(s).\n` +
                       `Omitidos (duplicados): ${result.skipped}\n` +
-                      `Total de clientes: ${totalClients}`);
+                      `Total de clientes: ${allClients.length}`);
             }
         }
     } catch (error) {
@@ -437,22 +439,22 @@ async function importClients(event) {
     event.target.value = '';
 }
 
-function repairClients() {
-    const allClients = ClientManager.getAllClients();
+async function repairClients() {
+    const allClients = await ClientManager.getAllClients();
 
     if (allClients.length === 0) {
         alert('No hay clientes para reparar');
         return;
     }
 
-    const result = ClientManager.validateAndRepair();
+    const result = await ClientManager.validateAndRepair();
 
     if (result.totalRepaired === 0) {
         alert('✓ No se detectaron problemas en los datos de clientes');
         return;
     }
 
-    renderClientsList();
+    await renderClientsList();
     alert(`✓ Reparación completada exitosamente.\n\n` +
           `IDs corruptos reparados: ${result.corruptedIds}\n` +
           `AccountPlans corregidos: ${result.missingAccountPlans}\n\n` +

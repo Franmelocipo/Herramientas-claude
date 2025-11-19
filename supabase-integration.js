@@ -22,7 +22,7 @@ async function getSupabaseClients() {
         const { data, error } = await supabase
             .from('clientes')
             .select('*')
-            .order('nombre');
+            .order('nombre', { ascending: true });
 
         if (error) {
             console.error('❌ [getSupabaseClients] Error de Supabase:', error);
