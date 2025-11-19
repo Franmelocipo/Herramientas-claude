@@ -124,7 +124,26 @@ function attachEventListeners() {
     document.getElementById('btnCloseClients').addEventListener('click', () => hideClientsModal());
     document.getElementById('btnNewClient').addEventListener('click', () => showNewClientModal());
     document.getElementById('btnCancelNewClient').addEventListener('click', () => hideNewClientModal());
-    document.getElementById('btnCreateClient').addEventListener('click', () => createClient());
+    document.getElementById('btnCreateClient').addEventListener('click', async () => {
+        const nombre = document.getElementById('newClientName').value;
+        const cuit = document.getElementById('newClientCuit').value;
+
+        if (!nombre) {
+            alert('El nombre es obligatorio');
+            return;
+        }
+
+        await crearClienteSimple(nombre, cuit);
+
+        // Recargar lista de clientes
+        const clientes = await obtenerClientes();
+        console.log('Clientes actuales:', clientes);
+
+        // Cerrar modal y actualizar lista
+        hideNewClientModal();
+        await renderClientsList();
+        await updateCounts();
+    });
     document.getElementById('btnRepairClients').addEventListener('click', () => repairClients());
     document.getElementById('importClientsFile').addEventListener('change', (e) => importClients(e));
 
