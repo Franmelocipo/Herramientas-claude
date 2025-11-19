@@ -68,5 +68,56 @@ waitForSupabase(() => {
     }
   };
 
-  console.log('✅ Funciones de clientes disponibles: crearClienteSimple(), obtenerClientes()');
+  // Función: Eliminar cliente
+  window.eliminarCliente = async function(id) {
+    try {
+      console.log('🗑️ Eliminando cliente:', id);
+
+      const { error } = await supabaseClient
+        .from('clientes')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('❌ Error:', error);
+        alert('Error al eliminar cliente: ' + error.message);
+        return false;
+      }
+
+      console.log('✅ Cliente eliminado');
+      return true;
+    } catch (err) {
+      console.error('❌ Error general:', err);
+      alert('Error al eliminar cliente');
+      return false;
+    }
+  };
+
+  // Función: Actualizar cliente
+  window.actualizarCliente = async function(id, razon_social, cuit) {
+    try {
+      console.log('✏️ Actualizando cliente:', id);
+
+      const { data, error } = await supabaseClient
+        .from('clientes')
+        .update({ razon_social: razon_social, cuit: cuit })
+        .eq('id', id)
+        .select();
+
+      if (error) {
+        console.error('❌ Error:', error);
+        alert('Error al actualizar cliente: ' + error.message);
+        return null;
+      }
+
+      console.log('✅ Cliente actualizado:', data);
+      return data;
+    } catch (err) {
+      console.error('❌ Error general:', err);
+      alert('Error al actualizar cliente');
+      return null;
+    }
+  };
+
+  console.log('✅ Funciones de clientes disponibles: crearClienteSimple(), obtenerClientes(), eliminarCliente(), actualizarCliente()');
 });
