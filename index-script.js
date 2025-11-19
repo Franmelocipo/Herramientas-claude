@@ -45,14 +45,8 @@ async function getSupabaseClientsCount() {
     try {
         console.log('🔢 [getSupabaseClientsCount] Obteniendo conteo de clientes...');
 
-        const { count, error } = await supabase
-            .from('clientes')
-            .select('*', { count: 'exact', head: true });
-
-        if (error) {
-            console.error('❌ [getSupabaseClientsCount] Error:', error);
-            throw error;
-        }
+        const clientes = await obtenerClientes();
+        const count = clientes.length;
 
         console.log(`✅ [getSupabaseClientsCount] Total: ${count || 0} clientes`);
         return count || 0;
@@ -123,6 +117,7 @@ function attachEventListeners() {
     // Modal Clientes
     document.getElementById('btnCloseClients').addEventListener('click', () => hideClientsModal());
     document.getElementById('btnNewClient').addEventListener('click', () => showNewClientModal());
+    document.getElementById('btnDownloadTemplate').addEventListener('click', () => downloadClientTemplate());
     document.getElementById('btnCancelNewClient').addEventListener('click', () => hideNewClientModal());
     document.getElementById('btnCreateClient').addEventListener('click', async () => {
         const razon_social = document.getElementById('newClientName').value;
@@ -144,7 +139,6 @@ function attachEventListeners() {
         await renderClientsList();
         await updateCounts();
     });
-    document.getElementById('btnRepairClients').addEventListener('click', () => repairClients());
     document.getElementById('importClientsFile').addEventListener('change', (e) => importClients(e));
 
     // Búsqueda de clientes
@@ -286,33 +280,25 @@ async function renderClientsList(searchTerm = '') {
     let allClients = [];
     let filteredClients = [];
 
-    if (supabase) {
-        // Obtener clientes desde Supabase
-        try {
-            allClients = await getSupabaseClients();
+    // Obtener clientes desde Supabase usando obtenerClientes()
+    try {
+        allClients = await obtenerClientes();
 
-            // Filtrar por término de búsqueda
-            if (searchTerm.trim() !== '') {
-                const term = searchTerm.toLowerCase();
-                filteredClients = allClients.filter(client =>
-                    client.name.toLowerCase().includes(term) ||
-                    (client.cuit && client.cuit.toLowerCase().includes(term))
-                );
-            } else {
-                filteredClients = allClients;
-            }
-        } catch (error) {
-            console.error('Error cargando clientes desde Supabase:', error);
-            allClients = [];
-            filteredClients = [];
+        // Filtrar por término de búsqueda
+        if (searchTerm.trim() !== '') {
+            const term = searchTerm.toLowerCase();
+            filteredClients = allClients.filter(client =>
+                client.razon_social.toLowerCase().includes(term) ||
+                (client.cuit && client.cuit.toLowerCase().includes(term))
+            );
+        } else {
+            filteredClients = allClients;
         }
-    } else {
-        // Fallback a localStorage
-        allClients = await ClientManager.getAllClients();
-        filteredClients = await ClientManager.searchClients(searchTerm);
+    } catch (error) {
+        console.error('Error cargando clientes desde Supabase:', error);
+        allClients = [];
+        filteredClients = [];
     }
-
-    const selectedClientId = ClientManager.getSelectedClientId();
 
     // Actualizar estadísticas
     const statsElement = document.getElementById('clientsStats');
@@ -336,31 +322,30 @@ async function renderClientsList(searchTerm = '') {
         return;
     }
 
-    const html = filteredClients.map(client => {
-        const isSelected = selectedClientId === client.id;
-        const selectedClass = isSelected ? 'client-item-selected' : '';
-        const accountCount = (client.account_plan?.length || client.accountPlan?.length) || 0;
-        const idType = Number.isInteger(client.id) ? '✓' : '⚠️';
-
-        return `
-            <div class="client-item ${selectedClass}">
-                <div class="client-header">
-                    <div>
-                        <h3>${client.name} ${isSelected ? '(Activo)' : ''}</h3>
-                        <p>${client.cuit ? `CUIT: ${client.cuit} | ` : ''}${accountCount} cuentas | ID: ${client.id} ${idType}</p>
-                    </div>
-                    <div class="client-actions">
-                        <button class="btn-select" onclick="selectClient(${client.id})">Seleccionar</button>
-                        <button class="btn-delete" onclick="deleteClient(${client.id})">Eliminar</button>
-                    </div>
-                </div>
-                <label class="file-input-label">
-                    <span>Plan de Cuentas (Excel: Código | Descripción)</span>
-                    <input type="file" accept=".xlsx,.xls" onchange="importAccountPlan(event, ${client.id})">
-                </label>
-            </div>
-        `;
-    }).join('');
+    // Crear tabla HTML
+    const html = `
+        <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            <thead>
+                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569;">Razón Social</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569;">CUIT</th>
+                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #475569; width: 200px;">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${filteredClients.map(client => `
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 12px; color: #1e293b;">${client.razon_social}</td>
+                        <td style="padding: 12px; color: #64748b;">${client.cuit || '-'}</td>
+                        <td style="padding: 12px; text-align: center;">
+                            <button onclick="editarCliente(${client.id})" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 8px; font-size: 13px;">✏️ Editar</button>
+                            <button onclick="eliminarClienteUI(${client.id})" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Eliminar</button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
 
     listElement.innerHTML = html;
 }
@@ -416,46 +401,159 @@ async function importClients(event) {
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
 
+        // Leer las columnas razon_social y cuit
         const clientsToImport = jsonData.slice(1).map(row => ({
-            name: String(row[0] || '').trim(),
-            cuit: String(row[1] || '').trim(),
-            accountPlan: []
-        })).filter(c => c.name);
+            razon_social: String(row[0] || '').trim(),
+            cuit: String(row[1] || '').trim()
+        })).filter(c => c.razon_social);
 
         if (clientsToImport.length === 0) {
             alert('No se encontraron clientes válidos en el archivo');
             return;
         }
 
-        if (supabase) {
-            // Importar a Supabase
-            const result = await importSupabaseClients(clientsToImport);
+        // Importar usando crearClienteSimple
+        let imported = 0;
+        let errors = 0;
+        const total = clientsToImport.length;
 
-            if (result.imported > 0) {
-                alert(`Se importaron ${result.imported} cliente(s) a Supabase`);
-                await renderClientsList();
-                await updateCounts();
-            } else {
-                alert('No se pudieron importar los clientes');
+        for (let i = 0; i < total; i++) {
+            const cliente = clientsToImport[i];
+
+            // Mostrar progreso
+            const progressMsg = `Importando cliente ${i + 1} de ${total}...`;
+            console.log(progressMsg);
+
+            // Actualizar UI con progreso (opcional)
+            const statsElement = document.getElementById('clientsStats');
+            if (statsElement) {
+                statsElement.textContent = progressMsg;
+                statsElement.classList.add('show');
             }
+
+            try {
+                const result = await crearClienteSimple(cliente.razon_social, cliente.cuit);
+                if (result) {
+                    imported++;
+                } else {
+                    errors++;
+                }
+            } catch (err) {
+                console.error(`Error importando cliente ${cliente.razon_social}:`, err);
+                errors++;
+            }
+        }
+
+        // Limpiar mensaje de progreso
+        const statsElement = document.getElementById('clientsStats');
+        if (statsElement) {
+            statsElement.classList.remove('show');
+        }
+
+        // Mostrar resultado final
+        if (imported > 0) {
+            alert(`Se importaron ${imported} cliente(s) exitosamente${errors > 0 ? `\nErrores: ${errors}` : ''}`);
+            await renderClientsList();
+            await updateCounts();
         } else {
-            // Fallback a localStorage
-            const result = await ClientManager.importClients(clientsToImport, true);
-
-            if (result.imported === 0 && result.skipped > 0) {
-                alert('Todos los clientes ya existen');
-            } else {
-                const allClients = await ClientManager.getAllClients();
-                alert(`Se importaron ${result.imported} cliente(s) nuevo(s).\n` +
-                      `Omitidos (duplicados): ${result.skipped}\n` +
-                      `Total de clientes: ${allClients.length}`);
-            }
+            alert('No se pudieron importar los clientes. Verifica que no existan duplicados.');
         }
     } catch (error) {
         alert('Error al importar clientes: ' + error.message);
     }
 
     event.target.value = '';
+}
+
+// Función para eliminar cliente desde la UI
+async function eliminarClienteUI(id) {
+    try {
+        // Obtener el cliente para confirmar
+        const clientes = await obtenerClientes();
+        const cliente = clientes.find(c => c.id === id);
+
+        if (!cliente) {
+            alert('Cliente no encontrado');
+            return;
+        }
+
+        if (!confirm(`¿Eliminar el cliente "${cliente.razon_social}"?`)) {
+            return;
+        }
+
+        const success = await eliminarCliente(id);
+        if (success) {
+            alert('Cliente eliminado exitosamente');
+            await renderClientsList();
+            await updateCounts();
+        }
+    } catch (error) {
+        console.error('Error eliminando cliente:', error);
+        alert('Error al eliminar cliente: ' + error.message);
+    }
+}
+
+// Función para editar cliente
+async function editarCliente(id) {
+    try {
+        // Obtener el cliente
+        const clientes = await obtenerClientes();
+        const cliente = clientes.find(c => c.id === id);
+
+        if (!cliente) {
+            alert('Cliente no encontrado');
+            return;
+        }
+
+        // Solicitar nueva razón social
+        const nuevaRazonSocial = prompt('Razón Social:', cliente.razon_social);
+        if (nuevaRazonSocial === null) return; // Cancelado
+
+        if (!nuevaRazonSocial.trim()) {
+            alert('La razón social no puede estar vacía');
+            return;
+        }
+
+        // Solicitar nuevo CUIT
+        const nuevoCuit = prompt('CUIT:', cliente.cuit || '');
+        if (nuevoCuit === null) return; // Cancelado
+
+        // Actualizar cliente
+        const result = await actualizarCliente(id, nuevaRazonSocial.trim(), nuevoCuit.trim());
+        if (result) {
+            alert('Cliente actualizado exitosamente');
+            await renderClientsList();
+        }
+    } catch (error) {
+        console.error('Error editando cliente:', error);
+        alert('Error al editar cliente: ' + error.message);
+    }
+}
+
+// Función para descargar plantilla Excel
+function downloadClientTemplate() {
+    try {
+        // Crear datos de ejemplo
+        const data = [
+            ['razon_social', 'cuit'],
+            ['EJEMPLO SA', '30123456789']
+        ];
+
+        // Crear libro de trabajo
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(data);
+
+        // Agregar hoja al libro
+        XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
+
+        // Descargar archivo
+        XLSX.writeFile(wb, 'plantilla_clientes.xlsx');
+
+        console.log('✅ Plantilla descargada exitosamente');
+    } catch (error) {
+        console.error('Error descargando plantilla:', error);
+        alert('Error al descargar plantilla: ' + error.message);
+    }
 }
 
 async function repairClients() {

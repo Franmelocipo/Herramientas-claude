@@ -123,15 +123,15 @@
 
             <div class="btn-group mb-4">
                 <button id="btnNewClient" class="btn-primary flex-1">+ Nuevo Cliente</button>
+                <button id="btnDownloadTemplate" class="btn-secondary flex-1">📥 Descargar Plantilla</button>
                 <label class="btn-secondary flex-1" style="cursor: pointer; text-align: center;">
-                    📥 Importar Clientes
+                    📤 Importar Clientes
                     <input type="file" id="importClientsFile" accept=".xlsx,.xls" style="display: none;">
                 </label>
-                <button id="btnRepairClients" class="btn-secondary flex-1" title="Reparar IDs corruptos">🔧 Reparar Datos</button>
             </div>
             <div class="info-box" style="font-size: 12px; padding: 10px; margin-bottom: 16px;">
-                <strong>Formato Excel para importar:</strong> Razón Social | CUIT<br>
-                <strong>Reparar Datos:</strong> Usa este botón si ves IDs con ⚠️ o si un cliente muestra datos incorrectos
+                <strong>Formato Excel:</strong> razon_social | cuit<br>
+                <strong>Plantilla:</strong> Descarga la plantilla Excel con el formato correcto para importar clientes
             </div>
 
             <div id="clientsStats" class="clients-stats"></div>
