@@ -27,14 +27,21 @@ function initSupabase() {
         console.error('Supabase library not loaded. Add the CDN script to your HTML.');
         return null;
     }
-    
+
     supabase = window.supabase.createClient(
         SUPABASE_CONFIG.url,
         SUPABASE_CONFIG.anonKey
     );
-    
+
     console.log('✅ Supabase initialized successfully');
     return supabase;
+}
+
+// Inicializar automáticamente al cargar
+if (typeof window !== 'undefined') {
+    window.addEventListener('DOMContentLoaded', () => {
+        initSupabase();
+    });
 }
 
 // =====================================================
