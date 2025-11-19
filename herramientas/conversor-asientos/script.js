@@ -1,7 +1,6 @@
 // ============================================
 // ESTADO DE LA APLICACIÓN
 // ============================================
-// NOTA: Ahora usamos ClientManager y TaxManager para gestión centralizada de datos
 const state = {
     step: 0,
     sourceType: '',
@@ -17,14 +16,9 @@ const state = {
 // ============================================
 // HELPERS PARA COMPATIBILIDAD CON CÓDIGO EXISTENTE
 // ============================================
-// Estas funciones adaptan el código existente al nuevo sistema centralizado
-
-function getClients() {
-    return ClientManager.getAllClients();
-}
 
 function getSelectedClientId() {
-    return ClientManager.getSelectedClientId();
+    return localStorage.getItem('cliente_activo_id');
 }
 
 function getTaxDatabase() {
@@ -107,20 +101,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Adjuntar event listeners
     attachEventListeners();
 
-    // Log de diagnóstico usando ClientManager
-    const clients = getClients();
-    console.log('Estado inicial de clientes:');
-    console.table(clients.map(c => ({
-        nombre: c.name,
-        id: c.id,
-        idValido: Number.isInteger(c.id) ? 'SI' : 'NO',
-        cuentas: c.accountPlan?.length || 0
-    })));
-
+    // Log de diagnóstico
     const selectedClientId = getSelectedClientId();
     if (selectedClientId) {
-        const selected = ClientManager.getClient(selectedClientId);
-        console.log('Cliente seleccionado actual:', selected ? selected.name : 'NO ENCONTRADO');
+        console.log('Cliente activo ID:', selectedClientId);
     } else {
         console.log('No hay cliente seleccionado');
     }
@@ -240,31 +224,39 @@ function reset() {
 // ============================================
 // FUNCIONES AUXILIARES PARA LA HERRAMIENTA
 // ============================================
-function updateClientName() {
+async function updateClientName() {
     const selectedClientId = getSelectedClientId();
 
     if (selectedClientId) {
-        const client = ClientManager.getClient(selectedClientId);
-        if (client) {
-            elements.clientName.textContent = `Cliente: ${client.name}`;
-            console.log('Cliente seleccionado:', {
-                id: selectedClientId,
-                nombre: client.name,
-                cuentas: client.accountPlan?.length || 0
-            });
+        // Usar window.obtenerClienteActivo() si está disponible
+        if (typeof window.obtenerClienteActivo === 'function') {
+            const cliente = window.obtenerClienteActivo();
+            if (cliente) {
+                elements.clientName.textContent = `Cliente: ${cliente.razon_social}`;
+                console.log('Cliente seleccionado:', {
+                    id: selectedClientId,
+                    nombre: cliente.razon_social
+                });
+            } else {
+                elements.clientName.textContent = '';
+            }
         } else {
-            console.error('No se encontró el cliente con ID:', selectedClientId);
-            elements.clientName.textContent = '';
+            elements.clientName.textContent = 'Cliente ID: ' + selectedClientId;
         }
     } else {
         elements.clientName.textContent = '';
     }
 }
 
-function getClientAccounts() {
+async function getClientAccounts() {
     const selectedClientId = getSelectedClientId();
     if (!selectedClientId) return [];
-    return ClientManager.getAccountPlan(selectedClientId);
+
+    // Usar window.obtenerPlanCuentas() si está disponible
+    if (typeof window.obtenerPlanCuentas === 'function') {
+        return await window.obtenerPlanCuentas(selectedClientId);
+    }
+    return [];
 }
 
 // ============================================
