@@ -5,7 +5,7 @@
 .env.development
 
 # Generated files (created during build)
-supabase-config.js
+# supabase-config.js - NOTA: Ya no se genera, tiene valores por defecto commiteados
 
 # Node modules
 node_modules/
