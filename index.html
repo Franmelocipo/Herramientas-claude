@@ -37,6 +37,9 @@
         </div>
     </div>
 
+    <!-- Indicador de Cliente Activo -->
+    <div id="clienteActivoIndicador" style="background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 12px 20px; margin-bottom: 20px; display: none;"></div>
+
     <div class="container">
         <div class="header">
             <h1>🧮 Herramientas Contables</h1>
@@ -200,9 +203,58 @@
         </div>
     </div>
 
+    <!-- Modal Plan de Cuentas -->
+    <div id="modalPlanCuentas" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 Plan de Cuentas - <span id="planCuentasClienteNombre"></span></h2>
+                <button class="close-btn" id="btnClosePlanCuentas">✕</button>
+            </div>
+
+            <div class="btn-group mb-4">
+                <button id="btnDescargarPlantillaPlan" class="btn-secondary flex-1">📥 Descargar Plantilla Plan</button>
+                <label class="btn-primary flex-1" style="cursor: pointer; text-align: center;">
+                    📤 Importar Plan
+                    <input type="file" id="importPlanFile" accept=".xlsx,.xls" style="display: none;">
+                </label>
+                <button id="btnNuevaCuenta" class="btn-primary flex-1">+ Nueva Cuenta</button>
+            </div>
+
+            <div class="info-box" style="font-size: 12px; padding: 10px; margin-bottom: 16px;">
+                <strong>Formato Excel:</strong> codigo | cuenta | tipo<br>
+                <strong>Tipos válidos:</strong> Activo, Pasivo, Patrimonio Neto, Ingreso, Egreso
+            </div>
+
+            <div id="planCuentasStats" class="clients-stats"></div>
+            <div id="planCuentasList" style="max-height: 500px; overflow-y: auto;"></div>
+        </div>
+    </div>
+
+    <!-- Modal Nueva Cuenta -->
+    <div id="modalNuevaCuenta" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>Nueva Cuenta</h3>
+            <input type="text" id="nuevaCuentaCodigo" placeholder="Código (ej: 1.1.1.01)" class="input-text mb-4">
+            <input type="text" id="nuevaCuentaNombre" placeholder="Nombre de la Cuenta" class="input-text mb-4">
+            <select id="nuevaCuentaTipo" class="input-text mb-4">
+                <option value="">Seleccionar Tipo</option>
+                <option value="Activo">Activo</option>
+                <option value="Pasivo">Pasivo</option>
+                <option value="Patrimonio Neto">Patrimonio Neto</option>
+                <option value="Ingreso">Ingreso</option>
+                <option value="Egreso">Egreso</option>
+            </select>
+            <div class="btn-group">
+                <button id="btnCancelNuevaCuenta" class="btn-secondary">Cancelar</button>
+                <button id="btnCrearCuenta" class="btn-primary">Crear</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Configuración de Supabase -->
     <script src="supabase-config.js"></script>
     <script src="clientes-simple.js"></script>
+    <script src="plan-cuentas.js"></script>
     <script src="supabase-integration.js"></script>
 
     <!-- Módulos compartidos -->
