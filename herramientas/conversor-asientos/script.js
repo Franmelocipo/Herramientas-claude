@@ -34,44 +34,7 @@ function getTaxDatabase() {
 // ============================================
 // ELEMENTOS DEL DOM
 // ============================================
- claude/fix-converter-client-display-01TB1MNRd6dbzc31RxcaLtBJ
 let elements = {};
-
-const elements = {
-    // Steps
-    step0: document.getElementById('step0'),
-    step1: document.getElementById('step1'),
-    step2: document.getElementById('step2'),
-    step3: document.getElementById('step3'),
-
-    // Header
-    subtitle: document.getElementById('subtitle'),
-    clientName: document.getElementById('clientName'),
-    btnReset: document.getElementById('btnReset'),
-
-    // Step 1
-    sourceTypeName: document.getElementById('sourceTypeName'),
-    fileInput: document.getElementById('fileInput'),
-    btnSelectFile: document.getElementById('btnSelectFile'),
-
-    // Step 2
-    groupStats: document.getElementById('groupStats'),
-    bankAccountSection: document.getElementById('bankAccountSection'),
-    bankAccountLabel: document.getElementById('bankAccountLabel'),
-    bankAccountInput: document.getElementById('bankAccountInput'),
-    bankAccountDropdown: document.getElementById('bankAccountDropdown'),
-    compensacionesInfo: document.getElementById('compensacionesInfo'),
-    groupsList: document.getElementById('groupsList'),
-    btnBackToUpload: document.getElementById('btnBackToUpload'),
-    btnGenerateFinal: document.getElementById('btnGenerateFinal'),
-
-    // Step 3
-    finalStats: document.getElementById('finalStats'),
-    previewTableBody: document.getElementById('previewTableBody'),
-    btnBackToAssignment: document.getElementById('btnBackToAssignment'),
-    btnDownloadExcel: document.getElementById('btnDownloadExcel')
-};
- main
 
 // ============================================
 // TIPOS DE FUENTE
@@ -155,18 +118,13 @@ function initializeElements() {
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('=== INICIANDO APLICACIÓN ===');
- claude/fix-converter-client-display-01TB1MNRd6dbzc31RxcaLtBJ
 
     // Inicializar elementos del DOM
     initializeElements();
 
-    // Cargar datos
-    loadClients();
-    loadTaxDatabase();
-
+    // Cargar datos - usando sistema centralizado
     console.log('Usando sistema centralizado de datos compartidos');
 
- main
     updateClientName();
 
     // Adjuntar event listeners
@@ -196,68 +154,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function attachEventListeners() {
     // Header
- claude/fix-converter-client-display-01TB1MNRd6dbzc31RxcaLtBJ
-    if (elements.btnClientManager) {
-        elements.btnClientManager.addEventListener('click', () => showClientManager());
-    } else {
-        console.error('btnClientManager no encontrado');
-    }
-
-    if (elements.btnTaxDatabase) {
-        elements.btnTaxDatabase.addEventListener('click', () => showTaxDatabase());
-    } else {
-        console.error('btnTaxDatabase no encontrado');
-    }
-
     if (elements.btnReset) {
         elements.btnReset.addEventListener('click', () => reset());
-    } else {
-        console.error('btnReset no encontrado');
     }
 
-    // Modals - Clients
-    if (elements.btnCloseClientManager) {
-        elements.btnCloseClientManager.addEventListener('click', () => hideClientManager());
-    }
-    if (elements.btnNewClient) {
-        elements.btnNewClient.addEventListener('click', () => showNewClientModal());
-    }
-    if (elements.btnCancelNewClient) {
-        elements.btnCancelNewClient.addEventListener('click', () => hideNewClientModal());
-    }
-    if (elements.btnCreateClient) {
-        elements.btnCreateClient.addEventListener('click', () => createClient());
-    }
-    if (elements.btnRepairClients) {
-        elements.btnRepairClients.addEventListener('click', () => repairClientData());
-    }
-    if (elements.importClientsFile) {
-        elements.importClientsFile.addEventListener('change', (e) => importClients(e));
-    }
-
-    // Client search
-    const clientSearchInput = document.getElementById('clientSearchInput');
-    if (clientSearchInput) {
-        clientSearchInput.addEventListener('input', (e) => {
-            renderClientsList(e.target.value);
-        });
-    }
-
-    // Modals - Tax Database
-    if (elements.btnCloseTaxDatabase) {
-        elements.btnCloseTaxDatabase.addEventListener('click', () => hideTaxDatabase());
-    }
-    if (elements.importTaxFile) {
-        elements.importTaxFile.addEventListener('change', (e) => importTaxDatabase(e));
-    }
-    if (elements.btnClearTaxDatabase) {
-        elements.btnClearTaxDatabase.addEventListener('click', () => clearTaxDatabase());
-    }
-
-
-    elements.btnReset.addEventListener('click', () => reset());
-
- main
     // Step 0: Source type selection
     document.querySelectorAll('.source-type-btn').forEach(btn => {
         btn.addEventListener('click', () => selectSourceType(btn.dataset.type));
@@ -272,10 +172,10 @@ function attachEventListeners() {
     }
 
     // Step 2: Account assignment
- claude/fix-converter-client-display-01TB1MNRd6dbzc31RxcaLtBJ
     if (elements.bankAccountInput) {
         elements.bankAccountInput.addEventListener('click', () => {
-            if (state.selectedClient) {
+            const selectedClientId = getSelectedClientId();
+            if (selectedClientId) {
                 state.activeSearchField = 'bank';
                 showAccountDropdown('bank');
             }
@@ -287,16 +187,6 @@ function attachEventListeners() {
     if (elements.btnGenerateFinal) {
         elements.btnGenerateFinal.addEventListener('click', () => generateFinalExcel());
     }
-
-    elements.bankAccountInput.addEventListener('click', () => {
-        if (getSelectedClientId()) {
-            state.activeSearchField = 'bank';
-            showAccountDropdown('bank');
-        }
-    });
-    elements.btnBackToUpload.addEventListener('click', () => goToStep(1));
-    elements.btnGenerateFinal.addEventListener('click', () => generateFinalExcel());
- main
 
     // Step 3: Download
     if (elements.btnBackToAssignment) {
