@@ -4,6 +4,9 @@
 .env.production
 .env.development
 
+# Generated files (created during build)
+supabase-config.js
+
 # Node modules
 node_modules/
 
