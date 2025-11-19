@@ -341,7 +341,7 @@ async function renderClientsList(searchTerm = '') {
 
     // Crear tabla HTML
     const html = `
-        <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <table class="preview-table" style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
             <thead>
                 <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
                     <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569;">Razón Social</th>
@@ -352,16 +352,19 @@ async function renderClientsList(searchTerm = '') {
             <tbody>
                 ${filteredClients.map(client => {
                     const isActive = clienteActivoId === client.id;
-                    const bgColor = isActive ? '#e0f2fe' : 'white';
-                    const borderLeft = isActive ? 'border-left: 4px solid #3b82f6;' : '';
+                    const activeClass = isActive ? 'cliente-activo-row' : '';
+                    const activeBadge = isActive ? '<span class="badge-cliente-activo" style="font-size: 9px; padding: 3px 6px; margin-left: 8px;">✓ ACTIVO</span>' : '';
                     return `
-                        <tr onclick="seleccionarClienteUI('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="border-bottom: 1px solid #e2e8f0; background: ${bgColor}; ${borderLeft} cursor: pointer; transition: background 0.2s;" onmouseover="if (!this.style.borderLeft) this.style.background='#f8fafc'" onmouseout="if (!this.style.borderLeft) this.style.background='white'">
-                            <td style="padding: 12px; color: #1e293b; font-weight: ${isActive ? '600' : '400'};">${client.razon_social}</td>
+                        <tr class="${activeClass}" onclick="seleccionarClienteUI('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 12px; color: #1e293b; font-weight: ${isActive ? '600' : '400'};">
+                                ${client.razon_social}
+                                ${activeBadge}
+                            </td>
                             <td style="padding: 12px; color: #64748b;">${client.cuit || '-'}</td>
                             <td style="padding: 12px; text-align: center;" onclick="event.stopPropagation()">
-                                <button onclick="abrirPlanCuentas('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="background: #8b5cf6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px;">📊 Plan</button>
-                                <button onclick="editarCliente('${client.id}')" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px;">✏️ Editar</button>
-                                <button onclick="eliminarClienteUI('${client.id}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Eliminar</button>
+                                <button onclick="abrirPlanCuentas('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="background: #8b5cf6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#7c3aed'" onmouseout="this.style.background='#8b5cf6'">📊 Plan</button>
+                                <button onclick="editarCliente('${client.id}')" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">✏️ Editar</button>
+                                <button onclick="eliminarClienteUI('${client.id}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">🗑️ Eliminar</button>
                             </td>
                         </tr>
                     `;
@@ -853,6 +856,72 @@ async function showStorageStats() {
 function seleccionarClienteUI(clienteId, razonSocial) {
     seleccionarCliente(clienteId, razonSocial);
     renderClientsList();
+
+    // Mostrar notificación temporal
+    mostrarNotificacion(`✅ Cliente seleccionado: ${razonSocial}`, 'success');
+}
+
+/**
+ * Mostrar notificación temporal
+ */
+function mostrarNotificacion(mensaje, tipo = 'info') {
+    // Crear elemento de notificación
+    const notificacion = document.createElement('div');
+    notificacion.style.cssText = `
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        background: ${tipo === 'success' ? '#10b981' : tipo === 'error' ? '#ef4444' : '#3b82f6'};
+        color: white;
+        padding: 16px 24px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        font-weight: 600;
+        font-size: 14px;
+        animation: slideInRight 0.3s ease-out;
+        max-width: 400px;
+    `;
+    notificacion.textContent = mensaje;
+
+    // Agregar animación CSS
+    if (!document.getElementById('notification-styles')) {
+        const style = document.createElement('style');
+        style.id = 'notification-styles';
+        style.textContent = `
+            @keyframes slideInRight {
+                from {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+            @keyframes slideOutRight {
+                from {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+                to {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(notificacion);
+
+    // Remover después de 3 segundos
+    setTimeout(() => {
+        notificacion.style.animation = 'slideOutRight 0.3s ease-out';
+        setTimeout(() => {
+            notificacion.remove();
+        }, 300);
+    }, 3000);
 }
 
 // ============================================
@@ -1012,3 +1081,34 @@ async function importarPlanCuentasUI(event) {
 
     event.target.value = '';
 }
+
+// ============================================
+// FUNCIONES GLOBALES PARA OTRAS HERRAMIENTAS
+// ============================================
+
+/**
+ * Función global para seleccionar cliente activo
+ * Disponible para todas las herramientas
+ */
+window.seleccionarClienteActivo = function(clienteId, razonSocial) {
+    if (typeof seleccionarCliente === 'function') {
+        seleccionarCliente(clienteId, razonSocial);
+        console.log('✅ Cliente activo establecido:', razonSocial);
+        return {
+            success: true,
+            cliente: {
+                id: clienteId,
+                razon_social: razonSocial
+            }
+        };
+    } else {
+        console.error('❌ Función seleccionarCliente no disponible');
+        return { success: false, error: 'Función no disponible' };
+    }
+};
+
+console.log('✅ Sistema de Cliente Activo inicializado');
+console.log('   Funciones disponibles:');
+console.log('   - window.seleccionarClienteActivo(id, nombre)');
+console.log('   - window.obtenerClienteActivo()');
+console.log('   - window.limpiarClienteActivo()');
