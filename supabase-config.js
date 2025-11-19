@@ -11,7 +11,7 @@
 // =====================================================
 const SUPABASE_CONFIG = {
     url: 'https://wnpjvnmyfkgtpwqnbmxa.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InducGp2bm15ZmtndHB3cW5ibXhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzEwNDYxNjksImV4cCI6MjA0NjYyMjE2OX0.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InducGp2bm15ZmtndHB3cW5ibXhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzEwNDYxNjksImV4cCI6MjA0NjYyMjE2OX0'
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InducGp2bm15ZmtndHB3cW5ibXhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzEwNDYxNjksImV4cCI6MjA0NjYyMjE2OX0.Z_YE5vZ5Y-zQh8PVVkFBZvQGJI8KxXz3FqK5wXRn9bw'
 };
 
 // =====================================================

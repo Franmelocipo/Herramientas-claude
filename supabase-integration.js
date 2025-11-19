@@ -13,20 +13,46 @@
 async function getSupabaseClients() {
     try {
         if (!supabase) {
-            console.error('Supabase no está inicializado');
+            console.error('❌ [getSupabaseClients] Supabase no está inicializado');
             return [];
         }
 
-        const { data, error } = await supabase
-            .from('shared_clients')
-            .select('*')
-            .eq('active', true)
-            .order('name');
+        console.log('📡 [getSupabaseClients] Obteniendo clientes desde Supabase...');
 
-        if (error) throw error;
-        return data || [];
+        const { data, error } = await supabase
+            .from('clientes')
+            .select('*')
+            .order('nombre');
+
+        if (error) {
+            console.error('❌ [getSupabaseClients] Error de Supabase:', error);
+            console.error('Detalles:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+            });
+            throw error;
+        }
+
+        // Mapear campos de Supabase a formato local
+        const mappedData = (data || []).map(client => ({
+            id: client.id,
+            name: client.nombre,
+            cuit: client.cuit,
+            direccion: client.direccion,
+            email: client.email,
+            telefono: client.telefono,
+            tipo_societario: client.tipo_societario,
+            account_plan: [],
+            created_at: client.created_at,
+            updated_at: client.updated_at
+        }));
+
+        console.log(`✅ [getSupabaseClients] Obtenidos ${mappedData.length} clientes`);
+        return mappedData;
     } catch (error) {
-        console.error('Error obteniendo clientes:', error);
+        console.error('❌ [getSupabaseClients] Error general:', error);
         return [];
     }
 }
@@ -37,24 +63,59 @@ async function getSupabaseClients() {
 async function createSupabaseClient(clientData) {
     try {
         if (!supabase) {
-            console.error('Supabase no está inicializado');
+            console.error('❌ [createSupabaseClient] Supabase no está inicializado');
             return null;
         }
 
+        console.log('📝 [createSupabaseClient] Creando cliente:', clientData);
+
+        const clientToInsert = {
+            nombre: clientData.name,
+            cuit: clientData.cuit || '',
+            direccion: clientData.direccion || '',
+            email: clientData.email || '',
+            telefono: clientData.telefono || '',
+            tipo_societario: clientData.tipo_societario || ''
+        };
+
+        console.log('📤 [createSupabaseClient] Datos a insertar:', clientToInsert);
+
         const { data, error } = await supabase
-            .from('shared_clients')
-            .insert([{
-                name: clientData.name,
-                cuit: clientData.cuit || '',
-                account_plan: clientData.accountPlan || []
-            }])
+            .from('clientes')
+            .insert([clientToInsert])
             .select()
             .single();
 
-        if (error) throw error;
-        return data;
+        if (error) {
+            console.error('❌ [createSupabaseClient] Error de Supabase:', error);
+            console.error('Detalles completos del error:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code,
+                statusCode: error.statusCode
+            });
+            throw error;
+        }
+
+        console.log('✅ [createSupabaseClient] Cliente creado exitosamente:', data);
+
+        // Mapear respuesta al formato local
+        return {
+            id: data.id,
+            name: data.nombre,
+            cuit: data.cuit,
+            direccion: data.direccion,
+            email: data.email,
+            telefono: data.telefono,
+            tipo_societario: data.tipo_societario,
+            account_plan: [],
+            created_at: data.created_at,
+            updated_at: data.updated_at
+        };
     } catch (error) {
-        console.error('Error creando cliente:', error);
+        console.error('❌ [createSupabaseClient] Error general al crear cliente:', error);
+        console.error('Stack trace:', error.stack);
         return null;
     }
 }
@@ -65,44 +126,67 @@ async function createSupabaseClient(clientData) {
 async function updateSupabaseClient(clientId, updates) {
     try {
         if (!supabase) {
-            console.error('Supabase no está inicializado');
+            console.error('❌ [updateSupabaseClient] Supabase no está inicializado');
             return null;
         }
 
+        console.log('✏️ [updateSupabaseClient] Actualizando cliente:', clientId, updates);
+
+        // Mapear campos al formato de Supabase
+        const mappedUpdates = {};
+        if (updates.name !== undefined) mappedUpdates.nombre = updates.name;
+        if (updates.cuit !== undefined) mappedUpdates.cuit = updates.cuit;
+        if (updates.direccion !== undefined) mappedUpdates.direccion = updates.direccion;
+        if (updates.email !== undefined) mappedUpdates.email = updates.email;
+        if (updates.telefono !== undefined) mappedUpdates.telefono = updates.telefono;
+        if (updates.tipo_societario !== undefined) mappedUpdates.tipo_societario = updates.tipo_societario;
+
         const { data, error } = await supabase
-            .from('shared_clients')
-            .update(updates)
+            .from('clientes')
+            .update(mappedUpdates)
             .eq('id', clientId)
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            console.error('❌ [updateSupabaseClient] Error:', error);
+            throw error;
+        }
+
+        console.log('✅ [updateSupabaseClient] Cliente actualizado:', data);
         return data;
     } catch (error) {
-        console.error('Error actualizando cliente:', error);
+        console.error('❌ [updateSupabaseClient] Error general:', error);
         return null;
     }
 }
 
 /**
- * Eliminar un cliente en Supabase (soft delete)
+ * Eliminar un cliente en Supabase (eliminación real, no soft delete)
  */
 async function deleteSupabaseClient(clientId) {
     try {
         if (!supabase) {
-            console.error('Supabase no está inicializado');
+            console.error('❌ [deleteSupabaseClient] Supabase no está inicializado');
             return false;
         }
 
+        console.log('🗑️ [deleteSupabaseClient] Eliminando cliente:', clientId);
+
         const { error } = await supabase
-            .from('shared_clients')
-            .update({ active: false })
+            .from('clientes')
+            .delete()
             .eq('id', clientId);
 
-        if (error) throw error;
+        if (error) {
+            console.error('❌ [deleteSupabaseClient] Error:', error);
+            throw error;
+        }
+
+        console.log('✅ [deleteSupabaseClient] Cliente eliminado exitosamente');
         return true;
     } catch (error) {
-        console.error('Error eliminando cliente:', error);
+        console.error('❌ [deleteSupabaseClient] Error general:', error);
         return false;
     }
 }
@@ -113,29 +197,41 @@ async function deleteSupabaseClient(clientId) {
 async function importSupabaseClients(clients) {
     try {
         if (!supabase) {
-            console.error('Supabase no está inicializado');
+            console.error('❌ [importSupabaseClients] Supabase no está inicializado');
             return { imported: 0, errors: [] };
         }
 
+        console.log(`📦 [importSupabaseClients] Importando ${clients.length} clientes...`);
+
         const clientsToInsert = clients.map(c => ({
-            name: c.name,
+            nombre: c.name,
             cuit: c.cuit || '',
-            account_plan: c.accountPlan || []
+            direccion: c.direccion || '',
+            email: c.email || '',
+            telefono: c.telefono || '',
+            tipo_societario: c.tipo_societario || ''
         }));
 
+        console.log('📤 [importSupabaseClients] Datos a insertar:', clientsToInsert);
+
         const { data, error } = await supabase
-            .from('shared_clients')
+            .from('clientes')
             .insert(clientsToInsert)
             .select();
 
-        if (error) throw error;
+        if (error) {
+            console.error('❌ [importSupabaseClients] Error:', error);
+            throw error;
+        }
+
+        console.log(`✅ [importSupabaseClients] Importados ${data?.length || 0} clientes`);
 
         return {
             imported: data?.length || 0,
             errors: []
         };
     } catch (error) {
-        console.error('Error importando clientes:', error);
+        console.error('❌ [importSupabaseClients] Error general:', error);
         return {
             imported: 0,
             errors: [error.message]

@@ -42,15 +42,21 @@ async function syncWithSupabase() {
 // Obtener cantidad de clientes desde Supabase
 async function getSupabaseClientsCount() {
     try {
-        const { count, error } = await supabase
-            .from('shared_clients')
-            .select('*', { count: 'exact', head: true })
-            .eq('active', true);
+        console.log('🔢 [getSupabaseClientsCount] Obteniendo conteo de clientes...');
 
-        if (error) throw error;
+        const { count, error } = await supabase
+            .from('clientes')
+            .select('*', { count: 'exact', head: true });
+
+        if (error) {
+            console.error('❌ [getSupabaseClientsCount] Error:', error);
+            throw error;
+        }
+
+        console.log(`✅ [getSupabaseClientsCount] Total: ${count || 0} clientes`);
         return count || 0;
     } catch (error) {
-        console.error('Error obteniendo conteo de clientes:', error);
+        console.error('❌ [getSupabaseClientsCount] Error general:', error);
         return 0;
     }
 }
@@ -219,15 +225,20 @@ async function deleteClient(clientId) {
     try {
         if (supabase) {
             // Obtener el cliente desde Supabase para confirmar
+            console.log('🔍 [deleteClient] Buscando cliente:', numericId);
+
             const { data: client, error } = await supabase
-                .from('shared_clients')
+                .from('clientes')
                 .select('*')
                 .eq('id', numericId)
                 .single();
 
-            if (error) throw error;
+            if (error) {
+                console.error('❌ [deleteClient] Error buscando cliente:', error);
+                throw error;
+            }
 
-            if (confirm(`¿Eliminar el cliente "${client.name}"?`)) {
+            if (confirm(`¿Eliminar el cliente "${client.nombre}"?`)) {
                 const success = await deleteSupabaseClient(numericId);
                 if (success) {
                     await renderClientsList();
@@ -245,6 +256,7 @@ async function deleteClient(clientId) {
             }
         }
     } catch (error) {
+        console.error('❌ [deleteClient] Error general:', error);
         alert('Error al eliminar cliente: ' + error.message);
     }
 }
