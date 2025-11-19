@@ -15,6 +15,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('Clientes (localStorage):', allClients.length);
     console.log('Impuestos (localStorage):', TaxManager.getAllTaxes().length);
     console.log('====================================================');
+
+    // Actualizar indicador de cliente activo
+    if (typeof actualizarIndicadorClienteActivo === 'function') {
+        actualizarIndicadorClienteActivo();
+    }
 });
 
 // Sincronizar datos con Supabase
@@ -154,6 +159,14 @@ function attachEventListeners() {
     // Modal Almacenamiento
     document.getElementById('btnCloseStorage').addEventListener('click', () => hideStorageModal());
     document.getElementById('btnRefreshStorage').addEventListener('click', () => showStorageStats());
+
+    // Modal Plan de Cuentas
+    document.getElementById('btnClosePlanCuentas').addEventListener('click', () => hidePlanCuentasModal());
+    document.getElementById('btnDescargarPlantillaPlan').addEventListener('click', () => descargarPlantillaPlan());
+    document.getElementById('importPlanFile').addEventListener('change', (e) => importarPlanCuentasUI(e));
+    document.getElementById('btnNuevaCuenta').addEventListener('click', () => showNuevaCuentaModal());
+    document.getElementById('btnCancelNuevaCuenta').addEventListener('click', () => hideNuevaCuentaModal());
+    document.getElementById('btnCrearCuenta').addEventListener('click', () => crearCuentaUI());
 
     // Listeners para cambios en los datos
     ClientManager.onClientsChange(() => {
@@ -300,6 +313,10 @@ async function renderClientsList(searchTerm = '') {
         filteredClients = [];
     }
 
+    // Obtener cliente activo
+    const clienteActivo = obtenerClienteActivo();
+    const clienteActivoId = clienteActivo ? clienteActivo.id : null;
+
     // Actualizar estadísticas
     const statsElement = document.getElementById('clientsStats');
     if (searchTerm.trim() !== '' && allClients.length > 0) {
@@ -329,20 +346,26 @@ async function renderClientsList(searchTerm = '') {
                 <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
                     <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569;">Razón Social</th>
                     <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569;">CUIT</th>
-                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #475569; width: 200px;">Acciones</th>
+                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #475569; width: 300px;">Acciones</th>
                 </tr>
             </thead>
             <tbody>
-                ${filteredClients.map(client => `
-                    <tr style="border-bottom: 1px solid #e2e8f0;">
-                        <td style="padding: 12px; color: #1e293b;">${client.razon_social}</td>
-                        <td style="padding: 12px; color: #64748b;">${client.cuit || '-'}</td>
-                        <td style="padding: 12px; text-align: center;">
-                            <button onclick="editarCliente(${client.id})" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 8px; font-size: 13px;">✏️ Editar</button>
-                            <button onclick="eliminarClienteUI(${client.id})" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Eliminar</button>
-                        </td>
-                    </tr>
-                `).join('')}
+                ${filteredClients.map(client => {
+                    const isActive = clienteActivoId === client.id;
+                    const bgColor = isActive ? '#e0f2fe' : 'white';
+                    const borderLeft = isActive ? 'border-left: 4px solid #3b82f6;' : '';
+                    return `
+                        <tr onclick="seleccionarClienteUI('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="border-bottom: 1px solid #e2e8f0; background: ${bgColor}; ${borderLeft} cursor: pointer; transition: background 0.2s;" onmouseover="if (!this.style.borderLeft) this.style.background='#f8fafc'" onmouseout="if (!this.style.borderLeft) this.style.background='white'">
+                            <td style="padding: 12px; color: #1e293b; font-weight: ${isActive ? '600' : '400'};">${client.razon_social}</td>
+                            <td style="padding: 12px; color: #64748b;">${client.cuit || '-'}</td>
+                            <td style="padding: 12px; text-align: center;" onclick="event.stopPropagation()">
+                                <button onclick="abrirPlanCuentas('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="background: #8b5cf6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px;">📊 Plan</button>
+                                <button onclick="editarCliente('${client.id}')" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px;">✏️ Editar</button>
+                                <button onclick="eliminarClienteUI('${client.id}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Eliminar</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
             </tbody>
         </table>
     `;
@@ -818,4 +841,174 @@ async function showStorageStats() {
             </div>
         `;
     }
+}
+
+// ============================================
+// FUNCIONES PARA SELECCIÓN DE CLIENTE ACTIVO
+// ============================================
+
+/**
+ * Seleccionar cliente desde la UI
+ */
+function seleccionarClienteUI(clienteId, razonSocial) {
+    seleccionarCliente(clienteId, razonSocial);
+    renderClientsList();
+}
+
+// ============================================
+// MODAL PLAN DE CUENTAS
+// ============================================
+
+let currentClienteIdPlan = null;
+
+async function abrirPlanCuentas(clienteId, razonSocial) {
+    currentClienteIdPlan = clienteId;
+    document.getElementById('planCuentasClienteNombre').textContent = razonSocial;
+    document.getElementById('modalPlanCuentas').classList.remove('hidden');
+    await renderPlanCuentasList();
+}
+
+function hidePlanCuentasModal() {
+    document.getElementById('modalPlanCuentas').classList.add('hidden');
+    currentClienteIdPlan = null;
+}
+
+async function renderPlanCuentasList() {
+    if (!currentClienteIdPlan) return;
+
+    const cuentas = await obtenerPlanCuentas(currentClienteIdPlan);
+    const listElement = document.getElementById('planCuentasList');
+    const statsElement = document.getElementById('planCuentasStats');
+
+    if (cuentas.length === 0) {
+        listElement.innerHTML = '<div class="empty-state">No hay cuentas en el plan. Importa un archivo Excel o crea cuentas manualmente.</div>';
+        statsElement.textContent = '';
+        return;
+    }
+
+    statsElement.textContent = `Total de cuentas: ${cuentas.length}`;
+
+    const html = `
+        <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            <thead>
+                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569; width: 120px;">Código</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569;">Cuenta</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569; width: 150px;">Tipo</th>
+                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #475569; width: 180px;">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${cuentas.map(cuenta => `
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 12px; color: #1e293b; font-family: monospace;">${cuenta.codigo}</td>
+                        <td style="padding: 12px; color: #1e293b;">${cuenta.cuenta}</td>
+                        <td style="padding: 12px; color: #64748b;">${cuenta.tipo || '-'}</td>
+                        <td style="padding: 12px; text-align: center;">
+                            <button onclick="editarCuentaUI('${cuenta.id}', '${cuenta.codigo}', '${cuenta.cuenta.replace(/'/g, "\\'")}', '${cuenta.tipo || ''}')" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 8px; font-size: 13px;">✏️ Editar</button>
+                            <button onclick="eliminarCuentaUI('${cuenta.id}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Eliminar</button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+
+    listElement.innerHTML = html;
+}
+
+function showNuevaCuentaModal() {
+    if (!currentClienteIdPlan) {
+        alert('Debe abrir el plan de cuentas de un cliente primero');
+        return;
+    }
+
+    document.getElementById('modalNuevaCuenta').classList.remove('hidden');
+    document.getElementById('nuevaCuentaCodigo').value = '';
+    document.getElementById('nuevaCuentaNombre').value = '';
+    document.getElementById('nuevaCuentaTipo').value = '';
+    document.getElementById('nuevaCuentaCodigo').focus();
+}
+
+function hideNuevaCuentaModal() {
+    document.getElementById('modalNuevaCuenta').classList.add('hidden');
+}
+
+async function crearCuentaUI() {
+    const codigo = document.getElementById('nuevaCuentaCodigo').value.trim();
+    const nombre = document.getElementById('nuevaCuentaNombre').value.trim();
+    const tipo = document.getElementById('nuevaCuentaTipo').value;
+
+    if (!codigo || !nombre) {
+        alert('El código y el nombre son obligatorios');
+        return;
+    }
+
+    if (!currentClienteIdPlan) {
+        alert('Error: No hay cliente seleccionado');
+        return;
+    }
+
+    const result = await crearCuenta(currentClienteIdPlan, codigo, nombre, tipo);
+
+    if (result) {
+        alert('Cuenta creada exitosamente');
+        hideNuevaCuentaModal();
+        await renderPlanCuentasList();
+    }
+}
+
+async function editarCuentaUI(cuentaId, codigoActual, nombreActual, tipoActual) {
+    const nuevoCodigo = prompt('Código:', codigoActual);
+    if (nuevoCodigo === null) return;
+
+    const nuevoNombre = prompt('Nombre de la Cuenta:', nombreActual);
+    if (nuevoNombre === null) return;
+
+    const nuevoTipo = prompt('Tipo (Activo/Pasivo/Patrimonio Neto/Ingreso/Egreso):', tipoActual);
+    if (nuevoTipo === null) return;
+
+    if (!nuevoCodigo.trim() || !nuevoNombre.trim()) {
+        alert('El código y el nombre son obligatorios');
+        return;
+    }
+
+    const result = await actualizarCuenta(cuentaId, nuevoCodigo.trim(), nuevoNombre.trim(), nuevoTipo.trim());
+
+    if (result) {
+        alert('Cuenta actualizada exitosamente');
+        await renderPlanCuentasList();
+    }
+}
+
+async function eliminarCuentaUI(cuentaId) {
+    if (!confirm('¿Eliminar esta cuenta del plan?')) {
+        return;
+    }
+
+    const result = await eliminarCuenta(cuentaId);
+
+    if (result) {
+        alert('Cuenta eliminada exitosamente');
+        await renderPlanCuentasList();
+    }
+}
+
+async function importarPlanCuentasUI(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!currentClienteIdPlan) {
+        alert('Error: No hay cliente seleccionado');
+        event.target.value = '';
+        return;
+    }
+
+    const result = await importarPlanCuentas(file, currentClienteIdPlan);
+
+    if (result.success) {
+        await renderPlanCuentasList();
+    }
+
+    event.target.value = '';
 }
