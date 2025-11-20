@@ -390,6 +390,56 @@ async function extractTextLinesFromPDF(pdfFile) {
     return lines;
 }
 
+// Extraer texto con posiciones X para determinar columnas
+async function extractTextWithPositions(pdfFile) {
+    const arrayBuffer = await pdfFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    const allItems = [];
+
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+
+        for (const item of textContent.items) {
+            if (item.str.trim()) {
+                allItems.push({
+                    text: item.str,
+                    x: item.transform[4],
+                    y: item.transform[5],
+                    page: pageNum
+                });
+            }
+        }
+    }
+
+    // Agrupar items por línea (Y similar dentro de la misma página)
+    const lineGroups = {};
+    for (const item of allItems) {
+        const yKey = `${item.page}-${Math.round(item.y / 5) * 5}`;
+        if (!lineGroups[yKey]) {
+            lineGroups[yKey] = { items: [], page: item.page, y: item.y };
+        }
+        lineGroups[yKey].items.push(item);
+    }
+
+    // Convertir a array de líneas con items y posiciones
+    const lines = Object.values(lineGroups)
+        .sort((a, b) => {
+            if (a.page !== b.page) return a.page - b.page;
+            return b.y - a.y;
+        })
+        .map(group => {
+            const sortedItems = group.items.sort((a, b) => a.x - b.x);
+            return {
+                text: sortedItems.map(item => item.text).join(' '),
+                items: sortedItems
+            };
+        });
+
+    return lines;
+}
+
 function extractSaldoInicial(text) {
     const periodoMatch = text.match(/Período de movimientos\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+Saldos\s+\$?([\d.,]+)\s+\$?([\d.,]+)/i);
 
@@ -642,25 +692,61 @@ function parseBBVAExtract(text) {
     return movements;
 }
 
-// Parsear extracto Santander línea por línea
-// Estructura: fecha | comprobante | descripción | importes ($)
-// Si línea empieza con fecha → nuevo movimiento
-// Si no → continuación de descripción
-function parseSantanderLineByLine(lines) {
+// Parsear extracto Santander usando posiciones de columnas
+// Estructura: Fecha | Comprobante | Movimiento | DÉBITO | CRÉDITO | Saldo
+// Determina débito/crédito por la posición X en el PDF, NO por cambio de saldo
+function parseSantanderWithPositions(linesWithPositions) {
     const movements = [];
     let currentMovement = null;
 
+    // Detectar posiciones de columnas buscando el header
+    let debitoColumnX = null;
+    let creditoColumnX = null;
+    let saldoColumnX = null;
+
+    // Buscar la línea de encabezado para determinar posiciones de columnas
+    for (const lineData of linesWithPositions) {
+        const text = lineData.text.toLowerCase();
+        if (text.includes('débito') || text.includes('debito')) {
+            for (const item of lineData.items) {
+                const itemText = item.text.toLowerCase();
+                if (itemText.includes('débito') || itemText.includes('debito')) {
+                    debitoColumnX = item.x;
+                } else if (itemText.includes('crédito') || itemText.includes('credito')) {
+                    creditoColumnX = item.x;
+                } else if (itemText === 'saldo') {
+                    saldoColumnX = item.x;
+                }
+            }
+            if (debitoColumnX && creditoColumnX) {
+                console.log('Columnas detectadas - Débito X:', debitoColumnX, 'Crédito X:', creditoColumnX, 'Saldo X:', saldoColumnX);
+                break;
+            }
+        }
+    }
+
+    // Si no encontramos las columnas exactas, usar valores por defecto típicos de Santander
+    // Basado en análisis de PDFs de Santander
+    if (!debitoColumnX || !creditoColumnX) {
+        // Valores típicos para PDF de Santander
+        debitoColumnX = 380;
+        creditoColumnX = 450;
+        saldoColumnX = 520;
+        console.log('Usando posiciones de columnas por defecto');
+    }
+
+    // Calcular el punto medio entre débito y crédito para clasificar
+    const midPoint = (debitoColumnX + creditoColumnX) / 2;
+
     // Regex para detectar fecha al inicio de línea
     const dateRegex = /^(\d{2}\/\d{2}\/\d{2})\b/;
-    // Regex para extraer todos los importes con $
-    const amountRegex = /\$\s*([\d.]+,\d{2})/g;
-    // Regex para extraer número de comprobante (secuencia de dígitos después de la fecha)
+    // Regex para extraer número de comprobante
     const comprobanteRegex = /^\d{2}\/\d{2}\/\d{2}\s+(\d+)/;
 
-    console.log('Procesando', lines.length, 'líneas del PDF');
+    console.log('Procesando', linesWithPositions.length, 'líneas del PDF');
 
-    for (const line of lines) {
-        const trimmedLine = line.trim();
+    for (const lineData of linesWithPositions) {
+        const trimmedLine = lineData.text.trim();
 
         // Ignorar líneas vacías o de encabezado
         if (!trimmedLine ||
@@ -691,51 +777,83 @@ function parseSantanderLineByLine(lines) {
             const comprobanteMatch = trimmedLine.match(comprobanteRegex);
             const comprobante = comprobanteMatch ? comprobanteMatch[1] : '';
 
-            // Extraer todos los importes ($)
-            const amounts = [];
-            let amountMatch;
-            while ((amountMatch = amountRegex.exec(trimmedLine)) !== null) {
-                amounts.push(amountMatch[1]);
+            // Encontrar todos los importes con sus posiciones X
+            const amountsWithPositions = [];
+            for (const item of lineData.items) {
+                // Buscar items que sean importes (contienen $ o son números con formato argentino)
+                const amountMatch = item.text.match(/^\$?\s*([\d.]+,\d{2})$/);
+                if (amountMatch) {
+                    amountsWithPositions.push({
+                        value: amountMatch[1],
+                        x: item.x
+                    });
+                }
             }
-            // Reset regex lastIndex
-            amountRegex.lastIndex = 0;
 
-            // Extraer descripción (todo entre comprobante e importes)
+            // Ordenar por posición X (izquierda a derecha)
+            amountsWithPositions.sort((a, b) => a.x - b.x);
+
+            // Extraer descripción
             let descripcion = trimmedLine;
-            // Quitar fecha
             descripcion = descripcion.replace(dateRegex, '').trim();
-            // Quitar comprobante
             if (comprobante) {
                 descripcion = descripcion.replace(new RegExp('^' + comprobante + '\\s*'), '').trim();
             }
-            // Quitar importes
             descripcion = descripcion.replace(/\$\s*[\d.]+,\d{2}/g, '').trim();
 
-            // Determinar débito, crédito y saldo según cantidad de importes
-            let importe = '0';
+            // Clasificar importes por posición de columna
+            let debito = '0';
+            let credito = '0';
             let saldo = '0';
 
-            if (amounts.length >= 1) {
-                saldo = amounts[amounts.length - 1]; // Último siempre es saldo
-            }
-            if (amounts.length >= 2) {
-                importe = amounts[amounts.length - 2]; // Penúltimo es el importe
+            if (amountsWithPositions.length >= 1) {
+                // El último siempre es saldo (columna más a la derecha)
+                saldo = amountsWithPositions[amountsWithPositions.length - 1].value;
             }
 
-            // Crear nuevo movimiento (temporalmente sin saber si es débito o crédito)
+            if (amountsWithPositions.length >= 2) {
+                // El penúltimo es el movimiento (débito o crédito)
+                const movAmount = amountsWithPositions[amountsWithPositions.length - 2];
+
+                // Clasificar según posición X
+                // Si está más cerca de la columna Débito → es débito
+                // Si está más cerca de la columna Crédito → es crédito
+                if (movAmount.x < midPoint) {
+                    debito = movAmount.value;
+                } else {
+                    credito = movAmount.value;
+                }
+            }
+
+            // Si hay 3 importes, el primero y segundo son débito y crédito
+            if (amountsWithPositions.length >= 3) {
+                const first = amountsWithPositions[0];
+                const second = amountsWithPositions[1];
+
+                if (first.x < midPoint) {
+                    debito = first.value;
+                } else {
+                    credito = first.value;
+                }
+
+                if (second.x < midPoint && debito === '0') {
+                    debito = second.value;
+                } else if (second.x >= midPoint && credito === '0') {
+                    credito = second.value;
+                }
+            }
+
             currentMovement = {
                 fecha: fecha,
                 descripcion: descripcion,
                 origen: comprobante,
-                importe: importe, // Se clasificará después como débito o crédito
-                saldo: saldo,
-                debito: '0',
-                credito: '0'
+                debito: debito,
+                credito: credito,
+                saldo: saldo
             };
 
         } else if (currentMovement) {
-            // Es continuación de la descripción del movimiento actual
-            // Verificar que no sea línea de ruido
+            // Es continuación de la descripción
             if (!/^(Fecha|Comprobante|Movimiento|D[eé]bito|Cr[eé]dito|Saldo|P[aá]gina|Cuenta Corriente)/i.test(trimmedLine)) {
                 currentMovement.descripcion += ' ' + trimmedLine;
             }
@@ -747,14 +865,30 @@ function parseSantanderLineByLine(lines) {
         movements.push(currentMovement);
     }
 
-    // Filtrar "Saldo Inicial"
-    const filteredMovements = movements.filter(mov =>
-        !/Saldo Inicial/i.test(mov.descripcion)
-    );
+    // Filtrar "Saldo Inicial" y limpiar descripciones
+    const filteredMovements = movements
+        .filter(mov => !/Saldo Inicial/i.test(mov.descripcion))
+        .map(mov => {
+            mov.descripcion = mov.descripcion
+                .replace(/\s+/g, ' ')
+                .replace(/Fecha\s+Comprobante\s+Movimiento\s+D[eé]bito\s+Cr[eé]dito\s+Saldo/gi, '')
+                .trim();
+            return mov;
+        });
 
     console.log('Movimientos encontrados:', filteredMovements.length);
 
     return filteredMovements;
+}
+
+// Función legacy - mantener para compatibilidad
+function parseSantanderLineByLine(lines) {
+    // Convertir líneas simples a formato con posiciones (fallback)
+    const linesWithPositions = lines.map(line => ({
+        text: line,
+        items: [{ text: line, x: 0 }]
+    }));
+    return parseSantanderWithPositions(linesWithPositions);
 }
 
 // Clasificar débito/crédito comparando saldos
@@ -824,22 +958,18 @@ function parseSantanderExtract(text) {
 
 async function processSantanderPDF(pdfFile) {
     try {
-        // Extraer texto línea por línea
-        const lines = await extractTextLinesFromPDF(pdfFile);
-        console.log('Líneas extraídas del PDF:', lines.length);
-
-        // También extraer texto plano para el saldo inicial
-        const text = await extractTextFromPDF(pdfFile);
+        // Extraer texto CON POSICIONES para determinar columnas
+        const linesWithPositions = await extractTextWithPositions(pdfFile);
+        console.log('Líneas extraídas del PDF:', linesWithPositions.length);
 
         // Extraer saldo inicial de Santander
         // Buscar en la línea "Saldo Inicial" - el último número es el saldo
-        // Formato: "Saldo Inicial $ 0,00 $ 0,00 $ 30.000,00"
         state.saldoInicial = null;
 
         // Buscar línea de Saldo Inicial
-        for (const line of lines) {
-            if (/Saldo Inicial/i.test(line)) {
-                const amounts = line.match(/\d{1,3}(?:\.\d{3})*,\d{2}/g);
+        for (const lineData of linesWithPositions) {
+            if (/Saldo Inicial/i.test(lineData.text)) {
+                const amounts = lineData.text.match(/\d{1,3}(?:\.\d{3})*,\d{2}/g);
                 if (amounts && amounts.length >= 1) {
                     // El último importe en la línea de Saldo Inicial es el saldo
                     state.saldoInicial = amounts[amounts.length - 1];
@@ -848,29 +978,15 @@ async function processSantanderPDF(pdfFile) {
             }
         }
 
-        // Fallback: buscar en texto plano
-        if (!state.saldoInicial) {
-            const saldoLine = text.match(/Saldo Inicial[^\n]*/i);
-            if (saldoLine) {
-                const numbers = saldoLine[0].match(/\d{1,3}(?:\.\d{3})*,\d{2}/g);
-                if (numbers && numbers.length >= 1) {
-                    state.saldoInicial = numbers[numbers.length - 1];
-                }
-            }
-        }
-
         console.log('Saldo inicial encontrado:', state.saldoInicial);
 
-        // Parsear movimientos línea por línea
-        let movements = parseSantanderLineByLine(lines);
+        // Parsear movimientos usando POSICIONES DE COLUMNAS (no cambio de saldo)
+        const movements = parseSantanderWithPositions(linesWithPositions);
 
         if (movements.length === 0) {
             showError('No se encontraron movimientos en el PDF. Verifique que el archivo contenga movimientos con formato de fecha DD/MM/YY.');
             return;
         }
-
-        // Clasificar débito/crédito comparando saldos
-        movements = classifyDebitCredit(movements, state.saldoInicial);
 
         console.log('Movimientos procesados:', movements.length);
         if (movements.length > 0) {
