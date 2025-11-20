@@ -341,6 +341,32 @@ async function extractTextFromPDF(pdfFile) {
     return fullText;
 }
 
+// Extraer texto con posiciones X para Santander
+async function extractTextWithPositionsFromPDF(pdfFile) {
+    const arrayBuffer = await pdfFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    const allItems = [];
+
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+
+        for (const item of textContent.items) {
+            if (item.str.trim()) {
+                allItems.push({
+                    text: item.str,
+                    x: item.transform[4],
+                    y: item.transform[5],
+                    page: pageNum
+                });
+            }
+        }
+    }
+
+    return allItems;
+}
+
 function extractSaldoInicial(text) {
     const periodoMatch = text.match(/Período de movimientos\s+\$?([\d.,]+)\s+\$?([\d.,]+)\s+Saldos\s+\$?([\d.,]+)\s+\$?([\d.,]+)/i);
 
@@ -593,190 +619,228 @@ function parseBBVAExtract(text) {
     return movements;
 }
 
-function parseSantanderExtract(text) {
+// Parsear extracto Santander usando POSICIONES DE COLUMNAS
+// Las columnas del PDF son: Fecha | Comprobante | Movimiento | Débito | Crédito | Saldo
+function parseSantanderExtractByPosition(items) {
     const movements = [];
 
-    // DETECTAR INICIO DE TABLA:
-    // Buscar "Cuenta Corriente Nº" y luego la línea de encabezados
-    const cuentaCorrienteIndex = text.search(/Cuenta Corriente N[º°]/i);
-    if (cuentaCorrienteIndex === -1) {
-        console.log('No se encontró "Cuenta Corriente Nº"');
-        return movements;
+    // Paso 1: Encontrar posiciones X de las columnas usando los encabezados
+    // Buscar items que contengan los encabezados
+    const headerItems = items.filter(item =>
+        /^(Fecha|Comprobante|Movimiento|D[eé]bito|Cr[eé]dito|Saldo)$/i.test(item.text.trim())
+    );
+
+    // Definir rangos de columnas basados en encabezados encontrados
+    let columnRanges = null;
+
+    // Agrupar encabezados por Y similar (misma línea)
+    const headerGroups = {};
+    for (const item of headerItems) {
+        const yKey = Math.round(item.y / 5) * 5; // Agrupar por Y aproximado
+        if (!headerGroups[yKey]) headerGroups[yKey] = [];
+        headerGroups[yKey].push(item);
     }
 
-    // Buscar la línea de encabezados después de "Cuenta Corriente Nº"
-    const headerPattern = /Fecha\s+Comprobante\s+Movimiento\s+D[eé]bito\s+Cr[eé]dito\s+Saldo/i;
-    const headerMatch = text.substring(cuentaCorrienteIndex).match(headerPattern);
-
-    if (!headerMatch) {
-        console.log('No se encontró la línea de encabezados');
-        return movements;
-    }
-
-    const headerIndex = cuentaCorrienteIndex + text.substring(cuentaCorrienteIndex).indexOf(headerMatch[0]);
-    let movimientosText = text.substring(headerIndex + headerMatch[0].length);
-
-    // DETECTAR FIN DE TABLA:
-    // Parar en "Saldo total $" o "Detalle impositivo"
-    const finTablaMatch = movimientosText.match(/Saldo total\s*\$|Detalle impositivo/i);
-    if (finTablaMatch) {
-        movimientosText = movimientosText.substring(0, finTablaMatch.index);
-    }
-
-    // Buscar todas las fechas (DD/MM/YY - año corto de 2 dígitos)
-    const datePattern = /\d{2}\/\d{2}\/\d{2}(?!\d)/g;
-    const datePositions = [];
-    let match;
-
-    while ((match = datePattern.exec(movimientosText)) !== null) {
-        datePositions.push({
-            date: match[0],
-            index: match.index
-        });
-    }
-
-    // Procesar cada segmento entre fechas
-    for (let i = 0; i < datePositions.length; i++) {
-        const currentDate = datePositions[i];
-        const nextDate = datePositions[i + 1];
-
-        const endIndex = nextDate ? nextDate.index : movimientosText.length;
-        const segment = movimientosText.substring(currentDate.index, endIndex).trim();
-
-        // Ignorar línea de Saldo Inicial
-        if (/Saldo Inicial/i.test(segment)) {
-            continue;
+    // Encontrar el grupo con más encabezados (la línea de encabezados real)
+    let headerLine = [];
+    for (const key in headerGroups) {
+        if (headerGroups[key].length > headerLine.length) {
+            headerLine = headerGroups[key];
         }
+    }
 
-        // Extraer todos los importes del segmento (formato: $ 10.910.083,35 o 10.910.083,35)
-        const amountRegex = /\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}/g;
-        const rawAmounts = segment.match(amountRegex) || [];
+    // Ordenar encabezados por posición X
+    headerLine.sort((a, b) => a.x - b.x);
 
-        // Limpiar importes (remover $ y espacios)
-        const amounts = rawAmounts.map(amt => amt.replace(/\$\s*/g, '').trim());
+    console.log('Encabezados encontrados:', headerLine.map(h => `${h.text}(x:${h.x})`));
 
-        if (amounts.length === 0) continue;
-
-        // Convertir fecha de DD/MM/YY a DD/MM/YYYY
-        const dateParts = currentDate.date.split('/');
-        const year = parseInt(dateParts[2]);
-        const fullYear = year < 50 ? `20${dateParts[2]}` : `19${dateParts[2]}`;
-        const fecha = `${dateParts[0]}/${dateParts[1]}/${fullYear}`;
-
-        // Extraer descripción - remover fecha y montos
-        let descripcion = segment.replace(currentDate.date, '').trim();
-        rawAmounts.forEach(amt => {
-            descripcion = descripcion.replace(amt, '');
-        });
-
-        // Limpiar descripción de texto basura
-        descripcion = descripcion
-            .replace(/\s+/g, ' ')
-            .replace(/Fecha\s+Comprobante\s+Movimiento\s+D[eé]bito\s+Cr[eé]dito\s+Saldo[^$]*/gi, '')
-            .replace(/Cuenta Corriente N[º°]\s*\d*/gi, '')
-            .replace(/P[aá]gina\s+\d+\s*(de|\/)\s*\d+/gi, '')
-            .trim();
-
-        // Extraer comprobante (números al inicio de la descripción)
-        const comprobanteMatch = descripcion.match(/^(\d+)\s+/);
-        let comprobante = '';
-        if (comprobanteMatch) {
-            comprobante = comprobanteMatch[1];
-            descripcion = descripcion.replace(comprobanteMatch[0], '').trim();
-        }
-
-        if (!descripcion) continue;
-
-        const movement = {
-            fecha: fecha,
-            descripcion: descripcion,
-            origen: comprobante,
-            credito: '0',
-            debito: '0',
-            saldo: ''
+    if (headerLine.length >= 4) {
+        // Crear rangos de columnas basados en las posiciones X de los encabezados
+        columnRanges = {
+            fecha: { min: 0, max: 0 },
+            comprobante: { min: 0, max: 0 },
+            movimiento: { min: 0, max: 0 },
+            debito: { min: 0, max: 0 },
+            credito: { min: 0, max: 0 },
+            saldo: { min: 0, max: 999 }
         };
 
-        // Santander tiene formato: Débito | Crédito | Saldo en cuenta
-        // Los valores van según posición en columna del PDF
-        // Si columna Débito tiene valor → Débito
-        // Si columna Crédito tiene valor → Crédito
-
-        if (amounts.length >= 3) {
-            // Formato completo: [débito, crédito, saldo]
-            const debito = amounts[amounts.length - 3];
-            const credito = amounts[amounts.length - 2];
-            const saldo = amounts[amounts.length - 1];
-
-            const debitoNum = parseFloat(debito.replace(/\./g, '').replace(',', '.'));
-            const creditoNum = parseFloat(credito.replace(/\./g, '').replace(',', '.'));
-
-            // Asignar según la columna donde aparece el valor
-            if (debitoNum === 0 || debito === '0' || debito === '0,00') {
-                movement.debito = '0';
-                movement.credito = credito;
-            } else if (creditoNum === 0 || credito === '0' || credito === '0,00') {
-                movement.debito = debito;
-                movement.credito = '0';
-            } else {
-                // Ambos tienen valor (caso especial)
-                movement.debito = debito;
-                movement.credito = credito;
+        for (const header of headerLine) {
+            const headerText = header.text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            if (headerText === 'fecha') {
+                columnRanges.fecha.min = header.x - 20;
+            } else if (headerText === 'comprobante') {
+                columnRanges.fecha.max = header.x - 5;
+                columnRanges.comprobante.min = header.x - 10;
+            } else if (headerText === 'movimiento') {
+                columnRanges.comprobante.max = header.x - 5;
+                columnRanges.movimiento.min = header.x - 10;
+            } else if (headerText === 'debito') {
+                columnRanges.movimiento.max = header.x - 5;
+                columnRanges.debito.min = header.x - 30;
+            } else if (headerText === 'credito') {
+                columnRanges.debito.max = header.x - 5;
+                columnRanges.credito.min = header.x - 30;
+            } else if (headerText === 'saldo') {
+                columnRanges.credito.max = header.x - 5;
+                columnRanges.saldo.min = header.x - 30;
             }
-            movement.saldo = saldo;
-        } else if (amounts.length === 2) {
-            // Solo monto y saldo
-            movement.saldo = amounts[1];
-            movement.credito = amounts[0];
-        } else if (amounts.length === 1) {
-            movement.saldo = amounts[0];
         }
 
-        if (movement.fecha && movement.descripcion) {
-            movements.push(movement);
-        }
+        console.log('Rangos de columnas definidos:', columnRanges);
+    } else {
+        // Fallback: usar rangos predeterminados típicos de Santander
+        console.log('Usando rangos de columnas predeterminados');
+        columnRanges = {
+            fecha: { min: 0, max: 80 },
+            comprobante: { min: 80, max: 150 },
+            movimiento: { min: 150, max: 380 },
+            debito: { min: 380, max: 450 },
+            credito: { min: 450, max: 520 },
+            saldo: { min: 520, max: 999 }
+        };
     }
 
-    // Procesar líneas de continuación (descripción sin fecha)
-    // Buscar texto entre movimientos que no empieza con fecha
-    const lines = movimientosText.split(/\n/);
-    let currentMovementIndex = -1;
+    // Paso 2: Encontrar Y de la línea de encabezados para saber dónde empiezan los datos
+    const headerY = headerLine.length > 0 ? headerLine[0].y : 0;
 
-    for (const line of lines) {
-        const trimmedLine = line.trim();
-        if (!trimmedLine) continue;
+    // Paso 3: Filtrar items que están debajo de los encabezados (Y menor porque Y decrece hacia abajo en PDF)
+    const dataItems = items.filter(item => item.y < headerY - 10);
 
-        // Si la línea empieza con fecha, buscar el movimiento correspondiente
-        if (/^\d{2}\/\d{2}\/\d{2}(?!\d)/.test(trimmedLine)) {
-            // Encontrar el índice del movimiento con esta fecha
-            const dateMatch = trimmedLine.match(/^\d{2}\/\d{2}\/\d{2}/);
-            if (dateMatch) {
-                const dateParts = dateMatch[0].split('/');
-                const fullYear = parseInt(dateParts[2]) < 50 ? `20${dateParts[2]}` : `19${dateParts[2]}`;
-                const fullDate = `${dateParts[0]}/${dateParts[1]}/${fullYear}`;
-                currentMovementIndex = movements.findIndex(m => m.fecha === fullDate);
-            }
-        } else if (currentMovementIndex >= 0 && currentMovementIndex < movements.length) {
-            // Línea sin fecha = continuación de descripción
-            // Solo agregar si no es un importe ni texto basura
-            const isAmount = /^\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}$/.test(trimmedLine);
-            const isTrash = /^(P[aá]gina|Cuenta Corriente|Saldo total|Detalle impositivo)/i.test(trimmedLine);
+    // Paso 4: Agrupar items por filas (Y similar)
+    const rowGroups = {};
+    for (const item of dataItems) {
+        const yKey = Math.round(item.y / 8) * 8; // Tolerancia de 8 puntos para la misma fila
+        if (!rowGroups[yKey]) rowGroups[yKey] = [];
+        rowGroups[yKey].push(item);
+    }
 
-            if (!isAmount && !isTrash && trimmedLine.length > 2) {
-                // Verificar que no sea un número de comprobante solo
-                if (!/^\d+$/.test(trimmedLine)) {
-                    movements[currentMovementIndex].descripcion += ' ' + trimmedLine;
+    // Ordenar filas de arriba a abajo (Y mayor primero)
+    const sortedYKeys = Object.keys(rowGroups).map(Number).sort((a, b) => b - a);
+
+    // Paso 5: Procesar cada fila
+    let currentMovement = null;
+
+    for (const yKey of sortedYKeys) {
+        const rowItems = rowGroups[yKey].sort((a, b) => a.x - b.x);
+
+        // Clasificar items por columna según posición X
+        const row = {
+            fecha: [],
+            comprobante: [],
+            movimiento: [],
+            debito: [],
+            credito: [],
+            saldo: []
+        };
+
+        for (const item of rowItems) {
+            const x = item.x;
+            const text = item.text.trim();
+
+            // Asignar a columna según posición X
+            if (x >= columnRanges.fecha.min && x < columnRanges.comprobante.min) {
+                row.fecha.push(text);
+            } else if (x >= columnRanges.comprobante.min && x < columnRanges.movimiento.min) {
+                row.comprobante.push(text);
+            } else if (x >= columnRanges.movimiento.min && x < columnRanges.debito.min) {
+                row.movimiento.push(text);
+            } else if (x >= columnRanges.debito.min && x < columnRanges.credito.min) {
+                // Solo extraer si tiene $ o es número monetario
+                if (/\$|^\d{1,3}(?:\.\d{3})*,\d{2}$/.test(text)) {
+                    row.debito.push(text);
+                }
+            } else if (x >= columnRanges.credito.min && x < columnRanges.saldo.min) {
+                // Solo extraer si tiene $ o es número monetario
+                if (/\$|^\d{1,3}(?:\.\d{3})*,\d{2}$/.test(text)) {
+                    row.credito.push(text);
+                }
+            } else if (x >= columnRanges.saldo.min) {
+                // Solo extraer si tiene $ o es número monetario
+                if (/\$|^\d{1,3}(?:\.\d{3})*,\d{2}$/.test(text)) {
+                    row.saldo.push(text);
                 }
             }
         }
+
+        // Verificar si esta fila tiene una fecha (nueva transacción)
+        const fechaText = row.fecha.join(' ');
+        const fechaMatch = fechaText.match(/\d{2}\/\d{2}\/\d{2}(?!\d)/);
+
+        if (fechaMatch) {
+            // Es una nueva transacción
+
+            // Guardar movimiento anterior si existe
+            if (currentMovement && currentMovement.fecha) {
+                // Ignorar Saldo Inicial
+                if (!/Saldo Inicial/i.test(currentMovement.descripcion)) {
+                    movements.push(currentMovement);
+                }
+            }
+
+            // Convertir fecha de DD/MM/YY a DD/MM/YYYY
+            const dateParts = fechaMatch[0].split('/');
+            const year = parseInt(dateParts[2]);
+            const fullYear = year < 50 ? `20${dateParts[2]}` : `19${dateParts[2]}`;
+            const fecha = `${dateParts[0]}/${dateParts[1]}/${fullYear}`;
+
+            // Extraer valores monetarios (limpiar $ y espacios)
+            const cleanAmount = (arr) => {
+                const text = arr.join('').replace(/\$\s*/g, '').trim();
+                return text || '0';
+            };
+
+            currentMovement = {
+                fecha: fecha,
+                descripcion: row.movimiento.join(' ').trim(),
+                origen: row.comprobante.join(' ').trim(),
+                debito: cleanAmount(row.debito),
+                credito: cleanAmount(row.credito),
+                saldo: cleanAmount(row.saldo)
+            };
+        } else if (currentMovement) {
+            // Es continuación de la descripción del movimiento actual
+            const additionalDesc = row.movimiento.join(' ').trim();
+            if (additionalDesc && !/^(P[aá]gina|Cuenta Corriente|Saldo total|Detalle impositivo)/i.test(additionalDesc)) {
+                currentMovement.descripcion += ' ' + additionalDesc;
+            }
+        }
+    }
+
+    // No olvidar el último movimiento
+    if (currentMovement && currentMovement.fecha) {
+        if (!/Saldo Inicial/i.test(currentMovement.descripcion)) {
+            movements.push(currentMovement);
+        }
+    }
+
+    // Limpiar descripciones
+    for (const mov of movements) {
+        mov.descripcion = mov.descripcion
+            .replace(/\s+/g, ' ')
+            .replace(/Fecha\s+Comprobante\s+Movimiento\s+D[eé]bito\s+Cr[eé]dito\s+Saldo/gi, '')
+            .replace(/Cuenta Corriente N[º°]\s*\d*/gi, '')
+            .replace(/P[aá]gina\s+\d+\s*(de|\/)\s*\d+/gi, '')
+            .trim();
     }
 
     return movements;
 }
 
+// Función legacy para compatibilidad (usa texto plano)
+function parseSantanderExtract(text) {
+    // Esta función ya no se usa, pero se mantiene por compatibilidad
+    return [];
+}
+
 async function processSantanderPDF(pdfFile) {
     try {
+        // Usar extracción con posiciones para Santander
+        const items = await extractTextWithPositionsFromPDF(pdfFile);
+        console.log('Items extraídos del PDF:', items.length);
+
+        // También extraer texto plano para el saldo inicial
         const text = await extractTextFromPDF(pdfFile);
-        console.log('Texto extraído del PDF (primeros 2000 chars):', text.substring(0, 2000));
 
         // Extraer saldo inicial de Santander
         // Buscar en la línea "Saldo Inicial" - el último número es el saldo
@@ -803,7 +867,8 @@ async function processSantanderPDF(pdfFile) {
 
         console.log('Saldo inicial encontrado:', state.saldoInicial);
 
-        const movements = parseSantanderExtract(text);
+        // Usar la nueva función de extracción por posición
+        const movements = parseSantanderExtractByPosition(items);
 
         console.log('Movimientos encontrados:', movements.length);
         if (movements.length > 0) {
@@ -812,7 +877,7 @@ async function processSantanderPDF(pdfFile) {
         }
 
         if (movements.length === 0) {
-            showError('No se encontraron movimientos en el PDF. Verifique que el PDF contenga "Cuenta Corriente Nº" y la tabla de movimientos.');
+            showError('No se encontraron movimientos en el PDF. Verifique que el PDF contenga los encabezados de columna (Fecha, Comprobante, Movimiento, Débito, Crédito, Saldo).');
             return;
         }
 
