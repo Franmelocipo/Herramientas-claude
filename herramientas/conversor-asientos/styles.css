@@ -649,11 +649,20 @@ body {
     margin-bottom: 4px;
 }
 
-/* Campos de cuenta dual (DEBE/HABER) */
+/* Campos de cuenta dual (DEBE/HABER) - legacy */
 .group-account-dual {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    min-width: 280px;
+    flex-shrink: 0;
+}
+
+/* Campo de cuenta único por grupo (nueva lógica) */
+.group-account-single {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     min-width: 280px;
     flex-shrink: 0;
 }
@@ -706,13 +715,14 @@ body {
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
-/* Ajuste para grupos con campos duales en pantallas pequeñas */
+/* Ajuste para grupos con campos en pantallas pequeñas */
 @media (max-width: 768px) {
     .group-main-row {
         flex-direction: column;
     }
 
-    .group-account-dual {
+    .group-account-dual,
+    .group-account-single {
         width: 100%;
         min-width: auto;
     }
