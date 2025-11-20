@@ -263,11 +263,11 @@ async function updateClientAccountPlan(clientId, accountPlan) {
 }
 
 // =====================================================
-// FUNCIONES PARA IMPUESTOS
+// FUNCIONES PARA IMPUESTOS (TABLA LEGACY: tax_database)
 // =====================================================
 
 /**
- * Obtener base de datos de impuestos desde Supabase
+ * Obtener base de datos de impuestos desde Supabase (tabla legacy)
  */
 async function getSupabaseTaxDatabase() {
     try {
@@ -290,7 +290,7 @@ async function getSupabaseTaxDatabase() {
 }
 
 /**
- * Importar base de datos de impuestos a Supabase
+ * Importar base de datos de impuestos a Supabase (tabla legacy)
  */
 async function importSupabaseTaxDatabase(taxes, clearFirst = false) {
     try {
@@ -335,7 +335,7 @@ async function importSupabaseTaxDatabase(taxes, clearFirst = false) {
 }
 
 /**
- * Limpiar base de datos de impuestos
+ * Limpiar base de datos de impuestos (tabla legacy)
  */
 async function clearSupabaseTaxDatabase() {
     try {
@@ -354,6 +354,247 @@ async function clearSupabaseTaxDatabase() {
     } catch (error) {
         console.error('Error limpiando base de impuestos:', error);
         return false;
+    }
+}
+
+// =====================================================
+// FUNCIONES PARA IMPUESTOS_BASE (NUEVA TABLA - 6 CAMPOS)
+// =====================================================
+
+/**
+ * Obtener base de datos de impuestos desde Supabase (nueva tabla con 6 campos)
+ */
+async function getSupabaseImpuestosBase() {
+    try {
+        if (!supabase) {
+            console.error('Supabase no está inicializado');
+            return [];
+        }
+
+        const { data, error } = await supabase
+            .from('impuestos_base')
+            .select('*')
+            .order('codigo_impuesto')
+            .order('codigo_concepto')
+            .order('codigo_subconcepto');
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('Error obteniendo impuestos_base:', error);
+        return [];
+    }
+}
+
+/**
+ * Obtener conteo de registros en impuestos_base
+ */
+async function getSupabaseImpuestosBaseCount() {
+    try {
+        if (!supabase) {
+            return 0;
+        }
+
+        const { count, error } = await supabase
+            .from('impuestos_base')
+            .select('*', { count: 'exact', head: true });
+
+        if (error) throw error;
+        return count || 0;
+    } catch (error) {
+        console.error('Error obteniendo conteo de impuestos_base:', error);
+        return 0;
+    }
+}
+
+/**
+ * Importar base de datos de impuestos a Supabase (nueva tabla con 6 campos)
+ */
+async function importSupabaseImpuestosBase(taxes, clearFirst = false) {
+    try {
+        if (!supabase) {
+            console.error('Supabase no está inicializado');
+            return { success: false, imported: 0 };
+        }
+
+        // Limpiar base de datos si se solicita
+        if (clearFirst) {
+            const { error: deleteError } = await supabase
+                .from('impuestos_base')
+                .delete()
+                .neq('id', '00000000-0000-0000-0000-000000000000'); // Eliminar todos los registros
+
+            if (deleteError) {
+                console.error('Error al limpiar impuestos_base:', deleteError);
+                throw deleteError;
+            }
+        }
+
+        // Insertar nuevos datos
+        const { data, error } = await supabase
+            .from('impuestos_base')
+            .insert(taxes)
+            .select();
+
+        if (error) {
+            console.error('Error al insertar en impuestos_base:', error);
+            throw error;
+        }
+
+        return {
+            success: true,
+            imported: data?.length || 0
+        };
+    } catch (error) {
+        console.error('Error importando impuestos_base:', error);
+        return {
+            success: false,
+            imported: 0,
+            error: error.message
+        };
+    }
+}
+
+/**
+ * Limpiar base de datos de impuestos (nueva tabla)
+ */
+async function clearSupabaseImpuestosBase() {
+    try {
+        if (!supabase) {
+            console.error('Supabase no está inicializado');
+            return false;
+        }
+
+        const { error } = await supabase
+            .from('impuestos_base')
+            .delete()
+            .neq('id', '00000000-0000-0000-0000-000000000000'); // Eliminar todos los registros
+
+        if (error) {
+            console.error('Error al limpiar impuestos_base:', error);
+            throw error;
+        }
+        return true;
+    } catch (error) {
+        console.error('Error limpiando impuestos_base:', error);
+        return false;
+    }
+}
+
+/**
+ * Buscar en impuestos_base por cualquier campo
+ */
+async function searchSupabaseImpuestosBase(searchTerm) {
+    try {
+        if (!supabase) {
+            console.error('Supabase no está inicializado');
+            return [];
+        }
+
+        const term = searchTerm.toLowerCase();
+
+        const { data, error } = await supabase
+            .from('impuestos_base')
+            .select('*')
+            .or(`codigo_impuesto.ilike.%${term}%,descripcion_impuesto.ilike.%${term}%,codigo_concepto.ilike.%${term}%,descripcion_concepto.ilike.%${term}%,codigo_subconcepto.ilike.%${term}%,descripcion_subconcepto.ilike.%${term}%`)
+            .order('codigo_impuesto')
+            .order('codigo_concepto')
+            .order('codigo_subconcepto');
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('Error buscando en impuestos_base:', error);
+        return [];
+    }
+}
+
+/**
+ * Obtener impuestos únicos de la base
+ */
+async function getUniqueImpuestos() {
+    try {
+        if (!supabase) {
+            return [];
+        }
+
+        const { data, error } = await supabase
+            .from('impuestos_base')
+            .select('codigo_impuesto, descripcion_impuesto')
+            .order('codigo_impuesto');
+
+        if (error) throw error;
+
+        // Obtener valores únicos
+        const unique = [];
+        const seen = new Set();
+        for (const item of data || []) {
+            if (!seen.has(item.codigo_impuesto)) {
+                seen.add(item.codigo_impuesto);
+                unique.push(item);
+            }
+        }
+        return unique;
+    } catch (error) {
+        console.error('Error obteniendo impuestos únicos:', error);
+        return [];
+    }
+}
+
+/**
+ * Obtener conceptos por impuesto
+ */
+async function getConceptosByImpuesto(codigoImpuesto) {
+    try {
+        if (!supabase) {
+            return [];
+        }
+
+        const { data, error } = await supabase
+            .from('impuestos_base')
+            .select('codigo_concepto, descripcion_concepto')
+            .eq('codigo_impuesto', codigoImpuesto)
+            .order('codigo_concepto');
+
+        if (error) throw error;
+
+        // Obtener valores únicos
+        const unique = [];
+        const seen = new Set();
+        for (const item of data || []) {
+            if (!seen.has(item.codigo_concepto)) {
+                seen.add(item.codigo_concepto);
+                unique.push(item);
+            }
+        }
+        return unique;
+    } catch (error) {
+        console.error('Error obteniendo conceptos:', error);
+        return [];
+    }
+}
+
+/**
+ * Obtener subconceptos por impuesto y concepto
+ */
+async function getSubconceptosByConcepto(codigoImpuesto, codigoConcepto) {
+    try {
+        if (!supabase) {
+            return [];
+        }
+
+        const { data, error } = await supabase
+            .from('impuestos_base')
+            .select('codigo_subconcepto, descripcion_subconcepto')
+            .eq('codigo_impuesto', codigoImpuesto)
+            .eq('codigo_concepto', codigoConcepto)
+            .order('codigo_subconcepto');
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('Error obteniendo subconceptos:', error);
+        return [];
     }
 }
 

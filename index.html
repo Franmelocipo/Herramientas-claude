@@ -154,37 +154,48 @@
 
     <!-- Modal Gestión de Impuestos -->
     <div id="modalTaxes" class="modal hidden">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width: 1200px;">
             <div class="modal-header">
                 <h2>📊 Base de Datos de Impuestos</h2>
                 <button class="close-btn" id="btnCloseTaxes">✕</button>
             </div>
-            <label class="btn-primary mb-4" style="cursor: pointer; text-align: center; display: block;">
-                📥 Importar Base de Impuestos
-                <input type="file" id="importTaxFile" accept=".xlsx,.xls" style="display: none;">
-            </label>
-            <div class="info-box" style="font-size: 12px; padding: 10px; margin-bottom: 16px;">
-                <strong>Formato Excel:</strong> Impuesto | Concepto | Subconcepto
+
+            <div class="btn-group mb-4">
+                <button id="btnDownloadTaxTemplate" class="btn-secondary flex-1">📥 Descargar Plantilla Impuestos</button>
+                <label class="btn-primary flex-1" style="cursor: pointer; text-align: center;">
+                    📤 Importar Base de Impuestos
+                    <input type="file" id="importTaxFile" accept=".xlsx,.xls" style="display: none;">
+                </label>
+                <button id="btnClearTaxDatabase" class="btn-danger flex-1">🗑️ Limpiar Base de Datos</button>
             </div>
+
+            <div class="info-box" style="font-size: 12px; padding: 10px; margin-bottom: 16px;">
+                <strong>Formato Excel (6 columnas):</strong> codigo_impuesto | descripcion_impuesto | codigo_concepto | descripcion_concepto | codigo_subconcepto | descripcion_subconcepto<br>
+                <strong>Ejemplo:</strong> IVA | Impuesto al Valor Agregado | DEB | Débito Fiscal | 21% | IVA 21% - Tasa General
+            </div>
+
             <div id="taxStats" style="margin-bottom: 16px; color: #64748b;"></div>
+
             <div class="preview-container">
                 <div class="preview-header">
                     <h4>Vista Previa de la Base (Primeras 50 filas)</h4>
                 </div>
-                <div class="preview-table-container" style="max-height: 400px;">
-                    <table class="preview-table">
+                <div class="preview-table-container" style="max-height: 400px; overflow-x: auto;">
+                    <table class="preview-table" style="min-width: 900px;">
                         <thead>
                             <tr>
-                                <th>Impuesto</th>
-                                <th>Concepto</th>
-                                <th>Subconcepto</th>
+                                <th style="min-width: 80px;">Cód. Imp.</th>
+                                <th style="min-width: 180px;">Descripción Impuesto</th>
+                                <th style="min-width: 80px;">Cód. Conc.</th>
+                                <th style="min-width: 150px;">Desc. Concepto</th>
+                                <th style="min-width: 80px;">Cód. Sub.</th>
+                                <th style="min-width: 180px;">Desc. Subconcepto</th>
                             </tr>
                         </thead>
                         <tbody id="taxTableBody"></tbody>
                     </table>
                 </div>
             </div>
-            <button id="btnClearTaxDatabase" class="btn-secondary mt-4" style="width: 100%;">Limpiar Base de Datos</button>
         </div>
     </div>
 
