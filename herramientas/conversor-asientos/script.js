@@ -33,8 +33,12 @@ function getTaxDatabase() {
 // FUNCIONES PARA SELECTOR DE CLIENTE
 // ============================================
 
+// Variable para almacenar todos los clientes
+let todosLosClientes = [];
+
 async function cargarClientesEnSelector() {
     const select = document.getElementById('selector-cliente-conversor');
+    const inputBuscar = document.getElementById('buscar-cliente');
     if (!select) return;
 
     try {
@@ -49,18 +53,24 @@ async function cargarClientesEnSelector() {
             return;
         }
 
-        // Limpiar opciones existentes excepto la primera
-        select.innerHTML = '<option value="">-- Seleccione un cliente --</option>';
+        // Guardar todos los clientes
+        todosLosClientes = clientes;
 
-        // Llenar el select
-        clientes.forEach(cliente => {
-            const option = document.createElement('option');
-            option.value = cliente.id;
-            option.textContent = cliente.razon_social;
-            select.appendChild(option);
-        });
+        // Renderizar opciones
+        renderizarOpcionesClientes(clientes);
 
         console.log('✅ Clientes cargados en selector:', clientes.length);
+
+        // Evento de búsqueda
+        if (inputBuscar) {
+            inputBuscar.addEventListener('input', (e) => {
+                const busqueda = e.target.value.toLowerCase();
+                const clientesFiltrados = todosLosClientes.filter(cliente =>
+                    cliente.razon_social.toLowerCase().includes(busqueda)
+                );
+                renderizarOpcionesClientes(clientesFiltrados);
+            });
+        }
 
         // Evento al cambiar selección
         select.addEventListener('change', async (e) => {
@@ -92,6 +102,30 @@ async function cargarClientesEnSelector() {
     } catch (error) {
         console.error('❌ Error cargando clientes:', error);
     }
+}
+
+function renderizarOpcionesClientes(clientes) {
+    const select = document.getElementById('selector-cliente-conversor');
+    if (!select) return;
+
+    // Limpiar opciones existentes
+    select.innerHTML = '';
+
+    if (clientes.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '-- No se encontraron clientes --';
+        select.appendChild(option);
+        return;
+    }
+
+    // Llenar el select
+    clientes.forEach(cliente => {
+        const option = document.createElement('option');
+        option.value = cliente.id;
+        option.textContent = cliente.razon_social;
+        select.appendChild(option);
+    });
 }
 
 async function cargarPlanCuentasCliente(clienteId) {
@@ -200,14 +234,12 @@ function initializeElements() {
         clientName: document.getElementById('clientName'),
         btnReset: document.getElementById('btnReset'),
 
-        // Step 0 - Template section
-        templateDownloadSection: document.getElementById('templateDownloadSection'),
-        btnDownloadTemplate: document.getElementById('btnDownloadTemplate'),
-
         // Step 1
         sourceTypeName: document.getElementById('sourceTypeName'),
         fileInput: document.getElementById('fileInput'),
         btnSelectFile: document.getElementById('btnSelectFile'),
+        btnDownloadTemplateSpecific: document.getElementById('btnDownloadTemplateSpecific'),
+        templateButtonText: document.getElementById('templateButtonText'),
 
         // Step 2
         groupStats: document.getElementById('groupStats'),
@@ -260,15 +292,15 @@ function attachEventListeners() {
         elements.btnReset.addEventListener('click', () => reset());
     }
 
-    // Step 0: Template download
-    if (elements.btnDownloadTemplate) {
-        elements.btnDownloadTemplate.addEventListener('click', () => downloadTemplate());
-    }
-
     // Step 0: Source type selection
     document.querySelectorAll('.source-type-btn').forEach(btn => {
         btn.addEventListener('click', () => selectSourceType(btn.dataset.type));
     });
+
+    // Step 1: Template download specific
+    if (elements.btnDownloadTemplateSpecific) {
+        elements.btnDownloadTemplateSpecific.addEventListener('click', () => downloadTemplateSpecific());
+    }
 
     // Step 1: File upload
     if (elements.btnSelectFile) {
@@ -383,6 +415,19 @@ async function getClientAccounts() {
 function selectSourceType(type) {
     state.sourceType = type;
     elements.sourceTypeName.textContent = sourceTypes[type].name;
+
+    // Actualizar texto del botón de plantilla según el tipo
+    const templateNames = {
+        extracto: 'Descargar Plantilla Extracto',
+        registros: 'Descargar Plantilla Registros',
+        veps: 'Descargar Plantilla VEPs',
+        compensaciones: 'Descargar Plantilla Compensaciones'
+    };
+
+    if (elements.templateButtonText) {
+        elements.templateButtonText.textContent = templateNames[type] || 'Descargar Plantilla';
+    }
+
     goToStep(1);
 }
 
@@ -1172,84 +1217,128 @@ function postProcessCompensaciones(allData) {
 }
 
 // ============================================
-// DESCARGA DE PLANTILLA EXCEL
+// DESCARGA DE PLANTILLAS ESPECÍFICAS
 // ============================================
-function downloadTemplate() {
-    // Crear workbook
+function downloadTemplateSpecific() {
     const wb = XLSX.utils.book_new();
+    let datos, fileName, instrucciones;
 
-    // ========== HOJA 1: DATOS ==========
-    const datosEjemplo = [
-        ['fecha', 'descripcion', 'debe', 'haber'],
-        ['2025-01-15', 'Pago proveedor', 10000, 0],
-        ['2025-01-15', 'Banco cuenta corriente', 0, 10000],
-        ['2025-01-20', 'Venta producto', 0, 5000],
-        ['2025-01-20', 'Caja', 5000, 0],
-        ['2025-01-25', 'Compra mercadería', 15000, 0],
-        ['2025-01-25', 'Proveedores', 0, 15000],
-        ['2025-01-28', 'Cobro de cliente', 0, 8000],
-        ['2025-01-28', 'Banco cuenta corriente', 8000, 0]
-    ];
+    switch (state.sourceType) {
+        case 'extracto':
+            datos = [
+                ['Fecha', 'Descripción', 'Débito', 'Crédito', 'Saldo'],
+                ['15/01/2025', 'TRANSFERENCIA RECIBIDA - CLIENTE SA', '', 50000, 50000],
+                ['16/01/2025', 'DEBITO AUTOMATICO - SERVICIO LUZ', 3500, '', 46500],
+                ['17/01/2025', 'COMISION MANTENIMIENTO CTA', 500, '', 46000],
+                ['18/01/2025', 'ACREDITAMIENTO ECHEQ', '', 25000, 71000],
+                ['19/01/2025', 'TRANSFERENCIA ENVIADA - PROVEEDOR', 15000, '', 56000]
+            ];
+            fileName = 'plantilla_extracto_bancario.xlsx';
+            instrucciones = [
+                ['PLANTILLA EXTRACTO BANCARIO'],
+                [''],
+                ['Columnas requeridas:'],
+                ['- Fecha: Fecha del movimiento (DD/MM/YYYY)'],
+                ['- Descripción: Detalle del movimiento bancario'],
+                ['- Débito: Monto que sale de la cuenta (número)'],
+                ['- Crédito: Monto que entra a la cuenta (número)'],
+                ['- Saldo: Saldo después del movimiento (opcional)'],
+                [''],
+                ['El sistema agrupará automáticamente por tipo de operación']
+            ];
+            break;
 
-    const wsDatos = XLSX.utils.aoa_to_sheet(datosEjemplo);
+        case 'registros':
+            datos = [
+                ['FECHA', 'N_INTER', 'N_COMP', 'PROVEEDOR', 'CONCEPTO', 'DESC_CTA', 'DEBE', 'HABER'],
+                ['15/01/2025', 1, 'FC-001', 'PROVEEDOR SA', 'Compra mercadería', 'Mercaderías', 10000, ''],
+                ['15/01/2025', 1, 'FC-001', 'PROVEEDOR SA', 'Compra mercadería', 'IVA CF', 2100, ''],
+                ['15/01/2025', 1, 'FC-001', 'PROVEEDOR SA', 'Compra mercadería', 'Proveedores', '', 12100],
+                ['20/01/2025', 2, 'FC-002', 'SERVICIOS SRL', 'Servicio contable', 'Honorarios', 5000, ''],
+                ['20/01/2025', 2, 'FC-002', 'SERVICIOS SRL', 'Servicio contable', 'Proveedores', '', 5000]
+            ];
+            fileName = 'plantilla_registros_cliente.xlsx';
+            instrucciones = [
+                ['PLANTILLA REGISTROS DEL CLIENTE'],
+                [''],
+                ['Columnas requeridas:'],
+                ['- FECHA: Fecha del asiento (DD/MM/YYYY)'],
+                ['- N_INTER: Número de asiento interno'],
+                ['- N_COMP: Número de comprobante'],
+                ['- PROVEEDOR: Razón social del proveedor'],
+                ['- CONCEPTO: Descripción del concepto'],
+                ['- DESC_CTA: Descripción de la cuenta (para agrupar)'],
+                ['- DEBE: Importe al debe'],
+                ['- HABER: Importe al haber'],
+                [''],
+                ['Cada N_INTER representa un asiento completo']
+            ];
+            break;
 
-    // Configurar anchos de columna
-    wsDatos['!cols'] = [
-        { wch: 12 },  // fecha
-        { wch: 30 },  // descripcion
-        { wch: 12 },  // debe
-        { wch: 12 }   // haber
-    ];
+        case 'veps':
+            datos = [
+                ['NRO_VEP', 'FECHA', 'PERIODO', 'IMPUESTO', 'CONCEPTO', 'COD_SUBCONCEPTO', 'SUBCONCEPTO', 'IMPORTE'],
+                ['12345678', '15/01/2025', '12/2024', 'IVA', 'DECLARACIÓN JURADA', '19', 'IMPUESTO DETERMINADO', 50000],
+                ['12345678', '15/01/2025', '12/2024', 'IVA', 'DECLARACIÓN JURADA', '51', 'INTERESES RESARCITORIOS', 1500],
+                ['87654321', '20/01/2025', '12/2024', 'GANANCIAS', 'ANTICIPO', '19', 'IMPUESTO DETERMINADO', 25000]
+            ];
+            fileName = 'plantilla_veps_arca.xlsx';
+            instrucciones = [
+                ['PLANTILLA VEPs ARCA'],
+                [''],
+                ['Columnas requeridas:'],
+                ['- NRO_VEP: Número de VEP'],
+                ['- FECHA: Fecha de pago'],
+                ['- PERIODO: Período fiscal (MM/YYYY)'],
+                ['- IMPUESTO: Nombre del impuesto'],
+                ['- CONCEPTO: Concepto de pago'],
+                ['- COD_SUBCONCEPTO: Código de subconcepto (51 = intereses)'],
+                ['- SUBCONCEPTO: Descripción del subconcepto'],
+                ['- IMPORTE: Monto a pagar'],
+                [''],
+                ['Los VEPs se agrupan por impuesto y se separan intereses']
+            ];
+            break;
 
+        case 'compensaciones':
+            datos = [
+                ['Transacción', 'Fecha Operación', 'Impuesto Orig', 'Concepto Orig', 'Subconcepto Orig', 'Período Orig', 'Impuesto Dest', 'Concepto Dest', 'Subconcepto Dest', 'Período Dest', 'Importe'],
+                ['1001', '15/01/2025', 'IVA', 'SALDO A FAVOR', 'LIBRE DISPONIBILIDAD', '11/2024', 'GANANCIAS', 'ANTICIPO', 'IMPUESTO', '12/2024', 25000],
+                ['1002', '20/01/2025', 'IVA', 'SALDO A FAVOR', 'LIBRE DISPONIBILIDAD', '12/2024', 'IIBB', 'ANTICIPO', 'IMPUESTO', '01/2025', 15000]
+            ];
+            fileName = 'plantilla_compensaciones_arca.xlsx';
+            instrucciones = [
+                ['PLANTILLA COMPENSACIONES ARCA'],
+                [''],
+                ['Columnas requeridas:'],
+                ['- Transacción: Número de transacción'],
+                ['- Fecha Operación: Fecha de la compensación'],
+                ['- Impuesto Orig: Impuesto de origen (donde sale)'],
+                ['- Concepto Orig / Subconcepto Orig / Período Orig'],
+                ['- Impuesto Dest: Impuesto de destino (donde entra)'],
+                ['- Concepto Dest / Subconcepto Dest / Período Dest'],
+                ['- Importe: Monto compensado'],
+                [''],
+                ['ORIGEN va al HABER (sale), DESTINO va al DEBE (entra)']
+            ];
+            break;
+
+        default:
+            alert('Por favor, seleccione un tipo de archivo primero');
+            return;
+    }
+
+    // Crear hoja de datos
+    const wsDatos = XLSX.utils.aoa_to_sheet(datos);
     XLSX.utils.book_append_sheet(wb, wsDatos, 'Datos');
 
-    // ========== HOJA 2: INSTRUCCIONES ==========
-    const instrucciones = [
-        ['INSTRUCCIONES DE USO DE LA PLANTILLA'],
-        [''],
-        ['1. Complete la columna "fecha" en formato YYYY-MM-DD (ejemplo: 2025-01-15)'],
-        [''],
-        ['2. Complete la columna "descripcion" con el detalle del movimiento'],
-        [''],
-        ['3. La columna "debe" es para débitos (cargos/entradas)'],
-        ['   - Ingrese el importe numérico sin símbolos'],
-        ['   - Si el movimiento no tiene débito, deje en 0'],
-        [''],
-        ['4. La columna "haber" es para créditos (abonos/salidas)'],
-        ['   - Ingrese el importe numérico sin símbolos'],
-        ['   - Si el movimiento no tiene crédito, deje en 0'],
-        [''],
-        ['5. IMPORTANTE: Cada movimiento debe tener DEBE o HABER (no ambos simultáneamente)'],
-        [''],
-        ['6. Los asientos deben estar balanceados:'],
-        ['   - Por cada debe, debe haber un haber de igual importe'],
-        ['   - O viceversa'],
-        [''],
-        ['7. Una vez completada la plantilla:'],
-        ['   - Guarde el archivo en formato Excel (.xlsx)'],
-        ['   - Súbalo al conversor de asientos contables'],
-        ['   - El sistema agrupará automáticamente los movimientos similares'],
-        [''],
-        ['8. Tipos de archivo que puede procesar el conversor:'],
-        ['   - Extractos Bancarios'],
-        ['   - Registros del Cliente'],
-        ['   - VEPs de ARCA'],
-        ['   - Compensaciones de ARCA'],
-        [''],
-        ['Para más información, consulte la documentación del sistema.']
-    ];
-
+    // Crear hoja de instrucciones
     const wsInstrucciones = XLSX.utils.aoa_to_sheet(instrucciones);
-
-    // Configurar ancho de columna para instrucciones
-    wsInstrucciones['!cols'] = [{ wch: 80 }];
-
+    wsInstrucciones['!cols'] = [{ wch: 70 }];
     XLSX.utils.book_append_sheet(wb, wsInstrucciones, 'Instrucciones');
 
     // Descargar archivo
-    const fileName = 'plantilla_extracto_bancario.xlsx';
     XLSX.writeFile(wb, fileName);
-
     console.log('✅ Plantilla descargada:', fileName);
 }
 

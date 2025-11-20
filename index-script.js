@@ -13,11 +13,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     console.log('Impuestos (localStorage):', TaxManager.getAllTaxes().length);
     console.log('====================================================');
-
-    // Actualizar indicador de cliente activo
-    if (typeof actualizarIndicadorClienteActivo === 'function') {
-        actualizarIndicadorClienteActivo();
-    }
 });
 
 // Sincronizar datos con Supabase
@@ -166,6 +161,7 @@ function attachEventListeners() {
     document.getElementById('btnNuevaCuenta').addEventListener('click', () => showNuevaCuentaModal());
     document.getElementById('btnCancelNuevaCuenta').addEventListener('click', () => hideNuevaCuentaModal());
     document.getElementById('btnCrearCuenta').addEventListener('click', () => crearCuentaUI());
+    document.getElementById('btnEliminarPlanCompleto').addEventListener('click', () => eliminarPlanCompletoUI());
 
     // Listeners para cambios en los datos
     TaxManager.onTaxDatabaseChange(() => {
@@ -289,10 +285,6 @@ async function renderClientsList(searchTerm = '') {
         filteredClients = [];
     }
 
-    // Obtener cliente activo
-    const clienteActivo = obtenerClienteActivo();
-    const clienteActivoId = clienteActivo ? clienteActivo.id : null;
-
     // Actualizar estadísticas
     const statsElement = document.getElementById('clientsStats');
     if (searchTerm.trim() !== '' && allClients.length > 0) {
@@ -315,7 +307,7 @@ async function renderClientsList(searchTerm = '') {
         return;
     }
 
-    // Crear tabla HTML
+    // Crear tabla HTML (solo administración, sin selección de cliente activo)
     const html = `
         <table class="preview-table" style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
             <thead>
@@ -327,17 +319,13 @@ async function renderClientsList(searchTerm = '') {
             </thead>
             <tbody>
                 ${filteredClients.map(client => {
-                    const isActive = clienteActivoId === client.id;
-                    const activeClass = isActive ? 'cliente-activo-row' : '';
-                    const activeBadge = isActive ? '<span class="badge-cliente-activo" style="font-size: 9px; padding: 3px 6px; margin-left: 8px;">✓ ACTIVO</span>' : '';
                     return `
-                        <tr class="${activeClass}" onclick="seleccionarClienteUI('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="border-bottom: 1px solid #e2e8f0;">
-                            <td style="padding: 12px; color: #1e293b; font-weight: ${isActive ? '600' : '400'};">
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 12px; color: #1e293b;">
                                 ${client.razon_social}
-                                ${activeBadge}
                             </td>
                             <td style="padding: 12px; color: #64748b;">${client.cuit || '-'}</td>
-                            <td style="padding: 12px; text-align: center;" onclick="event.stopPropagation()">
+                            <td style="padding: 12px; text-align: center;">
                                 <button onclick="abrirPlanCuentas('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="background: #8b5cf6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#7c3aed'" onmouseout="this.style.background='#8b5cf6'">📊 Plan</button>
                                 <button onclick="editarCliente('${client.id}')" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">✏️ Editar</button>
                                 <button onclick="eliminarClienteUI('${client.id}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">🗑️ Eliminar</button>
@@ -1051,6 +1039,37 @@ async function importarPlanCuentasUI(event) {
     }
 
     event.target.value = '';
+}
+
+async function eliminarPlanCompletoUI() {
+    if (!currentClienteIdPlan) {
+        alert('Error: No hay cliente seleccionado');
+        return;
+    }
+
+    // Obtener nombre del cliente para el mensaje
+    const nombreCliente = document.getElementById('planCuentasClienteNombre').textContent;
+
+    const confirmacion = confirm(
+        `¿Está seguro de eliminar TODO el plan de cuentas de ${nombreCliente}?\n\n` +
+        `Esta acción no se puede deshacer.`
+    );
+
+    if (!confirmacion) {
+        return;
+    }
+
+    try {
+        const success = await eliminarPlanCuentas(currentClienteIdPlan);
+
+        if (success) {
+            alert('Plan de cuentas eliminado correctamente');
+            await renderPlanCuentasList();
+        }
+    } catch (error) {
+        console.error('Error eliminando plan de cuentas:', error);
+        alert('Error al eliminar el plan de cuentas: ' + error.message);
+    }
 }
 
 // ============================================

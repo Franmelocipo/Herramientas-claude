@@ -40,25 +40,19 @@
 
             <!-- Paso 0: Selección de tipo -->
             <div id="step0" class="step">
-                <!-- Selector de cliente -->
+                <!-- Selector de cliente con búsqueda -->
                 <div class="selector-cliente-container">
-                    <label for="selector-cliente-conversor">Seleccione el cliente para esta conversión:</label>
-                    <select id="selector-cliente-conversor" class="selector-cliente">
+                    <label for="buscar-cliente">Seleccione el cliente para esta conversión:</label>
+                    <input type="text"
+                           id="buscar-cliente"
+                           placeholder="🔍 Buscar cliente por nombre..."
+                           class="input-text mb-2"
+                           style="margin-bottom: 8px;">
+                    <select id="selector-cliente-conversor" class="selector-cliente" size="5">
                         <option value="">-- Seleccione un cliente --</option>
                         <!-- Las opciones se cargarán desde Supabase -->
                     </select>
                     <p id="clientePlanInfo" class="cliente-plan-info hidden"></p>
-                </div>
-
-                <!-- Botón de descarga de plantilla -->
-                <div id="templateDownloadSection" class="template-download-section">
-                    <h3 class="step-title">¿Necesita una plantilla?</h3>
-                    <button id="btnDownloadTemplate" class="btn-template">
-                        📥 Descargar Plantilla Excel
-                    </button>
-                    <p style="margin-top: 8px; color: #64748b; font-size: 14px;">
-                        Descargue esta plantilla con ejemplos para preparar sus datos correctamente
-                    </p>
                 </div>
 
                 <h3 class="step-title">Tipo de archivo origen</h3>
@@ -91,6 +85,11 @@
                         <p class="upload-type">Tipo: <strong id="sourceTypeName"></strong></p>
                         <input type="file" id="fileInput" accept=".xlsx,.xls" class="file-input hidden">
                         <button id="btnSelectFile" class="btn-primary">Seleccionar Excel</button>
+                        <div style="margin-top: 16px;">
+                            <button id="btnDownloadTemplateSpecific" class="btn-template" style="font-size: 13px;">
+                                📥 <span id="templateButtonText">Descargar Plantilla</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
