@@ -694,8 +694,9 @@ function parseBBVAExtract(text) {
 
 // Parsear extracto Santander usando posiciones de columnas
 // Estructura: Fecha | Comprobante | Movimiento | DÉBITO | CRÉDITO | Saldo
-// Determina débito/crédito por la posición X en el PDF, NO por cambio de saldo
-function parseSantanderWithPositions(linesWithPositions) {
+// Determina débito/crédito por la posición X en el PDF
+// Si falla, usa validación por cambio de saldo como respaldo
+function parseSantanderWithPositions(linesWithPositions, saldoInicial = null) {
     const movements = [];
     let currentMovement = null;
 
@@ -726,9 +727,7 @@ function parseSantanderWithPositions(linesWithPositions) {
     }
 
     // Si no encontramos las columnas exactas, usar valores por defecto típicos de Santander
-    // Basado en análisis de PDFs de Santander
     if (!debitoColumnX || !creditoColumnX) {
-        // Valores típicos para PDF de Santander
         debitoColumnX = 380;
         creditoColumnX = 450;
         saldoColumnX = 520;
@@ -744,6 +743,7 @@ function parseSantanderWithPositions(linesWithPositions) {
     const comprobanteRegex = /^\d{2}\/\d{2}\/\d{2}\s+(\d+)/;
 
     console.log('Procesando', linesWithPositions.length, 'líneas del PDF');
+    console.log('='.repeat(80));
 
     for (const lineData of linesWithPositions) {
         const trimmedLine = lineData.text.trim();
@@ -778,14 +778,18 @@ function parseSantanderWithPositions(linesWithPositions) {
             const comprobante = comprobanteMatch ? comprobanteMatch[1] : '';
 
             // Encontrar todos los importes con sus posiciones X
+            // Mejorar regex para capturar más formatos de importes
             const amountsWithPositions = [];
             for (const item of lineData.items) {
-                // Buscar items que sean importes (contienen $ o son números con formato argentino)
-                const amountMatch = item.text.match(/^\$?\s*([\d.]+,\d{2})$/);
+                // Buscar items que sean importes - múltiples patrones
+                // Formato: 1.234,56 o 123,45 o $1.234,56
+                const amountMatch = item.text.match(/^\$?\s*([\d.]+,\d{2})$/) ||
+                                   item.text.match(/^([\d.]+,\d{2})$/);
                 if (amountMatch) {
                     amountsWithPositions.push({
                         value: amountMatch[1],
-                        x: item.x
+                        x: item.x,
+                        text: item.text
                     });
                 }
             }
@@ -799,12 +803,19 @@ function parseSantanderWithPositions(linesWithPositions) {
             if (comprobante) {
                 descripcion = descripcion.replace(new RegExp('^' + comprobante + '\\s*'), '').trim();
             }
-            descripcion = descripcion.replace(/\$\s*[\d.]+,\d{2}/g, '').trim();
+            descripcion = descripcion.replace(/\$?\s*[\d.]+,\d{2}/g, '').trim();
 
             // Clasificar importes por posición de columna
             let debito = '0';
             let credito = '0';
             let saldo = '0';
+
+            // Log para debug
+            console.log(`Fila PDF: ${trimmedLine.substring(0, 100)}`);
+            console.log(`  Importes encontrados: ${amountsWithPositions.length}`);
+            amountsWithPositions.forEach((a, i) => {
+                console.log(`    [${i}] valor: ${a.value}, X: ${a.x.toFixed(1)}`);
+            });
 
             if (amountsWithPositions.length >= 1) {
                 // El último siempre es saldo (columna más a la derecha)
@@ -816,8 +827,6 @@ function parseSantanderWithPositions(linesWithPositions) {
                 const movAmount = amountsWithPositions[amountsWithPositions.length - 2];
 
                 // Clasificar según posición X
-                // Si está más cerca de la columna Débito → es débito
-                // Si está más cerca de la columna Crédito → es crédito
                 if (movAmount.x < midPoint) {
                     debito = movAmount.value;
                 } else {
@@ -843,6 +852,9 @@ function parseSantanderWithPositions(linesWithPositions) {
                 }
             }
 
+            console.log(`  → Débito: ${debito} | Crédito: ${credito} | Saldo: ${saldo}`);
+            console.log('-'.repeat(80));
+
             currentMovement = {
                 fecha: fecha,
                 descripcion: descripcion,
@@ -866,7 +878,7 @@ function parseSantanderWithPositions(linesWithPositions) {
     }
 
     // Filtrar "Saldo Inicial" y limpiar descripciones
-    const filteredMovements = movements
+    let filteredMovements = movements
         .filter(mov => !/Saldo Inicial/i.test(mov.descripcion))
         .map(mov => {
             mov.descripcion = mov.descripcion
@@ -876,9 +888,98 @@ function parseSantanderWithPositions(linesWithPositions) {
             return mov;
         });
 
+    console.log('='.repeat(80));
     console.log('Movimientos encontrados:', filteredMovements.length);
 
+    // VALIDACIÓN ADICIONAL: Corregir movimientos con 0/0 usando cambio de saldo
+    filteredMovements = validateAndFixAmounts(filteredMovements, saldoInicial);
+
     return filteredMovements;
+}
+
+// Función de validación: Si Crédito=0 y Débito=0 pero el saldo cambió, calcular el movimiento
+function validateAndFixAmounts(movements, saldoInicial) {
+    const parseArgentineNumber = (value) => {
+        if (!value || value === '0') return 0;
+        return parseFloat(value.replace(/\./g, '').replace(',', '.'));
+    };
+
+    const formatArgentineNumber = (num) => {
+        if (num === 0) return '0';
+        return num.toLocaleString('es-AR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).replace(/\s/g, '');
+    };
+
+    let saldoAnterior = saldoInicial ? parseArgentineNumber(saldoInicial) : null;
+    let fixedCount = 0;
+
+    console.log('='.repeat(80));
+    console.log('VALIDACIÓN DE IMPORTES (por cambio de saldo)');
+    console.log('Saldo inicial:', saldoAnterior);
+    console.log('='.repeat(80));
+
+    for (let i = 0; i < movements.length; i++) {
+        const mov = movements[i];
+        const saldoActual = parseArgentineNumber(mov.saldo);
+        const debito = parseArgentineNumber(mov.debito);
+        const credito = parseArgentineNumber(mov.credito);
+
+        // Si no tenemos saldo anterior, usar el primero disponible
+        if (saldoAnterior === null && i === 0) {
+            // Para el primer movimiento, si tiene saldo pero no tiene movimiento,
+            // necesitamos inferir del siguiente
+            saldoAnterior = saldoActual - credito + debito;
+        }
+
+        // VALIDACIÓN: Si ambos son 0 pero el saldo cambió
+        if (debito === 0 && credito === 0 && saldoAnterior !== null && saldoActual !== saldoAnterior) {
+            const diferencia = saldoActual - saldoAnterior;
+
+            console.log(`⚠️  Corrigiendo movimiento: ${mov.descripcion.substring(0, 50)}`);
+            console.log(`    Saldo anterior: ${saldoAnterior}, Saldo actual: ${saldoActual}`);
+            console.log(`    Diferencia: ${diferencia}`);
+
+            if (diferencia > 0) {
+                // El saldo aumentó → es crédito
+                mov.credito = formatArgentineNumber(diferencia);
+                mov.debito = '0';
+                console.log(`    → Asignado como CRÉDITO: ${mov.credito}`);
+            } else {
+                // El saldo disminuyó → es débito
+                mov.debito = formatArgentineNumber(Math.abs(diferencia));
+                mov.credito = '0';
+                console.log(`    → Asignado como DÉBITO: ${mov.debito}`);
+            }
+            fixedCount++;
+        }
+
+        // También verificar si el movimiento ya tiene valor pero está en la columna incorrecta
+        // comparando con el cambio de saldo esperado
+        if ((debito > 0 || credito > 0) && saldoAnterior !== null) {
+            const cambioEsperado = saldoActual - saldoAnterior;
+            const cambioCalculado = credito - debito;
+
+            // Si el cambio no coincide, puede estar invertido
+            if (Math.abs(cambioEsperado - cambioCalculado) > 0.01 && Math.abs(cambioEsperado + cambioCalculado) < 0.01) {
+                console.log(`⚠️  Invirtiendo débito/crédito: ${mov.descripcion.substring(0, 50)}`);
+                const temp = mov.debito;
+                mov.debito = mov.credito;
+                mov.credito = temp;
+                fixedCount++;
+            }
+        }
+
+        // Actualizar saldo anterior para el siguiente movimiento
+        saldoAnterior = saldoActual;
+    }
+
+    console.log('='.repeat(80));
+    console.log(`Movimientos corregidos por validación de saldo: ${fixedCount}`);
+    console.log('='.repeat(80));
+
+    return movements;
 }
 
 // Función legacy - mantener para compatibilidad
@@ -980,8 +1081,9 @@ async function processSantanderPDF(pdfFile) {
 
         console.log('Saldo inicial encontrado:', state.saldoInicial);
 
-        // Parsear movimientos usando POSICIONES DE COLUMNAS (no cambio de saldo)
-        const movements = parseSantanderWithPositions(linesWithPositions);
+        // Parsear movimientos usando POSICIONES DE COLUMNAS
+        // Y validación adicional por cambio de saldo como respaldo
+        const movements = parseSantanderWithPositions(linesWithPositions, state.saldoInicial);
 
         if (movements.length === 0) {
             showError('No se encontraron movimientos en el PDF. Verifique que el archivo contenga movimientos con formato de fecha DD/MM/YY.');
