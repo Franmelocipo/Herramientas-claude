@@ -596,23 +596,35 @@ function parseBBVAExtract(text) {
 function parseSantanderExtract(text) {
     const movements = [];
 
-    // Buscar la sección "Movimientos en pesos"
-    const movimientosIndex = text.search(/Movimientos en pesos/i);
-    if (movimientosIndex === -1) {
-        console.log('No se encontró la sección "Movimientos en pesos"');
+    // DETECTAR INICIO DE TABLA:
+    // Buscar "Cuenta Corriente Nº" y luego la línea de encabezados
+    const cuentaCorrienteIndex = text.search(/Cuenta Corriente N[º°]/i);
+    if (cuentaCorrienteIndex === -1) {
+        console.log('No se encontró "Cuenta Corriente Nº"');
         return movements;
     }
 
-    let movimientosText = text.substring(movimientosIndex);
+    // Buscar la línea de encabezados después de "Cuenta Corriente Nº"
+    const headerPattern = /Fecha\s+Comprobante\s+Movimiento\s+D[eé]bito\s+Cr[eé]dito\s+Saldo/i;
+    const headerMatch = text.substring(cuentaCorrienteIndex).match(headerPattern);
 
-    // Cortar en "Saldo total" o similar
-    const saldoTotalIndex = movimientosText.search(/Saldo total|Total del período/i);
-    if (saldoTotalIndex !== -1) {
-        movimientosText = movimientosText.substring(0, saldoTotalIndex);
+    if (!headerMatch) {
+        console.log('No se encontró la línea de encabezados');
+        return movements;
     }
 
-    // Buscar todas las fechas (DD/MM/YYYY)
-    const datePattern = /\d{2}\/\d{2}\/\d{4}/g;
+    const headerIndex = cuentaCorrienteIndex + text.substring(cuentaCorrienteIndex).indexOf(headerMatch[0]);
+    let movimientosText = text.substring(headerIndex + headerMatch[0].length);
+
+    // DETECTAR FIN DE TABLA:
+    // Parar en "Saldo total $" o "Detalle impositivo"
+    const finTablaMatch = movimientosText.match(/Saldo total\s*\$|Detalle impositivo/i);
+    if (finTablaMatch) {
+        movimientosText = movimientosText.substring(0, finTablaMatch.index);
+    }
+
+    // Buscar todas las fechas (DD/MM/YY - año corto de 2 dígitos)
+    const datePattern = /\d{2}\/\d{2}\/\d{2}(?!\d)/g;
     const datePositions = [];
     let match;
 
@@ -636,25 +648,33 @@ function parseSantanderExtract(text) {
             continue;
         }
 
-        // Extraer todos los importes del segmento (formato argentino: 10.910.083,35)
-        const amountRegex = /\d{1,3}(?:\.\d{3})*,\d{2}/g;
-        const amounts = segment.match(amountRegex) || [];
+        // Extraer todos los importes del segmento (formato: $ 10.910.083,35 o 10.910.083,35)
+        const amountRegex = /\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}/g;
+        const rawAmounts = segment.match(amountRegex) || [];
+
+        // Limpiar importes (remover $ y espacios)
+        const amounts = rawAmounts.map(amt => amt.replace(/\$\s*/g, '').trim());
 
         if (amounts.length === 0) continue;
 
-        const fecha = currentDate.date;
+        // Convertir fecha de DD/MM/YY a DD/MM/YYYY
+        const dateParts = currentDate.date.split('/');
+        const year = parseInt(dateParts[2]);
+        const fullYear = year < 50 ? `20${dateParts[2]}` : `19${dateParts[2]}`;
+        const fecha = `${dateParts[0]}/${dateParts[1]}/${fullYear}`;
 
         // Extraer descripción - remover fecha y montos
-        let descripcion = segment.replace(fecha, '').trim();
-        amounts.forEach(amt => {
+        let descripcion = segment.replace(currentDate.date, '').trim();
+        rawAmounts.forEach(amt => {
             descripcion = descripcion.replace(amt, '');
         });
 
-        // Limpiar descripción
+        // Limpiar descripción de texto basura
         descripcion = descripcion
             .replace(/\s+/g, ' ')
-            .replace(/Fecha\s+Comprobante\s+Movimiento\s+D[eé]bito\s+Cr[eé]dito\s+Saldo/gi, '')
-            .replace(/Movimientos en pesos/gi, '')
+            .replace(/Fecha\s+Comprobante\s+Movimiento\s+D[eé]bito\s+Cr[eé]dito\s+Saldo[^$]*/gi, '')
+            .replace(/Cuenta Corriente N[º°]\s*\d*/gi, '')
+            .replace(/P[aá]gina\s+\d+\s*(de|\/)\s*\d+/gi, '')
             .trim();
 
         // Extraer comprobante (números al inicio de la descripción)
@@ -676,35 +696,36 @@ function parseSantanderExtract(text) {
             saldo: ''
         };
 
-        // Santander tiene formato: Débito | Crédito | Saldo
-        // Según el usuario: valores van según posición en columna, NO por signo
-        // Si hay 3 valores: [débito, crédito, saldo] - uno de los dos primeros es 0
-        // Si hay 2 valores: [monto, saldo]
-        // Si hay 1 valor: solo saldo
+        // Santander tiene formato: Débito | Crédito | Saldo en cuenta
+        // Los valores van según posición en columna del PDF
+        // Si columna Débito tiene valor → Débito
+        // Si columna Crédito tiene valor → Crédito
 
         if (amounts.length >= 3) {
-            // Formato completo: débito, crédito, saldo
+            // Formato completo: [débito, crédito, saldo]
             const debito = amounts[amounts.length - 3];
             const credito = amounts[amounts.length - 2];
             const saldo = amounts[amounts.length - 1];
 
-            // Si débito es 0, todo el monto está en crédito y viceversa
-            if (parseFloat(debito.replace(/\./g, '').replace(',', '.')) === 0) {
+            const debitoNum = parseFloat(debito.replace(/\./g, '').replace(',', '.'));
+            const creditoNum = parseFloat(credito.replace(/\./g, '').replace(',', '.'));
+
+            // Asignar según la columna donde aparece el valor
+            if (debitoNum === 0 || debito === '0' || debito === '0,00') {
                 movement.debito = '0';
                 movement.credito = credito;
-            } else if (parseFloat(credito.replace(/\./g, '').replace(',', '.')) === 0) {
+            } else if (creditoNum === 0 || credito === '0' || credito === '0,00') {
                 movement.debito = debito;
                 movement.credito = '0';
             } else {
-                // Ambos tienen valor (caso raro)
+                // Ambos tienen valor (caso especial)
                 movement.debito = debito;
                 movement.credito = credito;
             }
             movement.saldo = saldo;
         } else if (amounts.length === 2) {
-            // Solo monto y saldo - determinar por contexto
+            // Solo monto y saldo
             movement.saldo = amounts[1];
-            // Por defecto asignamos a crédito, se recalculará el saldo después
             movement.credito = amounts[0];
         } else if (amounts.length === 1) {
             movement.saldo = amounts[0];
@@ -715,27 +736,83 @@ function parseSantanderExtract(text) {
         }
     }
 
+    // Procesar líneas de continuación (descripción sin fecha)
+    // Buscar texto entre movimientos que no empieza con fecha
+    const lines = movimientosText.split(/\n/);
+    let currentMovementIndex = -1;
+
+    for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) continue;
+
+        // Si la línea empieza con fecha, buscar el movimiento correspondiente
+        if (/^\d{2}\/\d{2}\/\d{2}(?!\d)/.test(trimmedLine)) {
+            // Encontrar el índice del movimiento con esta fecha
+            const dateMatch = trimmedLine.match(/^\d{2}\/\d{2}\/\d{2}/);
+            if (dateMatch) {
+                const dateParts = dateMatch[0].split('/');
+                const fullYear = parseInt(dateParts[2]) < 50 ? `20${dateParts[2]}` : `19${dateParts[2]}`;
+                const fullDate = `${dateParts[0]}/${dateParts[1]}/${fullYear}`;
+                currentMovementIndex = movements.findIndex(m => m.fecha === fullDate);
+            }
+        } else if (currentMovementIndex >= 0 && currentMovementIndex < movements.length) {
+            // Línea sin fecha = continuación de descripción
+            // Solo agregar si no es un importe ni texto basura
+            const isAmount = /^\$?\s*\d{1,3}(?:\.\d{3})*,\d{2}$/.test(trimmedLine);
+            const isTrash = /^(P[aá]gina|Cuenta Corriente|Saldo total|Detalle impositivo)/i.test(trimmedLine);
+
+            if (!isAmount && !isTrash && trimmedLine.length > 2) {
+                // Verificar que no sea un número de comprobante solo
+                if (!/^\d+$/.test(trimmedLine)) {
+                    movements[currentMovementIndex].descripcion += ' ' + trimmedLine;
+                }
+            }
+        }
+    }
+
     return movements;
 }
 
 async function processSantanderPDF(pdfFile) {
     try {
         const text = await extractTextFromPDF(pdfFile);
+        console.log('Texto extraído del PDF (primeros 2000 chars):', text.substring(0, 2000));
 
         // Extraer saldo inicial de Santander
-        const saldoInicialMatch = text.match(/Saldo Inicial\s+[\d.,]+\s+[\d.,]+\s+([\d.,]+)/i);
-        if (saldoInicialMatch) {
-            state.saldoInicial = saldoInicialMatch[1];
-        } else {
-            // Alternativa: buscar patrón diferente
-            const altMatch = text.match(/Saldo Inicial[^\d]*([\d.,]+)/i);
-            state.saldoInicial = altMatch ? altMatch[1] : null;
+        // Buscar en la línea "Saldo Inicial" - el último número es el saldo
+        // Formato: "Saldo Inicial $ 0,00 $ 0,00 $ 30.000,00"
+        let saldoInicialMatch = text.match(/Saldo Inicial[^\n]*\$\s*([\d.,]+)\s*$/im);
+        if (!saldoInicialMatch) {
+            // Alternativa: buscar todos los números después de "Saldo Inicial"
+            saldoInicialMatch = text.match(/Saldo Inicial[^$]*(?:\$\s*[\d.,]+\s*){2}\$\s*([\d.,]+)/i);
         }
+        if (!saldoInicialMatch) {
+            // Último intento: el tercer número después de Saldo Inicial
+            const saldoLine = text.match(/Saldo Inicial[^\n]*/i);
+            if (saldoLine) {
+                const numbers = saldoLine[0].match(/\d{1,3}(?:\.\d{3})*,\d{2}/g);
+                if (numbers && numbers.length >= 3) {
+                    state.saldoInicial = numbers[2]; // El tercer número es el saldo
+                } else if (numbers && numbers.length >= 1) {
+                    state.saldoInicial = numbers[numbers.length - 1];
+                }
+            }
+        } else {
+            state.saldoInicial = saldoInicialMatch[1];
+        }
+
+        console.log('Saldo inicial encontrado:', state.saldoInicial);
 
         const movements = parseSantanderExtract(text);
 
+        console.log('Movimientos encontrados:', movements.length);
+        if (movements.length > 0) {
+            console.log('Primer movimiento:', movements[0]);
+            console.log('Último movimiento:', movements[movements.length - 1]);
+        }
+
         if (movements.length === 0) {
-            showError('No se encontraron movimientos en el PDF.');
+            showError('No se encontraron movimientos en el PDF. Verifique que el PDF contenga "Cuenta Corriente Nº" y la tabla de movimientos.');
             return;
         }
 
@@ -765,6 +842,7 @@ async function processSantanderPDF(pdfFile) {
         renderPreview();
 
     } catch (err) {
+        console.error('Error procesando PDF Santander:', err);
         throw err;
     }
 }
