@@ -523,6 +523,11 @@ body {
     background: #eef2ff;
 }
 
+.dropdown-item.activo {
+    background: #e3f2fd;
+    border-left: 3px solid #3b82f6;
+}
+
 .dropdown-item-code {
     font-weight: 700;
     font-size: 13px;

@@ -312,12 +312,21 @@ function attachEventListeners() {
 
     // Step 2: Account assignment
     if (elements.bankAccountInput) {
-        elements.bankAccountInput.addEventListener('click', () => {
+        elements.bankAccountInput.addEventListener('focus', () => {
             const selectedClientId = getSelectedClientId();
             if (selectedClientId) {
                 state.activeSearchField = 'bank';
                 showAccountDropdown('bank');
             }
+        });
+        elements.bankAccountInput.addEventListener('input', () => {
+            const selectedClientId = getSelectedClientId();
+            if (selectedClientId) {
+                handleAccountInputChange('bank');
+            }
+        });
+        elements.bankAccountInput.addEventListener('keydown', (e) => {
+            handleAccountInputKeydown(e, 'bank');
         });
     }
     if (elements.btnBackToUpload) {
@@ -702,7 +711,7 @@ function renderGroupsList() {
         elements.bankAccountLabel.textContent = state.sourceType === 'extracto'
             ? 'Cuenta del Banco (contrapartida)'
             : 'Cuenta de Contrapartida (para totales de VEP)';
-        elements.bankAccountInput.placeholder = getSelectedClientId() ? 'Click para buscar cuenta...' : 'Ej: 11010101';
+        elements.bankAccountInput.placeholder = getSelectedClientId() ? '🔍 Buscar por código o descripción...' : 'Ej: 11010101';
         elements.bankAccountInput.value = state.bankAccount;
     } else {
         elements.bankAccountSection.classList.add('hidden');
@@ -780,7 +789,7 @@ function renderGroupsList() {
                                 class="input-text"
                                 data-group-idx="${idx}"
                                 value="${state.accountCodes[idx] || ''}"
-                                placeholder="${getSelectedClientId() ? 'Click para buscar...' : 'Código'}"
+                                placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
                             >
                             <div class="account-dropdown hidden" id="dropdown-${idx}"></div>
                         </div>
@@ -796,14 +805,25 @@ function renderGroupsList() {
     // Attach event listeners to account inputs
     document.querySelectorAll('.group-account input[data-group-idx]').forEach(input => {
         const idx = parseInt(input.dataset.groupIdx);
+
+        // Filtrado en tiempo real
         input.addEventListener('input', (e) => {
-            state.accountCodes[idx] = e.target.value;
+            if (getSelectedClientId()) {
+                handleAccountInputChange(idx);
+            }
         });
-        input.addEventListener('click', () => {
+
+        // Mostrar dropdown al enfocar
+        input.addEventListener('focus', () => {
             if (getSelectedClientId()) {
                 state.activeSearchField = idx;
                 showAccountDropdown(idx);
             }
+        });
+
+        // Navegación por teclado
+        input.addEventListener('keydown', (e) => {
+            handleAccountInputKeydown(e, idx);
         });
     });
 }
@@ -817,8 +837,16 @@ function toggleGroupExpansion(idx) {
 }
 
 // ============================================
-// DROPDOWN DE CUENTAS
+// DROPDOWN DE CUENTAS - SISTEMA UNIFICADO
 // ============================================
+
+// Estado para navegación con teclado
+let dropdownState = {
+    currentIndex: -1,
+    accounts: [],
+    fieldId: null
+};
+
 async function showAccountDropdown(fieldId) {
     closeAllDropdowns();
 
@@ -828,88 +856,173 @@ async function showAccountDropdown(fieldId) {
         return;
     }
 
+    dropdownState.accounts = accounts;
+    dropdownState.fieldId = fieldId;
+    dropdownState.currentIndex = -1;
+
     let dropdown;
+    let inputElement;
+
     if (fieldId === 'bank') {
         dropdown = elements.bankAccountDropdown;
+        inputElement = elements.bankAccountInput;
     } else {
         dropdown = document.getElementById(`dropdown-${fieldId}`);
+        inputElement = document.querySelector(`input[data-group-idx="${fieldId}"]`);
     }
 
-    if (!dropdown) return;
+    if (!dropdown || !inputElement) return;
 
-    renderAccountDropdown(dropdown, accounts, (acc) => {
-        if (fieldId === 'bank') {
-            state.bankAccount = acc.code;
-            elements.bankAccountInput.value = acc.code;
-        } else {
-            state.accountCodes[fieldId] = acc.code;
-            const input = document.querySelector(`input[data-group-idx="${fieldId}"]`);
-            if (input) input.value = acc.code;
-        }
-        closeAllDropdowns();
-    });
+    // Filtrar cuentas basándose en el valor actual del input
+    const query = inputElement.value.trim().toLowerCase();
+    renderAccountResults(dropdown, accounts, query);
 
     dropdown.classList.remove('hidden');
 }
 
-function renderAccountDropdown(dropdown, accounts, onSelect) {
-    let query = '';
+function renderAccountResults(dropdown, accounts, query) {
+    const filteredAccounts = query === ''
+        ? accounts.slice(0, 30)
+        : accounts.filter(a =>
+            String(a.code || '').toLowerCase().includes(query) ||
+            String(a.description || '').toLowerCase().includes(query)
+        ).slice(0, 30);
 
-    const render = () => {
-        const filteredAccounts = query.trim() === ''
-            ? accounts.slice(0, 20)
-            : accounts.filter(a =>
-                String(a.code || '').toLowerCase().includes(query.toLowerCase()) ||
-                String(a.description || '').toLowerCase().includes(query.toLowerCase())
-            ).slice(0, 20);
+    if (filteredAccounts.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-empty">No se encontraron resultados</div>';
+        return;
+    }
 
-        const searchHtml = `
-            <div class="dropdown-search">
-                <input type="text" placeholder="Buscar por código o descripción..." class="dropdown-search-input">
-            </div>
-        `;
+    const itemsHtml = filteredAccounts.map((acc, idx) => `
+        <div class="dropdown-item ${idx === dropdownState.currentIndex ? 'activo' : ''}" data-code="${acc.code}" data-idx="${idx}">
+            <div class="dropdown-item-code">${acc.code}</div>
+            <div class="dropdown-item-desc">${acc.description}</div>
+        </div>
+    `).join('');
 
-        const itemsHtml = filteredAccounts.length === 0
-            ? '<div class="dropdown-empty">No se encontraron resultados</div>'
-            : filteredAccounts.map(acc => `
-                <div class="dropdown-item" data-code="${acc.code}">
-                    <div class="dropdown-item-code">${acc.code}</div>
-                    <div class="dropdown-item-desc">${acc.description}</div>
-                </div>
-            `).join('');
+    dropdown.innerHTML = `<div class="dropdown-items">${itemsHtml}</div>`;
 
-        dropdown.innerHTML = `
-            ${searchHtml}
-            <div class="dropdown-items">${itemsHtml}</div>
-        `;
-
-        // Search input
-        const searchInput = dropdown.querySelector('.dropdown-search-input');
-        if (searchInput) {
-            searchInput.value = query;
-            searchInput.focus();
-            searchInput.addEventListener('input', (e) => {
-                query = e.target.value;
-                render();
-            });
-        }
-
-        // Item clicks
-        dropdown.querySelectorAll('.dropdown-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const code = item.dataset.code;
-                const acc = accounts.find(a => a.code === code);
-                if (acc) onSelect(acc);
-            });
+    // Item clicks
+    dropdown.querySelectorAll('.dropdown-item').forEach(item => {
+        item.addEventListener('click', () => {
+            selectAccount(item.dataset.code);
         });
-    };
+    });
 
-    render();
+    // Guardar cuentas filtradas para navegación
+    dropdownState.filteredAccounts = filteredAccounts;
+}
+
+function selectAccount(code) {
+    const acc = dropdownState.accounts.find(a => a.code === code);
+    if (!acc) return;
+
+    if (dropdownState.fieldId === 'bank') {
+        state.bankAccount = acc.code;
+        elements.bankAccountInput.value = `${acc.code} - ${acc.description}`;
+    } else {
+        state.accountCodes[dropdownState.fieldId] = acc.code;
+        const input = document.querySelector(`input[data-group-idx="${dropdownState.fieldId}"]`);
+        if (input) input.value = `${acc.code} - ${acc.description}`;
+    }
+    closeAllDropdowns();
+}
+
+function navegarDropdown(direccion) {
+    if (!dropdownState.filteredAccounts || dropdownState.filteredAccounts.length === 0) return;
+
+    const maxIndex = dropdownState.filteredAccounts.length - 1;
+
+    if (direccion === 'down') {
+        dropdownState.currentIndex = Math.min(dropdownState.currentIndex + 1, maxIndex);
+    } else if (direccion === 'up') {
+        dropdownState.currentIndex = Math.max(dropdownState.currentIndex - 1, 0);
+    }
+
+    // Actualizar visual
+    document.querySelectorAll('.dropdown-item').forEach((item, idx) => {
+        if (idx === dropdownState.currentIndex) {
+            item.classList.add('activo');
+            item.scrollIntoView({ block: 'nearest' });
+        } else {
+            item.classList.remove('activo');
+        }
+    });
+}
+
+function seleccionarItemActivo() {
+    if (dropdownState.currentIndex >= 0 && dropdownState.filteredAccounts) {
+        const acc = dropdownState.filteredAccounts[dropdownState.currentIndex];
+        if (acc) selectAccount(acc.code);
+    }
+}
+
+function handleAccountInputKeydown(e, fieldId) {
+    const dropdown = fieldId === 'bank'
+        ? elements.bankAccountDropdown
+        : document.getElementById(`dropdown-${fieldId}`);
+
+    if (!dropdown || dropdown.classList.contains('hidden')) {
+        if (e.key === 'Enter' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            showAccountDropdown(fieldId);
+        }
+        return;
+    }
+
+    switch (e.key) {
+        case 'ArrowDown':
+            e.preventDefault();
+            navegarDropdown('down');
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            navegarDropdown('up');
+            break;
+        case 'Enter':
+            e.preventDefault();
+            if (dropdownState.currentIndex >= 0) {
+                seleccionarItemActivo();
+            } else if (dropdownState.filteredAccounts && dropdownState.filteredAccounts.length > 0) {
+                selectAccount(dropdownState.filteredAccounts[0].code);
+            }
+            break;
+        case 'Escape':
+            e.preventDefault();
+            closeAllDropdowns();
+            break;
+    }
+}
+
+function handleAccountInputChange(fieldId) {
+    const inputElement = fieldId === 'bank'
+        ? elements.bankAccountInput
+        : document.querySelector(`input[data-group-idx="${fieldId}"]`);
+
+    const dropdown = fieldId === 'bank'
+        ? elements.bankAccountDropdown
+        : document.getElementById(`dropdown-${fieldId}`);
+
+    if (!inputElement || !dropdown) return;
+
+    const query = inputElement.value.trim().toLowerCase();
+
+    // Si el dropdown no está visible, mostrarlo
+    if (dropdown.classList.contains('hidden')) {
+        showAccountDropdown(fieldId);
+    } else {
+        // Actualizar resultados
+        dropdownState.currentIndex = -1;
+        renderAccountResults(dropdown, dropdownState.accounts, query);
+    }
 }
 
 function closeAllDropdowns() {
-    state.activeSearchField = null;
-    elements.bankAccountDropdown.classList.add('hidden');
+    dropdownState.currentIndex = -1;
+    dropdownState.fieldId = null;
+    if (elements.bankAccountDropdown) {
+        elements.bankAccountDropdown.classList.add('hidden');
+    }
     document.querySelectorAll('.account-dropdown').forEach(d => d.classList.add('hidden'));
 }
 

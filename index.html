@@ -249,6 +249,31 @@
         </div>
     </div>
 
+    <!-- Modal Editar Cuenta -->
+    <div id="modalEditarCuenta" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>Editar Cuenta</h3>
+            <input type="hidden" id="editarCuentaId">
+            <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #475569;">Código:</label>
+            <input type="text" id="editarCuentaCodigo" placeholder="Código (ej: 1.1.1.01)" class="input-text mb-4">
+            <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #475569;">Cuenta:</label>
+            <input type="text" id="editarCuentaNombre" placeholder="Nombre de la Cuenta" class="input-text mb-4">
+            <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #475569;">Tipo:</label>
+            <select id="editarCuentaTipo" class="input-text mb-4">
+                <option value="">Seleccionar Tipo</option>
+                <option value="Activo">Activo</option>
+                <option value="Pasivo">Pasivo</option>
+                <option value="Patrimonio Neto">Patrimonio Neto</option>
+                <option value="Ingreso">Ingreso</option>
+                <option value="Egreso">Egreso</option>
+            </select>
+            <div class="btn-group">
+                <button id="btnCancelEditarCuenta" class="btn-secondary">Cancelar</button>
+                <button id="btnGuardarCuenta" class="btn-primary">Guardar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Configuración de Supabase -->
     <script src="supabase-config.js"></script>
     <script src="clientes-simple.js"></script>
