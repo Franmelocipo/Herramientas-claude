@@ -27,6 +27,16 @@
             <div class="header">
                 <h1>Conversor de Extractos Bancarios</h1>
                 <p class="subtitle">Convierte tus extractos bancarios y de inversiones de PDF a Excel fácilmente</p>
+                <p class="client-name" id="clientName"></p>
+            </div>
+
+            <!-- Selector de cliente -->
+            <div class="selector-cliente-container">
+                <label for="selector-cliente-extractos">Seleccione el cliente para esta conversión:</label>
+                <select id="selector-cliente-extractos" class="selector-cliente">
+                    <option value="">-- Seleccione un cliente --</option>
+                    <!-- Las opciones se cargarán desde Supabase -->
+                </select>
             </div>
 
             <!-- Paso 1: Tipo de extracto -->

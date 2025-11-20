@@ -1,6 +1,10 @@
 let selectedFiles = [];
 let processedData = null;
 
+// Cliente seleccionado en este módulo
+let clienteSeleccionadoId = null;
+let clienteSeleccionadoNombre = '';
+
 const fileInput = document.getElementById('fileInput');
 const processBtn = document.getElementById('processBtn');
 const downloadBtn = document.getElementById('downloadBtn');
@@ -12,6 +16,89 @@ const tableFooter = document.getElementById('tableFooter');
 const dropZone = document.getElementById('dropZone');
 const fileList = document.getElementById('fileList');
 const fileListItems = document.getElementById('fileListItems');
+const clientNameElement = document.getElementById('clientName');
+
+// ============================================
+// FUNCIONES PARA SELECTOR DE CLIENTE
+// ============================================
+
+async function cargarClientesEnSelector() {
+    const select = document.getElementById('selector-cliente-mp');
+    if (!select) return;
+
+    try {
+        // Obtener clientes desde Supabase
+        const { data: clientes, error } = await supabase
+            .from('clientes')
+            .select('id, razon_social')
+            .order('razon_social');
+
+        if (error) {
+            console.error('Error cargando clientes:', error);
+            return;
+        }
+
+        // Limpiar opciones existentes excepto la primera
+        select.innerHTML = '<option value="">-- Seleccione un cliente --</option>';
+
+        // Llenar el select
+        clientes.forEach(cliente => {
+            const option = document.createElement('option');
+            option.value = cliente.id;
+            option.textContent = cliente.razon_social;
+            select.appendChild(option);
+        });
+
+        console.log('✅ Clientes cargados en selector:', clientes.length);
+
+        // Evento al cambiar selección
+        select.addEventListener('change', (e) => {
+            const clienteId = e.target.value;
+            if (clienteId) {
+                const clienteNombre = select.options[select.selectedIndex].text;
+                clienteSeleccionadoId = clienteId;
+                clienteSeleccionadoNombre = clienteNombre;
+
+                console.log('Cliente seleccionado:', clienteId, clienteNombre);
+
+                // Actualizar nombre en el header
+                if (clientNameElement) {
+                    clientNameElement.textContent = `Cliente: ${clienteNombre}`;
+                }
+
+                // Habilitar área de carga
+                habilitarCarga();
+            } else {
+                clienteSeleccionadoId = null;
+                clienteSeleccionadoNombre = '';
+                if (clientNameElement) {
+                    clientNameElement.textContent = '';
+                }
+                deshabilitarCarga();
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Error cargando clientes:', error);
+    }
+}
+
+function deshabilitarCarga() {
+    dropZone.style.opacity = '0.5';
+    dropZone.style.pointerEvents = 'none';
+    processBtn.disabled = true;
+}
+
+function habilitarCarga() {
+    dropZone.style.opacity = '1';
+    dropZone.style.pointerEvents = 'auto';
+}
+
+// Inicializar al cargar
+document.addEventListener('DOMContentLoaded', async () => {
+    await cargarClientesEnSelector();
+    deshabilitarCarga();
+});
 
 // Click en la zona de arrastre abre el selector de archivos
 dropZone.addEventListener('click', (e) => {
