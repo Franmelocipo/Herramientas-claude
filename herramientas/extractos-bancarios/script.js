@@ -107,6 +107,7 @@ function habilitarPasos() {
 const banksBancarios = [
     { id: 'galicia', name: 'Banco Galicia' },
     { id: 'bbva', name: 'Banco BBVA' },
+    { id: 'santander', name: 'Banco Santander' },
     { id: 'nacion', name: 'Banco Nación', disabled: true }
 ];
 
@@ -308,6 +309,8 @@ async function handleConvert() {
             await processGaliciaPDF(state.file);
         } else if (state.selectedBank === 'bbva') {
             await processBBVAPDF(state.file);
+        } else if (state.selectedBank === 'santander') {
+            await processSantanderPDF(state.file);
         } else if (state.selectedBank === 'galicia-inversiones') {
             await processGaliciaInversionesPDF(state.file);
         }
@@ -588,6 +591,182 @@ function parseBBVAExtract(text) {
     }
 
     return movements;
+}
+
+function parseSantanderExtract(text) {
+    const movements = [];
+
+    // Buscar la sección "Movimientos en pesos"
+    const movimientosIndex = text.search(/Movimientos en pesos/i);
+    if (movimientosIndex === -1) {
+        console.log('No se encontró la sección "Movimientos en pesos"');
+        return movements;
+    }
+
+    let movimientosText = text.substring(movimientosIndex);
+
+    // Cortar en "Saldo total" o similar
+    const saldoTotalIndex = movimientosText.search(/Saldo total|Total del período/i);
+    if (saldoTotalIndex !== -1) {
+        movimientosText = movimientosText.substring(0, saldoTotalIndex);
+    }
+
+    // Buscar todas las fechas (DD/MM/YYYY)
+    const datePattern = /\d{2}\/\d{2}\/\d{4}/g;
+    const datePositions = [];
+    let match;
+
+    while ((match = datePattern.exec(movimientosText)) !== null) {
+        datePositions.push({
+            date: match[0],
+            index: match.index
+        });
+    }
+
+    // Procesar cada segmento entre fechas
+    for (let i = 0; i < datePositions.length; i++) {
+        const currentDate = datePositions[i];
+        const nextDate = datePositions[i + 1];
+
+        const endIndex = nextDate ? nextDate.index : movimientosText.length;
+        const segment = movimientosText.substring(currentDate.index, endIndex).trim();
+
+        // Ignorar línea de Saldo Inicial
+        if (/Saldo Inicial/i.test(segment)) {
+            continue;
+        }
+
+        // Extraer todos los importes del segmento (formato argentino: 10.910.083,35)
+        const amountRegex = /\d{1,3}(?:\.\d{3})*,\d{2}/g;
+        const amounts = segment.match(amountRegex) || [];
+
+        if (amounts.length === 0) continue;
+
+        const fecha = currentDate.date;
+
+        // Extraer descripción - remover fecha y montos
+        let descripcion = segment.replace(fecha, '').trim();
+        amounts.forEach(amt => {
+            descripcion = descripcion.replace(amt, '');
+        });
+
+        // Limpiar descripción
+        descripcion = descripcion
+            .replace(/\s+/g, ' ')
+            .replace(/Fecha\s+Comprobante\s+Movimiento\s+D[eé]bito\s+Cr[eé]dito\s+Saldo/gi, '')
+            .replace(/Movimientos en pesos/gi, '')
+            .trim();
+
+        // Extraer comprobante (números al inicio de la descripción)
+        const comprobanteMatch = descripcion.match(/^(\d+)\s+/);
+        let comprobante = '';
+        if (comprobanteMatch) {
+            comprobante = comprobanteMatch[1];
+            descripcion = descripcion.replace(comprobanteMatch[0], '').trim();
+        }
+
+        if (!descripcion) continue;
+
+        const movement = {
+            fecha: fecha,
+            descripcion: descripcion,
+            origen: comprobante,
+            credito: '0',
+            debito: '0',
+            saldo: ''
+        };
+
+        // Santander tiene formato: Débito | Crédito | Saldo
+        // Según el usuario: valores van según posición en columna, NO por signo
+        // Si hay 3 valores: [débito, crédito, saldo] - uno de los dos primeros es 0
+        // Si hay 2 valores: [monto, saldo]
+        // Si hay 1 valor: solo saldo
+
+        if (amounts.length >= 3) {
+            // Formato completo: débito, crédito, saldo
+            const debito = amounts[amounts.length - 3];
+            const credito = amounts[amounts.length - 2];
+            const saldo = amounts[amounts.length - 1];
+
+            // Si débito es 0, todo el monto está en crédito y viceversa
+            if (parseFloat(debito.replace(/\./g, '').replace(',', '.')) === 0) {
+                movement.debito = '0';
+                movement.credito = credito;
+            } else if (parseFloat(credito.replace(/\./g, '').replace(',', '.')) === 0) {
+                movement.debito = debito;
+                movement.credito = '0';
+            } else {
+                // Ambos tienen valor (caso raro)
+                movement.debito = debito;
+                movement.credito = credito;
+            }
+            movement.saldo = saldo;
+        } else if (amounts.length === 2) {
+            // Solo monto y saldo - determinar por contexto
+            movement.saldo = amounts[1];
+            // Por defecto asignamos a crédito, se recalculará el saldo después
+            movement.credito = amounts[0];
+        } else if (amounts.length === 1) {
+            movement.saldo = amounts[0];
+        }
+
+        if (movement.fecha && movement.descripcion) {
+            movements.push(movement);
+        }
+    }
+
+    return movements;
+}
+
+async function processSantanderPDF(pdfFile) {
+    try {
+        const text = await extractTextFromPDF(pdfFile);
+
+        // Extraer saldo inicial de Santander
+        const saldoInicialMatch = text.match(/Saldo Inicial\s+[\d.,]+\s+[\d.,]+\s+([\d.,]+)/i);
+        if (saldoInicialMatch) {
+            state.saldoInicial = saldoInicialMatch[1];
+        } else {
+            // Alternativa: buscar patrón diferente
+            const altMatch = text.match(/Saldo Inicial[^\d]*([\d.,]+)/i);
+            state.saldoInicial = altMatch ? altMatch[1] : null;
+        }
+
+        const movements = parseSantanderExtract(text);
+
+        if (movements.length === 0) {
+            showError('No se encontraron movimientos en el PDF.');
+            return;
+        }
+
+        // Recalcular saldos basados en Saldo[i] = Saldo[i-1] + Crédito[i] - Débito[i]
+        const parseArgentineNumber = (value) => {
+            if (!value || value === '0') return 0;
+            return parseFloat(value.replace(/\./g, '').replace(',', '.'));
+        };
+
+        let saldoActual = state.saldoInicial ? parseArgentineNumber(state.saldoInicial) : 0;
+
+        for (let i = 0; i < movements.length; i++) {
+            const credito = parseArgentineNumber(movements[i].credito);
+            const debito = parseArgentineNumber(movements[i].debito);
+
+            saldoActual = saldoActual + credito - debito;
+
+            // Formatear saldo de vuelta a formato argentino
+            movements[i].saldo = saldoActual.toLocaleString('es-AR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).replace(/\s/g, '');
+        }
+
+        state.extractedData = movements;
+        showSuccess(`¡Archivo procesado exitosamente! ${movements.length} movimientos encontrados.`);
+        renderPreview();
+
+    } catch (err) {
+        throw err;
+    }
 }
 
 function parseGaliciaInversionesExtract(text) {
