@@ -6,13 +6,11 @@ const state = {
     sourceType: '',
     sourceData: [],
     groupedData: [],
-    accountCodesDebe: {},   // Cuentas para el DEBE
-    accountCodesHaber: {},  // Cuentas para el HABER (contrapartida)
+    accountCodes: {},       // Una cuenta por grupo
     finalData: [],
-    bankAccount: '',
+    bankAccount: '',        // Cuenta de contrapartida global (banco/caja)
     activeSearchField: null,
-    activeSearchType: null, // 'debe' o 'haber'
-    expandedGroups: {} // Rastrear qué grupos están expandidos
+    expandedGroups: {}      // Rastrear qué grupos están expandidos
 };
 
 // ============================================
@@ -400,12 +398,10 @@ function reset() {
     state.sourceType = '';
     state.sourceData = [];
     state.groupedData = [];
-    state.accountCodesDebe = {};
-    state.accountCodesHaber = {};
+    state.accountCodes = {};
     state.finalData = [];
     state.bankAccount = '';
     state.activeSearchField = null;
-    state.activeSearchType = null;
     state.expandedGroups = {};
 
     elements.fileInput.value = '';
@@ -917,24 +913,14 @@ function groupSimilarEntries(data) {
 function renderGroupsList() {
     elements.groupStats.textContent = `${state.groupedData.length} grupos | ${state.sourceData.length} movimientos`;
 
-    // Mostrar/ocultar sección de cuenta bancaria (solo para extracto y veps como contrapartida global)
-    if (state.sourceType === 'extracto' || state.sourceType === 'veps') {
-        elements.bankAccountSection.classList.remove('hidden');
-        elements.bankAccountLabel.textContent = state.sourceType === 'extracto'
-            ? 'Cuenta del Banco (contrapartida global)'
-            : 'Cuenta de Contrapartida (para totales de VEP)';
-        elements.bankAccountInput.placeholder = getSelectedClientId() ? '🔍 Buscar por código o descripción...' : 'Ej: 11010101';
-        elements.bankAccountInput.value = state.bankAccount;
-    } else {
-        elements.bankAccountSection.classList.add('hidden');
-    }
+    // SIEMPRE mostrar la sección de cuenta de contrapartida (banco/caja)
+    elements.bankAccountSection.classList.remove('hidden');
+    elements.bankAccountLabel.textContent = 'Cuenta de CONTRAPARTIDA (banco/caja) para TODOS los movimientos';
+    elements.bankAccountInput.placeholder = getSelectedClientId() ? '🔍 Buscar cuenta contrapartida...' : 'Ej: 11020101';
+    elements.bankAccountInput.value = state.bankAccount;
 
-    // Mostrar/ocultar info de compensaciones
-    if (state.sourceType === 'compensaciones') {
-        elements.compensacionesInfo.classList.remove('hidden');
-    } else {
-        elements.compensacionesInfo.classList.add('hidden');
-    }
+    // Ocultar info de compensaciones (ya no aplica)
+    elements.compensacionesInfo.classList.add('hidden');
 
     // Renderizar grupos
     const html = state.groupedData.map((g, idx) => {
@@ -976,109 +962,26 @@ function renderGroupsList() {
             `;
         }
 
-        // Para compensaciones, solo mostrar un campo según si es origen o destino
-        // Para extracto, mostrar solo un campo de cuenta (la contrapartida es global)
-        let accountFieldsHtml = '';
-        if (state.sourceType === 'compensaciones') {
-            // Compensaciones: origen = HABER, destino = DEBE
-            if (g.isOrigen) {
-                accountFieldsHtml = `
-                    <div class="group-account-dual">
-                        <div class="account-field">
-                            <label class="account-label haber-label">Cuenta HABER (sale)</label>
-                            <div class="input-with-dropdown">
-                                <input
-                                    type="text"
-                                    class="input-text input-haber"
-                                    data-group-idx="${idx}"
-                                    data-account-type="haber"
-                                    value="${state.accountCodesHaber[idx] || ''}"
-                                    placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
-                                >
-                                <div class="account-dropdown hidden" id="dropdown-${idx}-haber"></div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            } else {
-                accountFieldsHtml = `
-                    <div class="group-account-dual">
-                        <div class="account-field">
-                            <label class="account-label debe-label">Cuenta DEBE (entra)</label>
-                            <div class="input-with-dropdown">
-                                <input
-                                    type="text"
-                                    class="input-text input-debe"
-                                    data-group-idx="${idx}"
-                                    data-account-type="debe"
-                                    value="${state.accountCodesDebe[idx] || ''}"
-                                    placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
-                                >
-                                <div class="account-dropdown hidden" id="dropdown-${idx}-debe"></div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-        } else if (state.sourceType === 'extracto') {
-            // Extracto: solo un campo de cuenta por grupo (contrapartida es global)
-            const totalMovimientos = g.totalDebe + g.totalHaber;
-            accountFieldsHtml = `
-                <div class="group-account-dual">
-                    <div class="account-field">
-                        <label class="account-label debe-label">Cuenta del Grupo</label>
-                        <div class="account-totals">$${totalMovimientos.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</div>
-                        <div class="input-with-dropdown">
-                            <input
-                                type="text"
-                                class="input-text input-debe"
-                                data-group-idx="${idx}"
-                                data-account-type="debe"
-                                value="${state.accountCodesDebe[idx] || ''}"
-                                placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
-                            >
-                            <div class="account-dropdown hidden" id="dropdown-${idx}-debe"></div>
-                        </div>
+        // UN solo campo de cuenta por grupo (nueva lógica simplificada)
+        const totalMovimientos = Math.abs(g.totalDebe - g.totalHaber);
+        const accountFieldsHtml = `
+            <div class="group-account-single">
+                <div class="account-field">
+                    <label class="account-label">Cuenta para: ${g.concepto.substring(0, 30)}${g.concepto.length > 30 ? '...' : ''}</label>
+                    <div class="account-totals">$${totalMovimientos.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</div>
+                    <div class="input-with-dropdown">
+                        <input
+                            type="text"
+                            class="input-text"
+                            data-group-idx="${idx}"
+                            value="${state.accountCodes[idx] || ''}"
+                            placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
+                        >
+                        <div class="account-dropdown hidden" id="dropdown-${idx}"></div>
                     </div>
                 </div>
-            `;
-        } else {
-            // Para todos los demás tipos: mostrar dos campos (DEBE y HABER)
-            accountFieldsHtml = `
-                <div class="group-account-dual">
-                    <div class="account-field">
-                        <label class="account-label debe-label">Cuenta DEBE</label>
-                        <div class="account-totals">$${g.totalDebe.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</div>
-                        <div class="input-with-dropdown">
-                            <input
-                                type="text"
-                                class="input-text input-debe"
-                                data-group-idx="${idx}"
-                                data-account-type="debe"
-                                value="${state.accountCodesDebe[idx] || ''}"
-                                placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
-                            >
-                            <div class="account-dropdown hidden" id="dropdown-${idx}-debe"></div>
-                        </div>
-                    </div>
-                    <div class="account-field">
-                        <label class="account-label haber-label">Cuenta HABER</label>
-                        <div class="account-totals">$${g.totalHaber.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</div>
-                        <div class="input-with-dropdown">
-                            <input
-                                type="text"
-                                class="input-text input-haber"
-                                data-group-idx="${idx}"
-                                data-account-type="haber"
-                                value="${state.accountCodesHaber[idx] || ''}"
-                                placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
-                            >
-                            <div class="account-dropdown hidden" id="dropdown-${idx}-haber"></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
+            </div>
+        `;
 
         return `
             <div class="group-item ${classType}">
@@ -1102,15 +1005,14 @@ function renderGroupsList() {
 
     elements.groupsList.innerHTML = html;
 
-    // Attach event listeners to account inputs (both debe and haber)
-    document.querySelectorAll('.group-account-dual input[data-group-idx]').forEach(input => {
+    // Attach event listeners to account inputs (un solo campo por grupo)
+    document.querySelectorAll('.group-account-single input[data-group-idx]').forEach(input => {
         const idx = parseInt(input.dataset.groupIdx);
-        const accountType = input.dataset.accountType; // 'debe' o 'haber'
 
         // Filtrado en tiempo real
         input.addEventListener('input', (e) => {
             if (getSelectedClientId()) {
-                handleAccountInputChange(idx, accountType);
+                handleAccountInputChange(idx);
             }
         });
 
@@ -1118,14 +1020,13 @@ function renderGroupsList() {
         input.addEventListener('focus', () => {
             if (getSelectedClientId()) {
                 state.activeSearchField = idx;
-                state.activeSearchType = accountType;
-                showAccountDropdown(idx, accountType);
+                showAccountDropdown(idx);
             }
         });
 
         // Navegación por teclado
         input.addEventListener('keydown', (e) => {
-            handleAccountInputKeydown(e, idx, accountType);
+            handleAccountInputKeydown(e, idx);
         });
     });
 }
@@ -1146,11 +1047,10 @@ function toggleGroupExpansion(idx) {
 let dropdownState = {
     currentIndex: -1,
     accounts: [],
-    fieldId: null,
-    accountType: null // 'debe' o 'haber'
+    fieldId: null
 };
 
-async function showAccountDropdown(fieldId, accountType = null) {
+async function showAccountDropdown(fieldId) {
     closeAllDropdowns();
 
     const accounts = await getClientAccounts();
@@ -1161,7 +1061,6 @@ async function showAccountDropdown(fieldId, accountType = null) {
 
     dropdownState.accounts = accounts;
     dropdownState.fieldId = fieldId;
-    dropdownState.accountType = accountType;
     dropdownState.currentIndex = -1;
 
     let dropdown;
@@ -1170,11 +1069,7 @@ async function showAccountDropdown(fieldId, accountType = null) {
     if (fieldId === 'bank') {
         dropdown = elements.bankAccountDropdown;
         inputElement = elements.bankAccountInput;
-    } else if (accountType) {
-        dropdown = document.getElementById(`dropdown-${fieldId}-${accountType}`);
-        inputElement = document.querySelector(`input[data-group-idx="${fieldId}"][data-account-type="${accountType}"]`);
     } else {
-        // Fallback para compatibilidad
         dropdown = document.getElementById(`dropdown-${fieldId}`);
         inputElement = document.querySelector(`input[data-group-idx="${fieldId}"]`);
     }
@@ -1229,15 +1124,11 @@ function selectAccount(code) {
         state.bankAccount = acc.code;
         elements.bankAccountInput.value = `${acc.code} - ${acc.description}`;
     } else {
-        // Guardar en el estado correspondiente según el tipo de cuenta
-        if (dropdownState.accountType === 'debe') {
-            state.accountCodesDebe[dropdownState.fieldId] = acc.code;
-        } else if (dropdownState.accountType === 'haber') {
-            state.accountCodesHaber[dropdownState.fieldId] = acc.code;
-        }
+        // Guardar en el estado (una cuenta por grupo)
+        state.accountCodes[dropdownState.fieldId] = acc.code;
 
         // Actualizar el input
-        const input = document.querySelector(`input[data-group-idx="${dropdownState.fieldId}"][data-account-type="${dropdownState.accountType}"]`);
+        const input = document.querySelector(`input[data-group-idx="${dropdownState.fieldId}"]`);
         if (input) input.value = `${acc.code} - ${acc.description}`;
     }
     closeAllDropdowns();
@@ -1272,12 +1163,10 @@ function seleccionarItemActivo() {
     }
 }
 
-function handleAccountInputKeydown(e, fieldId, accountType = null) {
+function handleAccountInputKeydown(e, fieldId) {
     let dropdown;
     if (fieldId === 'bank') {
         dropdown = elements.bankAccountDropdown;
-    } else if (accountType) {
-        dropdown = document.getElementById(`dropdown-${fieldId}-${accountType}`);
     } else {
         dropdown = document.getElementById(`dropdown-${fieldId}`);
     }
@@ -1285,7 +1174,7 @@ function handleAccountInputKeydown(e, fieldId, accountType = null) {
     if (!dropdown || dropdown.classList.contains('hidden')) {
         if (e.key === 'Enter' || e.key === 'ArrowDown') {
             e.preventDefault();
-            showAccountDropdown(fieldId, accountType);
+            showAccountDropdown(fieldId);
         }
         return;
     }
@@ -1314,16 +1203,13 @@ function handleAccountInputKeydown(e, fieldId, accountType = null) {
     }
 }
 
-function handleAccountInputChange(fieldId, accountType = null) {
+function handleAccountInputChange(fieldId) {
     let inputElement;
     let dropdown;
 
     if (fieldId === 'bank') {
         inputElement = elements.bankAccountInput;
         dropdown = elements.bankAccountDropdown;
-    } else if (accountType) {
-        inputElement = document.querySelector(`input[data-group-idx="${fieldId}"][data-account-type="${accountType}"]`);
-        dropdown = document.getElementById(`dropdown-${fieldId}-${accountType}`);
     } else {
         inputElement = document.querySelector(`input[data-group-idx="${fieldId}"]`);
         dropdown = document.getElementById(`dropdown-${fieldId}`);
@@ -1335,7 +1221,7 @@ function handleAccountInputChange(fieldId, accountType = null) {
 
     // Si el dropdown no está visible, mostrarlo
     if (dropdown.classList.contains('hidden')) {
-        showAccountDropdown(fieldId, accountType);
+        showAccountDropdown(fieldId);
     } else {
         // Actualizar resultados
         dropdownState.currentIndex = -1;
@@ -1356,83 +1242,27 @@ function closeAllDropdowns() {
 // GENERACIÓN DE ASIENTOS FINALES
 // ============================================
 function generateFinalExcel() {
-    // Validaciones según el tipo de origen
+    // Validaciones simplificadas (nueva lógica)
     const errors = [];
 
-    if (state.sourceType === 'compensaciones') {
-        // Para compensaciones: validar que cada grupo tenga ambas cuentas (partida doble)
-        state.groupedData.forEach((g, idx) => {
-            const hasDebe = state.accountCodesDebe[idx];
-            const hasHaber = state.accountCodesHaber[idx];
-
-            if (!hasDebe || !hasHaber) {
-                errors.push(`Grupo "${g.concepto}": faltan cuentas DEBE y/o HABER (requiere ambas para partida doble)`);
-            }
-
-            // Validar que no sea la misma cuenta
-            if (hasDebe && hasHaber && state.accountCodesDebe[idx] === state.accountCodesHaber[idx]) {
-                errors.push(`Grupo "${g.concepto}": las cuentas DEBE y HABER no pueden ser iguales`);
-            }
-        });
-    } else if (state.sourceType === 'extracto') {
-        // Para extracto: validar cuenta de contrapartida y una cuenta por grupo
-        if (!state.bankAccount) {
-            errors.push('Falta la cuenta del banco (contrapartida global)');
-        }
-
-        state.groupedData.forEach((g, idx) => {
-            const hasCuenta = state.accountCodesDebe[idx];
-
-            // Para extracto, cada grupo necesita su cuenta
-            if (!hasCuenta) {
-                errors.push(`Grupo "${g.concepto}": falta asignar la cuenta del grupo`);
-            }
-
-            // Validar que la cuenta del grupo no sea igual a la contrapartida
-            if (hasCuenta && state.bankAccount && state.accountCodesDebe[idx] === state.bankAccount) {
-                errors.push(`Grupo "${g.concepto}": la cuenta del grupo no puede ser igual a la contrapartida`);
-            }
-        });
-    } else if (state.sourceType === 'veps') {
-        // Para veps: validar cuenta de contrapartida y cuentas duales
-        if (!state.bankAccount) {
-            errors.push('Falta la cuenta de contrapartida (para totales de VEP)');
-        }
-
-        state.groupedData.forEach((g, idx) => {
-            const hasDebe = state.accountCodesDebe[idx];
-            const hasHaber = state.accountCodesHaber[idx];
-
-            // Para veps, al menos una cuenta debe estar asignada
-            if (!hasDebe && !hasHaber) {
-                errors.push(`Grupo "${g.concepto}": falta asignar al menos una cuenta (DEBE o HABER)`);
-            }
-
-            // Validar que no sea la misma cuenta
-            if (hasDebe && hasHaber && state.accountCodesDebe[idx] === state.accountCodesHaber[idx]) {
-                errors.push(`Grupo "${g.concepto}": las cuentas DEBE y HABER no pueden ser iguales`);
-            }
-        });
-    } else {
-        // Para tabla y registros: validar cuentas duales obligatorias
-        state.groupedData.forEach((g, idx) => {
-            const hasDebe = state.accountCodesDebe[idx];
-            const hasHaber = state.accountCodesHaber[idx];
-
-            if (!hasDebe && !hasHaber) {
-                errors.push(`Grupo "${g.concepto}": faltan ambas cuentas (DEBE y HABER)`);
-            } else if (!hasDebe && g.totalDebe > 0) {
-                errors.push(`Grupo "${g.concepto}": falta cuenta DEBE (tiene $${g.totalDebe.toFixed(2)} en debe)`);
-            } else if (!hasHaber && g.totalHaber > 0) {
-                errors.push(`Grupo "${g.concepto}": falta cuenta HABER (tiene $${g.totalHaber.toFixed(2)} en haber)`);
-            }
-
-            // Validar que no sea la misma cuenta
-            if (hasDebe && hasHaber && state.accountCodesDebe[idx] === state.accountCodesHaber[idx]) {
-                errors.push(`Grupo "${g.concepto}": las cuentas DEBE y HABER no pueden ser iguales`);
-            }
-        });
+    // Validar cuenta de contrapartida global (obligatoria para todos)
+    if (!state.bankAccount) {
+        errors.push('Falta la cuenta de CONTRAPARTIDA (banco/caja)');
     }
+
+    // Validar que cada grupo tenga su cuenta asignada
+    state.groupedData.forEach((g, idx) => {
+        const hasCuenta = state.accountCodes[idx];
+
+        if (!hasCuenta) {
+            errors.push(`Grupo "${g.concepto}": falta asignar la cuenta`);
+        }
+
+        // Validar que la cuenta del grupo no sea igual a la contrapartida
+        if (hasCuenta && state.bankAccount && state.accountCodes[idx] === state.bankAccount) {
+            errors.push(`Grupo "${g.concepto}": la cuenta no puede ser igual a la contrapartida`);
+        }
+    });
 
     if (errors.length > 0) {
         const maxErrors = 10;
@@ -1446,36 +1276,124 @@ function generateFinalExcel() {
     }
 
     const allData = [];
-    let numeroAsientoGlobal = 1;
+    let numeroAsiento = 1;
+    const contrapartida = state.bankAccount;
 
+    // NUEVA LÓGICA UNIFICADA: procesar cada grupo con la misma lógica
     state.groupedData.forEach((g, idx) => {
-        const codeDebe = state.accountCodesDebe[idx] || '';
-        const codeHaber = state.accountCodesHaber[idx] || '';
-        let numeroAsiento = numeroAsientoGlobal;
+        const cuentaGrupo = state.accountCodes[idx] || '';
 
-        if (state.sourceType === 'compensaciones') {
-            processCompensaciones(g, codeDebe, codeHaber, allData);
-        } else if (state.sourceType === 'veps') {
-            numeroAsiento = processVeps(g, codeDebe, codeHaber, allData, numeroAsiento);
-            numeroAsientoGlobal = numeroAsiento;
-        } else if (state.sourceType === 'registros') {
-            processRegistros(g, codeDebe, codeHaber, allData);
-        } else if (state.sourceType === 'extracto') {
-            numeroAsiento = processExtracto(g, codeDebe, codeHaber, allData, numeroAsiento);
-            numeroAsientoGlobal = numeroAsiento;
-        } else if (state.sourceType === 'tabla') {
-            numeroAsiento = processTabla(g, codeDebe, codeHaber, allData, numeroAsiento);
-            numeroAsientoGlobal = numeroAsiento;
-        }
+        g.items.forEach(item => {
+            // Obtener fecha y descripción según el tipo de fuente
+            let fecha = '';
+            let descripcion = '';
+            let importe = 0;
+
+            if (state.sourceType === 'extracto') {
+                fecha = item.Fecha || '';
+                descripcion = item['Descripción'] || item.Leyenda || '';
+                // Extracto: Débito = negativo (sale), Crédito = positivo (entra)
+                const debito = parseFloat(String(item['Débito'] || '0').replace(/\./g, '').replace(',', '.')) || 0;
+                const credito = parseFloat(String(item['Crédito'] || '0').replace(/\./g, '').replace(',', '.')) || 0;
+                importe = credito - debito;
+            } else if (state.sourceType === 'compensaciones') {
+                fecha = item['Fecha Operación'] || item['Fecha Operacion'] || '';
+                const transaccion = item['Transacción'] || item['Transaccion'] || '';
+                const impuesto = g.isOrigen ? (item['Impuesto Orig'] || '') : (item['Impuesto Dest'] || '');
+                const concepto = g.isOrigen ? (item['Concepto Orig'] || '') : (item['Concepto Dest'] || '');
+                descripcion = `COMP ${transaccion} - ${impuesto} ${concepto}`;
+                const importeStr = String(item['Importe'] || '0').replace('$', '').trim();
+                importe = parseFloat(importeStr.replace(/\./g, '').replace(',', '.')) || 0;
+                // Origen = sale (negativo), Destino = entra (positivo)
+                if (g.isOrigen) importe = -importe;
+            } else if (state.sourceType === 'veps') {
+                fecha = item['FECHA'] || item['Fecha'] || '';
+                const nroVep = item['NRO_VEP'] || item['Nro_VEP'] || '';
+                const impuesto = item['IMPUESTO'] || item['Impuesto'] || '';
+                const concepto = item['CONCEPTO'] || item['Concepto'] || '';
+                const periodo = item['PERIODO'] || item['Periodo'] || '';
+                descripcion = `${impuesto} - ${concepto} / ${periodo} / VEP ${nroVep}`;
+                importe = typeof item['IMPORTE'] === 'number' ? item['IMPORTE'] : parseFloat(String(item['IMPORTE'] || '0').replace(/\./g, '').replace(',', '.')) || 0;
+                // VEPs son pagos (negativos - sale del banco)
+                importe = -importe;
+            } else if (state.sourceType === 'registros') {
+                fecha = item['FECHA'] || item['Fecha'] || '';
+                const nComp = item['N_COMP'] || item['N_Comp'] || '';
+                const razonSocial = item['RAZON SOCIAL'] || item['RAZON_SOCIAL'] || item['Razon Social'] || item['PROVEEDOR'] || '';
+                const concepto = item['CONCEPTO'] || item['Concepto'] || '';
+                descripcion = [concepto, nComp, razonSocial].filter(Boolean).join(' / ');
+                const debeVal = parseFloat(String(item['DEBE'] || '0').replace(/\./g, '').replace(',', '.')) || 0;
+                const haberVal = parseFloat(String(item['HABER'] || '0').replace(/\./g, '').replace(',', '.')) || 0;
+                importe = debeVal - haberVal;
+            } else if (state.sourceType === 'tabla') {
+                fecha = item['FECHA'] || item['Fecha'] || item['fecha'] || '';
+                descripcion = item['DESCRIPCION'] || item['Descripcion'] || item['descripcion'] || '';
+                // Usar valores calculados del agrupamiento
+                const debeVal = item._calculatedDebe || 0;
+                const haberVal = item._calculatedHaber || 0;
+                importe = debeVal - haberVal;
+            }
+
+            // Generar asiento con la nueva lógica basada en signo
+            const absImporte = Math.abs(importe);
+            if (absImporte > 0.001) {
+                if (importe < 0) {
+                    // Importe negativo: cuenta_grupo al HABER, contrapartida al DEBE
+                    allData.push({
+                        Fecha: fecha,
+                        Numero: numeroAsiento,
+                        Cuenta: cuentaGrupo,
+                        Debe: 0,
+                        Haber: parseFloat(absImporte.toFixed(2)),
+                        'Tipo de auxiliar': 1,
+                        Auxiliar: 1,
+                        Importe: parseFloat((-absImporte).toFixed(2)),
+                        Leyenda: descripcion,
+                        ExtraContable: 's'
+                    });
+                    allData.push({
+                        Fecha: fecha,
+                        Numero: numeroAsiento,
+                        Cuenta: contrapartida,
+                        Debe: parseFloat(absImporte.toFixed(2)),
+                        Haber: 0,
+                        'Tipo de auxiliar': 1,
+                        Auxiliar: 1,
+                        Importe: parseFloat(absImporte.toFixed(2)),
+                        Leyenda: descripcion,
+                        ExtraContable: 's'
+                    });
+                } else {
+                    // Importe positivo: cuenta_grupo al DEBE, contrapartida al HABER
+                    allData.push({
+                        Fecha: fecha,
+                        Numero: numeroAsiento,
+                        Cuenta: cuentaGrupo,
+                        Debe: parseFloat(absImporte.toFixed(2)),
+                        Haber: 0,
+                        'Tipo de auxiliar': 1,
+                        Auxiliar: 1,
+                        Importe: parseFloat(absImporte.toFixed(2)),
+                        Leyenda: descripcion,
+                        ExtraContable: 's'
+                    });
+                    allData.push({
+                        Fecha: fecha,
+                        Numero: numeroAsiento,
+                        Cuenta: contrapartida,
+                        Debe: 0,
+                        Haber: parseFloat(absImporte.toFixed(2)),
+                        'Tipo de auxiliar': 1,
+                        Auxiliar: 1,
+                        Importe: parseFloat((-absImporte).toFixed(2)),
+                        Leyenda: descripcion,
+                        ExtraContable: 's'
+                    });
+                }
+                numeroAsiento++;
+            }
+        });
     });
-
-    // Post-procesamiento
-    if (state.sourceType === 'compensaciones') {
-        postProcessCompensaciones(allData);
-    } else if (state.sourceType === 'registros') {
-        allData.sort((a, b) => a._sortOrder - b._sortOrder);
-        allData.forEach(item => delete item._sortOrder);
-    }
 
     // Validación de partida doble: suma DEBE = suma HABER por asiento
     const asientosByNumero = {};
