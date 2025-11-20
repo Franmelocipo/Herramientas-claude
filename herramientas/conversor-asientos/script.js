@@ -977,6 +977,7 @@ function renderGroupsList() {
         }
 
         // Para compensaciones, solo mostrar un campo según si es origen o destino
+        // Para extracto, mostrar solo un campo de cuenta (la contrapartida es global)
         let accountFieldsHtml = '';
         if (state.sourceType === 'compensaciones') {
             // Compensaciones: origen = HABER, destino = DEBE
@@ -1019,6 +1020,28 @@ function renderGroupsList() {
                     </div>
                 `;
             }
+        } else if (state.sourceType === 'extracto') {
+            // Extracto: solo un campo de cuenta por grupo (contrapartida es global)
+            const totalMovimientos = g.totalDebe + g.totalHaber;
+            accountFieldsHtml = `
+                <div class="group-account-dual">
+                    <div class="account-field">
+                        <label class="account-label debe-label">Cuenta del Grupo</label>
+                        <div class="account-totals">$${totalMovimientos.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</div>
+                        <div class="input-with-dropdown">
+                            <input
+                                type="text"
+                                class="input-text input-debe"
+                                data-group-idx="${idx}"
+                                data-account-type="debe"
+                                value="${state.accountCodesDebe[idx] || ''}"
+                                placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
+                            >
+                            <div class="account-dropdown hidden" id="dropdown-${idx}-debe"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
         } else {
             // Para todos los demás tipos: mostrar dos campos (DEBE y HABER)
             accountFieldsHtml = `
@@ -1351,19 +1374,36 @@ function generateFinalExcel() {
                 errors.push(`Grupo "${g.concepto}": las cuentas DEBE y HABER no pueden ser iguales`);
             }
         });
-    } else if (state.sourceType === 'extracto' || state.sourceType === 'veps') {
-        // Para extracto y veps: validar cuenta bancaria y cuentas duales
+    } else if (state.sourceType === 'extracto') {
+        // Para extracto: validar cuenta de contrapartida y una cuenta por grupo
         if (!state.bankAccount) {
-            errors.push(state.sourceType === 'extracto'
-                ? 'Falta la cuenta del banco (contrapartida global)'
-                : 'Falta la cuenta de contrapartida (para totales de VEP)');
+            errors.push('Falta la cuenta del banco (contrapartida global)');
+        }
+
+        state.groupedData.forEach((g, idx) => {
+            const hasCuenta = state.accountCodesDebe[idx];
+
+            // Para extracto, cada grupo necesita su cuenta
+            if (!hasCuenta) {
+                errors.push(`Grupo "${g.concepto}": falta asignar la cuenta del grupo`);
+            }
+
+            // Validar que la cuenta del grupo no sea igual a la contrapartida
+            if (hasCuenta && state.bankAccount && state.accountCodesDebe[idx] === state.bankAccount) {
+                errors.push(`Grupo "${g.concepto}": la cuenta del grupo no puede ser igual a la contrapartida`);
+            }
+        });
+    } else if (state.sourceType === 'veps') {
+        // Para veps: validar cuenta de contrapartida y cuentas duales
+        if (!state.bankAccount) {
+            errors.push('Falta la cuenta de contrapartida (para totales de VEP)');
         }
 
         state.groupedData.forEach((g, idx) => {
             const hasDebe = state.accountCodesDebe[idx];
             const hasHaber = state.accountCodesHaber[idx];
 
-            // Para extracto/veps, al menos una cuenta debe estar asignada
+            // Para veps, al menos una cuenta debe estar asignada
             if (!hasDebe && !hasHaber) {
                 errors.push(`Grupo "${g.concepto}": falta asignar al menos una cuenta (DEBE o HABER)`);
             }
@@ -1735,6 +1775,11 @@ function processRegistros(g, codeDebe, codeHaber, allData) {
 }
 
 function processExtracto(g, codeDebe, codeHaber, allData, numeroAsiento) {
+    // codeDebe = cuenta del grupo (única)
+    // state.bankAccount = cuenta de contrapartida (global)
+    const cuentaGrupo = codeDebe;
+    const cuentaContrapartida = state.bankAccount;
+
     g.items.forEach(item => {
         const descripcion = item['Descripción'] || item.Leyenda || '';
         const fecha = item.Fecha || '';
@@ -1751,49 +1796,51 @@ function processExtracto(g, codeDebe, codeHaber, allData, numeroAsiento) {
 
         const leyenda = `EXTRACTO - ${descripcion}`;
 
-        // Débito en el extracto = sale del banco
-        // Asiento: Cuenta DEBE al debe, Banco al haber
+        // Débito en el extracto = sale del banco (equivale a importe negativo)
+        // Lógica: Haber = cuenta del grupo, Debe = contrapartida
         if (debitoVal > 0) {
-            const debe1 = parseFloat(debitoVal.toFixed(2));
-            const haber1 = 0;
+            const importe = parseFloat(debitoVal.toFixed(2));
+
+            // Línea 1: Cuenta del grupo al HABER
             allData.push({
-                Fecha: fecha, Numero: numeroAsiento, Cuenta: codeDebe || codeHaber,
-                Debe: debe1, Haber: haber1,
+                Fecha: fecha, Numero: numeroAsiento, Cuenta: cuentaGrupo,
+                Debe: 0, Haber: importe,
                 'Tipo de auxiliar': 1, Auxiliar: 1,
-                Importe: parseFloat((debe1 - haber1).toFixed(2)),
+                Importe: parseFloat((0 - importe).toFixed(2)),
                 Leyenda: leyenda, ExtraContable: 's'
             });
-            const debe2 = 0;
-            const haber2 = parseFloat(debitoVal.toFixed(2));
+
+            // Línea 2: Contrapartida (banco) al DEBE
             allData.push({
-                Fecha: fecha, Numero: numeroAsiento, Cuenta: state.bankAccount,
-                Debe: debe2, Haber: haber2,
+                Fecha: fecha, Numero: numeroAsiento, Cuenta: cuentaContrapartida,
+                Debe: importe, Haber: 0,
                 'Tipo de auxiliar': 1, Auxiliar: 1,
-                Importe: parseFloat((debe2 - haber2).toFixed(2)),
+                Importe: parseFloat(importe.toFixed(2)),
                 Leyenda: leyenda, ExtraContable: 's'
             });
             numeroAsiento++;
         }
 
-        // Crédito en el extracto = entra al banco
-        // Asiento: Banco al debe, Cuenta HABER al haber
+        // Crédito en el extracto = entra al banco (equivale a importe positivo)
+        // Lógica: Debe = cuenta del grupo, Haber = contrapartida
         if (creditoVal > 0) {
-            const debe3 = parseFloat(creditoVal.toFixed(2));
-            const haber3 = 0;
+            const importe = parseFloat(creditoVal.toFixed(2));
+
+            // Línea 1: Cuenta del grupo al DEBE
             allData.push({
-                Fecha: fecha, Numero: numeroAsiento, Cuenta: state.bankAccount,
-                Debe: debe3, Haber: haber3,
+                Fecha: fecha, Numero: numeroAsiento, Cuenta: cuentaGrupo,
+                Debe: importe, Haber: 0,
                 'Tipo de auxiliar': 1, Auxiliar: 1,
-                Importe: parseFloat((debe3 - haber3).toFixed(2)),
+                Importe: parseFloat(importe.toFixed(2)),
                 Leyenda: leyenda, ExtraContable: 's'
             });
-            const debe4 = 0;
-            const haber4 = parseFloat(creditoVal.toFixed(2));
+
+            // Línea 2: Contrapartida (banco) al HABER
             allData.push({
-                Fecha: fecha, Numero: numeroAsiento, Cuenta: codeHaber || codeDebe,
-                Debe: debe4, Haber: haber4,
+                Fecha: fecha, Numero: numeroAsiento, Cuenta: cuentaContrapartida,
+                Debe: 0, Haber: importe,
                 'Tipo de auxiliar': 1, Auxiliar: 1,
-                Importe: parseFloat((debe4 - haber4).toFixed(2)),
+                Importe: parseFloat((0 - importe).toFixed(2)),
                 Leyenda: leyenda, ExtraContable: 's'
             });
             numeroAsiento++;
