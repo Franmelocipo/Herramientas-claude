@@ -163,6 +163,10 @@ function attachEventListeners() {
     document.getElementById('btnCrearCuenta').addEventListener('click', () => crearCuentaUI());
     document.getElementById('btnEliminarPlanCompleto').addEventListener('click', () => eliminarPlanCompletoUI());
 
+    // Modal Editar Cuenta
+    document.getElementById('btnCancelEditarCuenta').addEventListener('click', () => hideEditarCuentaModal());
+    document.getElementById('btnGuardarCuenta').addEventListener('click', () => guardarCambiosCuenta());
+
     // Listeners para cambios en los datos
     TaxManager.onTaxDatabaseChange(() => {
         updateCounts();
@@ -986,25 +990,37 @@ async function crearCuentaUI() {
     }
 }
 
-async function editarCuentaUI(cuentaId, codigoActual, nombreActual, tipoActual) {
-    const nuevoCodigo = prompt('Código:', codigoActual);
-    if (nuevoCodigo === null) return;
+function editarCuentaUI(cuentaId, codigoActual, nombreActual, tipoActual) {
+    // Mostrar modal de edición con los valores actuales
+    document.getElementById('editarCuentaId').value = cuentaId;
+    document.getElementById('editarCuentaCodigo').value = codigoActual;
+    document.getElementById('editarCuentaNombre').value = nombreActual;
+    document.getElementById('editarCuentaTipo').value = tipoActual || '';
 
-    const nuevoNombre = prompt('Nombre de la Cuenta:', nombreActual);
-    if (nuevoNombre === null) return;
+    document.getElementById('modalEditarCuenta').classList.remove('hidden');
+    document.getElementById('editarCuentaCodigo').focus();
+}
 
-    const nuevoTipo = prompt('Tipo (Activo/Pasivo/Patrimonio Neto/Ingreso/Egreso):', tipoActual);
-    if (nuevoTipo === null) return;
+function hideEditarCuentaModal() {
+    document.getElementById('modalEditarCuenta').classList.add('hidden');
+}
 
-    if (!nuevoCodigo.trim() || !nuevoNombre.trim()) {
+async function guardarCambiosCuenta() {
+    const cuentaId = document.getElementById('editarCuentaId').value;
+    const nuevoCodigo = document.getElementById('editarCuentaCodigo').value.trim();
+    const nuevoNombre = document.getElementById('editarCuentaNombre').value.trim();
+    const nuevoTipo = document.getElementById('editarCuentaTipo').value;
+
+    if (!nuevoCodigo || !nuevoNombre) {
         alert('El código y el nombre son obligatorios');
         return;
     }
 
-    const result = await actualizarCuenta(cuentaId, nuevoCodigo.trim(), nuevoNombre.trim(), nuevoTipo.trim());
+    const result = await actualizarCuenta(cuentaId, nuevoCodigo, nuevoNombre, nuevoTipo);
 
     if (result) {
         alert('Cuenta actualizada exitosamente');
+        hideEditarCuentaModal();
         await renderPlanCuentasList();
     }
 }
