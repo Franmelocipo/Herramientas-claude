@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Conversor de Asientos Contables</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../supabase-config.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -38,18 +40,14 @@
 
             <!-- Paso 0: Selección de tipo -->
             <div id="step0" class="step">
-                <!-- Mensaje de advertencia si no hay cliente -->
-                <div id="noClientWarning" class="warning-box hidden">
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <span style="font-size: 24px;">⚠️</span>
-                        <div>
-                            <strong>Debe seleccionar un cliente primero</strong>
-                            <p style="margin: 4px 0 0 0; color: #64748b;">Vaya a Clientes y seleccione uno para continuar.</p>
-                        </div>
-                    </div>
-                    <button onclick="window.location.href='../../index.html'" style="background: #3b82f6; color: white; padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; margin-top: 12px;">
-                        Ir a Clientes
-                    </button>
+                <!-- Selector de cliente -->
+                <div class="selector-cliente-container">
+                    <label for="selector-cliente-conversor">Seleccione el cliente para esta conversión:</label>
+                    <select id="selector-cliente-conversor" class="selector-cliente">
+                        <option value="">-- Seleccione un cliente --</option>
+                        <!-- Las opciones se cargarán desde Supabase -->
+                    </select>
+                    <p id="clientePlanInfo" class="cliente-plan-info hidden"></p>
                 </div>
 
                 <!-- Botón de descarga de plantilla -->

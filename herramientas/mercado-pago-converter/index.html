@@ -32,7 +32,17 @@
                     <div class="subtitle">
                         Convierte tus resúmenes de Mercado Pago a formato extracto bancario
                     </div>
+                    <p class="client-name" id="clientName"></p>
                 </div>
+            </div>
+
+            <!-- Selector de cliente -->
+            <div class="selector-cliente-container">
+                <label for="selector-cliente-mp">Seleccione el cliente para esta conversión:</label>
+                <select id="selector-cliente-mp" class="selector-cliente">
+                    <option value="">-- Seleccione un cliente --</option>
+                    <!-- Las opciones se cargarán desde Supabase -->
+                </select>
             </div>
 
             <div class="file-input-wrapper">

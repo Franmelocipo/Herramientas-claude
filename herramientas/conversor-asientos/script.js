@@ -17,26 +17,155 @@ const state = {
 // HELPERS PARA COMPATIBILIDAD CON CÓDIGO EXISTENTE
 // ============================================
 
-function getSelectedClientId() {
-    // Leer desde el objeto cliente_activo (guardado por plan-cuentas.js)
-    try {
-        const clienteActivoStr = localStorage.getItem('cliente_activo');
-        if (!clienteActivoStr) {
-            console.log('🔍 No hay cliente_activo en localStorage');
-            return null;
-        }
+// Cliente seleccionado en este módulo
+let clienteSeleccionadoId = null;
+let clienteSeleccionadoNombre = '';
 
-        const clienteActivo = JSON.parse(clienteActivoStr);
-        console.log('🔍 Cliente activo encontrado:', clienteActivo);
-        return clienteActivo.id;
-    } catch (error) {
-        console.error('❌ Error leyendo cliente activo:', error);
-        return null;
-    }
+function getSelectedClientId() {
+    return clienteSeleccionadoId;
 }
 
 function getTaxDatabase() {
     return TaxManager.getAllTaxes();
+}
+
+// ============================================
+// FUNCIONES PARA SELECTOR DE CLIENTE
+// ============================================
+
+async function cargarClientesEnSelector() {
+    const select = document.getElementById('selector-cliente-conversor');
+    if (!select) return;
+
+    try {
+        // Obtener clientes desde Supabase
+        const { data: clientes, error } = await supabase
+            .from('clientes')
+            .select('id, razon_social')
+            .order('razon_social');
+
+        if (error) {
+            console.error('Error cargando clientes:', error);
+            return;
+        }
+
+        // Limpiar opciones existentes excepto la primera
+        select.innerHTML = '<option value="">-- Seleccione un cliente --</option>';
+
+        // Llenar el select
+        clientes.forEach(cliente => {
+            const option = document.createElement('option');
+            option.value = cliente.id;
+            option.textContent = cliente.razon_social;
+            select.appendChild(option);
+        });
+
+        console.log('✅ Clientes cargados en selector:', clientes.length);
+
+        // Evento al cambiar selección
+        select.addEventListener('change', async (e) => {
+            const clienteId = e.target.value;
+            if (clienteId) {
+                const clienteNombre = select.options[select.selectedIndex].text;
+                clienteSeleccionadoId = clienteId;
+                clienteSeleccionadoNombre = clienteNombre;
+
+                console.log('Cliente seleccionado:', clienteId, clienteNombre);
+
+                // Actualizar nombre en el header
+                if (elements.clientName) {
+                    elements.clientName.textContent = `Cliente: ${clienteNombre}`;
+                }
+
+                await cargarPlanCuentasCliente(clienteId);
+            } else {
+                clienteSeleccionadoId = null;
+                clienteSeleccionadoNombre = '';
+                if (elements.clientName) {
+                    elements.clientName.textContent = '';
+                }
+                deshabilitarOpciones();
+                ocultarInfoPlan();
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Error cargando clientes:', error);
+    }
+}
+
+async function cargarPlanCuentasCliente(clienteId) {
+    const infoElement = document.getElementById('clientePlanInfo');
+
+    try {
+        const { data: cuentas, error } = await supabase
+            .from('plan_cuentas')
+            .select('codigo, cuenta')
+            .eq('cliente_id', clienteId)
+            .order('codigo');
+
+        if (error) {
+            console.error('Error cargando plan:', error);
+            mostrarInfoPlan('Error al cargar el plan de cuentas', 'error');
+            deshabilitarOpciones();
+            return;
+        }
+
+        if (!cuentas || cuentas.length === 0) {
+            mostrarInfoPlan('⚠️ Este cliente no tiene plan de cuentas. Configure el plan primero.', 'error');
+            deshabilitarOpciones();
+            planCuentas = [];
+            return;
+        }
+
+        // Guardar las cuentas para usar en los selectores
+        planCuentas = cuentas.map(c => ({
+            codigo: c.codigo,
+            cuenta: c.cuenta
+        }));
+
+        mostrarInfoPlan(`✅ Plan de cuentas cargado: ${cuentas.length} cuentas`, 'success');
+        console.log('Plan de cuentas cargado:', cuentas.length, 'cuentas');
+
+        habilitarOpciones();
+
+    } catch (error) {
+        console.error('❌ Error cargando plan de cuentas:', error);
+        mostrarInfoPlan('Error al cargar el plan de cuentas', 'error');
+        deshabilitarOpciones();
+    }
+}
+
+function mostrarInfoPlan(mensaje, tipo) {
+    const infoElement = document.getElementById('clientePlanInfo');
+    if (infoElement) {
+        infoElement.textContent = mensaje;
+        infoElement.className = 'cliente-plan-info ' + tipo;
+        infoElement.classList.remove('hidden');
+    }
+}
+
+function ocultarInfoPlan() {
+    const infoElement = document.getElementById('clientePlanInfo');
+    if (infoElement) {
+        infoElement.classList.add('hidden');
+    }
+}
+
+function deshabilitarOpciones() {
+    document.querySelectorAll('.source-type-btn').forEach(btn => {
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'not-allowed';
+    });
+}
+
+function habilitarOpciones() {
+    document.querySelectorAll('.source-type-btn').forEach(btn => {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+    });
 }
 
 // ============================================
@@ -71,8 +200,7 @@ function initializeElements() {
         clientName: document.getElementById('clientName'),
         btnReset: document.getElementById('btnReset'),
 
-        // Step 0 - Client warning and template
-        noClientWarning: document.getElementById('noClientWarning'),
+        // Step 0 - Template section
         templateDownloadSection: document.getElementById('templateDownloadSection'),
         btnDownloadTemplate: document.getElementById('btnDownloadTemplate'),
 
@@ -113,23 +241,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Inicializar elementos del DOM
     initializeElements();
 
-    // Cargar datos - usando sistema centralizado
-    console.log('Usando sistema centralizado de datos compartidos');
+    // Cargar clientes en el selector
+    await cargarClientesEnSelector();
 
-    await updateClientName();
-    await checkClientAndLoadPlanCuentas();
+    // Deshabilitar opciones hasta que seleccionen cliente
+    deshabilitarOpciones();
 
     // Adjuntar event listeners
     attachEventListeners();
-
-    // Log de diagnóstico
-    const selectedClientId = getSelectedClientId();
-    if (selectedClientId) {
-        console.log('Cliente activo ID:', selectedClientId);
-        console.log('Plan de cuentas cargado:', planCuentas.length, 'cuentas');
-    } else {
-        console.log('No hay cliente seleccionado');
-    }
 
     console.log(`Base de impuestos: ${getTaxDatabase().length} registros`);
     console.log('======================');
@@ -251,89 +370,6 @@ function reset() {
 // ============================================
 // FUNCIONES AUXILIARES PARA LA HERRAMIENTA
 // ============================================
-async function updateClientName() {
-    console.log('🔍 VERIFICANDO CLIENTE ACTIVO EN CONVERSOR...');
-
-    const selectedClientId = getSelectedClientId();
-
-    if (selectedClientId) {
-        // Usar window.obtenerClienteActivo() si está disponible
-        if (typeof window.obtenerClienteActivo === 'function') {
-            const cliente = window.obtenerClienteActivo();
-            if (cliente) {
-                elements.clientName.textContent = `Cliente: ${cliente.razon_social}`;
-                console.log('✅ Cliente detectado correctamente:', {
-                    id: selectedClientId,
-                    nombre: cliente.razon_social
-                });
-            } else {
-                elements.clientName.textContent = '';
-                console.log('⚠️ No se pudo obtener información del cliente');
-            }
-        } else {
-            elements.clientName.textContent = 'Cliente ID: ' + selectedClientId;
-            console.log('⚠️ Función obtenerClienteActivo no disponible');
-        }
-    } else {
-        elements.clientName.textContent = '';
-        console.log('❌ NO HAY CLIENTE SELECCIONADO - Debe seleccionar un cliente desde el menú principal');
-    }
-}
-
-async function checkClientAndLoadPlanCuentas() {
-    console.log('🔍 VERIFICANDO CLIENTE Y CARGANDO PLAN DE CUENTAS...');
-
-    const clienteActivo = window.obtenerClienteActivo ? window.obtenerClienteActivo() : null;
-
-    console.log('  Cliente activo:', clienteActivo);
-
-    if (!clienteActivo || !clienteActivo.id) {
-        // No hay cliente activo - mostrar advertencia
-        if (elements.noClientWarning) {
-            elements.noClientWarning.classList.remove('hidden');
-        }
-        // Deshabilitar botones de selección de tipo
-        document.querySelectorAll('.source-type-btn').forEach(btn => {
-            btn.disabled = true;
-            btn.style.opacity = '0.5';
-            btn.style.cursor = 'not-allowed';
-        });
-        console.warn('❌ NO HAY CLIENTE ACTIVO SELECCIONADO');
-        console.warn('   Por favor, seleccione un cliente desde el menú principal (👥 Clientes)');
-        return;
-    }
-
-    console.log('✅ Cliente activo detectado:', {
-        id: clienteActivo.id,
-        razon_social: clienteActivo.razon_social
-    });
-
-    // Hay cliente activo - ocultar advertencia
-    if (elements.noClientWarning) {
-        elements.noClientWarning.classList.add('hidden');
-    }
-
-    // Cargar plan de cuentas
-    try {
-        if (typeof window.obtenerPlanCuentas === 'function') {
-            console.log('📊 Cargando plan de cuentas...');
-            planCuentas = await window.obtenerPlanCuentas(clienteActivo.id);
-
-            if (!planCuentas || planCuentas.length === 0) {
-                console.warn('⚠️ El cliente no tiene plan de cuentas configurado');
-                alert('Este cliente no tiene plan de cuentas configurado.\n\nPor favor, configure el plan de cuentas antes de usar el conversor.');
-            } else {
-                console.log('✅ Plan de cuentas cargado exitosamente:', planCuentas.length, 'cuentas');
-            }
-        } else {
-            console.error('❌ Función obtenerPlanCuentas no disponible');
-        }
-    } catch (error) {
-        console.error('❌ Error cargando plan de cuentas:', error);
-        alert('Error al cargar el plan de cuentas del cliente');
-    }
-}
-
 async function getClientAccounts() {
     return planCuentas.map(cuenta => ({
         code: cuenta.codigo,

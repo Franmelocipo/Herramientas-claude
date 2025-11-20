@@ -4,6 +4,10 @@ if (window.pdfjsLib) {
         'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
 
+// Cliente seleccionado en este módulo
+let clienteSeleccionadoId = null;
+let clienteSeleccionadoNombre = '';
+
 // Estado de la aplicación
 const state = {
     selectedType: '',
@@ -13,6 +17,91 @@ const state = {
     saldoInicial: null,
     isProcessing: false
 };
+
+// ============================================
+// FUNCIONES PARA SELECTOR DE CLIENTE
+// ============================================
+
+async function cargarClientesEnSelector() {
+    const select = document.getElementById('selector-cliente-extractos');
+    if (!select) return;
+
+    try {
+        // Obtener clientes desde Supabase
+        const { data: clientes, error } = await supabase
+            .from('clientes')
+            .select('id, razon_social')
+            .order('razon_social');
+
+        if (error) {
+            console.error('Error cargando clientes:', error);
+            return;
+        }
+
+        // Limpiar opciones existentes excepto la primera
+        select.innerHTML = '<option value="">-- Seleccione un cliente --</option>';
+
+        // Llenar el select
+        clientes.forEach(cliente => {
+            const option = document.createElement('option');
+            option.value = cliente.id;
+            option.textContent = cliente.razon_social;
+            select.appendChild(option);
+        });
+
+        console.log('✅ Clientes cargados en selector:', clientes.length);
+
+        // Evento al cambiar selección
+        select.addEventListener('change', (e) => {
+            const clienteId = e.target.value;
+            const clientNameElement = document.getElementById('clientName');
+
+            if (clienteId) {
+                const clienteNombre = select.options[select.selectedIndex].text;
+                clienteSeleccionadoId = clienteId;
+                clienteSeleccionadoNombre = clienteNombre;
+
+                console.log('Cliente seleccionado:', clienteId, clienteNombre);
+
+                // Actualizar nombre en el header
+                if (clientNameElement) {
+                    clientNameElement.textContent = `Cliente: ${clienteNombre}`;
+                }
+
+                // Habilitar pasos
+                habilitarPasos();
+            } else {
+                clienteSeleccionadoId = null;
+                clienteSeleccionadoNombre = '';
+                if (clientNameElement) {
+                    clientNameElement.textContent = '';
+                }
+                deshabilitarPasos();
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Error cargando clientes:', error);
+    }
+}
+
+function deshabilitarPasos() {
+    // Deshabilitar botones de tipo de extracto
+    document.querySelectorAll('[data-type]').forEach(btn => {
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'not-allowed';
+    });
+}
+
+function habilitarPasos() {
+    // Habilitar botones de tipo de extracto
+    document.querySelectorAll('[data-type]').forEach(btn => {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+    });
+}
 
 // Configuración de bancos
 const banksBancarios = [
@@ -49,9 +138,13 @@ const elements = {
 };
 
 // Inicializar aplicación
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initElements();
     attachEventListeners();
+
+    // Cargar clientes y deshabilitar pasos hasta selección
+    await cargarClientesEnSelector();
+    deshabilitarPasos();
 });
 
 function initElements() {
