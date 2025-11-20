@@ -215,7 +215,8 @@ const sourceTypes = {
     extracto: { name: 'Extracto Bancario', icon: '🏦' },
     registros: { name: 'Registros del Cliente', icon: '📝' },
     veps: { name: 'VEPs ARCA', icon: '🧾' },
-    compensaciones: { name: 'Compensaciones ARCA', icon: '🔄' }
+    compensaciones: { name: 'Compensaciones ARCA', icon: '🔄' },
+    tabla: { name: 'Tabla de Datos', icon: '📊' }
 };
 
 // ============================================
@@ -430,7 +431,8 @@ function selectSourceType(type) {
         extracto: 'Descargar Plantilla Extracto',
         registros: 'Descargar Plantilla Registros',
         veps: 'Descargar Plantilla VEPs',
-        compensaciones: 'Descargar Plantilla Compensaciones'
+        compensaciones: 'Descargar Plantilla Compensaciones',
+        tabla: 'Descargar Plantilla Tabla de Datos'
     };
 
     if (elements.templateButtonText) {
@@ -474,6 +476,22 @@ async function handleFileUpload(e) {
             return obj;
         });
 
+        // Validar datos si es tipo tabla
+        if (state.sourceType === 'tabla') {
+            const validationErrors = validateTablaData(rows);
+            if (validationErrors.length > 0) {
+                const maxErrors = 10;
+                let errorMsg = `Se encontraron ${validationErrors.length} error(es) en el archivo:\n\n`;
+                errorMsg += validationErrors.slice(0, maxErrors).join('\n');
+                if (validationErrors.length > maxErrors) {
+                    errorMsg += `\n\n... y ${validationErrors.length - maxErrors} error(es) más.`;
+                }
+                errorMsg += '\n\nPor favor, corrija los errores y vuelva a cargar el archivo.';
+                alert(errorMsg);
+                return;
+            }
+        }
+
         state.sourceData = rows;
         groupSimilarEntries(rows);
         goToStep(2);
@@ -481,6 +499,54 @@ async function handleFileUpload(e) {
     } catch (error) {
         alert('Error al leer el archivo: ' + error.message);
     }
+}
+
+// ============================================
+// VALIDACIÓN DE DATOS PARA TABLA
+// ============================================
+function validateTablaData(rows) {
+    const errors = [];
+
+    rows.forEach((row, idx) => {
+        const rowNum = idx + 2; // +2 porque idx empieza en 0 y hay encabezado
+
+        // Validar fecha
+        const fecha = row['FECHA'] || row['Fecha'] || row['fecha'];
+        if (!fecha) {
+            errors.push(`Fila ${rowNum}: FECHA está vacía`);
+        } else {
+            // Intentar parsear la fecha
+            const fechaStr = String(fecha);
+            const isValidDate = !isNaN(Date.parse(fechaStr)) ||
+                               /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fechaStr) ||
+                               /^\d{4}-\d{2}-\d{2}$/.test(fechaStr);
+            if (!isValidDate && typeof fecha !== 'number') {
+                errors.push(`Fila ${rowNum}: FECHA inválida (${fecha})`);
+            }
+        }
+
+        // Validar descripción
+        const descripcion = row['DESCRIPCION'] || row['Descripcion'] || row['descripcion'];
+        if (!descripcion || String(descripcion).trim() === '') {
+            errors.push(`Fila ${rowNum}: DESCRIPCION está vacía`);
+        }
+
+        // Validar importe
+        const importeRaw = row['IMPORTE'] || row['Importe'] || row['importe'];
+        if (importeRaw === undefined || importeRaw === null || importeRaw === '') {
+            errors.push(`Fila ${rowNum}: IMPORTE está vacío`);
+        } else {
+            const importe = typeof importeRaw === 'number' ? importeRaw :
+                           parseFloat(String(importeRaw).replace(/\./g, '').replace(',', '.'));
+            if (isNaN(importe)) {
+                errors.push(`Fila ${rowNum}: IMPORTE no es un número válido (${importeRaw})`);
+            } else if (importe === 0) {
+                errors.push(`Fila ${rowNum}: IMPORTE no puede ser cero`);
+            }
+        }
+    });
+
+    return errors;
 }
 
 // ============================================
@@ -626,6 +692,52 @@ function groupSimilarEntries(data) {
             groups[key].totalDebe += debeVal;
             groups[key].totalHaber += haberVal;
             groups[key].items.push(row);
+        });
+
+    } else if (state.sourceType === 'tabla') {
+        // Tabla de Datos - formato simple con 3 columnas
+        data.forEach((row) => {
+            const descripcion = String(row['DESCRIPCION'] || row['Descripcion'] || row['descripcion'] || '').trim();
+            if (!descripcion) return;
+
+            // Obtener importe (puede ser positivo o negativo)
+            let importe = 0;
+            const importeRaw = row['IMPORTE'] || row['Importe'] || row['importe'];
+            if (importeRaw !== undefined && importeRaw !== null && importeRaw !== '') {
+                importe = typeof importeRaw === 'number' ? importeRaw : parseFloat(String(importeRaw).replace(/\./g, '').replace(',', '.')) || 0;
+            }
+
+            // Determinar si va al debe o haber según el signo
+            let debeVal = 0, haberVal = 0;
+            if (importe < 0) {
+                // Negativo → HABER (valor absoluto)
+                haberVal = Math.abs(importe);
+            } else {
+                // Positivo → DEBE
+                debeVal = importe;
+            }
+
+            const key = descripcion;
+
+            if (!groups[key]) {
+                groups[key] = {
+                    concepto: descripcion,
+                    ejemploCompleto: descripcion,
+                    count: 0,
+                    totalDebe: 0,
+                    totalHaber: 0,
+                    items: []
+                };
+            }
+
+            groups[key].count++;
+            groups[key].totalDebe += debeVal;
+            groups[key].totalHaber += haberVal;
+            groups[key].items.push({
+                ...row,
+                _calculatedDebe: debeVal,
+                _calculatedHaber: haberVal
+            });
         });
 
     } else {
@@ -1030,7 +1142,7 @@ function closeAllDropdowns() {
 // GENERACIÓN DE ASIENTOS FINALES
 // ============================================
 function generateFinalExcel() {
-    if (state.sourceType === 'compensaciones') {
+    if (state.sourceType === 'compensaciones' || state.sourceType === 'tabla') {
         const missingAccounts = state.groupedData.filter((g, idx) => !state.accountCodes[idx]);
         if (missingAccounts.length > 0) {
             alert(`⚠️ Faltan asignar cuentas a ${missingAccounts.length} grupo(s)`);
@@ -1057,6 +1169,9 @@ function generateFinalExcel() {
             processRegistros(g, code, allData);
         } else if (state.sourceType === 'extracto') {
             numeroAsiento = processExtracto(g, code, allData, numeroAsiento);
+            numeroAsientoGlobal = numeroAsiento;
+        } else if (state.sourceType === 'tabla') {
+            numeroAsiento = processTabla(g, code, allData, numeroAsiento);
             numeroAsientoGlobal = numeroAsiento;
         }
     });
@@ -1307,6 +1422,44 @@ function processExtracto(g, code, allData, numeroAsiento) {
     return numeroAsiento;
 }
 
+function processTabla(g, code, allData, numeroAsiento) {
+    // Procesar cada item de la tabla de datos
+    g.items.forEach(item => {
+        // Obtener fecha en diferentes formatos posibles
+        let fecha = item['FECHA'] || item['Fecha'] || item['fecha'] || '';
+
+        // Obtener descripción
+        const descripcion = item['DESCRIPCION'] || item['Descripcion'] || item['descripcion'] || '';
+
+        // Usar los valores ya calculados en el agrupamiento
+        const debeVal = item._calculatedDebe || 0;
+        const haberVal = item._calculatedHaber || 0;
+
+        const debe = debeVal > 0 ? parseFloat(debeVal.toFixed(2)) : 0;
+        const haber = haberVal > 0 ? parseFloat(haberVal.toFixed(2)) : 0;
+
+        // Crear leyenda
+        const leyenda = descripcion;
+
+        allData.push({
+            Fecha: fecha,
+            Numero: numeroAsiento,
+            Cuenta: code,
+            Debe: debe,
+            Haber: haber,
+            'Tipo de auxiliar': 1,
+            Auxiliar: 1,
+            Importe: parseFloat((debe - haber).toFixed(2)),
+            Leyenda: leyenda,
+            ExtraContable: 's'
+        });
+
+        numeroAsiento++;
+    });
+
+    return numeroAsiento;
+}
+
 function postProcessCompensaciones(allData) {
     const transacciones = {};
     allData.forEach(asiento => {
@@ -1433,6 +1586,47 @@ function downloadTemplateSpecific() {
                 ['- Importe: Monto compensado'],
                 [''],
                 ['ORIGEN va al HABER (sale), DESTINO va al DEBE (entra)']
+            ];
+            break;
+
+        case 'tabla':
+            datos = [
+                ['FECHA', 'DESCRIPCION', 'IMPORTE'],
+                ['2025-01-15', 'Pago proveedores', -50000],
+                ['2025-01-15', 'Cobro clientes', 80000],
+                ['2025-01-20', 'Compra insumos', -12500],
+                ['2025-01-22', 'Venta productos', 45000],
+                ['2025-01-25', 'Gastos bancarios', -1500],
+                ['2025-01-28', 'Intereses ganados', 3200]
+            ];
+            fileName = 'plantilla_tabla_datos.xlsx';
+            instrucciones = [
+                ['PLANTILLA TABLA DE DATOS'],
+                [''],
+                ['Formato simple de 3 columnas para casos generales.'],
+                [''],
+                ['Columnas requeridas:'],
+                ['- FECHA: Fecha del movimiento (YYYY-MM-DD o DD/MM/YYYY)'],
+                ['- DESCRIPCION: Texto descriptivo del movimiento'],
+                ['- IMPORTE: Número positivo o negativo'],
+                [''],
+                ['LÓGICA DE CONVERSIÓN:'],
+                [''],
+                ['• IMPORTE NEGATIVO → va a columna HABER'],
+                ['  Ejemplo: -50000 se convierte en Haber: 50000'],
+                ['  (representa salidas de dinero: pagos, gastos, etc.)'],
+                [''],
+                ['• IMPORTE POSITIVO → va a columna DEBE'],
+                ['  Ejemplo: 80000 se convierte en Debe: 80000'],
+                ['  (representa entradas de dinero: cobros, ingresos, etc.)'],
+                [''],
+                ['El sistema usa el valor absoluto (sin el signo negativo).'],
+                [''],
+                ['EJEMPLOS:'],
+                ['-50000 (Pago proveedores) → Haber: 50.000,00'],
+                ['+80000 (Cobro clientes) → Debe: 80.000,00'],
+                ['-12500 (Compra insumos) → Haber: 12.500,00'],
+                ['+45000 (Venta productos) → Debe: 45.000,00']
             ];
             break;
 
