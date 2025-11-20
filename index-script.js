@@ -54,11 +54,11 @@ async function getSupabaseClientsCount() {
     }
 }
 
-// Obtener cantidad de impuestos desde Supabase
+// Obtener cantidad de impuestos desde Supabase (nueva tabla impuestos_base)
 async function getSupabaseTaxDatabaseCount() {
     try {
         const { count, error } = await supabase
-            .from('tax_database')
+            .from('impuestos_base')
             .select('*', { count: 'exact', head: true });
 
         if (error) throw error;
@@ -147,6 +147,7 @@ function attachEventListeners() {
 
     // Modal Impuestos
     document.getElementById('btnCloseTaxes').addEventListener('click', () => hideTaxesModal());
+    document.getElementById('btnDownloadTaxTemplate').addEventListener('click', () => downloadTaxTemplate());
     document.getElementById('importTaxFile').addEventListener('change', (e) => importTaxes(e));
     document.getElementById('btnClearTaxDatabase').addEventListener('click', () => clearTaxDatabase());
 
@@ -563,6 +564,56 @@ function hideTaxesModal() {
     document.getElementById('modalTaxes').classList.add('hidden');
 }
 
+// Descargar plantilla Excel para impuestos
+function downloadTaxTemplate() {
+    try {
+        // Crear datos de ejemplo con los 6 campos
+        const data = [
+            ['codigo_impuesto', 'descripcion_impuesto', 'codigo_concepto', 'descripcion_concepto', 'codigo_subconcepto', 'descripcion_subconcepto'],
+            ['IVA', 'Impuesto al Valor Agregado', 'DEB', 'Débito Fiscal', '21%', 'IVA 21% - Tasa General'],
+            ['IVA', 'Impuesto al Valor Agregado', 'DEB', 'Débito Fiscal', '10.5%', 'IVA 10.5% - Tasa Reducida'],
+            ['IVA', 'Impuesto al Valor Agregado', 'DEB', 'Débito Fiscal', '27%', 'IVA 27% - Tasa Diferencial'],
+            ['IVA', 'Impuesto al Valor Agregado', 'CRE', 'Crédito Fiscal', '21%', 'IVA 21% - Tasa General'],
+            ['IVA', 'Impuesto al Valor Agregado', 'CRE', 'Crédito Fiscal', '10.5%', 'IVA 10.5% - Tasa Reducida'],
+            ['IVA', 'Impuesto al Valor Agregado', 'RET', 'Retenciones', 'SUF', 'Retención IVA Sufrida'],
+            ['IVA', 'Impuesto al Valor Agregado', 'PER', 'Percepciones', 'SUF', 'Percepción IVA Sufrida'],
+            ['GAN', 'Impuesto a las Ganancias', 'ANT', 'Anticipos', 'ANT', 'Anticipo de Ganancias'],
+            ['GAN', 'Impuesto a las Ganancias', 'RET', 'Retenciones', 'SUF', 'Retención Ganancias Sufrida'],
+            ['GAN', 'Impuesto a las Ganancias', 'SAL', 'Saldo', 'PAG', 'Saldo a Pagar'],
+            ['IIBB', 'Ingresos Brutos', 'RET', 'Retenciones', 'SUF', 'Retención IIBB Sufrida'],
+            ['IIBB', 'Ingresos Brutos', 'PER', 'Percepciones', 'SUF', 'Percepción IIBB Sufrida'],
+            ['IIBB', 'Ingresos Brutos', 'ANT', 'Anticipos', 'ANT', 'Anticipo IIBB'],
+            ['SEG', 'Seguridad Social', 'CON', 'Contribuciones', 'PAT', 'Contribución Patronal'],
+            ['SEG', 'Seguridad Social', 'APO', 'Aportes', 'TRA', 'Aporte Trabajadores']
+        ];
+
+        // Crear libro de trabajo
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(data);
+
+        // Ajustar anchos de columna
+        ws['!cols'] = [
+            { wch: 18 }, // codigo_impuesto
+            { wch: 30 }, // descripcion_impuesto
+            { wch: 18 }, // codigo_concepto
+            { wch: 25 }, // descripcion_concepto
+            { wch: 20 }, // codigo_subconcepto
+            { wch: 35 }  // descripcion_subconcepto
+        ];
+
+        // Agregar hoja al libro
+        XLSX.utils.book_append_sheet(wb, ws, 'Plantilla Impuestos');
+
+        // Descargar archivo
+        XLSX.writeFile(wb, 'plantilla_base_impuestos.xlsx');
+
+        console.log('✅ Plantilla de impuestos descargada exitosamente');
+    } catch (error) {
+        console.error('Error descargando plantilla:', error);
+        alert('Error al descargar plantilla: ' + error.message);
+    }
+}
+
 async function importTaxes(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -573,20 +624,24 @@ async function importTaxes(event) {
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
 
+        // Nueva estructura con 6 campos
         const taxes = jsonData.slice(1).map(row => ({
-            impuesto: String(row[0] || '').trim(),
-            concepto: String(row[1] || '').trim(),
-            subconcepto: String(row[2] || '').trim()
-        })).filter(t => t.impuesto && t.concepto && t.subconcepto);
+            codigo_impuesto: String(row[0] || '').trim(),
+            descripcion_impuesto: String(row[1] || '').trim(),
+            codigo_concepto: String(row[2] || '').trim(),
+            descripcion_concepto: String(row[3] || '').trim(),
+            codigo_subconcepto: String(row[4] || '').trim(),
+            descripcion_subconcepto: String(row[5] || '').trim()
+        })).filter(t => t.codigo_impuesto && t.descripcion_impuesto);
 
         if (taxes.length === 0) {
-            alert('No se encontraron registros válidos en el archivo');
+            alert('No se encontraron registros válidos en el archivo.\n\nAsegúrate de que el archivo tenga las columnas:\ncodigo_impuesto | descripcion_impuesto | codigo_concepto | descripcion_concepto | codigo_subconcepto | descripcion_subconcepto');
             return;
         }
 
         if (supabase) {
-            // Importar a Supabase
-            const result = await importSupabaseTaxDatabase(taxes, true);
+            // Importar a Supabase (nueva tabla impuestos_base)
+            const result = await importSupabaseImpuestosBase(taxes, true);
 
             if (result.success) {
                 await renderTaxDatabase();
@@ -615,9 +670,9 @@ async function renderTaxDatabase() {
     let taxDatabase = [];
 
     if (supabase) {
-        // Obtener desde Supabase
+        // Obtener desde Supabase (nueva tabla impuestos_base)
         try {
-            taxDatabase = await getSupabaseTaxDatabase();
+            taxDatabase = await getSupabaseImpuestosBase();
         } catch (error) {
             console.error('Error cargando base de impuestos desde Supabase:', error);
             taxDatabase = [];
@@ -636,16 +691,19 @@ async function renderTaxDatabase() {
     const tableBody = document.getElementById('taxTableBody');
 
     if (taxDatabase.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 32px; color: #64748b;">No hay datos. Importa un archivo Excel para comenzar.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 32px; color: #64748b;">No hay datos. Importa un archivo Excel para comenzar.</td></tr>';
         return;
     }
 
     const preview = taxDatabase.slice(0, 50);
     const html = preview.map(tax => `
         <tr>
-            <td>${tax.impuesto}</td>
-            <td>${tax.concepto}</td>
-            <td>${tax.subconcepto}</td>
+            <td style="font-family: monospace; font-weight: 600;">${tax.codigo_impuesto || ''}</td>
+            <td>${tax.descripcion_impuesto || ''}</td>
+            <td style="font-family: monospace;">${tax.codigo_concepto || ''}</td>
+            <td>${tax.descripcion_concepto || ''}</td>
+            <td style="font-family: monospace;">${tax.codigo_subconcepto || ''}</td>
+            <td>${tax.descripcion_subconcepto || ''}</td>
         </tr>
     `).join('');
 
@@ -653,18 +711,18 @@ async function renderTaxDatabase() {
 }
 
 async function clearTaxDatabase() {
-    if (!confirm('¿Estás seguro de que deseas limpiar toda la base de datos de impuestos?')) {
+    if (!confirm('¿Estás seguro de que deseas limpiar toda la base de datos de impuestos?\n\nEsta acción eliminará todos los registros.')) {
         return;
     }
 
     try {
         if (supabase) {
-            // Limpiar en Supabase
-            const success = await clearSupabaseTaxDatabase();
+            // Limpiar en Supabase (nueva tabla impuestos_base)
+            const success = await clearSupabaseImpuestosBase();
             if (success) {
                 await renderTaxDatabase();
                 await updateCounts();
-                alert('Base de datos limpiada en Supabase');
+                alert('Base de datos de impuestos limpiada correctamente');
             } else {
                 alert('Error al limpiar la base de datos');
             }
