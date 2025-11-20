@@ -18,7 +18,21 @@ const state = {
 // ============================================
 
 function getSelectedClientId() {
-    return localStorage.getItem('cliente_activo_id');
+    // Leer desde el objeto cliente_activo (guardado por plan-cuentas.js)
+    try {
+        const clienteActivoStr = localStorage.getItem('cliente_activo');
+        if (!clienteActivoStr) {
+            console.log('🔍 No hay cliente_activo en localStorage');
+            return null;
+        }
+
+        const clienteActivo = JSON.parse(clienteActivoStr);
+        console.log('🔍 Cliente activo encontrado:', clienteActivo);
+        return clienteActivo.id;
+    } catch (error) {
+        console.error('❌ Error leyendo cliente activo:', error);
+        return null;
+    }
 }
 
 function getTaxDatabase() {
@@ -238,6 +252,8 @@ function reset() {
 // FUNCIONES AUXILIARES PARA LA HERRAMIENTA
 // ============================================
 async function updateClientName() {
+    console.log('🔍 VERIFICANDO CLIENTE ACTIVO EN CONVERSOR...');
+
     const selectedClientId = getSelectedClientId();
 
     if (selectedClientId) {
@@ -246,23 +262,30 @@ async function updateClientName() {
             const cliente = window.obtenerClienteActivo();
             if (cliente) {
                 elements.clientName.textContent = `Cliente: ${cliente.razon_social}`;
-                console.log('Cliente seleccionado:', {
+                console.log('✅ Cliente detectado correctamente:', {
                     id: selectedClientId,
                     nombre: cliente.razon_social
                 });
             } else {
                 elements.clientName.textContent = '';
+                console.log('⚠️ No se pudo obtener información del cliente');
             }
         } else {
             elements.clientName.textContent = 'Cliente ID: ' + selectedClientId;
+            console.log('⚠️ Función obtenerClienteActivo no disponible');
         }
     } else {
         elements.clientName.textContent = '';
+        console.log('❌ NO HAY CLIENTE SELECCIONADO - Debe seleccionar un cliente desde el menú principal');
     }
 }
 
 async function checkClientAndLoadPlanCuentas() {
+    console.log('🔍 VERIFICANDO CLIENTE Y CARGANDO PLAN DE CUENTAS...');
+
     const clienteActivo = window.obtenerClienteActivo ? window.obtenerClienteActivo() : null;
+
+    console.log('  Cliente activo:', clienteActivo);
 
     if (!clienteActivo || !clienteActivo.id) {
         // No hay cliente activo - mostrar advertencia
@@ -275,9 +298,15 @@ async function checkClientAndLoadPlanCuentas() {
             btn.style.opacity = '0.5';
             btn.style.cursor = 'not-allowed';
         });
-        console.warn('⚠️ No hay cliente activo seleccionado');
+        console.warn('❌ NO HAY CLIENTE ACTIVO SELECCIONADO');
+        console.warn('   Por favor, seleccione un cliente desde el menú principal (👥 Clientes)');
         return;
     }
+
+    console.log('✅ Cliente activo detectado:', {
+        id: clienteActivo.id,
+        razon_social: clienteActivo.razon_social
+    });
 
     // Hay cliente activo - ocultar advertencia
     if (elements.noClientWarning) {
@@ -287,14 +316,17 @@ async function checkClientAndLoadPlanCuentas() {
     // Cargar plan de cuentas
     try {
         if (typeof window.obtenerPlanCuentas === 'function') {
+            console.log('📊 Cargando plan de cuentas...');
             planCuentas = await window.obtenerPlanCuentas(clienteActivo.id);
 
             if (!planCuentas || planCuentas.length === 0) {
                 console.warn('⚠️ El cliente no tiene plan de cuentas configurado');
                 alert('Este cliente no tiene plan de cuentas configurado.\n\nPor favor, configure el plan de cuentas antes de usar el conversor.');
             } else {
-                console.log('✅ Plan de cuentas cargado:', planCuentas.length, 'cuentas');
+                console.log('✅ Plan de cuentas cargado exitosamente:', planCuentas.length, 'cuentas');
             }
+        } else {
+            console.error('❌ Función obtenerPlanCuentas no disponible');
         }
     } catch (error) {
         console.error('❌ Error cargando plan de cuentas:', error);

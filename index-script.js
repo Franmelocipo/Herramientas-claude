@@ -809,7 +809,23 @@ async function showStorageStats() {
  * Seleccionar cliente desde la UI
  */
 function seleccionarClienteUI(clienteId, razonSocial) {
+    console.log('🔵 SELECCIONANDO CLIENTE...');
+    console.log('  ID:', clienteId);
+    console.log('  Razón Social:', razonSocial);
+
+    // Guardar cliente usando plan-cuentas.js
     seleccionarCliente(clienteId, razonSocial);
+
+    // Verificar que se guardó correctamente
+    const verificacion = obtenerClienteActivo();
+    if (verificacion && verificacion.id === clienteId) {
+        console.log('✅ Cliente guardado correctamente en localStorage');
+        console.log('  Verificación:', verificacion);
+    } else {
+        console.error('❌ ERROR: Cliente NO se guardó correctamente');
+    }
+
+    // Re-renderizar lista para actualizar visualmente
     renderClientsList();
 
     // Mostrar notificación temporal
