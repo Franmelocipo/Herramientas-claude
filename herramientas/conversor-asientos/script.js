@@ -1337,12 +1337,18 @@ function generateFinalExcel() {
     const errors = [];
 
     if (state.sourceType === 'compensaciones') {
-        // Para compensaciones: validar que cada grupo tenga su cuenta correspondiente
+        // Para compensaciones: validar que cada grupo tenga ambas cuentas (partida doble)
         state.groupedData.forEach((g, idx) => {
-            if (g.isOrigen && !state.accountCodesHaber[idx]) {
-                errors.push(`Grupo "${g.concepto}": falta cuenta HABER`);
-            } else if (!g.isOrigen && !state.accountCodesDebe[idx]) {
-                errors.push(`Grupo "${g.concepto}": falta cuenta DEBE`);
+            const hasDebe = state.accountCodesDebe[idx];
+            const hasHaber = state.accountCodesHaber[idx];
+
+            if (!hasDebe || !hasHaber) {
+                errors.push(`Grupo "${g.concepto}": faltan cuentas DEBE y/o HABER (requiere ambas para partida doble)`);
+            }
+
+            // Validar que no sea la misma cuenta
+            if (hasDebe && hasHaber && state.accountCodesDebe[idx] === state.accountCodesHaber[idx]) {
+                errors.push(`Grupo "${g.concepto}": las cuentas DEBE y HABER no pueden ser iguales`);
             }
         });
     } else if (state.sourceType === 'extracto' || state.sourceType === 'veps') {
@@ -1431,6 +1437,37 @@ function generateFinalExcel() {
         allData.forEach(item => delete item._sortOrder);
     }
 
+    // Validación de partida doble: suma DEBE = suma HABER por asiento
+    const asientosByNumero = {};
+    allData.forEach(item => {
+        const numero = item.Numero || 'sin_numero';
+        if (!asientosByNumero[numero]) {
+            asientosByNumero[numero] = { debe: 0, haber: 0 };
+        }
+        asientosByNumero[numero].debe += item.Debe || 0;
+        asientosByNumero[numero].haber += item.Haber || 0;
+    });
+
+    const partidaDobleErrors = [];
+    Object.entries(asientosByNumero).forEach(([numero, sumas]) => {
+        const diferencia = Math.abs(sumas.debe - sumas.haber);
+        if (diferencia > 0.01) { // Tolerancia por redondeo
+            partidaDobleErrors.push(`Asiento ${numero}: Debe ($${sumas.debe.toFixed(2)}) ≠ Haber ($${sumas.haber.toFixed(2)})`);
+        }
+    });
+
+    if (partidaDobleErrors.length > 0) {
+        console.warn('Advertencias de partida doble:', partidaDobleErrors);
+        // Opcional: mostrar advertencia al usuario
+        // const maxErrors = 5;
+        // let warnMsg = `⚠️ Se encontraron ${partidaDobleErrors.length} asiento(s) desbalanceado(s):\n\n`;
+        // warnMsg += partidaDobleErrors.slice(0, maxErrors).map(e => `• ${e}`).join('\n');
+        // if (partidaDobleErrors.length > maxErrors) {
+        //     warnMsg += `\n\n... y ${partidaDobleErrors.length - maxErrors} más.`;
+        // }
+        // alert(warnMsg);
+    }
+
     state.finalData = allData;
     goToStep(3);
 }
@@ -1458,38 +1495,76 @@ function processCompensaciones(g, codeDebe, codeHaber, allData) {
             importe = parseFloat(importeStr.replace(/\./g, '').replace(',', '.')) || 0;
         }
 
-        let leyenda, debe, haber, cuenta;
+        let leyenda;
+        const importeVal = parseFloat(importe.toFixed(2));
 
         if (g.isOrigen) {
             const impuesto = primeraLinea['Impuesto Orig'] || '';
             const concepto = primeraLinea['Concepto Orig'] || '';
             const subconcepto = primeraLinea['Subconcepto Orig'] || '';
             leyenda = `COMP ${transaccion} - ${impuesto} ${concepto} ${subconcepto} / ${periodoOrig}`;
-            debe = 0;
-            haber = parseFloat(importe.toFixed(2));
-            cuenta = codeHaber; // Origen va al HABER
+
+            // Línea 1: Cuenta DEBE al debe
+            allData.push({
+                Fecha: fechaOp,
+                Cuenta: codeDebe,
+                Debe: importeVal,
+                Haber: 0,
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat(importeVal.toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's',
+                _transaccion: transaccion
+            });
+
+            // Línea 2: Cuenta HABER al haber (contrapartida)
+            allData.push({
+                Fecha: fechaOp,
+                Cuenta: codeHaber,
+                Debe: 0,
+                Haber: importeVal,
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat((-importeVal).toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's',
+                _transaccion: transaccion
+            });
         } else {
             const impuesto = primeraLinea['Impuesto Dest'] || '';
             const concepto = primeraLinea['Concepto Dest'] || '';
             const subconcepto = primeraLinea['Subconcepto Dest'] || '';
             leyenda = `COMP ${transaccion} - ${impuesto} ${concepto} ${subconcepto} / ${periodoDest}`;
-            debe = parseFloat(importe.toFixed(2));
-            haber = 0;
-            cuenta = codeDebe; // Destino va al DEBE
-        }
 
-        allData.push({
-            Fecha: fechaOp,
-            Cuenta: cuenta,
-            Debe: debe,
-            Haber: haber,
-            'Tipo de auxiliar': 1,
-            Auxiliar: 1,
-            Importe: parseFloat((debe - haber).toFixed(2)),
-            Leyenda: leyenda,
-            ExtraContable: 's',
-            _transaccion: transaccion
-        });
+            // Línea 1: Cuenta DEBE al debe
+            allData.push({
+                Fecha: fechaOp,
+                Cuenta: codeDebe,
+                Debe: importeVal,
+                Haber: 0,
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat(importeVal.toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's',
+                _transaccion: transaccion
+            });
+
+            // Línea 2: Cuenta HABER al haber (contrapartida)
+            allData.push({
+                Fecha: fechaOp,
+                Cuenta: codeHaber,
+                Debe: 0,
+                Haber: importeVal,
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat((-importeVal).toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's',
+                _transaccion: transaccion
+            });
+        }
     });
 }
 
@@ -1592,29 +1667,70 @@ function processRegistros(g, codeDebe, codeHaber, allData) {
         if (razonSocial) leyendaParts.push(razonSocial);
         const leyenda = leyendaParts.join(' / ');
 
-        // Determinar qué cuenta usar según si va al debe o al haber
-        let cuenta;
-        if (debe > 0) {
-            cuenta = codeDebe;
-        } else if (haber > 0) {
-            cuenta = codeHaber;
-        } else {
-            cuenta = codeDebe || codeHaber; // Fallback
-        }
+        const sortOrder = parseInt(nInter) || 0;
 
-        allData.push({
-            Fecha: fecha,
-            Numero: nInter,
-            Cuenta: cuenta,
-            Debe: debe,
-            Haber: haber,
-            'Tipo de auxiliar': 1,
-            Auxiliar: 1,
-            Importe: parseFloat((debe - haber).toFixed(2)),
-            Leyenda: leyenda,
-            ExtraContable: 's',
-            _sortOrder: parseInt(nInter) || 0
-        });
+        // Generar asiento completo por partida doble
+        if (debe > 0) {
+            // Línea 1: Cuenta DEBE al debe
+            allData.push({
+                Fecha: fecha,
+                Numero: nInter,
+                Cuenta: codeDebe,
+                Debe: debe,
+                Haber: 0,
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat(debe.toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's',
+                _sortOrder: sortOrder
+            });
+
+            // Línea 2: Cuenta HABER al haber (contrapartida)
+            allData.push({
+                Fecha: fecha,
+                Numero: nInter,
+                Cuenta: codeHaber,
+                Debe: 0,
+                Haber: debe,
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat((-debe).toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's',
+                _sortOrder: sortOrder
+            });
+        } else if (haber > 0) {
+            // Línea 1: Cuenta DEBE al debe (contrapartida)
+            allData.push({
+                Fecha: fecha,
+                Numero: nInter,
+                Cuenta: codeDebe,
+                Debe: haber,
+                Haber: 0,
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat(haber.toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's',
+                _sortOrder: sortOrder
+            });
+
+            // Línea 2: Cuenta HABER al haber
+            allData.push({
+                Fecha: fecha,
+                Numero: nInter,
+                Cuenta: codeHaber,
+                Debe: 0,
+                Haber: haber,
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat((-haber).toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's',
+                _sortOrder: sortOrder
+            });
+        }
     });
 }
 
