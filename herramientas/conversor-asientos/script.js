@@ -6,10 +6,12 @@ const state = {
     sourceType: '',
     sourceData: [],
     groupedData: [],
-    accountCodes: {},
+    accountCodesDebe: {},   // Cuentas para el DEBE
+    accountCodesHaber: {},  // Cuentas para el HABER (contrapartida)
     finalData: [],
     bankAccount: '',
     activeSearchField: null,
+    activeSearchType: null, // 'debe' o 'haber'
     expandedGroups: {} // Rastrear qué grupos están expandidos
 };
 
@@ -397,10 +399,12 @@ function reset() {
     state.sourceType = '';
     state.sourceData = [];
     state.groupedData = [];
-    state.accountCodes = {};
+    state.accountCodesDebe = {};
+    state.accountCodesHaber = {};
     state.finalData = [];
     state.bankAccount = '';
     state.activeSearchField = null;
+    state.activeSearchType = null;
     state.expandedGroups = {};
 
     elements.fileInput.value = '';
@@ -817,11 +821,11 @@ function groupSimilarEntries(data) {
 function renderGroupsList() {
     elements.groupStats.textContent = `${state.groupedData.length} grupos | ${state.sourceData.length} movimientos`;
 
-    // Mostrar/ocultar sección de cuenta bancaria
+    // Mostrar/ocultar sección de cuenta bancaria (solo para extracto y veps como contrapartida global)
     if (state.sourceType === 'extracto' || state.sourceType === 'veps') {
         elements.bankAccountSection.classList.remove('hidden');
         elements.bankAccountLabel.textContent = state.sourceType === 'extracto'
-            ? 'Cuenta del Banco (contrapartida)'
+            ? 'Cuenta del Banco (contrapartida global)'
             : 'Cuenta de Contrapartida (para totales de VEP)';
         elements.bankAccountInput.placeholder = getSelectedClientId() ? '🔍 Buscar por código o descripción...' : 'Ej: 11010101';
         elements.bankAccountInput.value = state.bankAccount;
@@ -840,10 +844,6 @@ function renderGroupsList() {
     const html = state.groupedData.map((g, idx) => {
         const classType = state.sourceType === 'compensaciones'
             ? (g.isOrigen ? 'origen' : 'destino')
-            : '';
-
-        const extraLabel = state.sourceType === 'compensaciones'
-            ? (g.isOrigen ? ' (HABER)' : ' (DEBE)')
             : '';
 
         const isExpanded = state.expandedGroups[idx] || false;
@@ -880,6 +880,87 @@ function renderGroupsList() {
             `;
         }
 
+        // Para compensaciones, solo mostrar un campo según si es origen o destino
+        let accountFieldsHtml = '';
+        if (state.sourceType === 'compensaciones') {
+            // Compensaciones: origen = HABER, destino = DEBE
+            if (g.isOrigen) {
+                accountFieldsHtml = `
+                    <div class="group-account-dual">
+                        <div class="account-field">
+                            <label class="account-label haber-label">Cuenta HABER (sale)</label>
+                            <div class="input-with-dropdown">
+                                <input
+                                    type="text"
+                                    class="input-text input-haber"
+                                    data-group-idx="${idx}"
+                                    data-account-type="haber"
+                                    value="${state.accountCodesHaber[idx] || ''}"
+                                    placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
+                                >
+                                <div class="account-dropdown hidden" id="dropdown-${idx}-haber"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                accountFieldsHtml = `
+                    <div class="group-account-dual">
+                        <div class="account-field">
+                            <label class="account-label debe-label">Cuenta DEBE (entra)</label>
+                            <div class="input-with-dropdown">
+                                <input
+                                    type="text"
+                                    class="input-text input-debe"
+                                    data-group-idx="${idx}"
+                                    data-account-type="debe"
+                                    value="${state.accountCodesDebe[idx] || ''}"
+                                    placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
+                                >
+                                <div class="account-dropdown hidden" id="dropdown-${idx}-debe"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            // Para todos los demás tipos: mostrar dos campos (DEBE y HABER)
+            accountFieldsHtml = `
+                <div class="group-account-dual">
+                    <div class="account-field">
+                        <label class="account-label debe-label">Cuenta DEBE</label>
+                        <div class="account-totals">$${g.totalDebe.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</div>
+                        <div class="input-with-dropdown">
+                            <input
+                                type="text"
+                                class="input-text input-debe"
+                                data-group-idx="${idx}"
+                                data-account-type="debe"
+                                value="${state.accountCodesDebe[idx] || ''}"
+                                placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
+                            >
+                            <div class="account-dropdown hidden" id="dropdown-${idx}-debe"></div>
+                        </div>
+                    </div>
+                    <div class="account-field">
+                        <label class="account-label haber-label">Cuenta HABER</label>
+                        <div class="account-totals">$${g.totalHaber.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</div>
+                        <div class="input-with-dropdown">
+                            <input
+                                type="text"
+                                class="input-text input-haber"
+                                data-group-idx="${idx}"
+                                data-account-type="haber"
+                                value="${state.accountCodesHaber[idx] || ''}"
+                                placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
+                            >
+                            <div class="account-dropdown hidden" id="dropdown-${idx}-haber"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         return `
             <div class="group-item ${classType}">
                 <div class="group-main-row">
@@ -890,22 +971,10 @@ function renderGroupsList() {
                         <div class="group-concepto">${g.concepto}</div>
                         <div class="group-ejemplo">${g.ejemploCompleto}</div>
                         <div class="group-stats">
-                            ${g.count} mov | Debe: $${g.totalDebe.toFixed(2)} | Haber: $${g.totalHaber.toFixed(2)}
+                            ${g.count} mov | Debe: $${g.totalDebe.toLocaleString('es-AR', { minimumFractionDigits: 2 })} | Haber: $${g.totalHaber.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                         </div>
                     </div>
-                    <div class="group-account">
-                        <label>Código de cuenta${extraLabel}</label>
-                        <div class="input-with-dropdown">
-                            <input
-                                type="text"
-                                class="input-text"
-                                data-group-idx="${idx}"
-                                value="${state.accountCodes[idx] || ''}"
-                                placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código'}"
-                            >
-                            <div class="account-dropdown hidden" id="dropdown-${idx}"></div>
-                        </div>
-                    </div>
+                    ${accountFieldsHtml}
                 </div>
                 ${detailsHtml}
             </div>
@@ -914,14 +983,15 @@ function renderGroupsList() {
 
     elements.groupsList.innerHTML = html;
 
-    // Attach event listeners to account inputs
-    document.querySelectorAll('.group-account input[data-group-idx]').forEach(input => {
+    // Attach event listeners to account inputs (both debe and haber)
+    document.querySelectorAll('.group-account-dual input[data-group-idx]').forEach(input => {
         const idx = parseInt(input.dataset.groupIdx);
+        const accountType = input.dataset.accountType; // 'debe' o 'haber'
 
         // Filtrado en tiempo real
         input.addEventListener('input', (e) => {
             if (getSelectedClientId()) {
-                handleAccountInputChange(idx);
+                handleAccountInputChange(idx, accountType);
             }
         });
 
@@ -929,13 +999,14 @@ function renderGroupsList() {
         input.addEventListener('focus', () => {
             if (getSelectedClientId()) {
                 state.activeSearchField = idx;
-                showAccountDropdown(idx);
+                state.activeSearchType = accountType;
+                showAccountDropdown(idx, accountType);
             }
         });
 
         // Navegación por teclado
         input.addEventListener('keydown', (e) => {
-            handleAccountInputKeydown(e, idx);
+            handleAccountInputKeydown(e, idx, accountType);
         });
     });
 }
@@ -956,10 +1027,11 @@ function toggleGroupExpansion(idx) {
 let dropdownState = {
     currentIndex: -1,
     accounts: [],
-    fieldId: null
+    fieldId: null,
+    accountType: null // 'debe' o 'haber'
 };
 
-async function showAccountDropdown(fieldId) {
+async function showAccountDropdown(fieldId, accountType = null) {
     closeAllDropdowns();
 
     const accounts = await getClientAccounts();
@@ -970,6 +1042,7 @@ async function showAccountDropdown(fieldId) {
 
     dropdownState.accounts = accounts;
     dropdownState.fieldId = fieldId;
+    dropdownState.accountType = accountType;
     dropdownState.currentIndex = -1;
 
     let dropdown;
@@ -978,7 +1051,11 @@ async function showAccountDropdown(fieldId) {
     if (fieldId === 'bank') {
         dropdown = elements.bankAccountDropdown;
         inputElement = elements.bankAccountInput;
+    } else if (accountType) {
+        dropdown = document.getElementById(`dropdown-${fieldId}-${accountType}`);
+        inputElement = document.querySelector(`input[data-group-idx="${fieldId}"][data-account-type="${accountType}"]`);
     } else {
+        // Fallback para compatibilidad
         dropdown = document.getElementById(`dropdown-${fieldId}`);
         inputElement = document.querySelector(`input[data-group-idx="${fieldId}"]`);
     }
@@ -1033,8 +1110,15 @@ function selectAccount(code) {
         state.bankAccount = acc.code;
         elements.bankAccountInput.value = `${acc.code} - ${acc.description}`;
     } else {
-        state.accountCodes[dropdownState.fieldId] = acc.code;
-        const input = document.querySelector(`input[data-group-idx="${dropdownState.fieldId}"]`);
+        // Guardar en el estado correspondiente según el tipo de cuenta
+        if (dropdownState.accountType === 'debe') {
+            state.accountCodesDebe[dropdownState.fieldId] = acc.code;
+        } else if (dropdownState.accountType === 'haber') {
+            state.accountCodesHaber[dropdownState.fieldId] = acc.code;
+        }
+
+        // Actualizar el input
+        const input = document.querySelector(`input[data-group-idx="${dropdownState.fieldId}"][data-account-type="${dropdownState.accountType}"]`);
         if (input) input.value = `${acc.code} - ${acc.description}`;
     }
     closeAllDropdowns();
@@ -1069,15 +1153,20 @@ function seleccionarItemActivo() {
     }
 }
 
-function handleAccountInputKeydown(e, fieldId) {
-    const dropdown = fieldId === 'bank'
-        ? elements.bankAccountDropdown
-        : document.getElementById(`dropdown-${fieldId}`);
+function handleAccountInputKeydown(e, fieldId, accountType = null) {
+    let dropdown;
+    if (fieldId === 'bank') {
+        dropdown = elements.bankAccountDropdown;
+    } else if (accountType) {
+        dropdown = document.getElementById(`dropdown-${fieldId}-${accountType}`);
+    } else {
+        dropdown = document.getElementById(`dropdown-${fieldId}`);
+    }
 
     if (!dropdown || dropdown.classList.contains('hidden')) {
         if (e.key === 'Enter' || e.key === 'ArrowDown') {
             e.preventDefault();
-            showAccountDropdown(fieldId);
+            showAccountDropdown(fieldId, accountType);
         }
         return;
     }
@@ -1106,14 +1195,20 @@ function handleAccountInputKeydown(e, fieldId) {
     }
 }
 
-function handleAccountInputChange(fieldId) {
-    const inputElement = fieldId === 'bank'
-        ? elements.bankAccountInput
-        : document.querySelector(`input[data-group-idx="${fieldId}"]`);
+function handleAccountInputChange(fieldId, accountType = null) {
+    let inputElement;
+    let dropdown;
 
-    const dropdown = fieldId === 'bank'
-        ? elements.bankAccountDropdown
-        : document.getElementById(`dropdown-${fieldId}`);
+    if (fieldId === 'bank') {
+        inputElement = elements.bankAccountInput;
+        dropdown = elements.bankAccountDropdown;
+    } else if (accountType) {
+        inputElement = document.querySelector(`input[data-group-idx="${fieldId}"][data-account-type="${accountType}"]`);
+        dropdown = document.getElementById(`dropdown-${fieldId}-${accountType}`);
+    } else {
+        inputElement = document.querySelector(`input[data-group-idx="${fieldId}"]`);
+        dropdown = document.getElementById(`dropdown-${fieldId}`);
+    }
 
     if (!inputElement || !dropdown) return;
 
@@ -1121,7 +1216,7 @@ function handleAccountInputChange(fieldId) {
 
     // Si el dropdown no está visible, mostrarlo
     if (dropdown.classList.contains('hidden')) {
-        showAccountDropdown(fieldId);
+        showAccountDropdown(fieldId, accountType);
     } else {
         // Actualizar resultados
         dropdownState.currentIndex = -1;
@@ -1142,14 +1237,69 @@ function closeAllDropdowns() {
 // GENERACIÓN DE ASIENTOS FINALES
 // ============================================
 function generateFinalExcel() {
-    if (state.sourceType === 'compensaciones' || state.sourceType === 'tabla') {
-        const missingAccounts = state.groupedData.filter((g, idx) => !state.accountCodes[idx]);
-        if (missingAccounts.length > 0) {
-            alert(`⚠️ Faltan asignar cuentas a ${missingAccounts.length} grupo(s)`);
-            return;
+    // Validaciones según el tipo de origen
+    const errors = [];
+
+    if (state.sourceType === 'compensaciones') {
+        // Para compensaciones: validar que cada grupo tenga su cuenta correspondiente
+        state.groupedData.forEach((g, idx) => {
+            if (g.isOrigen && !state.accountCodesHaber[idx]) {
+                errors.push(`Grupo "${g.concepto}": falta cuenta HABER`);
+            } else if (!g.isOrigen && !state.accountCodesDebe[idx]) {
+                errors.push(`Grupo "${g.concepto}": falta cuenta DEBE`);
+            }
+        });
+    } else if (state.sourceType === 'extracto' || state.sourceType === 'veps') {
+        // Para extracto y veps: validar cuenta bancaria y cuentas duales
+        if (!state.bankAccount) {
+            errors.push(state.sourceType === 'extracto'
+                ? 'Falta la cuenta del banco (contrapartida global)'
+                : 'Falta la cuenta de contrapartida (para totales de VEP)');
         }
-    } else if ((state.sourceType === 'extracto' || state.sourceType === 'veps') && !state.bankAccount) {
-        alert(state.sourceType === 'extracto' ? 'Por favor ingresa la cuenta del banco' : 'Por favor ingresa la cuenta de contrapartida');
+
+        state.groupedData.forEach((g, idx) => {
+            const hasDebe = state.accountCodesDebe[idx];
+            const hasHaber = state.accountCodesHaber[idx];
+
+            // Para extracto/veps, al menos una cuenta debe estar asignada
+            if (!hasDebe && !hasHaber) {
+                errors.push(`Grupo "${g.concepto}": falta asignar al menos una cuenta (DEBE o HABER)`);
+            }
+
+            // Validar que no sea la misma cuenta
+            if (hasDebe && hasHaber && state.accountCodesDebe[idx] === state.accountCodesHaber[idx]) {
+                errors.push(`Grupo "${g.concepto}": las cuentas DEBE y HABER no pueden ser iguales`);
+            }
+        });
+    } else {
+        // Para tabla y registros: validar cuentas duales obligatorias
+        state.groupedData.forEach((g, idx) => {
+            const hasDebe = state.accountCodesDebe[idx];
+            const hasHaber = state.accountCodesHaber[idx];
+
+            if (!hasDebe && !hasHaber) {
+                errors.push(`Grupo "${g.concepto}": faltan ambas cuentas (DEBE y HABER)`);
+            } else if (!hasDebe && g.totalDebe > 0) {
+                errors.push(`Grupo "${g.concepto}": falta cuenta DEBE (tiene $${g.totalDebe.toFixed(2)} en debe)`);
+            } else if (!hasHaber && g.totalHaber > 0) {
+                errors.push(`Grupo "${g.concepto}": falta cuenta HABER (tiene $${g.totalHaber.toFixed(2)} en haber)`);
+            }
+
+            // Validar que no sea la misma cuenta
+            if (hasDebe && hasHaber && state.accountCodesDebe[idx] === state.accountCodesHaber[idx]) {
+                errors.push(`Grupo "${g.concepto}": las cuentas DEBE y HABER no pueden ser iguales`);
+            }
+        });
+    }
+
+    if (errors.length > 0) {
+        const maxErrors = 10;
+        let errorMsg = `⚠️ Se encontraron ${errors.length} error(es):\n\n`;
+        errorMsg += errors.slice(0, maxErrors).map(e => `• ${e}`).join('\n');
+        if (errors.length > maxErrors) {
+            errorMsg += `\n\n... y ${errors.length - maxErrors} error(es) más.`;
+        }
+        alert(errorMsg);
         return;
     }
 
@@ -1157,21 +1307,22 @@ function generateFinalExcel() {
     let numeroAsientoGlobal = 1;
 
     state.groupedData.forEach((g, idx) => {
-        const code = state.accountCodes[idx] || '';
+        const codeDebe = state.accountCodesDebe[idx] || '';
+        const codeHaber = state.accountCodesHaber[idx] || '';
         let numeroAsiento = numeroAsientoGlobal;
 
         if (state.sourceType === 'compensaciones') {
-            processCompensaciones(g, code, allData);
+            processCompensaciones(g, codeDebe, codeHaber, allData);
         } else if (state.sourceType === 'veps') {
-            numeroAsiento = processVeps(g, code, allData, numeroAsiento);
+            numeroAsiento = processVeps(g, codeDebe, codeHaber, allData, numeroAsiento);
             numeroAsientoGlobal = numeroAsiento;
         } else if (state.sourceType === 'registros') {
-            processRegistros(g, code, allData);
+            processRegistros(g, codeDebe, codeHaber, allData);
         } else if (state.sourceType === 'extracto') {
-            numeroAsiento = processExtracto(g, code, allData, numeroAsiento);
+            numeroAsiento = processExtracto(g, codeDebe, codeHaber, allData, numeroAsiento);
             numeroAsientoGlobal = numeroAsiento;
         } else if (state.sourceType === 'tabla') {
-            numeroAsiento = processTabla(g, code, allData, numeroAsiento);
+            numeroAsiento = processTabla(g, codeDebe, codeHaber, allData, numeroAsiento);
             numeroAsientoGlobal = numeroAsiento;
         }
     });
@@ -1188,7 +1339,7 @@ function generateFinalExcel() {
     goToStep(3);
 }
 
-function processCompensaciones(g, code, allData) {
+function processCompensaciones(g, codeDebe, codeHaber, allData) {
     const itemsByTransaccion = {};
 
     g.items.forEach(item => {
@@ -1211,7 +1362,7 @@ function processCompensaciones(g, code, allData) {
             importe = parseFloat(importeStr.replace(/\./g, '').replace(',', '.')) || 0;
         }
 
-        let leyenda, debe, haber;
+        let leyenda, debe, haber, cuenta;
 
         if (g.isOrigen) {
             const impuesto = primeraLinea['Impuesto Orig'] || '';
@@ -1220,6 +1371,7 @@ function processCompensaciones(g, code, allData) {
             leyenda = `COMP ${transaccion} - ${impuesto} ${concepto} ${subconcepto} / ${periodoOrig}`;
             debe = 0;
             haber = parseFloat(importe.toFixed(2));
+            cuenta = codeHaber; // Origen va al HABER
         } else {
             const impuesto = primeraLinea['Impuesto Dest'] || '';
             const concepto = primeraLinea['Concepto Dest'] || '';
@@ -1227,11 +1379,12 @@ function processCompensaciones(g, code, allData) {
             leyenda = `COMP ${transaccion} - ${impuesto} ${concepto} ${subconcepto} / ${periodoDest}`;
             debe = parseFloat(importe.toFixed(2));
             haber = 0;
+            cuenta = codeDebe; // Destino va al DEBE
         }
 
         allData.push({
             Fecha: fechaOp,
-            Cuenta: code,
+            Cuenta: cuenta,
             Debe: debe,
             Haber: haber,
             'Tipo de auxiliar': 1,
@@ -1244,7 +1397,7 @@ function processCompensaciones(g, code, allData) {
     });
 }
 
-function processVeps(g, code, allData, numeroAsiento) {
+function processVeps(g, codeDebe, codeHaber, allData, numeroAsiento) {
     const itemsByVep = {};
 
     g.items.forEach(item => {
@@ -1275,12 +1428,13 @@ function processVeps(g, code, allData, numeroAsiento) {
 
             const leyenda = `${impuesto} - ${concepto} - ${subconcepto} / ${periodo} / VEP ${nroVep}`;
 
+            // Cada línea del VEP va al DEBE (pago de impuesto)
             const debe = parseFloat(importe.toFixed(2));
             const haber = 0;
             allData.push({
                 Fecha: fecha,
                 Numero: numeroAsiento,
-                Cuenta: code,
+                Cuenta: codeDebe || codeHaber, // Usar la cuenta que esté disponible
                 Debe: debe,
                 Haber: haber,
                 'Tipo de auxiliar': 1,
@@ -1291,6 +1445,7 @@ function processVeps(g, code, allData, numeroAsiento) {
             });
         });
 
+        // La contrapartida va al HABER (sale del banco)
         const leyendaContrapartida = `VEP ${nroVep} / ${periodo}`;
         const debeContra = 0;
         const haberContra = parseFloat(totalVep.toFixed(2));
@@ -1313,7 +1468,7 @@ function processVeps(g, code, allData, numeroAsiento) {
     return numeroAsiento;
 }
 
-function processRegistros(g, code, allData) {
+function processRegistros(g, codeDebe, codeHaber, allData) {
     g.items.forEach(item => {
         const fecha = item['FECHA'] || item['Fecha'] || '';
         const nInter = item['N_INTER'] || item['N_Inter'] || item['n_inter'] || '';
@@ -1341,10 +1496,20 @@ function processRegistros(g, code, allData) {
         if (razonSocial) leyendaParts.push(razonSocial);
         const leyenda = leyendaParts.join(' / ');
 
+        // Determinar qué cuenta usar según si va al debe o al haber
+        let cuenta;
+        if (debe > 0) {
+            cuenta = codeDebe;
+        } else if (haber > 0) {
+            cuenta = codeHaber;
+        } else {
+            cuenta = codeDebe || codeHaber; // Fallback
+        }
+
         allData.push({
             Fecha: fecha,
             Numero: nInter,
-            Cuenta: code,
+            Cuenta: cuenta,
             Debe: debe,
             Haber: haber,
             'Tipo de auxiliar': 1,
@@ -1357,7 +1522,7 @@ function processRegistros(g, code, allData) {
     });
 }
 
-function processExtracto(g, code, allData, numeroAsiento) {
+function processExtracto(g, codeDebe, codeHaber, allData, numeroAsiento) {
     g.items.forEach(item => {
         const descripcion = item['Descripción'] || item.Leyenda || '';
         const fecha = item.Fecha || '';
@@ -1374,11 +1539,13 @@ function processExtracto(g, code, allData, numeroAsiento) {
 
         const leyenda = `EXTRACTO - ${descripcion}`;
 
+        // Débito en el extracto = sale del banco
+        // Asiento: Cuenta DEBE al debe, Banco al haber
         if (debitoVal > 0) {
             const debe1 = parseFloat(debitoVal.toFixed(2));
             const haber1 = 0;
             allData.push({
-                Fecha: fecha, Numero: numeroAsiento, Cuenta: code,
+                Fecha: fecha, Numero: numeroAsiento, Cuenta: codeDebe || codeHaber,
                 Debe: debe1, Haber: haber1,
                 'Tipo de auxiliar': 1, Auxiliar: 1,
                 Importe: parseFloat((debe1 - haber1).toFixed(2)),
@@ -1396,6 +1563,8 @@ function processExtracto(g, code, allData, numeroAsiento) {
             numeroAsiento++;
         }
 
+        // Crédito en el extracto = entra al banco
+        // Asiento: Banco al debe, Cuenta HABER al haber
         if (creditoVal > 0) {
             const debe3 = parseFloat(creditoVal.toFixed(2));
             const haber3 = 0;
@@ -1409,7 +1578,7 @@ function processExtracto(g, code, allData, numeroAsiento) {
             const debe4 = 0;
             const haber4 = parseFloat(creditoVal.toFixed(2));
             allData.push({
-                Fecha: fecha, Numero: numeroAsiento, Cuenta: code,
+                Fecha: fecha, Numero: numeroAsiento, Cuenta: codeHaber || codeDebe,
                 Debe: debe4, Haber: haber4,
                 'Tipo de auxiliar': 1, Auxiliar: 1,
                 Importe: parseFloat((debe4 - haber4).toFixed(2)),
@@ -1422,8 +1591,9 @@ function processExtracto(g, code, allData, numeroAsiento) {
     return numeroAsiento;
 }
 
-function processTabla(g, code, allData, numeroAsiento) {
+function processTabla(g, codeDebe, codeHaber, allData, numeroAsiento) {
     // Procesar cada item de la tabla de datos
+    // IMPORTANTE: Generar asientos completos por partida doble
     g.items.forEach(item => {
         // Obtener fecha en diferentes formatos posibles
         let fecha = item['FECHA'] || item['Fecha'] || item['fecha'] || '';
@@ -1441,20 +1611,66 @@ function processTabla(g, code, allData, numeroAsiento) {
         // Crear leyenda
         const leyenda = descripcion;
 
-        allData.push({
-            Fecha: fecha,
-            Numero: numeroAsiento,
-            Cuenta: code,
-            Debe: debe,
-            Haber: haber,
-            'Tipo de auxiliar': 1,
-            Auxiliar: 1,
-            Importe: parseFloat((debe - haber).toFixed(2)),
-            Leyenda: leyenda,
-            ExtraContable: 's'
-        });
-
-        numeroAsiento++;
+        // Generar asiento completo por partida doble
+        if (debe > 0) {
+            // Importe positivo: Cuenta DEBE al debe, Cuenta HABER al haber
+            // Línea 1: DEBE
+            allData.push({
+                Fecha: fecha,
+                Numero: numeroAsiento,
+                Cuenta: codeDebe,
+                Debe: debe,
+                Haber: 0,
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat(debe.toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's'
+            });
+            // Línea 2: HABER (contrapartida)
+            allData.push({
+                Fecha: fecha,
+                Numero: numeroAsiento,
+                Cuenta: codeHaber,
+                Debe: 0,
+                Haber: debe,
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat((-debe).toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's'
+            });
+            numeroAsiento++;
+        } else if (haber > 0) {
+            // Importe negativo: Cuenta HABER al haber, Cuenta DEBE al debe
+            // Línea 1: DEBE (contrapartida)
+            allData.push({
+                Fecha: fecha,
+                Numero: numeroAsiento,
+                Cuenta: codeDebe,
+                Debe: haber,
+                Haber: 0,
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat(haber.toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's'
+            });
+            // Línea 2: HABER
+            allData.push({
+                Fecha: fecha,
+                Numero: numeroAsiento,
+                Cuenta: codeHaber,
+                Debe: 0,
+                Haber: haber,
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat((-haber).toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's'
+            });
+            numeroAsiento++;
+        }
     });
 
     return numeroAsiento;
