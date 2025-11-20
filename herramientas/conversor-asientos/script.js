@@ -218,7 +218,8 @@ const sourceTypes = {
     registros: { name: 'Registros del Cliente', icon: '📝' },
     veps: { name: 'VEPs ARCA', icon: '🧾' },
     compensaciones: { name: 'Compensaciones ARCA', icon: '🔄' },
-    tabla: { name: 'Tabla de Datos', icon: '📊' }
+    tabla: { name: 'Tabla de Datos', icon: '📊' },
+    soscontador: { name: 'Libro Diario SOS Contador', icon: '📒' }
 };
 
 // ============================================
@@ -436,7 +437,8 @@ function selectSourceType(type) {
         registros: 'Descargar Plantilla Registros',
         veps: 'Descargar Plantilla VEPs',
         compensaciones: 'Descargar Plantilla Compensaciones',
-        tabla: 'Descargar Plantilla Tabla de Datos'
+        tabla: 'Descargar Plantilla Tabla de Datos',
+        soscontador: 'Descargar Plantilla SOS Contador'
     };
 
     if (elements.templateButtonText) {
@@ -462,6 +464,9 @@ async function handleFileUpload(e) {
 
         if (state.sourceType === 'compensaciones') {
             jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true, range: 1 });
+        } else if (state.sourceType === 'soscontador') {
+            // SOS Contador tiene estructura especial - parsear desde fila 7
+            jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
         } else {
             jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
         }
@@ -496,6 +501,19 @@ async function handleFileUpload(e) {
             }
         }
 
+        // Caso especial: SOS Contador tiene estructura jerárquica
+        if (state.sourceType === 'soscontador') {
+            const parsedData = parseSOSContador(jsonData);
+            if (parsedData.length === 0) {
+                alert('No se encontraron asientos válidos en el archivo.\nVerifique que el archivo tenga el formato correcto de SOS Contador.');
+                return;
+            }
+            state.sourceData = parsedData;
+            state.finalData = parsedData;
+            goToStep(3); // Saltar directo a descarga (no requiere asignación)
+            return;
+        }
+
         state.sourceData = rows;
         groupSimilarEntries(rows);
         goToStep(2);
@@ -503,6 +521,84 @@ async function handleFileUpload(e) {
     } catch (error) {
         alert('Error al leer el archivo: ' + error.message);
     }
+}
+
+// ============================================
+// PARSEO ESPECIAL PARA SOS CONTADOR
+// ============================================
+function parseSOSContador(jsonData) {
+    const result = [];
+    let currentFecha = '';
+    let currentDescripcion = '';
+    let numeroAsiento = 1;
+
+    // Ignorar las primeras 7 filas (encabezados del libro)
+    // Fila 7 (índice 6) tiene los headers: Asiento, Descripcion - Cuenta, NaN, Monto Debe, Monto Haber, Monto Saldo
+
+    for (let i = 7; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (!row || row.length === 0) continue;
+
+        const colA = String(row[0] || '').trim();
+        const colB = String(row[1] || '').trim();
+        const colC = String(row[2] || '').trim();
+        const colD = row[3]; // Monto Debe
+        const colE = row[4]; // Monto Haber
+
+        // Detectar encabezado de asiento: "Asiento Nro. X - Fecha DD/MM/YYYY - COMPROBANTE"
+        if (colA.includes('Asiento Nro.') || colA.includes('Asiento Nro')) {
+            // Extraer fecha del encabezado
+            const fechaMatch = colA.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+            if (fechaMatch) {
+                currentFecha = fechaMatch[1];
+            }
+            numeroAsiento++;
+            continue;
+        }
+
+        // Detectar línea de descripción (tiene texto en columna B pero no en C, D, E)
+        if (colB && !colC && (colD === undefined || colD === null || colD === '') && (colE === undefined || colE === null || colE === '')) {
+            // Extraer descripción: "Operación según comprobante - PROVEEDOR"
+            currentDescripcion = colB;
+            continue;
+        }
+
+        // Procesar línea de movimiento (tiene código de cuenta en columna C)
+        if (colC && colC.includes(' - ')) {
+            // Extraer código de cuenta (antes del " - ")
+            const partes = colC.split(' - ');
+            const codigoCuenta = partes[0].trim();
+
+            // Obtener montos
+            let debe = 0, haber = 0;
+
+            if (colD !== undefined && colD !== null && colD !== '' && colD !== '-') {
+                debe = typeof colD === 'number' ? colD : parseFloat(String(colD).replace(/\./g, '').replace(',', '.')) || 0;
+            }
+
+            if (colE !== undefined && colE !== null && colE !== '' && colE !== '-') {
+                haber = typeof colE === 'number' ? colE : parseFloat(String(colE).replace(/\./g, '').replace(',', '.')) || 0;
+            }
+
+            // Solo agregar si tiene algún monto
+            if (debe > 0 || haber > 0) {
+                result.push({
+                    Fecha: currentFecha,
+                    Numero: numeroAsiento - 1,
+                    Cuenta: codigoCuenta,
+                    Debe: parseFloat(debe.toFixed(2)),
+                    Haber: parseFloat(haber.toFixed(2)),
+                    'Tipo de auxiliar': 1,
+                    Auxiliar: 1,
+                    Importe: parseFloat((debe - haber).toFixed(2)),
+                    Leyenda: currentDescripcion,
+                    ExtraContable: 's'
+                });
+            }
+        }
+    }
+
+    return result;
 }
 
 // ============================================
@@ -1843,6 +1939,71 @@ function downloadTemplateSpecific() {
                 ['+80000 (Cobro clientes) → Debe: 80.000,00'],
                 ['-12500 (Compra insumos) → Haber: 12.500,00'],
                 ['+45000 (Venta productos) → Debe: 45.000,00']
+            ];
+            break;
+
+        case 'soscontador':
+            datos = [
+                ['', '', '', '', '', ''],
+                ['', '', '', '', '', ''],
+                ['', '', '', '', '', ''],
+                ['', '', '', '', '', ''],
+                ['', '', '', '', '', ''],
+                ['', '', '', '', '', ''],
+                ['Asiento', 'Descripcion - Cuenta', '', 'Monto Debe', 'Monto Haber', 'Monto Saldo'],
+                ['Asiento Nro. 1 - Fecha 15/01/2025 - FC A-0001-00000123', '', '', '', '', ''],
+                ['', 'Compra de mercadería según factura - PROVEEDOR SA', '', '', '', ''],
+                ['', '', '4110101 - Mercaderías', 50000, '', 50000],
+                ['', '', '1160101 - IVA Crédito Fiscal', 10500, '', 60500],
+                ['', '', '2110101 - Proveedores', '', 60500, 0],
+                ['Asiento Nro. 2 - Fecha 20/01/2025 - REC 0001', '', '', '', '', ''],
+                ['', 'Pago a proveedor según recibo - PROVEEDOR SA', '', '', '', ''],
+                ['', '', '2110101 - Proveedores', 60500, '', 60500],
+                ['', '', '1110101 - Caja', '', 60500, 0],
+                ['Asiento Nro. 3 - Fecha 25/01/2025 - FC A-0001-00000456', '', '', '', '', ''],
+                ['', 'Honorarios profesionales - CONTADOR SRL', '', '', '', ''],
+                ['', '', '4210309 - Honorarios Profesionales', 15000, '', 15000],
+                ['', '', '1160101 - IVA Crédito Fiscal', 3150, '', 18150],
+                ['', '', '2110101 - Proveedores', '', 18150, 0]
+            ];
+            fileName = 'plantilla_sos_contador.xlsx';
+            instrucciones = [
+                ['PLANTILLA LIBRO DIARIO SOS CONTADOR'],
+                [''],
+                ['Este formato es específico para exportaciones de SOS Contador.'],
+                [''],
+                ['ESTRUCTURA DEL ARCHIVO:'],
+                [''],
+                ['• Filas 1-6: Encabezados del libro (se ignoran)'],
+                ['• Fila 7: Headers de columnas'],
+                ['  - Columna A: Asiento'],
+                ['  - Columna B: Descripcion - Cuenta'],
+                ['  - Columna C: (vacío en headers)'],
+                ['  - Columna D: Monto Debe'],
+                ['  - Columna E: Monto Haber'],
+                ['  - Columna F: Monto Saldo (se ignora)'],
+                [''],
+                ['ESTRUCTURA DE CADA ASIENTO:'],
+                [''],
+                ['1. ENCABEZADO DEL ASIENTO (Columna A):'],
+                ['   "Asiento Nro. X - Fecha DD/MM/YYYY - COMPROBANTE"'],
+                ['   Ejemplo: "Asiento Nro. 1 - Fecha 15/01/2025 - FC A-0001-00000123"'],
+                [''],
+                ['2. DESCRIPCIÓN (Columna B, fila siguiente):'],
+                ['   "Operación según comprobante - PROVEEDOR"'],
+                ['   Ejemplo: "Compra de mercadería según factura - PROVEEDOR SA"'],
+                [''],
+                ['3. LÍNEAS DE MOVIMIENTO (Columna C):'],
+                ['   "CODIGO - DESCRIPCION CUENTA"'],
+                ['   Ejemplo: "4210309 - Honorarios Profesionales"'],
+                ['   - Columna D: Monto Debe'],
+                ['   - Columna E: Monto Haber'],
+                [''],
+                ['IMPORTANTE:'],
+                ['- El sistema extrae SOLO el código de cuenta (números antes del " - ")'],
+                ['- No requiere asignación de cuentas porque ya vienen los códigos'],
+                ['- La fecha se extrae del encabezado de cada asiento'],
+                ['- La descripción de la operación se usa como leyenda']
             ];
             break;
 
