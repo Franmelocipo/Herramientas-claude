@@ -10,15 +10,21 @@
 
 CREATE TABLE IF NOT EXISTS comprobantes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    cliente_id UUID NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
-    usuario_subio_id UUID NOT NULL REFERENCES usuarios_comprobantes(id) ON DELETE CASCADE,
+    cliente_id UUID NOT NULL,
+    usuario_subio_id UUID NOT NULL,
     archivo_url TEXT NOT NULL,
     archivo_nombre TEXT NOT NULL,
     fecha_subida TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     tipo_comprobante TEXT DEFAULT 'factura',
     estado TEXT DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'procesado', 'rechazado')),
     notas TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    -- Foreign Keys (definidas después de las columnas)
+    CONSTRAINT fk_comprobantes_cliente
+        FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_comprobantes_usuario
+        FOREIGN KEY (usuario_subio_id) REFERENCES usuarios_comprobantes(id) ON DELETE CASCADE
 );
 
 -- =====================================================
