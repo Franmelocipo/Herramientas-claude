@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS comprobantes (
     archivo_nombre TEXT NOT NULL,
     fecha_subida TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     tipo_comprobante TEXT DEFAULT 'factura',
-    estado TEXT DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'procesado', 'rechazado')),
+    estado TEXT DEFAULT 'pendiente',
     notas TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
