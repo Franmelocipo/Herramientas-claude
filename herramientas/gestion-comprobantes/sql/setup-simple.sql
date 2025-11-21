@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS usuarios_comprobantes (
     password TEXT NOT NULL,
     rol TEXT NOT NULL CHECK (rol IN ('admin', 'cliente')),
     nombre TEXT NOT NULL,
-    cliente_id BIGINT REFERENCES clientes(id) ON DELETE SET NULL,
+    cliente_id UUID REFERENCES clientes(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -36,7 +36,7 @@ COMMENT ON COLUMN usuarios_comprobantes.cliente_id IS 'Solo para rol cliente - r
 
 CREATE TABLE IF NOT EXISTS comprobantes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    cliente_id BIGINT NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+    cliente_id UUID NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
     usuario_subio_id UUID NOT NULL REFERENCES usuarios_comprobantes(id) ON DELETE CASCADE,
     archivo_url TEXT NOT NULL,
     archivo_nombre TEXT NOT NULL,
@@ -142,8 +142,8 @@ ON CONFLICT (email) DO NOTHING;
 --
 -- 2. Luego crea el usuario cliente:
 --    INSERT INTO usuarios_comprobantes (email, password, rol, nombre, cliente_id) VALUES
---    ('cliente@ejemplo.com', 'cliente123', 'cliente', 'Juan Cliente', 1);
---    (reemplaza 1 con el id del cliente real)
+--    ('cliente@ejemplo.com', 'cliente123', 'cliente', 'Juan Cliente', 'uuid-del-cliente');
+--    (reemplaza 'uuid-del-cliente' con el id UUID del cliente real)
 
 
 -- =====================================================
@@ -176,4 +176,4 @@ SELECT 'comprobantes: ' || COUNT(*)::TEXT AS registros FROM comprobantes;
 -- ORDER BY c.fecha_subida DESC;
 
 -- Ver comprobantes de un cliente específico:
--- SELECT * FROM comprobantes WHERE cliente_id = 1;
+-- SELECT * FROM comprobantes WHERE cliente_id = 'uuid-del-cliente';
