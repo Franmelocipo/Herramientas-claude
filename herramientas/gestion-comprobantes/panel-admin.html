@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Administrador - Gestión de Comprobantes</title>
+
+    <!-- Estilos -->
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>Administración</h1>
+                <div class="user-info">
+                    <span id="userName">Cargando...</span>
+                </div>
+                <span class="user-role">Admin</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <span class="nav-section-title">Gestión</span>
+                    <ul class="nav-menu">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link active">
+                                <span class="icon">📋</span>
+                                Comprobantes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <span class="icon">👥</span>
+                                Clientes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <span class="icon">📊</span>
+                                Reportes
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="nav-section">
+                    <span class="nav-section-title">Sistema</span>
+                    <ul class="nav-menu">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <span class="icon">⚙️</span>
+                                Configuración
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="btn-logout" onclick="auth.logout()">
+                    Cerrar Sesión
+                </button>
+            </div>
+        </aside>
+
+        <!-- Contenido principal -->
+        <main class="main-content">
+            <div class="content-header">
+                <h1 id="welcomeMessage">Panel Administrador</h1>
+                <p>Gestión completa de comprobantes del estudio</p>
+            </div>
+
+            <!-- Contenido placeholder -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Gestión de Comprobantes</h3>
+                </div>
+                <div class="card-body">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🚧</div>
+                        <h3 class="empty-state-title">Próximamente</h3>
+                        <p class="empty-state-text">
+                            Próximamente: gestión de comprobantes
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Script de autenticación -->
+    <script src="auth.js"></script>
+
+    <script>
+        // Verificar sesión al cargar
+        document.addEventListener('DOMContentLoaded', () => {
+            // Verificar que sea admin
+            const session = auth.requireRole('admin');
+
+            if (!session) {
+                // Si no hay sesión o no es admin, requireRole ya redirige
+                return;
+            }
+
+            // Mostrar nombre del usuario
+            document.getElementById('userName').textContent = session.nombre;
+            document.getElementById('welcomeMessage').textContent = `Panel Administrador - ${session.nombre}`;
+        });
+    </script>
+</body>
+</html>

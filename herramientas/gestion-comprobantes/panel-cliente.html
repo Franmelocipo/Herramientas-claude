@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Cliente - Gestión de Comprobantes</title>
+
+    <!-- Estilos -->
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>Comprobantes</h1>
+                <div class="user-info">
+                    <span id="userName">Cargando...</span>
+                </div>
+                <span class="user-role">Cliente</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <span class="nav-section-title">Menu</span>
+                    <ul class="nav-menu">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link active">
+                                <span class="icon">📤</span>
+                                Subir Comprobantes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <span class="icon">📋</span>
+                                Mis Comprobantes
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="btn-logout" onclick="auth.logout()">
+                    Cerrar Sesión
+                </button>
+            </div>
+        </aside>
+
+        <!-- Contenido principal -->
+        <main class="main-content">
+            <div class="content-header">
+                <h1 id="welcomeMessage">Bienvenido</h1>
+                <p>Panel de gestión de comprobantes</p>
+            </div>
+
+            <!-- Contenido placeholder -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Subir Comprobantes</h3>
+                </div>
+                <div class="card-body">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🚧</div>
+                        <h3 class="empty-state-title">Próximamente</h3>
+                        <p class="empty-state-text">
+                            Próximamente: subir comprobantes
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Script de autenticación -->
+    <script src="auth.js"></script>
+
+    <script>
+        // Verificar sesión al cargar
+        document.addEventListener('DOMContentLoaded', () => {
+            // Verificar que sea cliente
+            const session = auth.requireRole('cliente');
+
+            if (!session) {
+                // Si no hay sesión o no es cliente, requireRole ya redirige
+                return;
+            }
+
+            // Mostrar nombre del usuario
+            document.getElementById('userName').textContent = session.nombre;
+            document.getElementById('welcomeMessage').textContent = `Bienvenido ${session.nombre}`;
+        });
+    </script>
+</body>
+</html>
