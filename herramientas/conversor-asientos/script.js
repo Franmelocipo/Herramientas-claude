@@ -10,7 +10,8 @@ const state = {
     finalData: [],
     bankAccount: '',        // Cuenta de contrapartida global (banco/caja)
     activeSearchField: null,
-    expandedGroups: {}      // Rastrear qué grupos están expandidos
+    expandedGroups: {},     // Rastrear qué grupos están expandidos
+    selectedItems: {}       // Rastrear items seleccionados para reagrupación {groupIdx: {itemIdx: true/false}}
 };
 
 // ============================================
@@ -27,6 +28,45 @@ function getSelectedClientId() {
 
 function getTaxDatabase() {
     return TaxManager.getAllTaxes();
+}
+
+// ============================================
+// FUNCIÓN CENTRALIZADA PARA PARSEAR IMPORTES
+// ============================================
+/**
+ * Parsea un importe en formato argentino a número
+ * Entrada: "393,75" → Salida: 393.75
+ * Entrada: "3.933,75" → Salida: 3933.75
+ * Entrada: "$1.234.567,89" → Salida: 1234567.89
+ */
+function parseAmount(value) {
+    if (value === undefined || value === null || value === '' || value === '-') {
+        return 0;
+    }
+
+    // Si ya es un número, retornarlo directamente
+    if (typeof value === 'number') {
+        return value;
+    }
+
+    // Convertir a string y limpiar
+    let str = String(value).trim();
+
+    // Remover símbolo de pesos
+    str = str.replace('$', '').trim();
+
+    // Si está vacío después de limpiar, retornar 0
+    if (str === '' || str === '-') {
+        return 0;
+    }
+
+    // Formato argentino: punto como separador de miles, coma como decimal
+    // 1. Eliminar todos los puntos (separadores de miles)
+    // 2. Reemplazar coma por punto (decimal)
+    str = str.replace(/\./g, '').replace(',', '.');
+
+    const result = parseFloat(str);
+    return isNaN(result) ? 0 : result;
 }
 
 // ============================================
@@ -568,13 +608,8 @@ function parseSOSContador(jsonData) {
             // Obtener montos
             let debe = 0, haber = 0;
 
-            if (colD !== undefined && colD !== null && colD !== '' && colD !== '-') {
-                debe = typeof colD === 'number' ? colD : parseFloat(String(colD).replace(/\./g, '').replace(',', '.')) || 0;
-            }
-
-            if (colE !== undefined && colE !== null && colE !== '' && colE !== '-') {
-                haber = typeof colE === 'number' ? colE : parseFloat(String(colE).replace(/\./g, '').replace(',', '.')) || 0;
-            }
+            debe = parseAmount(colD);
+            haber = parseAmount(colE);
 
             // Solo agregar si tiene algún monto
             if (debe > 0 || haber > 0) {
@@ -632,12 +667,9 @@ function validateTablaData(rows) {
         if (importeRaw === undefined || importeRaw === null || importeRaw === '') {
             errors.push(`Fila ${rowNum}: IMPORTE está vacío`);
         } else {
-            const importe = typeof importeRaw === 'number' ? importeRaw :
-                           parseFloat(String(importeRaw).replace(/\./g, '').replace(',', '.'));
-            if (isNaN(importe)) {
-                errors.push(`Fila ${rowNum}: IMPORTE no es un número válido (${importeRaw})`);
-            } else if (importe === 0) {
-                errors.push(`Fila ${rowNum}: IMPORTE no puede ser cero`);
+            const importe = parseAmount(importeRaw);
+            if (importe === 0) {
+                errors.push(`Fila ${rowNum}: IMPORTE no es un número válido o es cero (${importeRaw})`);
             }
         }
     });
@@ -663,11 +695,7 @@ function groupSimilarEntries(data) {
 
             if (!impuestoOrig || !impuestoDest) return;
 
-            let importe = 0;
-            const importeStr = String(row['Importe'] || '0').replace('$', '').trim();
-            if (importeStr && importeStr !== '0') {
-                importe = parseFloat(importeStr.replace(/\./g, '').replace(',', '.')) || 0;
-            }
+            const importe = parseAmount(row['Importe']);
 
             // Grupo ORIGEN (HABER)
             const keyOrig = `ORIG: ${impuestoOrig} / ${conceptoOrig} / ${subconceptoOrig}`;
@@ -717,10 +745,7 @@ function groupSimilarEntries(data) {
             const codSubconcepto = String(row['COD_SUBCONCEPTO'] || row['Cod_Subconcepto'] || row['cod_subconcepto'] || '').trim();
             const subconcepto = String(row['SUBCONCEPTO'] || row['Subconcepto'] || row['subconcepto'] || '').trim();
 
-            let importe = 0;
-            if (row['IMPORTE'] !== undefined && row['IMPORTE'] !== null && row['IMPORTE'] !== '' && row['IMPORTE'] !== '-') {
-                importe = typeof row['IMPORTE'] === 'number' ? row['IMPORTE'] : parseFloat(String(row['IMPORTE']).replace(/\./g, '').replace(',', '.')) || 0;
-            }
+            const importe = parseAmount(row['IMPORTE']);
 
             let key;
             if (codSubconcepto === '51' || (subconcepto.toUpperCase().includes('INTERES') && subconcepto.toUpperCase().includes('RESARCITORIO'))) {
@@ -761,15 +786,8 @@ function groupSimilarEntries(data) {
             const proveedor = String(row['PROVEEDOR'] || row['Proveedor'] || row['proveedor'] || '').trim();
             const concepto = String(row['CONCEPTO'] || row['Concepto'] || row['concepto'] || '').trim();
 
-            let debeVal = 0, haberVal = 0;
-
-            if (row['DEBE'] !== undefined && row['DEBE'] !== null && row['DEBE'] !== '' && row['DEBE'] !== '-') {
-                debeVal = typeof row['DEBE'] === 'number' ? row['DEBE'] : parseFloat(String(row['DEBE']).replace(/\./g, '').replace(',', '.')) || 0;
-            }
-
-            if (row['HABER'] !== undefined && row['HABER'] !== null && row['HABER'] !== '' && row['HABER'] !== '-') {
-                haberVal = typeof row['HABER'] === 'number' ? row['HABER'] : parseFloat(String(row['HABER']).replace(/\./g, '').replace(',', '.')) || 0;
-            }
+            const debeVal = parseAmount(row['DEBE']);
+            const haberVal = parseAmount(row['HABER']);
 
             const key = descCta;
 
@@ -797,11 +815,8 @@ function groupSimilarEntries(data) {
             if (!descripcion) return;
 
             // Obtener importe (puede ser positivo o negativo)
-            let importe = 0;
             const importeRaw = row['IMPORTE'] || row['Importe'] || row['importe'];
-            if (importeRaw !== undefined && importeRaw !== null && importeRaw !== '') {
-                importe = typeof importeRaw === 'number' ? importeRaw : parseFloat(String(importeRaw).replace(/\./g, '').replace(',', '.')) || 0;
-            }
+            const importe = parseAmount(importeRaw);
 
             // Determinar si va al debe o haber según el signo
             let debeVal = 0, haberVal = 0;
@@ -837,37 +852,50 @@ function groupSimilarEntries(data) {
         });
 
     } else {
-        // Extractos bancarios
-        const patterns = [
-            { key: 'TRANSFERENCIAS RECIBIDAS', keywords: ['TRANSFER', 'TRANSF', 'ACREDITAMIENTO', 'ACREDIT'] },
-            { key: 'CHEQUES DEPOSITADOS', keywords: ['ECHEQ', 'CHEQUE', 'CHQ', 'CANJE'] },
-            { key: 'DEBITOS AUTOMATICOS', keywords: ['DEB AUT', 'DEBITO AUT'] },
-            { key: 'IMPUESTOS', keywords: ['ING. BRUTOS', 'IIBB', 'SIRCREB', 'IVA'] },
-            { key: 'COMISIONES', keywords: ['COMISION', 'COM.'] },
-            { key: 'RETENCIONES', keywords: ['RETENCION', 'RET.', 'PERCEPCION'] }
+        // Extractos bancarios - NUEVA LÓGICA: Agrupación más específica
+        // En lugar de agrupar por categorías amplias, agrupamos por descripción exacta
+        // o por palabras clave específicas que comparten la misma cuenta contable
+
+        const specificPatterns = [
+            // Grupos específicos de impuestos (cada uno va a cuenta diferente)
+            { key: 'DEBITO IVA', keywords: ['DEBITO IVA'], exact: true },
+            { key: 'COBRO IIBB - SIRCREB', keywords: ['SIRCREB', 'COBRO IIBB', 'ING. BRUTOS'], exact: false },
+
+            // Comisiones bancarias (pueden compartir cuenta)
+            { key: 'COMISIONES BANCARIAS', keywords: ['COM.ADM.DESC', 'COMIS.AUT.MANT', 'COMISION'], exact: false },
+
+            // Transferencias
+            { key: 'TRANSFERENCIAS RECIBIDAS', keywords: ['TRANSFER', 'TRANSF', 'ACREDITAMIENTO', 'ACREDIT'], exact: false },
+
+            // Cheques
+            { key: 'CHEQUES DEPOSITADOS', keywords: ['ECHEQ', 'CHEQUE', 'CHQ', 'CANJE'], exact: false },
+
+            // Débitos automáticos
+            { key: 'DEBITOS AUTOMATICOS', keywords: ['DEB AUT', 'DEBITO AUT'], exact: false },
+
+            // Retenciones
+            { key: 'RETENCIONES', keywords: ['RETENCION', 'RET.', 'PERCEPCION'], exact: false }
         ];
 
         data.forEach((row) => {
-            const desc = String(row['Descripción'] || row.Leyenda || '').toUpperCase();
+            const desc = String(row['Descripción'] || row.Leyenda || '').trim();
+            const descUpper = desc.toUpperCase();
             if (!desc) return;
 
-            let debitoVal = 0, creditoVal = 0;
-
-            if (row['Débito'] !== undefined && row['Débito'] !== null && row['Débito'] !== '' && row['Débito'] !== 0) {
-                debitoVal = typeof row['Débito'] === 'number' ? row['Débito'] : parseFloat(String(row['Débito']).replace(/\./g, '').replace(',', '.')) || 0;
-            }
-
-            if (row['Crédito'] !== undefined && row['Crédito'] !== null && row['Crédito'] !== '' && row['Crédito'] !== 0) {
-                creditoVal = typeof row['Crédito'] === 'number' ? row['Crédito'] : parseFloat(String(row['Crédito']).replace(/\./g, '').replace(',', '.')) || 0;
-            }
+            const debitoVal = parseAmount(row['Débito']);
+            const creditoVal = parseAmount(row['Crédito']);
 
             let matched = false;
-            for (const pattern of patterns) {
-                if (pattern.keywords.some(kw => desc.includes(kw))) {
+
+            // Primero intentar con patrones específicos
+            for (const pattern of specificPatterns) {
+                const keywordMatch = pattern.keywords.some(kw => descUpper.includes(kw));
+
+                if (keywordMatch) {
                     if (!groups[pattern.key]) {
                         groups[pattern.key] = {
                             concepto: pattern.key,
-                            ejemploCompleto: row['Descripción'] || row.Leyenda,
+                            ejemploCompleto: desc,
                             count: 0,
                             totalDebe: 0,
                             totalHaber: 0,
@@ -883,13 +911,21 @@ function groupSimilarEntries(data) {
                 }
             }
 
+            // Si no matchea con patrones específicos, agrupar por descripción exacta
             if (!matched) {
-                const palabras = desc.split(' ').filter(p => p.length > 2).slice(0, 3).join(' ');
-                const key = palabras || 'OTROS';
+                // Normalizar la descripción: tomar las primeras 3-5 palabras significativas
+                const palabras = descUpper.split(/\s+/).filter(p => p.length > 2).slice(0, 4);
+                let key = palabras.join(' ');
+
+                // Si es muy corto, usar descripción completa
+                if (palabras.length === 0) {
+                    key = descUpper.substring(0, 50);
+                }
+
                 if (!groups[key]) {
                     groups[key] = {
                         concepto: key,
-                        ejemploCompleto: row['Descripción'] || row.Leyenda,
+                        ejemploCompleto: desc,
                         count: 0,
                         totalDebe: 0,
                         totalHaber: 0,
@@ -935,18 +971,38 @@ function renderGroupsList() {
         let detailsHtml = '';
         if (isExpanded && g.items && g.items.length > 0) {
             const headers = Object.keys(g.items[0]).filter(k => !k.startsWith('_'));
+
+            // Inicializar selectedItems para este grupo si no existe
+            if (!state.selectedItems[idx]) {
+                state.selectedItems[idx] = {};
+            }
+
             detailsHtml = `
                 <div class="group-details">
                     <div class="group-details-table-container">
                         <table class="group-details-table">
                             <thead>
                                 <tr>
+                                    <th style="width: 30px;">
+                                        <input type="checkbox"
+                                               id="selectAll-${idx}"
+                                               onchange="toggleSelectAll(${idx})"
+                                               title="Seleccionar todos">
+                                    </th>
                                     ${headers.map(h => `<th>${h}</th>`).join('')}
                                 </tr>
                             </thead>
                             <tbody>
-                                ${g.items.map(item => `
+                                ${g.items.map((item, itemIdx) => `
                                     <tr>
+                                        <td>
+                                            <input type="checkbox"
+                                                   class="item-checkbox"
+                                                   data-group-idx="${idx}"
+                                                   data-item-idx="${itemIdx}"
+                                                   ${state.selectedItems[idx][itemIdx] ? 'checked' : ''}
+                                                   onchange="toggleItemSelection(${idx}, ${itemIdx})">
+                                        </td>
                                         ${headers.map(h => {
                                             const val = item[h];
                                             if (val === undefined || val === null || val === '') return '<td>-</td>';
@@ -957,6 +1013,15 @@ function renderGroupsList() {
                                 `).join('')}
                             </tbody>
                         </table>
+                    </div>
+                    <div class="group-actions">
+                        <button class="btn-move-items" onclick="openMoveToGroupModal(${idx})" title="Mover seleccionados a otro grupo">
+                            📦 Mover seleccionados
+                        </button>
+                        <button class="btn-create-group" onclick="openCreateGroupModal(${idx})" title="Crear nuevo grupo con seleccionados">
+                            ➕ Nuevo grupo
+                        </button>
+                        <span class="selected-count" id="selected-count-${idx}">0 seleccionados</span>
                     </div>
                 </div>
             `;
@@ -1037,6 +1102,238 @@ function renderGroupsList() {
 function toggleGroupExpansion(idx) {
     state.expandedGroups[idx] = !state.expandedGroups[idx];
     renderGroupsList();
+}
+
+// ============================================
+// SELECCIÓN Y REAGRUPACIÓN DE ITEMS
+// ============================================
+function toggleItemSelection(groupIdx, itemIdx) {
+    if (!state.selectedItems[groupIdx]) {
+        state.selectedItems[groupIdx] = {};
+    }
+    state.selectedItems[groupIdx][itemIdx] = !state.selectedItems[groupIdx][itemIdx];
+    updateSelectedCount(groupIdx);
+}
+
+function toggleSelectAll(groupIdx) {
+    const checkbox = document.getElementById(`selectAll-${groupIdx}`);
+    const isChecked = checkbox.checked;
+
+    if (!state.selectedItems[groupIdx]) {
+        state.selectedItems[groupIdx] = {};
+    }
+
+    // Seleccionar o deseleccionar todos los items del grupo
+    const group = state.groupedData[groupIdx];
+    if (group && group.items) {
+        group.items.forEach((_, itemIdx) => {
+            state.selectedItems[groupIdx][itemIdx] = isChecked;
+        });
+    }
+
+    // Re-renderizar para actualizar checkboxes
+    renderGroupsList();
+}
+
+function updateSelectedCount(groupIdx) {
+    const countEl = document.getElementById(`selected-count-${groupIdx}`);
+    if (countEl) {
+        const count = Object.values(state.selectedItems[groupIdx] || {}).filter(v => v).length;
+        countEl.textContent = `${count} seleccionado${count !== 1 ? 's' : ''}`;
+    }
+}
+
+function openMoveToGroupModal(sourceGroupIdx) {
+    const selectedItems = getSelectedItems(sourceGroupIdx);
+    if (selectedItems.length === 0) {
+        alert('Por favor, selecciona al menos un movimiento para mover.');
+        return;
+    }
+
+    // Crear modal con lista de grupos disponibles
+    const otherGroups = state.groupedData
+        .map((g, idx) => ({ ...g, idx }))
+        .filter(g => g.idx !== sourceGroupIdx);
+
+    if (otherGroups.length === 0) {
+        alert('No hay otros grupos disponibles. Primero crea un nuevo grupo.');
+        return;
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+        <div class="modal-content-sm">
+            <div class="modal-header">
+                <h2>Mover a grupo</h2>
+                <button class="close-btn" onclick="this.closest('.modal').remove()">✕</button>
+            </div>
+            <p style="color: #64748b; margin-bottom: 16px;">
+                Mover ${selectedItems.length} movimiento${selectedItems.length > 1 ? 's' : ''} a:
+            </p>
+            <div style="max-height: 400px; overflow-y: auto;">
+                ${otherGroups.map(g => `
+                    <div class="group-option" onclick="moveItemsToGroup(${sourceGroupIdx}, ${g.idx}); this.closest('.modal').remove();"
+                         style="padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s;"
+                         onmouseover="this.style.background='#f8fafc'; this.style.borderColor='#6366f1';"
+                         onmouseout="this.style.background='white'; this.style.borderColor='#e2e8f0';">
+                        <div style="font-weight: 600; color: #1e293b;">${g.concepto}</div>
+                        <div style="font-size: 12px; color: #64748b; margin-top: 4px;">
+                            ${g.count} mov | $${g.totalDebe.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+function openCreateGroupModal(sourceGroupIdx) {
+    const selectedItems = getSelectedItems(sourceGroupIdx);
+    if (selectedItems.length === 0) {
+        alert('Por favor, selecciona al menos un movimiento para crear un grupo.');
+        return;
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+        <div class="modal-content-sm">
+            <div class="modal-header">
+                <h2>Crear nuevo grupo</h2>
+                <button class="close-btn" onclick="this.closest('.modal').remove()">✕</button>
+            </div>
+            <p style="color: #64748b; margin-bottom: 16px;">
+                Crear grupo con ${selectedItems.length} movimiento${selectedItems.length > 1 ? 's' : ''}:
+            </p>
+            <input type="text" id="newGroupName" placeholder="Nombre del nuevo grupo"
+                   style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; margin-bottom: 16px;">
+            <div style="display: flex; gap: 8px;">
+                <button class="btn-secondary" onclick="this.closest('.modal').remove()">Cancelar</button>
+                <button class="btn-primary flex-1" onclick="createNewGroup(${sourceGroupIdx}); this.closest('.modal').remove();">
+                    Crear grupo
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Focus en el input
+    setTimeout(() => {
+        const input = document.getElementById('newGroupName');
+        if (input) input.focus();
+    }, 100);
+}
+
+function getSelectedItems(groupIdx) {
+    const group = state.groupedData[groupIdx];
+    if (!group || !group.items) return [];
+
+    const selectedIndices = Object.entries(state.selectedItems[groupIdx] || {})
+        .filter(([_, isSelected]) => isSelected)
+        .map(([idx, _]) => parseInt(idx));
+
+    return selectedIndices.map(idx => group.items[idx]).filter(Boolean);
+}
+
+function moveItemsToGroup(sourceGroupIdx, targetGroupIdx) {
+    const selectedItems = getSelectedItems(sourceGroupIdx);
+    if (selectedItems.length === 0) return;
+
+    const sourceGroup = state.groupedData[sourceGroupIdx];
+    const targetGroup = state.groupedData[targetGroupIdx];
+
+    // Remover items del grupo origen
+    const selectedIndices = Object.entries(state.selectedItems[sourceGroupIdx] || {})
+        .filter(([_, isSelected]) => isSelected)
+        .map(([idx, _]) => parseInt(idx))
+        .sort((a, b) => b - a); // Ordenar de mayor a menor para remover correctamente
+
+    selectedIndices.forEach(idx => {
+        const item = sourceGroup.items[idx];
+        sourceGroup.items.splice(idx, 1);
+
+        // Agregar al grupo destino
+        targetGroup.items.push(item);
+
+        // Actualizar totales
+        const debe = parseAmount(item['Débito'] || item['DEBE'] || 0);
+        const haber = parseAmount(item['Crédito'] || item['HABER'] || item['Haber'] || 0);
+
+        sourceGroup.totalDebe -= debe;
+        sourceGroup.totalHaber -= haber;
+        sourceGroup.count--;
+
+        targetGroup.totalDebe += debe;
+        targetGroup.totalHaber += haber;
+        targetGroup.count++;
+    });
+
+    // Limpiar selección
+    state.selectedItems[sourceGroupIdx] = {};
+
+    // Re-renderizar
+    renderGroupsList();
+
+    alert(`${selectedItems.length} movimiento${selectedItems.length > 1 ? 's movidos' : ' movido'} a "${targetGroup.concepto}"`);
+}
+
+function createNewGroup(sourceGroupIdx) {
+    const newGroupName = document.getElementById('newGroupName')?.value.trim();
+    if (!newGroupName) {
+        alert('Por favor, ingresa un nombre para el nuevo grupo.');
+        return;
+    }
+
+    const selectedItems = getSelectedItems(sourceGroupIdx);
+    if (selectedItems.length === 0) return;
+
+    const sourceGroup = state.groupedData[sourceGroupIdx];
+
+    // Crear nuevo grupo
+    const newGroup = {
+        concepto: newGroupName,
+        ejemploCompleto: selectedItems[0]['Descripción'] || selectedItems[0]['Leyenda'] || selectedItems[0]['CONCEPTO'] || newGroupName,
+        count: selectedItems.length,
+        totalDebe: 0,
+        totalHaber: 0,
+        items: []
+    };
+
+    // Remover items del grupo origen y agregarlos al nuevo grupo
+    const selectedIndices = Object.entries(state.selectedItems[sourceGroupIdx] || {})
+        .filter(([_, isSelected]) => isSelected)
+        .map(([idx, _]) => parseInt(idx))
+        .sort((a, b) => b - a);
+
+    selectedIndices.forEach(idx => {
+        const item = sourceGroup.items[idx];
+        sourceGroup.items.splice(idx, 1);
+
+        newGroup.items.push(item);
+
+        const debe = parseAmount(item['Débito'] || item['DEBE'] || 0);
+        const haber = parseAmount(item['Crédito'] || item['HABER'] || item['Haber'] || 0);
+
+        sourceGroup.totalDebe -= debe;
+        sourceGroup.totalHaber -= haber;
+        sourceGroup.count--;
+
+        newGroup.totalDebe += debe;
+        newGroup.totalHaber += haber;
+    });
+
+    // Agregar nuevo grupo a la lista
+    state.groupedData.push(newGroup);
+
+    // Limpiar selección
+    state.selectedItems[sourceGroupIdx] = {};
+
+    // Re-renderizar
+    renderGroupsList();
+
+    alert(`Grupo "${newGroupName}" creado con ${selectedItems.length} movimiento${selectedItems.length > 1 ? 's' : ''}.`);
 }
 
 // ============================================
@@ -1293,8 +1590,8 @@ function generateFinalExcel() {
                 fecha = item.Fecha || '';
                 descripcion = item['Descripción'] || item.Leyenda || '';
                 // Extracto: Débito = negativo (sale), Crédito = positivo (entra)
-                const debito = parseFloat(String(item['Débito'] || '0').replace(/\./g, '').replace(',', '.')) || 0;
-                const credito = parseFloat(String(item['Crédito'] || '0').replace(/\./g, '').replace(',', '.')) || 0;
+                const debito = parseAmount(item['Débito']);
+                const credito = parseAmount(item['Crédito']);
                 importe = credito - debito;
             } else if (state.sourceType === 'compensaciones') {
                 fecha = item['Fecha Operación'] || item['Fecha Operacion'] || '';
@@ -1302,8 +1599,7 @@ function generateFinalExcel() {
                 const impuesto = g.isOrigen ? (item['Impuesto Orig'] || '') : (item['Impuesto Dest'] || '');
                 const concepto = g.isOrigen ? (item['Concepto Orig'] || '') : (item['Concepto Dest'] || '');
                 descripcion = `COMP ${transaccion} - ${impuesto} ${concepto}`;
-                const importeStr = String(item['Importe'] || '0').replace('$', '').trim();
-                importe = parseFloat(importeStr.replace(/\./g, '').replace(',', '.')) || 0;
+                importe = parseAmount(item['Importe']);
                 // Origen = sale (negativo), Destino = entra (positivo)
                 if (g.isOrigen) importe = -importe;
             } else if (state.sourceType === 'veps') {
@@ -1313,7 +1609,7 @@ function generateFinalExcel() {
                 const concepto = item['CONCEPTO'] || item['Concepto'] || '';
                 const periodo = item['PERIODO'] || item['Periodo'] || '';
                 descripcion = `${impuesto} - ${concepto} / ${periodo} / VEP ${nroVep}`;
-                importe = typeof item['IMPORTE'] === 'number' ? item['IMPORTE'] : parseFloat(String(item['IMPORTE'] || '0').replace(/\./g, '').replace(',', '.')) || 0;
+                importe = parseAmount(item['IMPORTE']);
                 // VEPs son pagos (negativos - sale del banco)
                 importe = -importe;
             } else if (state.sourceType === 'registros') {
@@ -1322,8 +1618,8 @@ function generateFinalExcel() {
                 const razonSocial = item['RAZON SOCIAL'] || item['RAZON_SOCIAL'] || item['Razon Social'] || item['PROVEEDOR'] || '';
                 const concepto = item['CONCEPTO'] || item['Concepto'] || '';
                 descripcion = [concepto, nComp, razonSocial].filter(Boolean).join(' / ');
-                const debeVal = parseFloat(String(item['DEBE'] || '0').replace(/\./g, '').replace(',', '.')) || 0;
-                const haberVal = parseFloat(String(item['HABER'] || '0').replace(/\./g, '').replace(',', '.')) || 0;
+                const debeVal = parseAmount(item['DEBE']);
+                const haberVal = parseAmount(item['HABER']);
                 importe = debeVal - haberVal;
             } else if (state.sourceType === 'tabla') {
                 fecha = item['FECHA'] || item['Fecha'] || item['fecha'] || '';
@@ -1447,11 +1743,7 @@ function processCompensaciones(g, codeDebe, codeHaber, allData) {
         const periodoOrig = primeraLinea['Período Orig'] || primeraLinea['Periodo Orig'] || '';
         const periodoDest = primeraLinea['Período Dest'] || primeraLinea['Periodo Dest'] || '';
 
-        let importe = 0;
-        const importeStr = String(primeraLinea['Importe'] || '0').replace('$', '').trim();
-        if (importeStr && importeStr !== '0') {
-            importe = parseFloat(importeStr.replace(/\./g, '').replace(',', '.')) || 0;
-        }
+        const importe = parseAmount(primeraLinea['Importe']);
 
         let leyenda;
         const importeVal = parseFloat(importe.toFixed(2));
@@ -1548,10 +1840,7 @@ function processVeps(g, codeDebe, codeHaber, allData, numeroAsiento) {
             const concepto = item['CONCEPTO'] || item['Concepto'] || '';
             const subconcepto = item['SUBCONCEPTO'] || item['Subconcepto'] || '';
 
-            let importe = 0;
-            if (item['IMPORTE'] !== undefined && item['IMPORTE'] !== null && item['IMPORTE'] !== '') {
-                importe = typeof item['IMPORTE'] === 'number' ? item['IMPORTE'] : parseFloat(String(item['IMPORTE']).replace(/\./g, '').replace(',', '.')) || 0;
-            }
+            const importe = parseAmount(item['IMPORTE']);
 
             totalVep += importe;
 
@@ -1608,13 +1897,8 @@ function processRegistros(g, codeDebe, codeHaber, allData) {
 
         let debeVal = 0, haberVal = 0;
 
-        if (item['DEBE'] !== undefined && item['DEBE'] !== null && item['DEBE'] !== '' && item['DEBE'] !== '-') {
-            debeVal = typeof item['DEBE'] === 'number' ? item['DEBE'] : parseFloat(String(item['DEBE']).replace(/\./g, '').replace(',', '.')) || 0;
-        }
-
-        if (item['HABER'] !== undefined && item['HABER'] !== null && item['HABER'] !== '' && item['HABER'] !== '-') {
-            haberVal = typeof item['HABER'] === 'number' ? item['HABER'] : parseFloat(String(item['HABER']).replace(/\./g, '').replace(',', '.')) || 0;
-        }
+        debeVal = parseAmount(item['DEBE']);
+        haberVal = parseAmount(item['HABER']);
 
         const debe = debeVal > 0 ? parseFloat(debeVal.toFixed(2)) : 0;
         const haber = haberVal > 0 ? parseFloat(haberVal.toFixed(2)) : 0;
@@ -1704,13 +1988,8 @@ function processExtracto(g, codeDebe, codeHaber, allData, numeroAsiento) {
 
         let debitoVal = 0, creditoVal = 0;
 
-        if (item['Débito'] !== undefined && item['Débito'] !== null && item['Débito'] !== '') {
-            debitoVal = typeof item['Débito'] === 'number' ? item['Débito'] : parseFloat(String(item['Débito']).replace(/\./g, '').replace(',', '.')) || 0;
-        }
-
-        if (item['Crédito'] !== undefined && item['Crédito'] !== null && item['Crédito'] !== '') {
-            creditoVal = typeof item['Crédito'] === 'number' ? item['Crédito'] : parseFloat(String(item['Crédito']).replace(/\./g, '').replace(',', '.')) || 0;
-        }
+        debitoVal = parseAmount(item['Débito']);
+        creditoVal = parseAmount(item['Crédito']);
 
         const leyenda = `EXTRACTO - ${descripcion}`;
 
