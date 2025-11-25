@@ -107,6 +107,7 @@ function habilitarPasos() {
 const banksBancarios = [
     { id: 'galicia', name: 'Banco Galicia' },
     { id: 'bbva', name: 'Banco BBVA' },
+    { id: 'bpn', name: 'BPN (Banco Provincia Neuquén)' },
     { id: 'santander', name: 'Banco Santander' },
     { id: 'nacion', name: 'Banco Nación', disabled: true }
 ];
@@ -309,6 +310,8 @@ async function handleConvert() {
             await processGaliciaPDF(state.file);
         } else if (state.selectedBank === 'bbva') {
             await processBBVAPDF(state.file);
+        } else if (state.selectedBank === 'bpn') {
+            await processBPNPDF(state.file);
         } else if (state.selectedBank === 'santander') {
             await processSantanderPDF(state.file);
         } else if (state.selectedBank === 'galicia-inversiones') {
@@ -690,6 +693,206 @@ function parseBBVAExtract(text) {
     }
 
     return movements;
+}
+
+// Parsear extracto BPN (Banco Provincia del Neuquén) usando posiciones de columnas
+// Estructura: Fecha | Descripción | Comprobante | Débito | Crédito | Saldo
+function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
+    const movements = [];
+    let currentMovement = null;
+
+    // Detectar posiciones de columnas buscando el header
+    let debitoColumnX = null;
+    let creditoColumnX = null;
+    let saldoColumnX = null;
+
+    // Buscar la línea de encabezado para determinar posiciones de columnas
+    for (const lineData of linesWithPositions) {
+        const text = lineData.text.toLowerCase();
+        if (text.includes('débito') || text.includes('debito')) {
+            for (const item of lineData.items) {
+                const itemText = item.text.toLowerCase();
+                if (itemText.includes('débito') || itemText.includes('debito')) {
+                    debitoColumnX = item.x;
+                } else if (itemText.includes('crédito') || itemText.includes('credito')) {
+                    creditoColumnX = item.x;
+                } else if (itemText === 'saldo') {
+                    saldoColumnX = item.x;
+                }
+            }
+            if (debitoColumnX && creditoColumnX) {
+                console.log('Columnas BPN detectadas - Débito X:', debitoColumnX, 'Crédito X:', creditoColumnX, 'Saldo X:', saldoColumnX);
+                break;
+            }
+        }
+    }
+
+    // Si no encontramos las columnas exactas, usar valores por defecto típicos
+    if (!debitoColumnX || !creditoColumnX) {
+        debitoColumnX = 350;
+        creditoColumnX = 420;
+        saldoColumnX = 500;
+        console.log('Usando posiciones de columnas por defecto para BPN');
+    }
+
+    // Calcular el punto medio entre débito y crédito para clasificar
+    const midPoint = (debitoColumnX + creditoColumnX) / 2;
+
+    // Regex para detectar fecha al inicio de línea
+    const dateRegex = /^(\d{1,2}\/\d{1,2}\/\d{2,4})\b/;
+
+    console.log('Procesando', linesWithPositions.length, 'líneas del PDF BPN');
+    console.log('='.repeat(80));
+
+    for (const lineData of linesWithPositions) {
+        const trimmedLine = lineData.text.trim();
+
+        // Ignorar líneas vacías o de encabezado
+        if (!trimmedLine ||
+            /^(Fecha|Descripción|Comprobante|D[eé]bito|Cr[eé]dito|Saldo)$/i.test(trimmedLine) ||
+            /Total\s+en\s+concepto\s+de/i.test(trimmedLine) ||
+            /Verificá|información|adicional|consultas/i.test(trimmedLine)) {
+            continue;
+        }
+
+        // Verificar si la línea empieza con fecha
+        const dateMatch = trimmedLine.match(dateRegex);
+
+        if (dateMatch) {
+            // Guardar movimiento anterior si existe
+            if (currentMovement) {
+                movements.push(currentMovement);
+            }
+
+            // Extraer fecha y convertir de DD/MM/YY a DD/MM/YYYY si es necesario
+            const dateParts = dateMatch[1].split('/');
+            let fullYear = dateParts[2];
+            if (dateParts[2].length === 2) {
+                const year = parseInt(dateParts[2]);
+                fullYear = year < 50 ? `20${dateParts[2]}` : `19${dateParts[2]}`;
+            }
+            const fecha = `${dateParts[0]}/${dateParts[1]}/${fullYear}`;
+
+            // Encontrar todos los importes con sus posiciones X
+            const amountsWithPositions = [];
+            for (const item of lineData.items) {
+                // Buscar items que sean importes
+                // Formato: 1.234,56 o 123,45 o -3.277,62
+                const amountMatch = item.text.match(/^-?\s*([\d.]+,\d{2})$/);
+                if (amountMatch) {
+                    amountsWithPositions.push({
+                        value: amountMatch[1],
+                        x: item.x,
+                        text: item.text
+                    });
+                }
+            }
+
+            // Ordenar por posición X (izquierda a derecha)
+            amountsWithPositions.sort((a, b) => a.x - b.x);
+
+            // Extraer descripción
+            let descripcion = trimmedLine;
+            descripcion = descripcion.replace(dateRegex, '').trim();
+            descripcion = descripcion.replace(/-?\s*[\d.]+,\d{2}/g, '').trim();
+
+            // Extraer comprobante (generalmente un número largo)
+            const comprobanteMatch = descripcion.match(/\b(\d{6,})\b/);
+            const comprobante = comprobanteMatch ? comprobanteMatch[1] : '';
+            if (comprobante) {
+                descripcion = descripcion.replace(comprobante, '').trim();
+            }
+
+            // Clasificar importes por posición de columna
+            let debito = '0';
+            let credito = '0';
+            let saldo = '0';
+
+            // Log para debug
+            console.log(`Fila PDF BPN: ${trimmedLine.substring(0, 100)}`);
+            console.log(`  Importes encontrados: ${amountsWithPositions.length}`);
+            amountsWithPositions.forEach((a, i) => {
+                console.log(`    [${i}] valor: ${a.value}, X: ${a.x.toFixed(1)}`);
+            });
+
+            if (amountsWithPositions.length >= 1) {
+                // El último siempre es saldo (columna más a la derecha)
+                saldo = amountsWithPositions[amountsWithPositions.length - 1].value;
+            }
+
+            if (amountsWithPositions.length >= 2) {
+                // El penúltimo es el movimiento (débito o crédito)
+                const movAmount = amountsWithPositions[amountsWithPositions.length - 2];
+
+                // Clasificar según posición X
+                if (movAmount.x < midPoint) {
+                    debito = movAmount.value;
+                } else {
+                    credito = movAmount.value;
+                }
+            }
+
+            // Si hay 3 importes, puede haber comprobante numérico, débito/crédito y saldo
+            // O débito, crédito y saldo
+            if (amountsWithPositions.length >= 3) {
+                const first = amountsWithPositions[0];
+                const second = amountsWithPositions[1];
+
+                // Verificar si el primero parece ser un comprobante (número grande sin decimales típicos)
+                const isFirstComprobante = !first.value.match(/,\d{2}$/);
+
+                if (!isFirstComprobante) {
+                    if (first.x < midPoint) {
+                        debito = first.value;
+                    } else {
+                        credito = first.value;
+                    }
+
+                    if (second.x < midPoint && debito === '0') {
+                        debito = second.value;
+                    } else if (second.x >= midPoint && credito === '0') {
+                        credito = second.value;
+                    }
+                }
+            }
+
+            console.log(`  → Débito: ${debito} | Crédito: ${credito} | Saldo: ${saldo}`);
+            console.log('-'.repeat(80));
+
+            currentMovement = {
+                fecha: fecha,
+                descripcion: descripcion,
+                origen: comprobante,
+                debito: debito,
+                credito: credito,
+                saldo: saldo
+            };
+
+        } else if (currentMovement) {
+            // Es continuación de la descripción
+            if (!/^(Fecha|Descripción|Comprobante|D[eé]bito|Cr[eé]dito|Saldo|Total)/i.test(trimmedLine)) {
+                currentMovement.descripcion += ' ' + trimmedLine;
+            }
+        }
+    }
+
+    // No olvidar el último movimiento
+    if (currentMovement) {
+        movements.push(currentMovement);
+    }
+
+    // Limpiar descripciones
+    const filteredMovements = movements.map(mov => {
+        mov.descripcion = mov.descripcion
+            .replace(/\s+/g, ' ')
+            .trim();
+        return mov;
+    });
+
+    console.log('='.repeat(80));
+    console.log('Movimientos BPN encontrados:', filteredMovements.length);
+
+    return filteredMovements;
 }
 
 // Parsear extracto Santander usando posiciones de columnas
@@ -1102,6 +1305,54 @@ async function processSantanderPDF(pdfFile) {
 
     } catch (err) {
         console.error('Error procesando PDF Santander:', err);
+        throw err;
+    }
+}
+
+async function processBPNPDF(pdfFile) {
+    try {
+        // Extraer texto CON POSICIONES para determinar columnas
+        const linesWithPositions = await extractTextWithPositions(pdfFile);
+        console.log('Líneas extraídas del PDF BPN:', linesWithPositions.length);
+
+        // Extraer saldo inicial del BPN
+        // Buscar "Saldo Anterior" o similar antes de la tabla de movimientos
+        state.saldoInicial = null;
+
+        // Buscar línea de Saldo Anterior
+        for (const lineData of linesWithPositions) {
+            if (/Saldo\s+Anterior/i.test(lineData.text)) {
+                const amounts = lineData.text.match(/-?\d{1,3}(?:\.\d{3})*,\d{2}/g);
+                if (amounts && amounts.length >= 1) {
+                    // El último importe en la línea de Saldo Anterior es el saldo
+                    state.saldoInicial = amounts[amounts.length - 1];
+                }
+                break;
+            }
+        }
+
+        console.log('Saldo inicial BPN encontrado:', state.saldoInicial);
+
+        // Parsear movimientos usando POSICIONES DE COLUMNAS
+        const movements = parseBPNWithPositions(linesWithPositions, state.saldoInicial);
+
+        if (movements.length === 0) {
+            showError('No se encontraron movimientos en el PDF. Verifique que el archivo contenga movimientos con formato de fecha DD/MM/YYYY.');
+            return;
+        }
+
+        console.log('Movimientos BPN procesados:', movements.length);
+        if (movements.length > 0) {
+            console.log('Primer movimiento:', movements[0]);
+            console.log('Último movimiento:', movements[movements.length - 1]);
+        }
+
+        state.extractedData = movements;
+        showSuccess(`¡Archivo procesado exitosamente! ${movements.length} movimientos encontrados.`);
+        renderPreview();
+
+    } catch (err) {
+        console.error('Error procesando PDF BPN:', err);
         throw err;
     }
 }
