@@ -680,6 +680,28 @@ function validateTablaData(rows) {
 // ============================================
 // AGRUPACIÓN DE DATOS
 // ============================================
+
+/**
+ * Normaliza una descripción eliminando patrones variables para permitir agrupación consistente.
+ * Elimina referencias, números de operación, fechas y códigos numéricos largos.
+ *
+ * @param {string} descripcion - Descripción original del movimiento
+ * @returns {string} - Descripción normalizada para agrupación
+ */
+function normalizarDescripcion(descripcion) {
+    return descripcion
+        .replace(/\(REF:\s*\d+\)/gi, '')       // Quitar (REF: 123456)
+        .replace(/\(Ref:\s*\d+\)/gi, '')       // Quitar (Ref: 123456)
+        .replace(/REF:\s*\d+/gi, '')           // Quitar REF: 123456
+        .replace(/\bREF\s+\d+\b/gi, '')        // Quitar REF 123456
+        .replace(/\(\d{6,}\)/g, '')            // Quitar números largos entre paréntesis (ej: (0000007744))
+        .replace(/\b\d{8,}\b/g, '')            // Quitar números largos sueltos (8+ dígitos)
+        .replace(/\d{2}\/\d{2}\/\d{4}/g, '')  // Quitar fechas dd/mm/aaaa
+        .replace(/\d{2}-\d{2}-\d{4}/g, '')    // Quitar fechas dd-mm-aaaa
+        .replace(/\s+/g, ' ')                  // Normalizar espacios múltiples a uno solo
+        .trim();                               // Eliminar espacios al inicio y final
+}
+
 function groupSimilarEntries(data) {
     const groups = {};
 
@@ -828,12 +850,14 @@ function groupSimilarEntries(data) {
                 debeVal = importe;
             }
 
-            const key = descripcion;
+            // Normalizar descripción para agrupar conceptos similares
+            const descNormalizada = normalizarDescripcion(descripcion);
+            const key = descNormalizada;
 
             if (!groups[key]) {
                 groups[key] = {
-                    concepto: descripcion,
-                    ejemploCompleto: descripcion,
+                    concepto: descNormalizada,   // Usar descripción normalizada como concepto
+                    ejemploCompleto: descripcion, // Mantener un ejemplo de la descripción original
                     count: 0,
                     totalDebe: 0,
                     totalHaber: 0,
@@ -911,21 +935,16 @@ function groupSimilarEntries(data) {
                 }
             }
 
-            // Si no matchea con patrones específicos, agrupar por descripción exacta
+            // Si no matchea con patrones específicos, agrupar por descripción normalizada
             if (!matched) {
-                // Normalizar la descripción: tomar las primeras 3-5 palabras significativas
-                const palabras = descUpper.split(/\s+/).filter(p => p.length > 2).slice(0, 4);
-                let key = palabras.join(' ');
-
-                // Si es muy corto, usar descripción completa
-                if (palabras.length === 0) {
-                    key = descUpper.substring(0, 50);
-                }
+                // Normalizar la descripción eliminando referencias, números y fechas variables
+                const descNormalizada = normalizarDescripcion(desc);
+                const key = descNormalizada.toUpperCase();
 
                 if (!groups[key]) {
                     groups[key] = {
-                        concepto: key,
-                        ejemploCompleto: desc,
+                        concepto: descNormalizada, // Usar descripción normalizada como concepto
+                        ejemploCompleto: desc,      // Mantener un ejemplo de la descripción original
                         count: 0,
                         totalDebe: 0,
                         totalHaber: 0,
