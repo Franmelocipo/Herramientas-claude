@@ -1573,8 +1573,13 @@ function handleDownloadExcel() {
 
     const parseArgentineNumber = (value) => {
         if (!value || value === '0') return 0;
+        // Detectar si el valor es negativo ANTES de limpiar
+        const isNegative = value.includes('-');
+        // Limpiar el formato argentino (puntos de miles y coma decimal)
         const cleaned = value.replace(/\./g, '').replace(',', '.').replace('-', '');
-        return parseFloat(cleaned);
+        const number = parseFloat(cleaned);
+        // Aplicar el signo negativo si corresponde
+        return isNegative ? -number : number;
     };
 
     const dataRows = state.extractedData.map((row) => {
