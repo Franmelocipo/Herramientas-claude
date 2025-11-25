@@ -755,6 +755,34 @@ function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
             continue;
         }
 
+        // BUG 1 FIX: Ignorar texto legal del pie de página
+        // Líneas que comienzan con comillas simples
+        if (trimmedLine.startsWith("'")) {
+            continue;
+        }
+
+        // Líneas que contienen palabras clave del texto legal
+        const legalKeywords = [
+            'Se informa',
+            'Para reportar',
+            'Personas Expuestas',
+            'Usted puede',
+            'Los depósitos',
+            'Se presumirá',
+            'Total en concepto',
+            'Responsables Inscriptos',
+            'en el concepto de total de IVA'
+        ];
+
+        if (legalKeywords.some(keyword => trimmedLine.includes(keyword))) {
+            continue;
+        }
+
+        // Líneas muy largas (probablemente texto legal)
+        if (trimmedLine.length > 200) {
+            continue;
+        }
+
         // Verificar si la línea empieza con fecha
         const dateMatch = trimmedLine.match(dateRegex);
 
@@ -765,23 +793,32 @@ function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
             }
 
             // Extraer fecha y convertir de DD/MM/YY a DD/MM/YYYY si es necesario
+            // BUG 3 FIX: Formatear correctamente fechas con día/mes de 1 dígito
             const dateParts = dateMatch[1].split('/');
+
+            // Agregar cero a la izquierda para día y mes si es necesario
+            const day = dateParts[0].padStart(2, '0');
+            const month = dateParts[1].padStart(2, '0');
+
+            // Convertir año de 2 dígitos a 4 dígitos si es necesario
             let fullYear = dateParts[2];
             if (dateParts[2].length === 2) {
                 const year = parseInt(dateParts[2]);
                 fullYear = year < 50 ? `20${dateParts[2]}` : `19${dateParts[2]}`;
             }
-            const fecha = `${dateParts[0]}/${dateParts[1]}/${fullYear}`;
+
+            const fecha = `${day}/${month}/${fullYear}`;
 
             // Encontrar todos los importes con sus posiciones X
             const amountsWithPositions = [];
             for (const item of lineData.items) {
                 // Buscar items que sean importes
                 // Formato: 1.234,56 o 123,45 o -3.277,62
-                const amountMatch = item.text.match(/^-?\s*([\d.]+,\d{2})$/);
+                // BUG 2 FIX: Preservar el signo negativo en los importes
+                const amountMatch = item.text.match(/^(-?\s*[\d.]+,\d{2})$/);
                 if (amountMatch) {
                     amountsWithPositions.push({
-                        value: amountMatch[1],
+                        value: amountMatch[1].replace(/\s+/g, ''),  // Remover espacios pero preservar el signo
                         x: item.x,
                         text: item.text
                     });
@@ -881,13 +918,27 @@ function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
         movements.push(currentMovement);
     }
 
-    // Limpiar descripciones
-    const filteredMovements = movements.map(mov => {
-        mov.descripcion = mov.descripcion
-            .replace(/\s+/g, ' ')
-            .trim();
-        return mov;
-    });
+    // Limpiar descripciones y filtrar movimientos con descripciones sospechosas
+    const filteredMovements = movements
+        .filter(mov => {
+            // BUG 1 FIX: Filtrar descripciones muy largas o que contengan texto legal
+            if (mov.descripcion.length > 100) {
+                return false;
+            }
+
+            // Filtrar líneas de totales que puedan haber pasado el filtro inicial
+            if (/^Total\b/i.test(mov.descripcion)) {
+                return false;
+            }
+
+            return true;
+        })
+        .map(mov => {
+            mov.descripcion = mov.descripcion
+                .replace(/\s+/g, ' ')
+                .trim();
+            return mov;
+        });
 
     console.log('='.repeat(80));
     console.log('Movimientos BPN encontrados:', filteredMovements.length);
