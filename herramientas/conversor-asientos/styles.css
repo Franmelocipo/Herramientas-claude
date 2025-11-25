@@ -865,6 +865,85 @@ body {
     background: #eef2ff;
 }
 
+/* Group Actions (botones de reagrupación) */
+.group-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 16px;
+    background: #f8fafc;
+    border-top: 2px solid #e2e8f0;
+    border-radius: 0 0 6px 6px;
+}
+
+.btn-move-items,
+.btn-create-group {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+.btn-move-items {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-move-items:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
+}
+
+.btn-create-group {
+    background: #10b981;
+    color: white;
+}
+
+.btn-create-group:hover {
+    background: #059669;
+    transform: translateY(-1px);
+}
+
+.selected-count {
+    margin-left: auto;
+    font-size: 13px;
+    font-weight: 600;
+    color: #6366f1;
+    padding: 6px 12px;
+    background: #eef2ff;
+    border-radius: 4px;
+}
+
+/* Checkboxes de selección */
+.item-checkbox,
+#selectAll {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
+.item-checkbox:hover {
+    transform: scale(1.1);
+}
+
+/* Opciones de grupo en modal */
+.group-option {
+    padding: 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.group-option:hover {
+    background: #f8fafc;
+    border-color: #6366f1;
+}
+
 /* Warning box for no client selected */
 .warning-box {
     background: #fef3c7;
