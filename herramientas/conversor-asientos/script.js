@@ -702,6 +702,42 @@ function normalizarDescripcion(descripcion) {
         .trim();                               // Eliminar espacios al inicio y final
 }
 
+/**
+ * Extrae un prefijo común de una descripción normalizada para agrupación inteligente.
+ * Toma las primeras 2-3 palabras significativas después de normalizar y filtrar conectores.
+ *
+ * Ejemplos:
+ * - "Pago - - - Compra de Juego 2 Soportes..." → "Pago Compra"
+ * - "Pago - - - Compra de Impresora Hp 1102w..." → "Pago Compra"
+ * - "TRANSFERENCIA RECIBIDA DE CLIENTE ABC" → "TRANSFERENCIA RECIBIDA"
+ *
+ * @param {string} descripcion - Descripción original del movimiento
+ * @returns {string} - Prefijo común para agrupar (primeras 2-3 palabras significativas)
+ */
+function extraerPrefijo(descripcion) {
+    // Primero normalizar la descripción
+    const normalizada = normalizarDescripcion(descripcion);
+
+    // Separar en palabras y filtrar palabras vacías o poco significativas
+    const palabras = normalizada
+        .split(/\s+/)
+        .filter(palabra => {
+            // Filtrar palabras vacías y conectores comunes
+            if (!palabra || palabra.length === 0) return false;
+            if (palabra === '-' || palabra === '/' || palabra === '|') return false;
+            // Filtrar artículos y preposiciones cortas
+            const palabraLower = palabra.toLowerCase();
+            if (['de', 'del', 'la', 'el', 'los', 'las', 'a', 'en', 'y', 'o', 'por', 'para'].includes(palabraLower)) return false;
+            return true;
+        });
+
+    // Tomar las primeras 2 palabras significativas para mejor agrupación
+    // Esto permite agrupar "Pago Compra Juego" y "Pago Compra Impresora" juntos
+    const prefijo = palabras.slice(0, 2).join(' ');
+
+    return prefijo.trim();
+}
+
 function groupSimilarEntries(data) {
     const groups = {};
 
@@ -850,13 +886,15 @@ function groupSimilarEntries(data) {
                 haberVal = importe;
             }
 
-            // Normalizar descripción para agrupar conceptos similares
-            const descNormalizada = normalizarDescripcion(descripcion);
-            const key = descNormalizada;
+            // AGRUPACIÓN POR PREFIJO COMÚN
+            // Extraer prefijo común para agrupar conceptos similares
+            // Ejemplo: "Pago - - - Compra de Juego..." → "Pago Compra"
+            const prefijo = extraerPrefijo(descripcion);
+            const key = prefijo.toUpperCase();
 
             if (!groups[key]) {
                 groups[key] = {
-                    concepto: descNormalizada,   // Usar descripción normalizada como concepto
+                    concepto: prefijo,            // Usar prefijo común como concepto
                     ejemploCompleto: descripcion, // Mantener un ejemplo de la descripción original
                     count: 0,
                     totalDebe: 0,
@@ -935,15 +973,18 @@ function groupSimilarEntries(data) {
                 }
             }
 
-            // Si no matchea con patrones específicos, agrupar por descripción normalizada
+            // Si no matchea con patrones específicos, agrupar por PREFIJO COMÚN
             if (!matched) {
-                // Normalizar la descripción eliminando referencias, números y fechas variables
-                const descNormalizada = normalizarDescripcion(desc);
-                const key = descNormalizada.toUpperCase();
+                // AGRUPACIÓN INTELIGENTE: Extraer prefijo común de la descripción
+                // Esto agrupa movimientos como:
+                // - "Pago - - - Compra de Juego..." → "Pago Compra"
+                // - "Pago - - - Compra de Impresora..." → "Pago Compra"
+                const prefijo = extraerPrefijo(desc);
+                const key = prefijo.toUpperCase();
 
                 if (!groups[key]) {
                     groups[key] = {
-                        concepto: descNormalizada, // Usar descripción normalizada como concepto
+                        concepto: prefijo,          // Usar prefijo común como concepto
                         ejemploCompleto: desc,      // Mantener un ejemplo de la descripción original
                         count: 0,
                         totalDebe: 0,
