@@ -1256,6 +1256,59 @@ function getSelectedItems(groupIdx) {
     return selectedIndices.map(idx => group.items[idx]).filter(Boolean);
 }
 
+/**
+ * Elimina grupos que no tienen movimientos (items vacíos)
+ * También limpia las referencias de selectedItems y expandedGroups
+ */
+function eliminarGruposVacios() {
+    // Iterar en reversa para evitar problemas al eliminar elementos
+    for (let i = state.groupedData.length - 1; i >= 0; i--) {
+        const grupo = state.groupedData[i];
+
+        // Si el grupo no tiene items o el array está vacío
+        if (!grupo.items || grupo.items.length === 0) {
+            // Eliminar el grupo
+            state.groupedData.splice(i, 1);
+
+            // Limpiar referencias en selectedItems
+            if (state.selectedItems[i]) {
+                delete state.selectedItems[i];
+            }
+
+            // Limpiar referencias en expandedGroups
+            if (state.expandedGroups[i]) {
+                delete state.expandedGroups[i];
+            }
+
+            // Actualizar índices en selectedItems y expandedGroups
+            // Los grupos posteriores ahora tienen un índice menor
+            const newSelectedItems = {};
+            const newExpandedGroups = {};
+
+            Object.keys(state.selectedItems).forEach(key => {
+                const idx = parseInt(key);
+                if (idx > i) {
+                    newSelectedItems[idx - 1] = state.selectedItems[key];
+                } else if (idx < i) {
+                    newSelectedItems[idx] = state.selectedItems[key];
+                }
+            });
+
+            Object.keys(state.expandedGroups).forEach(key => {
+                const idx = parseInt(key);
+                if (idx > i) {
+                    newExpandedGroups[idx - 1] = state.expandedGroups[key];
+                } else if (idx < i) {
+                    newExpandedGroups[idx] = state.expandedGroups[key];
+                }
+            });
+
+            state.selectedItems = newSelectedItems;
+            state.expandedGroups = newExpandedGroups;
+        }
+    }
+}
+
 function moveItemsToGroup(sourceGroupIdx, targetGroupIdx) {
     const selectedItems = getSelectedItems(sourceGroupIdx);
     if (selectedItems.length === 0) return;
@@ -1291,6 +1344,9 @@ function moveItemsToGroup(sourceGroupIdx, targetGroupIdx) {
 
     // Limpiar selección
     state.selectedItems[sourceGroupIdx] = {};
+
+    // Eliminar grupos vacíos automáticamente
+    eliminarGruposVacios();
 
     // Re-renderizar
     renderGroupsList();
@@ -1348,6 +1404,9 @@ function createNewGroup(sourceGroupIdx) {
 
     // Limpiar selección
     state.selectedItems[sourceGroupIdx] = {};
+
+    // Eliminar grupos vacíos automáticamente
+    eliminarGruposVacios();
 
     // Re-renderizar
     renderGroupsList();
