@@ -843,11 +843,11 @@ function groupSimilarEntries(data) {
             // Determinar si va al debe o haber según el signo
             let debeVal = 0, haberVal = 0;
             if (importe < 0) {
-                // Negativo → HABER (valor absoluto)
-                haberVal = Math.abs(importe);
+                // Negativo → DEBE (valor absoluto)
+                debeVal = Math.abs(importe);
             } else {
-                // Positivo → DEBE
-                debeVal = importe;
+                // Positivo → HABER
+                haberVal = importe;
             }
 
             // Normalizar descripción para agrupar conceptos similares
@@ -1653,16 +1653,16 @@ function generateFinalExcel() {
             const absImporte = Math.abs(importe);
             if (absImporte > 0.001) {
                 if (importe < 0) {
-                    // Importe negativo: cuenta_grupo al HABER, contrapartida al DEBE
+                    // Importe negativo: cuenta_grupo al DEBE, contrapartida al HABER
                     allData.push({
                         Fecha: fecha,
                         Numero: numeroAsiento,
                         Cuenta: cuentaGrupo,
-                        Debe: 0,
-                        Haber: parseFloat(absImporte.toFixed(2)),
+                        Debe: parseFloat(absImporte.toFixed(2)),
+                        Haber: 0,
                         'Tipo de auxiliar': 1,
                         Auxiliar: 1,
-                        Importe: parseFloat((-absImporte).toFixed(2)),
+                        Importe: parseFloat(absImporte.toFixed(2)),
                         Leyenda: descripcion,
                         ExtraContable: 's'
                     });
@@ -1670,25 +1670,25 @@ function generateFinalExcel() {
                         Fecha: fecha,
                         Numero: numeroAsiento,
                         Cuenta: contrapartida,
-                        Debe: parseFloat(absImporte.toFixed(2)),
-                        Haber: 0,
+                        Debe: 0,
+                        Haber: parseFloat(absImporte.toFixed(2)),
                         'Tipo de auxiliar': 1,
                         Auxiliar: 1,
-                        Importe: parseFloat(absImporte.toFixed(2)),
+                        Importe: parseFloat((-absImporte).toFixed(2)),
                         Leyenda: descripcion,
                         ExtraContable: 's'
                     });
                 } else {
-                    // Importe positivo: cuenta_grupo al DEBE, contrapartida al HABER
+                    // Importe positivo: cuenta_grupo al HABER, contrapartida al DEBE
                     allData.push({
                         Fecha: fecha,
                         Numero: numeroAsiento,
                         Cuenta: cuentaGrupo,
-                        Debe: parseFloat(absImporte.toFixed(2)),
-                        Haber: 0,
+                        Debe: 0,
+                        Haber: parseFloat(absImporte.toFixed(2)),
                         'Tipo de auxiliar': 1,
                         Auxiliar: 1,
-                        Importe: parseFloat(absImporte.toFixed(2)),
+                        Importe: parseFloat((-absImporte).toFixed(2)),
                         Leyenda: descripcion,
                         ExtraContable: 's'
                     });
@@ -1696,11 +1696,11 @@ function generateFinalExcel() {
                         Fecha: fecha,
                         Numero: numeroAsiento,
                         Cuenta: contrapartida,
-                        Debe: 0,
-                        Haber: parseFloat(absImporte.toFixed(2)),
+                        Debe: parseFloat(absImporte.toFixed(2)),
+                        Haber: 0,
                         'Tipo de auxiliar': 1,
                         Auxiliar: 1,
-                        Importe: parseFloat((-absImporte).toFixed(2)),
+                        Importe: parseFloat(absImporte.toFixed(2)),
                         Leyenda: descripcion,
                         ExtraContable: 's'
                     });
@@ -2303,20 +2303,20 @@ function downloadTemplateSpecific() {
                 [''],
                 ['LÓGICA DE CONVERSIÓN:'],
                 [''],
-                ['• IMPORTE NEGATIVO → va a columna HABER'],
-                ['  Ejemplo: -50000 se convierte en Haber: 50000'],
-                ['  (representa salidas de dinero: pagos, gastos, etc.)'],
+                ['• IMPORTE NEGATIVO → va a columna DEBE'],
+                ['  Ejemplo: -50000 se convierte en Debe: 50000'],
+                ['  (representa salidas de dinero: pagos, gastos, débitos en banco)'],
                 [''],
-                ['• IMPORTE POSITIVO → va a columna DEBE'],
-                ['  Ejemplo: 80000 se convierte en Debe: 80000'],
-                ['  (representa entradas de dinero: cobros, ingresos, etc.)'],
+                ['• IMPORTE POSITIVO → va a columna HABER'],
+                ['  Ejemplo: 80000 se convierte en Haber: 80000'],
+                ['  (representa entradas de dinero: cobros, ingresos, créditos en banco)'],
                 [''],
                 ['El sistema usa el valor absoluto (sin el signo negativo).'],
                 [''],
                 ['EJEMPLOS:'],
-                ['-50000 (Pago proveedores) → Haber: 50.000,00'],
-                ['+80000 (Cobro clientes) → Debe: 80.000,00'],
-                ['-12500 (Compra insumos) → Haber: 12.500,00'],
+                ['-50000 (Pago proveedores) → Debe: 50.000,00'],
+                ['+80000 (Cobro clientes) → Haber: 80.000,00'],
+                ['-12500 (Compra insumos) → Debe: 12.500,00'],
                 ['+45000 (Venta productos) → Debe: 45.000,00']
             ];
             break;
