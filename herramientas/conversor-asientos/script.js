@@ -1164,6 +1164,20 @@ function toggleGroupExpansion(idx) {
     renderGroupsList();
 }
 
+function expandirTodos() {
+    state.groupedData.forEach((_, idx) => {
+        state.expandedGroups[idx] = true;
+    });
+    renderGroupsList();
+}
+
+function colapsarTodos() {
+    state.groupedData.forEach((_, idx) => {
+        state.expandedGroups[idx] = false;
+    });
+    renderGroupsList();
+}
+
 // ============================================
 // SELECCIÓN Y REAGRUPACIÓN DE ITEMS
 // ============================================
