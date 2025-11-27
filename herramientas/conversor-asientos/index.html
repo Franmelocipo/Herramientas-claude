@@ -107,6 +107,16 @@
                 <h3 class="step-title">Asignar códigos de cuenta</h3>
                 <p class="step-subtitle" id="groupStats"></p>
 
+                <!-- Botones de expandir/colapsar todos -->
+                <div class="group-controls">
+                    <button id="btnExpandirTodos" class="btn-group-control" onclick="expandirTodos()">
+                        ▼ Expandir todos
+                    </button>
+                    <button id="btnColapsarTodos" class="btn-group-control" onclick="colapsarTodos()">
+                        ▶ Colapsar todos
+                    </button>
+                </div>
+
                 <!-- Cuenta de banco/contrapartida -->
                 <div id="bankAccountSection" class="bank-account-section hidden">
                     <label id="bankAccountLabel">Cuenta del Banco (contrapartida)</label>

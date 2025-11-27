@@ -560,6 +560,37 @@ body {
     color: #1e40af;
 }
 
+/* Group Controls */
+.group-controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    justify-content: flex-start;
+}
+
+.btn-group-control {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid #e2e8f0;
+    background: white;
+    color: #1e293b;
+}
+
+.btn-group-control:hover {
+    background: #f8fafc;
+    border-color: #6366f1;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+}
+
+.btn-group-control:active {
+    transform: translateY(0);
+}
+
 /* Groups List */
 .groups-list {
     display: flex;
