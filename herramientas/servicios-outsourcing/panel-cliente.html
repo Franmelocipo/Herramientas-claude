@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel Administrador - Gestión de Comprobantes</title>
+    <title>Panel Cliente - Servicios de Outsourcing</title>
 
     <!-- Estilos -->
     <link rel="stylesheet" href="styles.css">
@@ -16,51 +16,27 @@
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h1>Administración</h1>
+                <h1>Comprobantes</h1>
                 <div class="user-info">
                     <span id="userName">Cargando...</span>
                 </div>
-                <span class="user-role">Admin</span>
+                <span class="user-role">Cliente</span>
             </div>
 
             <nav class="sidebar-nav">
                 <div class="nav-section">
-                    <span class="nav-section-title">Gestión</span>
+                    <span class="nav-section-title">Menu</span>
                     <ul class="nav-menu">
                         <li class="nav-item">
-                            <a href="panel-admin.html" class="nav-link active">
+                            <a href="#" class="nav-link active">
+                                <span class="icon">📤</span>
+                                Subir Comprobantes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
                                 <span class="icon">📋</span>
-                                Comprobantes
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link">
-                                <span class="icon">👥</span>
-                                Clientes
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link">
-                                <span class="icon">📊</span>
-                                Reportes
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="nav-section">
-                    <span class="nav-section-title">Sistema</span>
-                    <ul class="nav-menu">
-                        <li class="nav-item">
-                            <a href="panel-usuarios.html" class="nav-link">
-                                <span class="icon">🔐</span>
-                                Gestión de Usuarios
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link">
-                                <span class="icon">⚙️</span>
-                                Configuración
+                                Mis Comprobantes
                             </a>
                         </li>
                     </ul>
@@ -77,21 +53,21 @@
         <!-- Contenido principal -->
         <main class="main-content">
             <div class="content-header">
-                <h1 id="welcomeMessage">Panel Administrador</h1>
-                <p>Gestión completa de comprobantes del estudio</p>
+                <h1 id="welcomeMessage">Bienvenido</h1>
+                <p>Panel de gestión de comprobantes</p>
             </div>
 
             <!-- Contenido placeholder -->
             <div class="card">
                 <div class="card-header">
-                    <h3 class="card-title">Gestión de Comprobantes</h3>
+                    <h3 class="card-title">Subir Comprobantes</h3>
                 </div>
                 <div class="card-body">
                     <div class="empty-state">
                         <div class="empty-state-icon">🚧</div>
                         <h3 class="empty-state-title">Próximamente</h3>
                         <p class="empty-state-text">
-                            Próximamente: gestión de comprobantes
+                            Próximamente: subir comprobantes
                         </p>
                     </div>
                 </div>
@@ -105,17 +81,31 @@
     <script>
         // Verificar sesión al cargar
         document.addEventListener('DOMContentLoaded', () => {
-            // Verificar que sea admin
-            const session = auth.requireRole('admin');
+            // Verificar que sea cliente
+            const session = auth.requireRole('cliente');
 
             if (!session) {
-                // Si no hay sesión o no es admin, requireRole ya redirige
+                // Si no hay sesión o no es cliente, requireRole ya redirige
                 return;
             }
 
             // Mostrar nombre del usuario
             document.getElementById('userName').textContent = session.nombre;
-            document.getElementById('welcomeMessage').textContent = `Panel Administrador - ${session.nombre}`;
+            document.getElementById('welcomeMessage').textContent = `Bienvenido ${session.nombre}`;
+
+            // IMPORTANTE: El cliente_id del usuario se encuentra en session.cliente_id
+            // Cuando se implemente la funcionalidad de comprobantes, TODOS los datos
+            // deben filtrarse por: WHERE cliente_id = session.cliente_id
+            //
+            // Ejemplo de query para Supabase:
+            // const { data, error } = await supabaseClient
+            //     .from('comprobantes')
+            //     .select('*')
+            //     .eq('cliente_id', session.cliente_id)
+            //     .order('fecha', { ascending: false });
+            //
+            // Esto asegura que el usuario solo vea información de SU cliente asignado
+            console.log('Usuario cliente cargado. Cliente ID:', session.cliente_id);
         });
     </script>
 </body>

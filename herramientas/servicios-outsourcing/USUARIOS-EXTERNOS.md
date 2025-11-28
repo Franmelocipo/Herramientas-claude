@@ -39,7 +39,7 @@ Sistema completo para la administración de usuarios externos (clientes) en el m
 Primero, ejecuta el script SQL en el editor de SQL de Supabase:
 
 ```bash
-herramientas/gestion-comprobantes/sql/03-agregar-requiere-cambio-password.sql
+herramientas/servicios-outsourcing/sql/03-agregar-requiere-cambio-password.sql
 ```
 
 Este script:
@@ -80,7 +80,7 @@ Todos los archivos ya están en su lugar:
 - Acceso completo a todas las herramientas
 - Puede gestionar usuarios externos
 - Ve información de todos los clientes
-- Accede desde: `herramientas/gestion-comprobantes/login.html`
+- Accede desde: `herramientas/servicios-outsourcing/login.html`
 
 ### Cliente (Usuario Externo)
 - Acceso restringido solo a su panel
@@ -95,7 +95,7 @@ Todos los archivos ya están en su lugar:
 ### Flujo 1: Crear Usuario Externo (Admin)
 
 1. **Login como Admin**
-   - Ir a: `herramientas/gestion-comprobantes/login.html`
+   - Ir a: `herramientas/servicios-outsourcing/login.html`
    - Ingresar credenciales de admin
 
 2. **Navegar a Gestión de Usuarios**
@@ -122,10 +122,10 @@ Todos los archivos ya están en su lugar:
    - El admin envía al cliente:
      - Usuario: `cliente1@ejemplo.com`
      - Contraseña temporal: `temp123`
-     - URL: `herramientas/gestion-comprobantes/login.html`
+     - URL: `herramientas/servicios-outsourcing/login.html`
 
 2. **Primer Login**
-   - Ir a: `herramientas/gestion-comprobantes/login.html`
+   - Ir a: `herramientas/servicios-outsourcing/login.html`
    - Ingresar usuario y contraseña temporal
    - Click en "Iniciar Sesión"
 
@@ -149,7 +149,7 @@ Todos los archivos ya están en su lugar:
 ### Flujo 3: Siguientes Inicios de Sesión
 
 1. **Login Normal**
-   - Ir a: `herramientas/gestion-comprobantes/login.html`
+   - Ir a: `herramientas/servicios-outsourcing/login.html`
    - Ingresar usuario y nueva contraseña
    - Click en "Iniciar Sesión"
 
@@ -283,7 +283,7 @@ const { data, error } = await supabaseClient
 ### Nuevos Archivos
 
 ```
-herramientas/gestion-comprobantes/
+herramientas/servicios-outsourcing/
 ├── sql/
 │   └── 03-agregar-requiere-cambio-password.sql  # Script SQL
 ├── panel-usuarios.html                           # Panel de gestión
@@ -293,7 +293,7 @@ herramientas/gestion-comprobantes/
 ### Archivos Modificados
 
 ```
-herramientas/gestion-comprobantes/
+herramientas/servicios-outsourcing/
 ├── auth.js                    # Sistema de autenticación actualizado
 ├── login.html                 # Verificación de cambio de password
 ├── panel-admin.html           # Link a gestión de usuarios

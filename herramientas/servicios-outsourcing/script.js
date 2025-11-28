@@ -375,7 +375,7 @@ async function loadSubirComprobantes() {
                     <li>Abrir un período en la tabla <code>periods</code></li>
                 </ol>
                 <p style="color: #856404; margin-top: 12px;">
-                    Ver <code>herramientas/gestion-comprobantes/README.md</code> para instrucciones completas.
+                    Ver <code>herramientas/servicios-outsourcing/README.md</code> para instrucciones completas.
                 </p>
             </div>
         </div>

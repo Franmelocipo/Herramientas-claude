@@ -1,4 +1,4 @@
-# 📋 Sistema de Gestión de Comprobantes
+# 📋 Servicios de Outsourcing
 
 Sistema web para la carga y gestión de comprobantes de clientes remotos del estudio contable, con integración a Supabase.
 
@@ -171,7 +171,7 @@ INSERT INTO periods (client_id, year, month, estado) VALUES
 ## 📁 Estructura del Proyecto
 
 ```
-gestion-comprobantes/
+servicios-outsourcing/
 ├── index.html                  # Página principal con navegación
 ├── styles.css                  # Estilos globales
 ├── script.js                   # Lógica principal y navegación

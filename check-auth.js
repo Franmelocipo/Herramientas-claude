@@ -14,7 +14,7 @@
         // Si es un usuario externo (cliente), redirigir automáticamente a su panel
         if (userRole === 'cliente') {
             console.log('Usuario externo detectado, redirigiendo a panel de cliente...');
-            window.location.replace('herramientas/gestion-comprobantes/panel-cliente.html');
+            window.location.replace('herramientas/servicios-outsourcing/panel-cliente.html');
             return;
         }
 
