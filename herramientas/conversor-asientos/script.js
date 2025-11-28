@@ -11,7 +11,8 @@ const state = {
     bankAccount: '',        // Cuenta de contrapartida global (banco/caja)
     activeSearchField: null,
     expandedGroups: {},     // Rastrear qué grupos están expandidos
-    selectedItems: {}       // Rastrear items seleccionados para reagrupación {groupIdx: {itemIdx: true/false}}
+    selectedItems: {},      // Rastrear items seleccionados para reagrupación {groupIdx: {itemIdx: true/false}}
+    selectedGroups: {}      // Rastrear grupos seleccionados para fusión {groupIdx: true/false}
 };
 
 // ============================================
@@ -443,6 +444,7 @@ function reset() {
     state.bankAccount = '';
     state.activeSearchField = null;
     state.expandedGroups = {};
+    state.selectedGroups = {};
 
     elements.fileInput.value = '';
     elements.bankAccountInput.value = '';
@@ -1109,8 +1111,14 @@ function renderGroupsList() {
         `;
 
         return `
-            <div class="group-item ${classType}">
+            <div class="group-item ${classType} ${state.selectedGroups[idx] ? 'group-selected' : ''}">
                 <div class="group-main-row">
+                    <input type="checkbox"
+                           class="group-checkbox"
+                           id="groupCheckbox-${idx}"
+                           ${state.selectedGroups[idx] ? 'checked' : ''}
+                           onchange="toggleGroupSelection(${idx})"
+                           title="Seleccionar grupo completo">
                     <button class="group-expand-btn" onclick="toggleGroupExpansion(${idx})" title="Ver detalle de movimientos">
                         ${expandIcon}
                     </button>
@@ -1467,6 +1475,250 @@ function createNewGroup(sourceGroupIdx) {
     renderGroupsList();
 
     alert(`Grupo "${newGroupName}" creado con ${selectedItems.length} movimiento${selectedItems.length > 1 ? 's' : ''}.`);
+}
+
+// ============================================
+// FUSIÓN DE GRUPOS COMPLETOS
+// ============================================
+
+/**
+ * Alterna la selección de un grupo completo
+ */
+function toggleGroupSelection(groupIdx) {
+    state.selectedGroups[groupIdx] = !state.selectedGroups[groupIdx];
+    actualizarContadorGrupos();
+    renderGroupsList();
+}
+
+/**
+ * Actualiza el contador de grupos seleccionados y habilita/deshabilita botones
+ */
+function actualizarContadorGrupos() {
+    const selectedCount = Object.values(state.selectedGroups).filter(v => v).length;
+    const countElement = document.getElementById('selectedGroupsCount');
+    const mergeControls = document.getElementById('groupMergeControls');
+    const btnMergeToNew = document.getElementById('btnMergeToNew');
+    const btnMergeToExisting = document.getElementById('btnMergeToExisting');
+
+    if (countElement) {
+        countElement.textContent = `${selectedCount} grupo${selectedCount !== 1 ? 's' : ''} seleccionado${selectedCount !== 1 ? 's' : ''}`;
+    }
+
+    // Mostrar/ocultar controles de fusión
+    if (mergeControls) {
+        if (selectedCount > 0) {
+            mergeControls.classList.remove('hidden');
+        } else {
+            mergeControls.classList.add('hidden');
+        }
+    }
+
+    // Habilitar/deshabilitar botones (se necesitan al menos 2 grupos)
+    const canMerge = selectedCount >= 2;
+    if (btnMergeToNew) {
+        btnMergeToNew.disabled = !canMerge;
+    }
+    if (btnMergeToExisting) {
+        btnMergeToExisting.disabled = !canMerge;
+    }
+}
+
+/**
+ * Fusiona los grupos seleccionados en un nuevo grupo
+ */
+function fusionarEnNuevoGrupo() {
+    const selectedIndices = Object.entries(state.selectedGroups)
+        .filter(([_, isSelected]) => isSelected)
+        .map(([idx, _]) => parseInt(idx));
+
+    if (selectedIndices.length < 2) {
+        alert('Debes seleccionar al menos 2 grupos para fusionar.');
+        return;
+    }
+
+    // Pedir nombre del nuevo grupo
+    const newGroupName = prompt('Ingresa el nombre del nuevo grupo:', 'Grupo Fusionado');
+    if (!newGroupName || !newGroupName.trim()) {
+        return;
+    }
+
+    // Crear nuevo grupo con todos los movimientos de los grupos seleccionados
+    const newGroup = {
+        concepto: newGroupName.trim(),
+        ejemploCompleto: '',
+        count: 0,
+        totalDebe: 0,
+        totalHaber: 0,
+        items: []
+    };
+
+    // Recopilar todos los movimientos de los grupos seleccionados
+    selectedIndices.forEach(idx => {
+        const group = state.groupedData[idx];
+        if (group && group.items) {
+            // Agregar todos los items al nuevo grupo
+            group.items.forEach(item => {
+                newGroup.items.push(item);
+
+                const debe = parseAmount(item['Débito'] || item['DEBE'] || 0);
+                const haber = parseAmount(item['Crédito'] || item['HABER'] || item['Haber'] || 0);
+
+                newGroup.totalDebe += debe;
+                newGroup.totalHaber += haber;
+                newGroup.count++;
+            });
+        }
+    });
+
+    // Establecer ejemplo completo del primer item
+    if (newGroup.items.length > 0) {
+        newGroup.ejemploCompleto = newGroup.items[0]['Descripción']
+            || newGroup.items[0]['Leyenda']
+            || newGroup.items[0]['CONCEPTO']
+            || newGroupName.trim();
+    }
+
+    // Agregar nuevo grupo
+    state.groupedData.push(newGroup);
+
+    // Eliminar grupos seleccionados (en orden inverso para no afectar índices)
+    selectedIndices.sort((a, b) => b - a).forEach(idx => {
+        state.groupedData.splice(idx, 1);
+    });
+
+    // Limpiar selección de grupos
+    state.selectedGroups = {};
+
+    // Eliminar grupos vacíos por si acaso
+    eliminarGruposVacios();
+
+    // Re-renderizar
+    renderGroupsList();
+    actualizarContadorGrupos();
+
+    alert(`✅ Grupos fusionados exitosamente en "${newGroupName}".\n${newGroup.count} movimientos en el nuevo grupo.`);
+}
+
+/**
+ * Muestra opciones para fusionar en grupo existente
+ */
+function mostrarOpcionesFusionExistente() {
+    const selectedIndices = Object.entries(state.selectedGroups)
+        .filter(([_, isSelected]) => isSelected)
+        .map(([idx, _]) => parseInt(idx));
+
+    if (selectedIndices.length < 2) {
+        alert('Debes seleccionar al menos 2 grupos para fusionar.');
+        return;
+    }
+
+    // Obtener grupos NO seleccionados
+    const availableGroups = state.groupedData
+        .map((g, idx) => ({ group: g, idx }))
+        .filter(({ idx }) => !state.selectedGroups[idx]);
+
+    if (availableGroups.length === 0) {
+        alert('No hay grupos disponibles como destino. Todos los grupos están seleccionados.');
+        return;
+    }
+
+    // Crear modal con opciones
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Selecciona el grupo destino</h2>
+                <button class="close-btn" onclick="this.closest('.modal').remove()">×</button>
+            </div>
+            <p style="color: #64748b; margin-bottom: 16px;">
+                Fusionar ${selectedIndices.length} grupos en:
+            </p>
+            <div style="max-height: 400px; overflow-y: auto;">
+                ${availableGroups.map(({ group, idx }) => `
+                    <div class="group-option" onclick="fusionarEnGrupoExistente(${idx})">
+                        <div style="font-weight: 600; color: #1e293b; margin-bottom: 4px;">
+                            ${group.concepto}
+                        </div>
+                        <div style="font-size: 13px; color: #64748b;">
+                            ${group.count} movimientos | Debe: $${group.totalDebe.toLocaleString('es-AR', { minimumFractionDigits: 2 })} | Haber: $${group.totalHaber.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Cerrar modal al hacer click fuera
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    });
+}
+
+/**
+ * Fusiona los grupos seleccionados en un grupo existente
+ */
+function fusionarEnGrupoExistente(targetGroupIdx) {
+    // Cerrar modal
+    document.querySelector('.modal')?.remove();
+
+    const selectedIndices = Object.entries(state.selectedGroups)
+        .filter(([_, isSelected]) => isSelected)
+        .map(([idx, _]) => parseInt(idx));
+
+    if (selectedIndices.length < 2) {
+        alert('Debes seleccionar al menos 2 grupos para fusionar.');
+        return;
+    }
+
+    const targetGroup = state.groupedData[targetGroupIdx];
+    if (!targetGroup) {
+        alert('Grupo destino no encontrado.');
+        return;
+    }
+
+    let totalMovimientos = 0;
+
+    // Mover todos los movimientos de los grupos seleccionados al grupo destino
+    selectedIndices.forEach(idx => {
+        const sourceGroup = state.groupedData[idx];
+        if (sourceGroup && sourceGroup.items && idx !== targetGroupIdx) {
+            sourceGroup.items.forEach(item => {
+                targetGroup.items.push(item);
+
+                const debe = parseAmount(item['Débito'] || item['DEBE'] || 0);
+                const haber = parseAmount(item['Crédito'] || item['HABER'] || item['Haber'] || 0);
+
+                targetGroup.totalDebe += debe;
+                targetGroup.totalHaber += haber;
+                targetGroup.count++;
+                totalMovimientos++;
+            });
+        }
+    });
+
+    // Eliminar grupos seleccionados (en orden inverso)
+    selectedIndices.sort((a, b) => b - a).forEach(idx => {
+        if (idx !== targetGroupIdx) {
+            state.groupedData.splice(idx, 1);
+        }
+    });
+
+    // Limpiar selección de grupos
+    state.selectedGroups = {};
+
+    // Eliminar grupos vacíos
+    eliminarGruposVacios();
+
+    // Re-renderizar
+    renderGroupsList();
+    actualizarContadorGrupos();
+
+    alert(`✅ Grupos fusionados exitosamente en "${targetGroup.concepto}".\n${totalMovimientos} movimientos agregados.`);
 }
 
 // ============================================
