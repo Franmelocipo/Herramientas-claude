@@ -165,7 +165,7 @@ INSERT INTO periods (client_id, year, month, estado) VALUES
 
 1. Abre el archivo `index.html` en tu navegador desde la raíz del proyecto
 2. Inicia sesión con las credenciales configuradas en `login.html`
-3. Navega a **Gestión de Comprobantes** en el menú
+3. Navega a **Servicios de Outsourcing** en el menú
 4. ¡Listo! Ya puedes usar la aplicación
 
 ## 📁 Estructura del Proyecto

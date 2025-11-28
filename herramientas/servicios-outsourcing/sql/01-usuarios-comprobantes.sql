@@ -29,7 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_usuarios_comprobantes_cliente ON usuarios_comprob
 -- 3. COMENTARIOS
 -- =====================================================
 
-COMMENT ON TABLE usuarios_comprobantes IS 'Usuarios del sistema de gestión de comprobantes';
+COMMENT ON TABLE usuarios_comprobantes IS 'Usuarios del sistema de servicios de outsourcing';
 COMMENT ON COLUMN usuarios_comprobantes.rol IS 'admin: ve todo | cliente: ve solo sus comprobantes';
 COMMENT ON COLUMN usuarios_comprobantes.cliente_id IS 'Solo para rol cliente - referencia a tabla clientes (UUID)';
 

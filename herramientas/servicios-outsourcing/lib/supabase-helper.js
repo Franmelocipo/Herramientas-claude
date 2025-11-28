@@ -1,6 +1,6 @@
 /**
- * SUPABASE HELPER - GESTIÓN DE COMPROBANTES
- * Funciones específicas para el sistema de gestión de comprobantes
+ * SUPABASE HELPER - SERVICIOS DE OUTSOURCING
+ * Funciones específicas para el sistema de servicios de outsourcing
  */
 
 // =====================================================
@@ -164,7 +164,7 @@ async function getPeriodosAbiertos(clientId) {
 }
 
 // =====================================================
-// GESTIÓN DE COMPROBANTES
+// GESTIÓN DE ARCHIVOS
 // =====================================================
 
 /**

@@ -1,5 +1,5 @@
 /**
- * SCRIPT PRINCIPAL - GESTIÓN DE COMPROBANTES
+ * SCRIPT PRINCIPAL - SERVICIOS DE OUTSOURCING
  * Maneja navegación, autenticación y carga de vistas
  */
 
@@ -14,7 +14,7 @@ let currentView = null;
 // INICIALIZACIÓN
 // =====================================================
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('Inicializando aplicación de gestión de comprobantes...');
+    console.log('Inicializando aplicación de servicios de outsourcing...');
 
     // Inicializar Supabase
     if (typeof initSupabase === 'function') {

@@ -1,6 +1,6 @@
 /**
  * CÁLCULO DE RETENCIONES RG 830
- * Sistema de Gestión de Comprobantes
+ * Sistema de Servicios de Outsourcing
  */
 
 // =====================================================
