@@ -1,6 +1,6 @@
 /**
  * UTILIDADES GENERALES
- * Sistema de Gestión de Comprobantes
+ * Sistema de Servicios de Outsourcing
  */
 
 // =====================================================

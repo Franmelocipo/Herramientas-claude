@@ -1,5 +1,5 @@
 -- =====================================================
--- SETUP SIMPLIFICADO - GESTIÓN DE COMPROBANTES
+-- SETUP SIMPLIFICADO - SERVICIOS DE OUTSOURCING
 -- Ejecutar en Supabase SQL Editor
 -- =====================================================
 
@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_usuarios_comprobantes_rol ON usuarios_comprobante
 CREATE INDEX IF NOT EXISTS idx_usuarios_comprobantes_cliente ON usuarios_comprobantes(cliente_id);
 
 -- Comentarios
-COMMENT ON TABLE usuarios_comprobantes IS 'Usuarios del sistema de gestión de comprobantes';
+COMMENT ON TABLE usuarios_comprobantes IS 'Usuarios del sistema de servicios de outsourcing';
 COMMENT ON COLUMN usuarios_comprobantes.rol IS 'admin: ve todo | cliente: ve solo sus comprobantes';
 COMMENT ON COLUMN usuarios_comprobantes.cliente_id IS 'Solo para rol cliente - referencia a tabla clientes';
 
