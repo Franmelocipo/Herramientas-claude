@@ -1,6 +1,6 @@
 /**
  * AUTH.JS - Sistema de Autenticación
- * Gestión de Comprobantes - Estudio Contable
+ * Servicios de Outsourcing - Estudio Contable
  */
 
 // Configuración de Supabase

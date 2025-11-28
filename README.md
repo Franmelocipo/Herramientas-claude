@@ -49,7 +49,7 @@ Convierte extractos bancarios y de inversiones de PDF a Excel para facilitar el 
 
 [📖 Ver documentación completa](./herramientas/extractos-bancarios/README.md)
 
-### 4. Gestión de Comprobantes
+### 4. Servicios de Outsourcing
 **📋 Estado:** ✅ Disponible (MVP)
 
 Sistema web completo para la carga y gestión de comprobantes de clientes remotos del estudio contable, con integración a Supabase.
@@ -75,7 +75,7 @@ Sistema web completo para la carga y gestión de comprobantes de clientes remoto
   - Storage para archivos de comprobantes
   - Códigos de retención RG 830 precargados
 
-[📖 Ver documentación completa](./herramientas/gestion-comprobantes/README.md)
+[📖 Ver documentación completa](./herramientas/servicios-outsourcing/README.md)
 
 ## Estructura del Proyecto
 
@@ -103,7 +103,7 @@ Herramientas-claude/
 │   │   ├── styles.css
 │   │   ├── script.js
 │   │   └── README.md
-│   └── gestion-comprobantes/          # Gestión de Comprobantes
+│   └── servicios-outsourcing/         # Servicios de Outsourcing
 │       ├── index.html                  # Aplicación principal
 │       ├── styles.css                  # Estilos
 │       ├── script.js                   # Lógica principal
