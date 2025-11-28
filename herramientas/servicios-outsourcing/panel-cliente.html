@@ -92,6 +92,20 @@
             // Mostrar nombre del usuario
             document.getElementById('userName').textContent = session.nombre;
             document.getElementById('welcomeMessage').textContent = `Bienvenido ${session.nombre}`;
+
+            // IMPORTANTE: El cliente_id del usuario se encuentra en session.cliente_id
+            // Cuando se implemente la funcionalidad de comprobantes, TODOS los datos
+            // deben filtrarse por: WHERE cliente_id = session.cliente_id
+            //
+            // Ejemplo de query para Supabase:
+            // const { data, error } = await supabaseClient
+            //     .from('comprobantes')
+            //     .select('*')
+            //     .eq('cliente_id', session.cliente_id)
+            //     .order('fecha', { ascending: false });
+            //
+            // Esto asegura que el usuario solo vea información de SU cliente asignado
+            console.log('Usuario cliente cargado. Cliente ID:', session.cliente_id);
         });
     </script>
 </body>

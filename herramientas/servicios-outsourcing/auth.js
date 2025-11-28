@@ -84,6 +84,11 @@ async function login(email, password) {
         localStorage.setItem('nombre', data.nombre);
         localStorage.setItem('isLoggedIn', 'true');
 
+        // Guardar cliente_id si existe (para usuarios tipo cliente)
+        if (data.cliente_id) {
+            localStorage.setItem('cliente_id', data.cliente_id);
+        }
+
         console.log('Login exitoso:', data.email, '- Rol:', data.rol);
 
         return {
@@ -92,8 +97,10 @@ async function login(email, password) {
                 id: data.id,
                 email: data.email,
                 nombre: data.nombre,
-                rol: data.rol
-            }
+                rol: data.rol,
+                cliente_id: data.cliente_id
+            },
+            requiere_cambio_password: data.requiere_cambio_password === true
         };
 
     } catch (error) {
@@ -115,6 +122,7 @@ function logout() {
     localStorage.removeItem('email');
     localStorage.removeItem('rol');
     localStorage.removeItem('nombre');
+    localStorage.removeItem('cliente_id');
     localStorage.removeItem('isLoggedIn');
 
     console.log('Sesión cerrada');
@@ -138,6 +146,7 @@ function checkSession() {
     const email = localStorage.getItem('email');
     const rol = localStorage.getItem('rol');
     const nombre = localStorage.getItem('nombre');
+    const clienteId = localStorage.getItem('cliente_id');
 
     // Verificar que todos los datos necesarios existan
     if (!userId || !email || !rol || !nombre) {
@@ -150,7 +159,8 @@ function checkSession() {
         id: userId,
         email: email,
         rol: rol,
-        nombre: nombre
+        nombre: nombre,
+        cliente_id: clienteId
     };
 }
 
