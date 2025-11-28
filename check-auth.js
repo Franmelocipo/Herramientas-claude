@@ -5,7 +5,27 @@
 (function() {
     'use strict';
 
-    // Verificar si existe la autenticación en sessionStorage
+    // PRIORIDAD 1: Verificar si hay sesión activa del módulo Gestión de Comprobantes
+    // Los usuarios externos (rol='cliente') deben ser redirigidos automáticamente
+    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    const userRole = localStorage.getItem('rol');
+
+    if (isLoggedIn && userRole) {
+        // Si es un usuario externo (cliente), redirigir automáticamente a su panel
+        if (userRole === 'cliente') {
+            console.log('Usuario externo detectado, redirigiendo a panel de cliente...');
+            window.location.replace('herramientas/gestion-comprobantes/panel-cliente.html');
+            return;
+        }
+
+        // Si es admin, permitir acceso al index (puede ver todas las herramientas)
+        if (userRole === 'admin') {
+            console.log('Usuario admin detectado, acceso permitido a todas las herramientas');
+            return;
+        }
+    }
+
+    // PRIORIDAD 2: Verificar autenticación del sistema anterior (sessionStorage)
     const isAuthenticated = sessionStorage.getItem('herramientas_auth') === 'authenticated';
 
     if (!isAuthenticated) {

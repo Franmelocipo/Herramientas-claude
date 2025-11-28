@@ -278,9 +278,18 @@
 
                 if (result.success) {
                     // Login exitoso
-                    showAlert('Inicio de sesión exitoso. Redirigiendo...', 'success');
 
-                    // Redirigir según el rol
+                    // Verificar si requiere cambio de password
+                    if (result.requiere_cambio_password) {
+                        showAlert('Primera vez: Debes cambiar tu contraseña. Redirigiendo...', 'success');
+                        setTimeout(() => {
+                            window.location.href = 'cambiar-password.html';
+                        }, 1500);
+                        return;
+                    }
+
+                    // Login normal - redirigir según el rol
+                    showAlert('Inicio de sesión exitoso. Redirigiendo...', 'success');
                     setTimeout(() => {
                         auth.redirectByRole(result.user.rol);
                     }, 1000);

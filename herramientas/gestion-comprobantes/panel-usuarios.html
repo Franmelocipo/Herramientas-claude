@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Usuarios - Sistema de Comprobantes</title>
+
+    <!-- Estilos -->
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        /* Estilos específicos para gestión de usuarios */
+        .users-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+        }
+
+        .users-table thead {
+            background: var(--bg-tertiary);
+        }
+
+        .users-table th,
+        .users-table td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .users-table th {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: var(--font-size-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .users-table tbody tr:hover {
+            background: var(--bg-secondary);
+        }
+
+        .user-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: var(--font-size-xs);
+            font-weight: 600;
+        }
+
+        .user-badge.admin {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .user-badge.cliente {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .user-badge.active {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .user-badge.inactive {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            padding: 8px;
+            cursor: pointer;
+            border-radius: var(--border-radius);
+            transition: all 0.2s;
+            font-size: 18px;
+        }
+
+        .btn-icon:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .btn-icon.delete:hover {
+            background: #fee2e2;
+            color: var(--danger-color);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: var(--border-radius-lg);
+            padding: var(--spacing-xl);
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .modal-header h2 {
+            font-size: var(--font-size-xl);
+            color: var(--text-primary);
+        }
+
+        .form-group {
+            margin-bottom: var(--spacing-md);
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: var(--spacing-xs);
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: var(--font-size-sm);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            font-size: var(--font-size-base);
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: var(--spacing-sm);
+            margin-top: var(--spacing-lg);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: var(--font-size-base);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex: 1;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: var(--border-radius);
+            margin-bottom: var(--spacing-md);
+            font-size: var(--font-size-sm);
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: var(--spacing-xl);
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: var(--spacing-md);
+        }
+
+        .loading {
+            text-align: center;
+            padding: var(--spacing-xl);
+            color: var(--text-secondary);
+        }
+
+        .password-hint {
+            font-size: var(--font-size-xs);
+            color: var(--text-light);
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>Gestión</h1>
+                <div class="user-info">
+                    <span id="userName">Cargando...</span>
+                </div>
+                <span class="user-role">Admin</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <span class="nav-section-title">Administración</span>
+                    <ul class="nav-menu">
+                        <li class="nav-item">
+                            <a href="panel-admin.html" class="nav-link">
+                                <span class="icon">🏠</span>
+                                Panel Principal
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="panel-usuarios.html" class="nav-link active">
+                                <span class="icon">👥</span>
+                                Gestión de Usuarios
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="btn-logout" onclick="auth.logout()">
+                    Cerrar Sesión
+                </button>
+            </div>
+        </aside>
+
+        <!-- Contenido principal -->
+        <main class="main-content">
+            <div class="content-header">
+                <h1>Gestión de Usuarios Externos</h1>
+                <p>Administra los usuarios que acceden al sistema de comprobantes</p>
+            </div>
+
+            <!-- Alerta -->
+            <div id="alertContainer"></div>
+
+            <!-- Botones de acción -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Usuarios del Sistema</h3>
+                    <button class="btn-primary" onclick="openCreateUserModal()">
+                        + Crear Nuevo Usuario
+                    </button>
+                </div>
+                <div class="card-body">
+                    <!-- Loading -->
+                    <div id="loadingUsers" class="loading">
+                        <div>⏳ Cargando usuarios...</div>
+                    </div>
+
+                    <!-- Tabla de usuarios -->
+                    <div id="usersTableContainer" style="display: none;">
+                        <table class="users-table">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Nombre</th>
+                                    <th>Cliente Asignado</th>
+                                    <th>Rol</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <!-- Se llenará dinámicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Estado vacío -->
+                    <div id="emptyState" class="empty-state" style="display: none;">
+                        <div class="empty-state-icon">👥</div>
+                        <h3 class="empty-state-title">No hay usuarios externos</h3>
+                        <p class="empty-state-text">Crea el primer usuario externo para comenzar</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Crear/Editar Usuario -->
+    <div id="userModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Crear Nuevo Usuario</h2>
+            </div>
+
+            <form id="userForm">
+                <input type="hidden" id="userId">
+
+                <div class="form-group">
+                    <label for="userEmail">Usuario (Email) *</label>
+                    <input type="text" id="userEmail" class="form-control" required placeholder="usuario@ejemplo.com">
+                    <p class="password-hint">Este será el usuario para iniciar sesión</p>
+                </div>
+
+                <div class="form-group" id="passwordGroup">
+                    <label for="userPassword">Contraseña Temporal *</label>
+                    <input type="text" id="userPassword" class="form-control" required placeholder="Mínimo 6 caracteres">
+                    <p class="password-hint">El usuario deberá cambiarla en el primer inicio de sesión</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="userName">Nombre Completo *</label>
+                    <input type="text" id="userName" class="form-control" required placeholder="Juan Pérez">
+                </div>
+
+                <div class="form-group">
+                    <label for="userCliente">Cliente Asignado *</label>
+                    <select id="userCliente" class="form-control" required>
+                        <option value="">Seleccionar cliente...</option>
+                        <!-- Se llenará dinámicamente -->
+                    </select>
+                    <p class="password-hint">El usuario solo verá información de este cliente</p>
+                </div>
+
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" onclick="closeUserModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <span id="btnSubmitText">Crear Usuario</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Resetear Contraseña -->
+    <div id="resetPasswordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Resetear Contraseña</h2>
+            </div>
+
+            <form id="resetPasswordForm">
+                <input type="hidden" id="resetUserId">
+
+                <div class="alert alert-info">
+                    Se generará una nueva contraseña temporal y el usuario deberá cambiarla en su próximo inicio de sesión.
+                </div>
+
+                <div class="form-group">
+                    <label for="resetPassword">Nueva Contraseña Temporal *</label>
+                    <input type="text" id="resetPassword" class="form-control" required placeholder="Mínimo 6 caracteres">
+                </div>
+
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" onclick="closeResetPasswordModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Resetear Contraseña</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Script de autenticación -->
+    <script src="auth.js"></script>
+
+    <script>
+        // Variables globales
+        let supabaseClient = null;
+        let clientes = [];
+        let usuarios = [];
+        let editingUserId = null;
+
+        // Verificar sesión al cargar
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Verificar que sea admin
+            const session = auth.requireRole('admin');
+
+            if (!session) {
+                return;
+            }
+
+            // Mostrar nombre del usuario
+            document.getElementById('userName').textContent = session.nombre;
+
+            // Inicializar Supabase
+            if (window.supabase && window.supabase.createClient) {
+                const supabaseUrl = 'https://wnpjvnmyfkgtpwqnbmxa.supabase.co';
+                const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InducGp2bm15ZmtndHB3cW5ibXhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMzE5OTAsImV4cCI6MjA3ODcwNzk5MH0.XmYGTMuQBJBpUMAij90T6z4SlCMugVWuWdwJ84GiPn8';
+                supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+            }
+
+            // Cargar datos
+            await loadClientes();
+            await loadUsuarios();
+        });
+
+        // Cargar clientes desde Supabase
+        async function loadClientes() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('clientes')
+                    .select('id, razon_social')
+                    .order('razon_social');
+
+                if (error) throw error;
+
+                clientes = data || [];
+
+                // Llenar select de clientes
+                const select = document.getElementById('userCliente');
+                select.innerHTML = '<option value="">Seleccionar cliente...</option>';
+
+                clientes.forEach(cliente => {
+                    const option = document.createElement('option');
+                    option.value = cliente.id;
+                    option.textContent = cliente.razon_social;
+                    select.appendChild(option);
+                });
+
+            } catch (error) {
+                console.error('Error cargando clientes:', error);
+                showAlert('Error al cargar la lista de clientes', 'error');
+            }
+        }
+
+        // Cargar usuarios desde Supabase
+        async function loadUsuarios() {
+            try {
+                document.getElementById('loadingUsers').style.display = 'block';
+                document.getElementById('usersTableContainer').style.display = 'none';
+                document.getElementById('emptyState').style.display = 'none';
+
+                const { data, error } = await supabaseClient
+                    .from('usuarios_comprobantes')
+                    .select(`
+                        id,
+                        email,
+                        nombre,
+                        rol,
+                        activo,
+                        cliente_id,
+                        clientes (
+                            razon_social
+                        )
+                    `)
+                    .eq('rol', 'cliente')
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+
+                usuarios = data || [];
+
+                document.getElementById('loadingUsers').style.display = 'none';
+
+                if (usuarios.length === 0) {
+                    document.getElementById('emptyState').style.display = 'block';
+                } else {
+                    document.getElementById('usersTableContainer').style.display = 'block';
+                    renderUsuarios();
+                }
+
+            } catch (error) {
+                console.error('Error cargando usuarios:', error);
+                document.getElementById('loadingUsers').style.display = 'none';
+                showAlert('Error al cargar los usuarios', 'error');
+            }
+        }
+
+        // Renderizar tabla de usuarios
+        function renderUsuarios() {
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = '';
+
+            usuarios.forEach(usuario => {
+                const tr = document.createElement('tr');
+
+                const clienteNombre = usuario.clientes ? usuario.clientes.razon_social : 'Sin asignar';
+                const estadoBadge = usuario.activo
+                    ? '<span class="user-badge active">Activo</span>'
+                    : '<span class="user-badge inactive">Inactivo</span>';
+
+                tr.innerHTML = `
+                    <td>${usuario.email}</td>
+                    <td>${usuario.nombre}</td>
+                    <td>${clienteNombre}</td>
+                    <td><span class="user-badge cliente">Cliente</span></td>
+                    <td>${estadoBadge}</td>
+                    <td>
+                        <button class="btn-icon" onclick="editUser('${usuario.id}')" title="Editar">✏️</button>
+                        <button class="btn-icon" onclick="resetPassword('${usuario.id}')" title="Resetear Contraseña">🔑</button>
+                        <button class="btn-icon delete" onclick="deleteUser('${usuario.id}', '${usuario.nombre}')" title="Eliminar">🗑️</button>
+                    </td>
+                `;
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Abrir modal crear usuario
+        function openCreateUserModal() {
+            editingUserId = null;
+            document.getElementById('modalTitle').textContent = 'Crear Nuevo Usuario';
+            document.getElementById('btnSubmitText').textContent = 'Crear Usuario';
+            document.getElementById('userForm').reset();
+            document.getElementById('userId').value = '';
+            document.getElementById('passwordGroup').style.display = 'block';
+            document.getElementById('userModal').classList.add('active');
+        }
+
+        // Cerrar modal usuario
+        function closeUserModal() {
+            document.getElementById('userModal').classList.remove('active');
+            document.getElementById('userForm').reset();
+            editingUserId = null;
+        }
+
+        // Editar usuario
+        function editUser(userId) {
+            const usuario = usuarios.find(u => u.id === userId);
+            if (!usuario) return;
+
+            editingUserId = userId;
+            document.getElementById('modalTitle').textContent = 'Editar Usuario';
+            document.getElementById('btnSubmitText').textContent = 'Guardar Cambios';
+            document.getElementById('userId').value = usuario.id;
+            document.getElementById('userEmail').value = usuario.email;
+            document.getElementById('userName').value = usuario.nombre;
+            document.getElementById('userCliente').value = usuario.cliente_id || '';
+            document.getElementById('passwordGroup').style.display = 'none';
+            document.getElementById('userModal').classList.add('active');
+        }
+
+        // Guardar usuario (crear o editar)
+        document.getElementById('userForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const email = document.getElementById('userEmail').value.trim();
+            const nombre = document.getElementById('userName').value.trim();
+            const clienteId = document.getElementById('userCliente').value;
+            const password = document.getElementById('userPassword').value;
+
+            if (!email || !nombre || !clienteId) {
+                showAlert('Por favor completa todos los campos obligatorios', 'error');
+                return;
+            }
+
+            try {
+                if (editingUserId) {
+                    // Actualizar usuario existente
+                    const { error } = await supabaseClient
+                        .from('usuarios_comprobantes')
+                        .update({
+                            email: email,
+                            nombre: nombre,
+                            cliente_id: clienteId
+                        })
+                        .eq('id', editingUserId);
+
+                    if (error) throw error;
+
+                    showAlert('Usuario actualizado exitosamente', 'success');
+                } else {
+                    // Crear nuevo usuario
+                    if (!password || password.length < 6) {
+                        showAlert('La contraseña debe tener al menos 6 caracteres', 'error');
+                        return;
+                    }
+
+                    const { error } = await supabaseClient
+                        .from('usuarios_comprobantes')
+                        .insert({
+                            email: email,
+                            password: password,
+                            nombre: nombre,
+                            rol: 'cliente',
+                            cliente_id: clienteId,
+                            requiere_cambio_password: true,
+                            activo: true
+                        });
+
+                    if (error) throw error;
+
+                    showAlert('Usuario creado exitosamente', 'success');
+                }
+
+                closeUserModal();
+                await loadUsuarios();
+
+            } catch (error) {
+                console.error('Error guardando usuario:', error);
+                if (error.code === '23505') {
+                    showAlert('Ya existe un usuario con ese email', 'error');
+                } else {
+                    showAlert('Error al guardar el usuario', 'error');
+                }
+            }
+        });
+
+        // Resetear contraseña
+        function resetPassword(userId) {
+            const usuario = usuarios.find(u => u.id === userId);
+            if (!usuario) return;
+
+            document.getElementById('resetUserId').value = userId;
+            document.getElementById('resetPassword').value = '';
+            document.getElementById('resetPasswordModal').classList.add('active');
+        }
+
+        // Cerrar modal reset password
+        function closeResetPasswordModal() {
+            document.getElementById('resetPasswordModal').classList.remove('active');
+            document.getElementById('resetPasswordForm').reset();
+        }
+
+        // Guardar nueva contraseña
+        document.getElementById('resetPasswordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const userId = document.getElementById('resetUserId').value;
+            const newPassword = document.getElementById('resetPassword').value;
+
+            if (!newPassword || newPassword.length < 6) {
+                showAlert('La contraseña debe tener al menos 6 caracteres', 'error');
+                return;
+            }
+
+            try {
+                const { error } = await supabaseClient
+                    .from('usuarios_comprobantes')
+                    .update({
+                        password: newPassword,
+                        requiere_cambio_password: true
+                    })
+                    .eq('id', userId);
+
+                if (error) throw error;
+
+                showAlert('Contraseña reseteada exitosamente', 'success');
+                closeResetPasswordModal();
+
+            } catch (error) {
+                console.error('Error reseteando contraseña:', error);
+                showAlert('Error al resetear la contraseña', 'error');
+            }
+        });
+
+        // Eliminar usuario
+        async function deleteUser(userId, userName) {
+            if (!confirm(`¿Estás seguro que deseas eliminar al usuario "${userName}"?\n\nEsta acción no se puede deshacer.`)) {
+                return;
+            }
+
+            try {
+                const { error } = await supabaseClient
+                    .from('usuarios_comprobantes')
+                    .delete()
+                    .eq('id', userId);
+
+                if (error) throw error;
+
+                showAlert('Usuario eliminado exitosamente', 'success');
+                await loadUsuarios();
+
+            } catch (error) {
+                console.error('Error eliminando usuario:', error);
+                showAlert('Error al eliminar el usuario', 'error');
+            }
+        }
+
+        // Mostrar alerta
+        function showAlert(message, type = 'info') {
+            const alertContainer = document.getElementById('alertContainer');
+            const alertClass = `alert-${type}`;
+
+            alertContainer.innerHTML = `
+                <div class="alert ${alertClass}">
+                    ${message}
+                </div>
+            `;
+
+            // Auto-ocultar después de 5 segundos
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+        }
+
+        // Cerrar modales al hacer clic fuera
+        window.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                closeUserModal();
+                closeResetPasswordModal();
+            }
+        });
+    </script>
+</body>
+</html>
