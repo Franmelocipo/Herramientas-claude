@@ -427,39 +427,80 @@
 
         // Verificar sesión al cargar
         document.addEventListener('DOMContentLoaded', async () => {
+            console.log('=== INICIO inicialización del panel ===');
+            console.log('DOM cargado, iniciando...');
+
+            // Verificar que Supabase esté disponible
+            console.log('Verificando disponibilidad de Supabase...');
+            console.log('window.supabase:', window.supabase);
+
+            if (typeof window.supabase === 'undefined') {
+                console.error('ERROR CRÍTICO: La biblioteca de Supabase no está cargada');
+                alert('Error de configuración: La biblioteca de Supabase no se ha cargado correctamente. Por favor, verifica tu conexión a internet y recarga la página.');
+                document.getElementById('loadingUsers').innerHTML = '<div class="loading" style="color: var(--danger-color);">Error: Biblioteca de Supabase no cargada</div>';
+                return;
+            }
+
+            console.log('Supabase está disponible');
+
             // Verificar que sea admin
+            console.log('Verificando rol de usuario...');
             const session = auth.requireRole('admin');
 
             if (!session) {
+                console.warn('Usuario no autenticado o sin rol admin');
                 return;
             }
+
+            console.log('Usuario autenticado:', session.email);
+            console.log('Rol:', session.rol);
 
             // Mostrar nombre del usuario
             document.getElementById('userName').textContent = session.nombre;
 
             // Inicializar Supabase
+            console.log('Inicializando cliente de Supabase...');
             if (window.supabase && window.supabase.createClient) {
                 const supabaseUrl = 'https://wnpjvnmyfkgtpwqnbmxa.supabase.co';
                 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InducGp2bm15ZmtndHB3cW5ibXhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMzE5OTAsImV4cCI6MjA3ODcwNzk5MH0.XmYGTMuQBJBpUMAij90T6z4SlCMugVWuWdwJ84GiPn8';
                 supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+                console.log('Cliente de Supabase inicializado:', supabaseClient);
+            } else {
+                console.error('ERROR: No se pudo crear el cliente de Supabase');
+                alert('Error al inicializar Supabase');
+                return;
             }
 
             // Cargar datos
+            console.log('Iniciando carga de datos...');
             await loadClientes();
             await loadUsuarios();
+
+            console.log('=== FIN inicialización del panel ===');
         });
 
         // Cargar clientes desde Supabase
         async function loadClientes() {
+            console.log('=== INICIO carga de clientes ===');
+
             try {
+                console.log('Ejecutando query a tabla clientes...');
                 const { data, error } = await supabaseClient
                     .from('clientes')
                     .select('id, razon_social')
                     .order('razon_social');
 
-                if (error) throw error;
+                console.log('Query de clientes ejecutada');
+                console.log('Data de clientes:', data);
+                console.log('Error de clientes:', error);
+
+                if (error) {
+                    console.error('ERROR en query de clientes:', error);
+                    throw error;
+                }
 
                 clientes = data || [];
+                console.log('Número de clientes encontrados:', clientes.length);
 
                 // Llenar select de clientes
                 const select = document.getElementById('userCliente');
@@ -472,19 +513,36 @@
                     select.appendChild(option);
                 });
 
+                console.log('Select de clientes llenado exitosamente');
+                console.log('=== FIN carga de clientes ===');
+
             } catch (error) {
-                console.error('Error cargando clientes:', error);
+                console.error('ERROR CATCH en loadClientes:', error);
+                console.error('Stack trace:', error.stack);
                 showAlert('Error al cargar la lista de clientes', 'error');
             }
         }
 
         // Cargar usuarios desde Supabase
         async function loadUsuarios() {
+            console.log('=== INICIO carga de usuarios ===');
+
             try {
+                console.log('Conectando a Supabase...');
+                console.log('Supabase client:', supabaseClient);
+
+                if (!supabaseClient) {
+                    console.error('ERROR: supabaseClient no está inicializado');
+                    document.getElementById('loadingUsers').innerHTML = '<div class="loading" style="color: var(--danger-color);">Error: Supabase no está inicializado. Por favor, recarga la página.</div>';
+                    showAlert('Error de configuración: Supabase no está cargado', 'error');
+                    return;
+                }
+
                 document.getElementById('loadingUsers').style.display = 'block';
                 document.getElementById('usersTableContainer').style.display = 'none';
                 document.getElementById('emptyState').style.display = 'none';
 
+                console.log('Ejecutando query a tabla usuarios_comprobantes...');
                 const { data, error } = await supabaseClient
                     .from('usuarios_comprobantes')
                     .select(`
@@ -501,23 +559,41 @@
                     .eq('rol', 'cliente')
                     .order('created_at', { ascending: false });
 
-                if (error) throw error;
+                console.log('Query ejecutada');
+                console.log('Data recibida:', data);
+                console.log('Error recibido:', error);
+
+                if (error) {
+                    console.error('ERROR en query:', error);
+                    console.error('Código de error:', error.code);
+                    console.error('Mensaje de error:', error.message);
+                    console.error('Detalles:', error.details);
+                    document.getElementById('loadingUsers').innerHTML = `<div class="loading" style="color: var(--danger-color);">Error: ${error.message}</div>`;
+                    showAlert(`Error al cargar usuarios: ${error.message}`, 'error');
+                    return;
+                }
 
                 usuarios = data || [];
+                console.log('Número de usuarios encontrados:', usuarios.length);
 
                 document.getElementById('loadingUsers').style.display = 'none';
 
                 if (usuarios.length === 0) {
+                    console.log('No hay usuarios, mostrando estado vacío');
                     document.getElementById('emptyState').style.display = 'block';
                 } else {
+                    console.log('Renderizando usuarios en la tabla');
                     document.getElementById('usersTableContainer').style.display = 'block';
                     renderUsuarios();
                 }
 
+                console.log('=== FIN carga de usuarios ===');
+
             } catch (error) {
-                console.error('Error cargando usuarios:', error);
-                document.getElementById('loadingUsers').style.display = 'none';
-                showAlert('Error al cargar los usuarios', 'error');
+                console.error('ERROR CATCH en loadUsuarios:', error);
+                console.error('Stack trace:', error.stack);
+                document.getElementById('loadingUsers').innerHTML = `<div class="loading" style="color: var(--danger-color);">Error inesperado: ${error.message}</div>`;
+                showAlert(`Error inesperado al cargar usuarios: ${error.message}`, 'error');
             }
         }
 
