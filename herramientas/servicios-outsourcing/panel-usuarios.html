@@ -379,8 +379,8 @@
                 </div>
 
                 <div class="btn-group">
-                    <button type="button" class="btn btn-secondary" onclick="closeUserModal()">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">
+                    <button type="button" class="btn btn-secondary" onclick="cerrarModalCrearUsuario()">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="guardarUsuario()">
                         <span id="btnSubmitText">Crear Usuario</span>
                     </button>
                 </div>
@@ -662,6 +662,158 @@
         }
 
         // Guardar usuario (crear o editar)
+        async function guardarUsuario() {
+            if (editingUserId) {
+                // Editar usuario existente
+                await editarUsuario();
+            } else {
+                // Crear nuevo usuario
+                await crearUsuario();
+            }
+        }
+
+        // Crear usuario (función independiente)
+        async function crearUsuario() {
+            console.log('=== Iniciando creación de usuario ===');
+
+            // Obtener valores del formulario
+            const email = document.getElementById('userEmail').value.trim();
+            const password = document.getElementById('userPassword').value.trim();
+            const nombre = document.getElementById('userName').value.trim();
+            const clienteId = document.getElementById('userCliente').value;
+
+            console.log('Datos del formulario:', { email, password: '***', nombre, clienteId });
+
+            // Validaciones
+            if (!email || !password || !nombre || !clienteId) {
+                alert('Por favor complete todos los campos');
+                return;
+            }
+
+            if (password.length < 6) {
+                alert('La contraseña debe tener al menos 6 caracteres');
+                return;
+            }
+
+            try {
+                console.log('Insertando usuario en Supabase...');
+
+                const { data, error } = await supabaseClient
+                    .from('usuarios_comprobantes')
+                    .insert([
+                        {
+                            email: email,
+                            password: password, // Por ahora sin hashear
+                            rol: 'cliente',
+                            nombre: nombre,
+                            cliente_id: clienteId,
+                            requiere_cambio_password: true,
+                            activo: true
+                        }
+                    ])
+                    .select();
+
+                console.log('Resultado insert:', { data, error });
+
+                if (error) {
+                    console.error('Error al crear usuario:', error);
+                    if (error.code === '23505') {
+                        alert('Error: Ya existe un usuario con ese email');
+                    } else {
+                        alert('Error al crear usuario: ' + error.message);
+                    }
+                    return;
+                }
+
+                console.log('Usuario creado exitosamente:', data);
+
+                // Mostrar mensaje de éxito
+                alert('¡Usuario creado exitosamente!\n\nUsuario: ' + email + '\nContraseña temporal: ' + password);
+
+                // Cerrar modal
+                cerrarModalCrearUsuario();
+
+                // Recargar lista de usuarios
+                await loadUsuarios();
+
+            } catch (err) {
+                console.error('Error inesperado:', err);
+                alert('Error inesperado al crear usuario: ' + err.message);
+            }
+        }
+
+        // Editar usuario existente
+        async function editarUsuario() {
+            console.log('=== Iniciando edición de usuario ===');
+
+            // Obtener valores del formulario
+            const email = document.getElementById('userEmail').value.trim();
+            const nombre = document.getElementById('userName').value.trim();
+            const clienteId = document.getElementById('userCliente').value;
+
+            console.log('Datos del formulario:', { email, nombre, clienteId });
+
+            // Validaciones
+            if (!email || !nombre || !clienteId) {
+                alert('Por favor complete todos los campos');
+                return;
+            }
+
+            try {
+                console.log('Actualizando usuario en Supabase...');
+
+                const { error } = await supabaseClient
+                    .from('usuarios_comprobantes')
+                    .update({
+                        email: email,
+                        nombre: nombre,
+                        cliente_id: clienteId
+                    })
+                    .eq('id', editingUserId);
+
+                console.log('Resultado update:', { error });
+
+                if (error) {
+                    console.error('Error al actualizar usuario:', error);
+                    if (error.code === '23505') {
+                        alert('Error: Ya existe un usuario con ese email');
+                    } else {
+                        alert('Error al actualizar usuario: ' + error.message);
+                    }
+                    return;
+                }
+
+                console.log('Usuario actualizado exitosamente');
+
+                // Mostrar mensaje de éxito
+                showAlert('Usuario actualizado exitosamente', 'success');
+
+                // Cerrar modal
+                cerrarModalCrearUsuario();
+
+                // Recargar lista de usuarios
+                await loadUsuarios();
+
+            } catch (err) {
+                console.error('Error inesperado:', err);
+                alert('Error inesperado al actualizar usuario: ' + err.message);
+            }
+        }
+
+        // Cerrar modal de crear usuario
+        function cerrarModalCrearUsuario() {
+            const modal = document.getElementById('userModal');
+            if (modal) {
+                modal.classList.remove('active');
+
+                // Limpiar formulario
+                document.getElementById('userForm').reset();
+                document.getElementById('userId').value = '';
+                editingUserId = null;
+            }
+        }
+
+        // Guardar usuario (editar usuario existente)
         document.getElementById('userForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -690,32 +842,13 @@
                     if (error) throw error;
 
                     showAlert('Usuario actualizado exitosamente', 'success');
+
+                    closeUserModal();
+                    await loadUsuarios();
                 } else {
-                    // Crear nuevo usuario
-                    if (!password || password.length < 6) {
-                        showAlert('La contraseña debe tener al menos 6 caracteres', 'error');
-                        return;
-                    }
-
-                    const { error } = await supabaseClient
-                        .from('usuarios_comprobantes')
-                        .insert({
-                            email: email,
-                            password: password,
-                            nombre: nombre,
-                            rol: 'cliente',
-                            cliente_id: clienteId,
-                            requiere_cambio_password: true,
-                            activo: true
-                        });
-
-                    if (error) throw error;
-
-                    showAlert('Usuario creado exitosamente', 'success');
+                    // Si no hay editingUserId, llamar a crearUsuario()
+                    await crearUsuario();
                 }
-
-                closeUserModal();
-                await loadUsuarios();
 
             } catch (error) {
                 console.error('Error guardando usuario:', error);
@@ -818,8 +951,11 @@
         // Cerrar modales al hacer clic fuera
         window.addEventListener('click', (e) => {
             if (e.target.classList.contains('modal')) {
-                closeUserModal();
-                closeResetPasswordModal();
+                if (e.target.id === 'userModal') {
+                    cerrarModalCrearUsuario();
+                } else if (e.target.id === 'resetPasswordModal') {
+                    closeResetPasswordModal();
+                }
             }
         });
     </script>
