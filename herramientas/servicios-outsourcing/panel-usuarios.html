@@ -420,7 +420,8 @@
 
     <script>
         // Variables globales
-        let supabaseClient = null;
+        // Nota: usar var para supabaseClient para evitar conflicto con auth.js
+        var supabaseClient = null;
         let clientes = [];
         let usuarios = [];
         let editingUserId = null;
