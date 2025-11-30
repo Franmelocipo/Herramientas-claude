@@ -77,7 +77,7 @@ async function login(email, password) {
             };
         }
 
-        // Guardar datos en localStorage
+        // Guardar datos en localStorage (formato individual - mantener por compatibilidad)
         localStorage.setItem('user_id', data.id);
         localStorage.setItem('email', data.email);
         localStorage.setItem('rol', data.rol);
@@ -89,7 +89,19 @@ async function login(email, password) {
             localStorage.setItem('cliente_id', data.cliente_id);
         }
 
+        // NUEVO: Guardar sesión completa en formato JSON
+        const sesionData = {
+            userId: data.id,
+            email: data.email,
+            nombre: data.nombre,
+            rol: data.rol,
+            clienteId: data.cliente_id, // IMPORTANTE: usar clienteId (camelCase)
+            requiereCambioPassword: data.requiere_cambio_password === true
+        };
+        localStorage.setItem('sesion_outsourcing', JSON.stringify(sesionData));
+
         console.log('Login exitoso:', data.email, '- Rol:', data.rol);
+        console.log('Sesión guardada:', sesionData);
 
         return {
             success: true,
@@ -124,6 +136,7 @@ function logout() {
     localStorage.removeItem('nombre');
     localStorage.removeItem('cliente_id');
     localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('sesion_outsourcing'); // Limpiar sesión completa
 
     console.log('Sesión cerrada');
 

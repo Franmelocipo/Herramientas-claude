@@ -504,8 +504,24 @@
             }
 
             try {
-                const sesion = JSON.parse(localStorage.getItem('sesion_outsourcing'));
-                console.log('Sesión:', sesion);
+                const sesionStr = localStorage.getItem('sesion_outsourcing');
+                console.log('Sesión string:', sesionStr);
+
+                if (!sesionStr) {
+                    alert('Sesión expirada. Por favor vuelva a iniciar sesión.');
+                    window.location.href = 'login.html';
+                    return;
+                }
+
+                const sesion = JSON.parse(sesionStr);
+                console.log('Sesión parseada:', sesion);
+                console.log('clienteId:', sesion.clienteId);
+                console.log('userId:', sesion.userId);
+
+                if (!sesion.clienteId) {
+                    alert('Error: No se encontró el ID del cliente. Por favor cierre sesión y vuelva a iniciar.');
+                    return;
+                }
 
                 // Nombre único para el archivo
                 const timestamp = Date.now();
