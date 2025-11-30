@@ -484,13 +484,17 @@
 
         // Subir comprobante
         async function subirComprobante() {
+            console.log('=== Iniciando subida de comprobante ===');
+
             const archivo = document.getElementById('archivoComprobante').files[0];
             const tipo = document.getElementById('tipoComprobante').value;
             const notas = document.getElementById('notasComprobante').value;
-            const btnSubir = document.getElementById('btnSubir');
+
+            console.log('Archivo seleccionado:', archivo);
+            console.log('Tipo:', tipo);
 
             if (!archivo) {
-                alert('Por favor, seleccione un archivo');
+                alert('Seleccione un archivo');
                 return;
             }
 
@@ -499,69 +503,73 @@
                 return;
             }
 
-            // Validar tamaño (máximo 10MB)
-            const maxSize = 10 * 1024 * 1024; // 10MB
-            if (archivo.size > maxSize) {
-                alert('El archivo es demasiado grande. Máximo 10MB');
-                return;
-            }
-
             try {
-                // Deshabilitar botón mientras se sube
-                btnSubir.disabled = true;
-                btnSubir.textContent = 'Subiendo...';
+                const sesion = JSON.parse(localStorage.getItem('sesion_outsourcing'));
+                console.log('Sesión:', sesion);
+
+                // Nombre único para el archivo
+                const timestamp = Date.now();
+                const nombreArchivo = `${timestamp}_${archivo.name}`;
+                const rutaArchivo = `${sesion.clienteId}/${nombreArchivo}`;
+
+                console.log('Ruta del archivo:', rutaArchivo);
+                console.log('Iniciando upload a Storage...');
 
                 // Subir a Supabase Storage
-                const nombreArchivo = `${Date.now()}_${archivo.name}`;
-                const ruta = `${sessionData.cliente_id}/${nombreArchivo}`;
-
                 const { data: uploadData, error: uploadError } = await supabaseClient.storage
                     .from('comprobantes')
-                    .upload(ruta, archivo);
+                    .upload(rutaArchivo, archivo, {
+                        cacheControl: '3600',
+                        upsert: false
+                    });
+
+                console.log('Upload data:', uploadData);
+                console.log('Upload error:', uploadError);
 
                 if (uploadError) {
-                    console.error('Error al subir archivo:', uploadError);
-                    throw new Error('Error al subir el archivo. Por favor, verifique que el bucket "comprobantes" existe en Supabase Storage.');
+                    console.error('Error en upload:', uploadError);
+                    throw uploadError;
                 }
 
                 // Obtener URL pública
                 const { data: urlData } = supabaseClient.storage
                     .from('comprobantes')
-                    .getPublicUrl(ruta);
+                    .getPublicUrl(rutaArchivo);
 
-                // Guardar registro en base de datos
-                const { error: dbError } = await supabaseClient
+                console.log('URL pública:', urlData.publicUrl);
+
+                // Guardar en base de datos
+                console.log('Guardando en base de datos...');
+                const { data: dbData, error: dbError } = await supabaseClient
                     .from('comprobantes')
                     .insert({
-                        cliente_id: sessionData.cliente_id,
-                        usuario_subio_id: sessionData.userId,
+                        cliente_id: sesion.clienteId,
+                        usuario_subio_id: sesion.userId,
                         archivo_url: urlData.publicUrl,
                         archivo_nombre: archivo.name,
                         tipo_comprobante: tipo,
-                        notas: notas || null,
+                        notas: notas,
                         estado: 'pendiente'
-                    });
+                    })
+                    .select();
+
+                console.log('DB data:', dbData);
+                console.log('DB error:', dbError);
 
                 if (dbError) {
-                    console.error('Error al guardar en BD:', dbError);
-                    throw new Error('Error al guardar el registro en la base de datos');
+                    console.error('Error en DB:', dbError);
+                    throw dbError;
                 }
 
-                alert('✅ Comprobante subido exitosamente');
+                console.log('Comprobante subido exitosamente');
+                alert('¡Comprobante subido exitosamente!');
+
                 cerrarModalSubir();
-
-                // Si estamos en la sección de mis comprobantes, recargar
-                if (document.getElementById('seccion-mis-comprobantes').classList.contains('active')) {
-                    cargarComprobantes();
-                }
+                cargarComprobantes();
 
             } catch (err) {
                 console.error('Error completo:', err);
-                alert('❌ Error al subir comprobante: ' + err.message);
-            } finally {
-                // Rehabilitar botón
-                btnSubir.disabled = false;
-                btnSubir.textContent = 'Subir';
+                alert('Error al subir comprobante: ' + err.message);
             }
         }
 
