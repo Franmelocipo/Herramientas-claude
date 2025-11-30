@@ -7,6 +7,335 @@
 
     <!-- Estilos -->
     <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Estilos para el header con link de volver */
+        .back-link {
+            display: inline-block;
+            margin-bottom: 15px;
+            color: var(--primary-color, #3498db);
+            text-decoration: none;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .back-link:hover {
+            color: var(--primary-dark, #2980b9);
+            text-decoration: underline;
+        }
+
+        /* Estilos para filtros */
+        .filters-container {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            min-width: 200px;
+        }
+
+        .filter-group label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #34495e;
+            margin-bottom: 5px;
+        }
+
+        .filter-group select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: white;
+            cursor: pointer;
+        }
+
+        .filter-group select:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        /* Estilos para estadísticas */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .stat-card.pendiente {
+            border-left-color: #f39c12;
+        }
+
+        .stat-card.procesado {
+            border-left-color: #3498db;
+        }
+
+        .stat-card.completado {
+            border-left-color: #27ae60;
+        }
+
+        .stat-card h4 {
+            font-size: 13px;
+            color: #7f8c8d;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .stat-card .stat-number {
+            font-size: 32px;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+
+        /* Estilos para la lista de comprobantes */
+        .comprobante-item {
+            background-color: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 12px;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 20px;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .comprobante-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-color: #3498db;
+        }
+
+        .comprobante-info {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .comprobante-info .comprobante-titulo {
+            color: #2c3e50;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .comprobante-info .comprobante-detalles {
+            color: #7f8c8d;
+            font-size: 13px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .comprobante-cliente {
+            display: inline-block;
+            padding: 4px 10px;
+            background-color: #e8f4f8;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #2980b9;
+        }
+
+        .comprobante-tipo {
+            display: inline-block;
+            padding: 3px 8px;
+            background-color: #ecf0f1;
+            border-radius: 3px;
+            font-size: 12px;
+            text-transform: capitalize;
+        }
+
+        .estado-badge {
+            display: inline-block;
+            padding: 5px 14px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+
+        .estado-pendiente {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .estado-procesado {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .estado-completado {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .comprobante-acciones {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .btn-accion {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-ver {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .btn-ver:hover {
+            background-color: #2980b9;
+        }
+
+        .btn-estado {
+            background-color: #95a5a6;
+            color: white;
+        }
+
+        .btn-estado:hover {
+            background-color: #7f8c8d;
+        }
+
+        .empty-message {
+            text-align: center;
+            padding: 60px 20px;
+            color: #7f8c8d;
+        }
+
+        .empty-message p {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        .loading-spinner {
+            text-align: center;
+            padding: 60px 20px;
+            color: #3498db;
+        }
+
+        /* Modal para cambiar estado */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 30px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            animation: slideDown 0.3s;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-content h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 22px;
+            margin-bottom: 20px;
+        }
+
+        .modal-content label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #34495e;
+        }
+
+        .modal-content select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .modal-buttons button {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .modal-buttons .btn-cancelar {
+            background-color: #95a5a6;
+            color: white;
+        }
+
+        .modal-buttons .btn-cancelar:hover {
+            background-color: #7f8c8d;
+        }
+
+        .modal-buttons .btn-guardar {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .modal-buttons .btn-guardar:hover {
+            background-color: #2980b9;
+        }
+    </style>
 
     <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -34,33 +363,9 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a href="#" class="nav-link">
-                                <span class="icon">👥</span>
-                                Clientes
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link">
-                                <span class="icon">📊</span>
-                                Reportes
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="nav-section">
-                    <span class="nav-section-title">Sistema</span>
-                    <ul class="nav-menu">
-                        <li class="nav-item">
                             <a href="panel-usuarios.html" class="nav-link">
                                 <span class="icon">🔐</span>
                                 Gestión de Usuarios
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link">
-                                <span class="icon">⚙️</span>
-                                Configuración
                             </a>
                         </li>
                     </ul>
@@ -76,41 +381,61 @@
 
         <!-- Contenido principal -->
         <main class="main-content">
+            <a href="../../index.html" class="back-link">← Volver a Herramientas</a>
+
             <div class="content-header">
-                <h1 id="welcomeMessage">Panel Administrador</h1>
-                <p>Gestión completa de servicios de outsourcing</p>
+                <h1 id="welcomeMessage">Panel de Administración</h1>
+                <p>Gestión completa de comprobantes - Todos los clientes</p>
             </div>
 
-            <!-- Accesos Rápidos -->
+            <!-- Estadísticas -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h4>Total Comprobantes</h4>
+                    <div class="stat-number" id="statTotal">0</div>
+                </div>
+                <div class="stat-card pendiente">
+                    <h4>Pendientes</h4>
+                    <div class="stat-number" id="statPendiente">0</div>
+                </div>
+                <div class="stat-card procesado">
+                    <h4>Procesados</h4>
+                    <div class="stat-number" id="statProcesado">0</div>
+                </div>
+                <div class="stat-card completado">
+                    <h4>Completados</h4>
+                    <div class="stat-number" id="statCompletado">0</div>
+                </div>
+            </div>
+
+            <!-- Filtros -->
+            <div class="filters-container">
+                <div class="filter-group">
+                    <label for="filtroCliente">Filtrar por Cliente</label>
+                    <select id="filtroCliente" onchange="aplicarFiltros()">
+                        <option value="">Todos los clientes</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="filtroEstado">Filtrar por Estado</label>
+                    <select id="filtroEstado" onchange="aplicarFiltros()">
+                        <option value="">Todos los estados</option>
+                        <option value="pendiente">Pendiente</option>
+                        <option value="procesado">Procesado</option>
+                        <option value="completado">Completado</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Lista de comprobantes -->
             <div class="card">
                 <div class="card-header">
-                    <h3 class="card-title">📊 Accesos Rápidos</h3>
+                    <h3 class="card-title">Comprobantes de Todos los Clientes</h3>
                 </div>
                 <div class="card-body">
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
-                        <!-- Gestión de Usuarios -->
-                        <a href="panel-usuarios.html" style="text-decoration: none; color: inherit;">
-                            <div style="padding: 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white; transition: transform 0.2s; cursor: pointer;">
-                                <div style="font-size: 48px; margin-bottom: 12px;">🔐</div>
-                                <h3 style="margin-bottom: 8px; font-size: 18px;">Gestión de Usuarios</h3>
-                                <p style="opacity: 0.9; font-size: 14px;">Administrar usuarios del sistema</p>
-                            </div>
-                        </a>
-
-                        <!-- Gestión de Comprobantes -->
-                        <a href="index.html" style="text-decoration: none; color: inherit;">
-                            <div style="padding: 24px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 12px; color: white; transition: transform 0.2s; cursor: pointer;">
-                                <div style="font-size: 48px; margin-bottom: 12px;">📋</div>
-                                <h3 style="margin-bottom: 8px; font-size: 18px;">Comprobantes</h3>
-                                <p style="opacity: 0.9; font-size: 14px;">Sistema de gestión de comprobantes</p>
-                            </div>
-                        </a>
-
-                        <!-- Configuración -->
-                        <div style="padding: 24px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 12px; color: white; opacity: 0.6;">
-                            <div style="font-size: 48px; margin-bottom: 12px;">⚙️</div>
-                            <h3 style="margin-bottom: 8px; font-size: 18px;">Configuración</h3>
-                            <p style="opacity: 0.9; font-size: 14px;">Próximamente</p>
+                    <div id="listaComprobantes">
+                        <div class="loading-spinner">
+                            <p>Cargando comprobantes...</p>
                         </div>
                     </div>
                 </div>
@@ -118,12 +443,35 @@
         </main>
     </div>
 
+    <!-- Modal para cambiar estado -->
+    <div id="modalCambiarEstado" class="modal">
+        <div class="modal-content">
+            <h3>Cambiar Estado del Comprobante</h3>
+            <p id="modalComprobanteInfo" style="color: #7f8c8d; margin-bottom: 20px;"></p>
+
+            <label for="nuevoEstado">Nuevo Estado:</label>
+            <select id="nuevoEstado">
+                <option value="pendiente">Pendiente</option>
+                <option value="procesado">Procesado</option>
+                <option value="completado">Completado</option>
+            </select>
+
+            <div class="modal-buttons">
+                <button class="btn-cancelar" onclick="cerrarModalEstado()">Cancelar</button>
+                <button class="btn-guardar" onclick="guardarNuevoEstado()">Guardar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Script de autenticación -->
     <script src="auth.js"></script>
 
     <script>
+        let todosLosComprobantes = [];
+        let comprobanteSeleccionado = null;
+
         // Verificar sesión al cargar
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             // Verificar que sea admin
             const session = auth.requireRole('admin');
 
@@ -135,7 +483,247 @@
             // Mostrar nombre del usuario
             document.getElementById('userName').textContent = session.nombre;
             document.getElementById('welcomeMessage').textContent = `Panel Administrador - ${session.nombre}`;
+
+            // Inicializar Supabase
+            if (!window.supabaseClient) {
+                window.supabaseClient = window.supabase.createClient(
+                    'https://wnpjvnmyfkgtpwqnbmxa.supabase.co',
+                    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InducGp2bm15ZmtndHB3cW5ibXhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMzE5OTAsImV4cCI6MjA3ODcwNzk5MH0.XmYGTMuQBJBpUMAij90T6z4SlCMugVWuWdwJ84GiPn8'
+                );
+            }
+
+            // Cargar todos los comprobantes
+            await cargarTodosLosComprobantes();
+
+            // Cargar lista de clientes para el filtro
+            await cargarClientes();
         });
+
+        // Cargar todos los comprobantes de todos los clientes
+        async function cargarTodosLosComprobantes() {
+            const contenedor = document.getElementById('listaComprobantes');
+
+            try {
+                // Obtener todos los comprobantes con información de clientes y usuarios
+                const { data, error } = await supabaseClient
+                    .from('comprobantes')
+                    .select(`
+                        *,
+                        clientes(razon_social, cuit),
+                        usuarios_comprobantes(nombre, email)
+                    `)
+                    .order('fecha_subida', { ascending: false });
+
+                if (error) {
+                    console.error('Error al cargar comprobantes:', error);
+                    contenedor.innerHTML = '<div class="empty-message"><p>❌ Error al cargar los comprobantes</p></div>';
+                    return;
+                }
+
+                todosLosComprobantes = data || [];
+
+                // Actualizar estadísticas
+                actualizarEstadisticas(todosLosComprobantes);
+
+                // Renderizar comprobantes
+                renderizarComprobantes(todosLosComprobantes);
+
+            } catch (err) {
+                console.error('Error:', err);
+                contenedor.innerHTML = '<div class="empty-message"><p>❌ Error al cargar los comprobantes</p></div>';
+            }
+        }
+
+        // Cargar lista de clientes para el filtro
+        async function cargarClientes() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('clientes')
+                    .select('id, razon_social')
+                    .order('razon_social', { ascending: true });
+
+                if (error) {
+                    console.error('Error al cargar clientes:', error);
+                    return;
+                }
+
+                const select = document.getElementById('filtroCliente');
+                data.forEach(cliente => {
+                    const option = document.createElement('option');
+                    option.value = cliente.id;
+                    option.textContent = cliente.razon_social;
+                    select.appendChild(option);
+                });
+
+            } catch (err) {
+                console.error('Error:', err);
+            }
+        }
+
+        // Actualizar estadísticas
+        function actualizarEstadisticas(comprobantes) {
+            const total = comprobantes.length;
+            const pendientes = comprobantes.filter(c => c.estado === 'pendiente').length;
+            const procesados = comprobantes.filter(c => c.estado === 'procesado').length;
+            const completados = comprobantes.filter(c => c.estado === 'completado').length;
+
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statPendiente').textContent = pendientes;
+            document.getElementById('statProcesado').textContent = procesados;
+            document.getElementById('statCompletado').textContent = completados;
+        }
+
+        // Aplicar filtros
+        function aplicarFiltros() {
+            const filtroCliente = document.getElementById('filtroCliente').value;
+            const filtroEstado = document.getElementById('filtroEstado').value;
+
+            let comprobantesFiltrados = [...todosLosComprobantes];
+
+            // Filtrar por cliente
+            if (filtroCliente) {
+                comprobantesFiltrados = comprobantesFiltrados.filter(c => c.cliente_id == filtroCliente);
+            }
+
+            // Filtrar por estado
+            if (filtroEstado) {
+                comprobantesFiltrados = comprobantesFiltrados.filter(c => c.estado === filtroEstado);
+            }
+
+            renderizarComprobantes(comprobantesFiltrados);
+        }
+
+        // Renderizar comprobantes
+        function renderizarComprobantes(comprobantes) {
+            const contenedor = document.getElementById('listaComprobantes');
+
+            if (!comprobantes || comprobantes.length === 0) {
+                contenedor.innerHTML = `
+                    <div class="empty-message">
+                        <p>📋 No se encontraron comprobantes con los filtros seleccionados</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = comprobantes.map(c => {
+                const fecha = new Date(c.fecha_subida).toLocaleDateString('es-AR', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                const clienteNombre = c.clientes?.razon_social || 'Cliente desconocido';
+                const usuarioNombre = c.usuarios_comprobantes?.nombre || 'Usuario desconocido';
+
+                return `
+                    <div class="comprobante-item">
+                        <div class="comprobante-info">
+                            <div class="comprobante-titulo">📄 ${c.archivo_nombre}</div>
+                            <div>
+                                <span class="comprobante-cliente">🏢 ${clienteNombre}</span>
+                            </div>
+                            <div class="comprobante-detalles">
+                                <span class="comprobante-tipo">${formatearTipo(c.tipo_comprobante)}</span>
+                                <span>👤 ${usuarioNombre}</span>
+                                <span>📅 ${fecha}</span>
+                            </div>
+                            ${c.notas ? `<div style="color: #555; font-size: 13px;">📝 ${c.notas}</div>` : ''}
+                            <div>
+                                <span class="estado-badge estado-${c.estado}">${formatearEstado(c.estado)}</span>
+                            </div>
+                        </div>
+                        <div class="comprobante-acciones">
+                            <a href="${c.archivo_url}" target="_blank" rel="noopener noreferrer" class="btn-accion btn-ver">
+                                👁️ Ver PDF
+                            </a>
+                            <button class="btn-accion btn-estado" onclick="abrirModalEstado(${c.id}, '${c.archivo_nombre}', '${c.estado}')">
+                                🔄 Cambiar Estado
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            contenedor.innerHTML = html;
+        }
+
+        // Formatear tipo de comprobante
+        function formatearTipo(tipo) {
+            const tipos = {
+                'factura': 'Factura',
+                'recibo': 'Recibo',
+                'nota_credito': 'Nota de Crédito',
+                'nota_debito': 'Nota de Débito',
+                'otro': 'Otro'
+            };
+            return tipos[tipo] || tipo;
+        }
+
+        // Formatear estado
+        function formatearEstado(estado) {
+            const estados = {
+                'pendiente': 'Pendiente',
+                'procesado': 'Procesado',
+                'completado': 'Completado'
+            };
+            return estados[estado] || estado;
+        }
+
+        // Abrir modal para cambiar estado
+        function abrirModalEstado(comprobanteId, nombreArchivo, estadoActual) {
+            comprobanteSeleccionado = comprobanteId;
+            document.getElementById('modalComprobanteInfo').textContent = `Archivo: ${nombreArchivo}`;
+            document.getElementById('nuevoEstado').value = estadoActual;
+            document.getElementById('modalCambiarEstado').style.display = 'block';
+        }
+
+        // Cerrar modal
+        function cerrarModalEstado() {
+            document.getElementById('modalCambiarEstado').style.display = 'none';
+            comprobanteSeleccionado = null;
+        }
+
+        // Guardar nuevo estado
+        async function guardarNuevoEstado() {
+            if (!comprobanteSeleccionado) return;
+
+            const nuevoEstado = document.getElementById('nuevoEstado').value;
+
+            try {
+                const { error } = await supabaseClient
+                    .from('comprobantes')
+                    .update({ estado: nuevoEstado })
+                    .eq('id', comprobanteSeleccionado);
+
+                if (error) {
+                    console.error('Error al actualizar estado:', error);
+                    alert('Error al cambiar el estado');
+                    return;
+                }
+
+                alert('Estado actualizado correctamente');
+                cerrarModalEstado();
+
+                // Recargar comprobantes
+                await cargarTodosLosComprobantes();
+                aplicarFiltros(); // Mantener filtros aplicados
+
+            } catch (err) {
+                console.error('Error:', err);
+                alert('Error al cambiar el estado');
+            }
+        }
+
+        // Cerrar modal al hacer clic fuera de él
+        window.onclick = function(event) {
+            const modal = document.getElementById('modalCambiarEstado');
+            if (event.target === modal) {
+                cerrarModalEstado();
+            }
+        }
     </script>
 </body>
 </html>
