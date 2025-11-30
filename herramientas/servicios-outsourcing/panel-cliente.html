@@ -4,507 +4,465 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel Cliente - Servicios de Outsourcing</title>
-
-    <!-- Estilos -->
-    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <style>
-        /* Estilos para el modal */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            animation: fadeIn 0.3s;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        .modal-content {
-            background-color: #fefefe;
-            margin: 5% auto;
-            padding: 30px;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 600px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            animation: slideDown 0.3s;
-        }
-
-        @keyframes slideDown {
-            from {
-                transform: translateY(-50px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-
-        .modal-content h3 {
-            margin-top: 0;
-            color: #2c3e50;
-            font-size: 24px;
-            margin-bottom: 20px;
-        }
-
-        .modal-content label {
-            display: block;
-            margin-top: 15px;
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: #34495e;
-        }
-
-        .modal-content select,
-        .modal-content input[type="file"],
-        .modal-content textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
+        * {
+            margin: 0;
+            padding: 0;
             box-sizing: border-box;
         }
 
-        .modal-content textarea {
-            min-height: 100px;
-            resize: vertical;
-            font-family: inherit;
-        }
-
-        .modal-buttons {
-            margin-top: 25px;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
             display: flex;
-            gap: 10px;
-            justify-content: flex-end;
         }
 
-        .modal-buttons button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
+        .sidebar {
+            width: 250px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 2rem 1rem;
+            color: white;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-info {
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .user-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .user-badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+        }
+
+        .client-name {
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .menu {
+            flex: 1;
+        }
+
+        .menu h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 1rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
+            transition: all 0.3s;
+            color: white;
+            text-decoration: none;
+        }
+
+        .menu-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .menu-item.active {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .logout-btn {
+            margin-top: auto;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
             transition: all 0.3s;
         }
 
-        .modal-buttons button:first-child {
-            background-color: #95a5a6;
-            color: white;
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
         }
 
-        .modal-buttons button:first-child:hover {
-            background-color: #7f8c8d;
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+
+        .content-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            font-size: 2rem;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 2rem;
+        }
+
+        .section {
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
         }
 
         .btn-primary {
-            background-color: #3498db !important;
-            color: white !important;
+            background: #667eea;
+            color: white;
         }
 
         .btn-primary:hover {
-            background-color: #2980b9 !important;
+            background: #5568d3;
         }
 
-        .btn-primary:disabled {
-            background-color: #bdc3c7 !important;
-            cursor: not-allowed;
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
         }
 
-        /* Estilos para la información del cliente */
-        .cliente-info {
-            background-color: #ecf0f1;
-            padding: 15px;
-            border-radius: 6px;
-            margin-bottom: 10px;
+        .btn-secondary:hover {
+            background: #d0d0d0;
         }
 
-        .cliente-info strong {
-            color: #2c3e50;
-            font-size: 14px;
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
         }
 
-        .cliente-info span {
-            color: #34495e;
-            font-size: 16px;
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal-content h3 {
+            margin-bottom: 1.5rem;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #555;
             font-weight: 500;
         }
 
-        /* Estilos para la lista de comprobantes */
-        .comprobante-item {
-            background-color: white;
-            border: 1px solid #e0e0e0;
+        .form-group select,
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
             border-radius: 6px;
-            padding: 15px;
-            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 2rem;
+        }
+
+        .comprobante-item {
+            padding: 1rem;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 1rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            transition: all 0.3s;
-        }
-
-        .comprobante-item:hover {
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            border-color: #3498db;
         }
 
         .comprobante-info {
             flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
         }
 
         .comprobante-info strong {
-            color: #2c3e50;
-            font-size: 16px;
+            display: block;
+            margin-bottom: 0.5rem;
         }
 
         .comprobante-info span {
-            color: #7f8c8d;
-            font-size: 13px;
-        }
-
-        .comprobante-tipo {
             display: inline-block;
-            padding: 3px 8px;
-            background-color: #ecf0f1;
-            border-radius: 3px;
-            font-size: 12px;
-            text-transform: capitalize;
+            margin-right: 1rem;
+            font-size: 0.9rem;
+            color: #666;
         }
 
         .estado-badge {
-            display: inline-block;
-            padding: 4px 12px;
+            padding: 0.25rem 0.75rem;
             border-radius: 12px;
-            font-size: 12px;
+            font-size: 0.85rem;
             font-weight: 500;
-            text-transform: capitalize;
         }
 
         .estado-pendiente {
-            background-color: #fff3cd;
+            background: #fff3cd;
             color: #856404;
         }
 
         .estado-procesado {
-            background-color: #d1ecf1;
+            background: #d1ecf1;
             color: #0c5460;
         }
 
-        .estado-completado {
-            background-color: #d4edda;
+        .estado-aprobado {
+            background: #d4edda;
             color: #155724;
         }
 
-        .comprobante-acciones {
-            display: flex;
-            gap: 10px;
-        }
-
-        .comprobante-acciones a {
-            padding: 8px 16px;
-            background-color: #3498db;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 13px;
-            transition: all 0.3s;
-        }
-
-        .comprobante-acciones a:hover {
-            background-color: #2980b9;
-        }
-
-        .empty-message {
+        .empty-state {
             text-align: center;
-            padding: 40px;
-            color: #7f8c8d;
-        }
-
-        .loading-spinner {
-            text-align: center;
-            padding: 40px;
-            color: #3498db;
-        }
-
-        /* Estilos para las secciones */
-        .content-section {
-            display: none;
-        }
-
-        .content-section.active {
-            display: block;
-        }
-
-        .action-button {
-            padding: 12px 24px;
-            background-color: #3498db;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.3s;
-        }
-
-        .action-button:hover {
-            background-color: #2980b9;
-        }
-
-        .action-button-large {
-            padding: 16px 32px;
-            font-size: 16px;
+            padding: 3rem;
+            color: #999;
         }
     </style>
-
-    <!-- Supabase -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-    <div class="main-container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <h1>Servicios</h1>
-                <div class="user-info">
-                    <span id="userName">Cargando...</span>
-                </div>
-                <span class="user-role">Cliente</span>
-            </div>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="user-info">
+            <div class="user-name" id="userName">Cargando...</div>
+            <span class="user-badge">Cliente</span>
+            <div class="client-name" id="clientName">Cargando cliente...</div>
+        </div>
 
-            <nav class="sidebar-nav">
-                <div class="nav-section">
-                    <span class="nav-section-title">Menu</span>
-                    <ul class="nav-menu">
-                        <li class="nav-item">
-                            <a href="#" class="nav-link active" onclick="mostrarSeccion('subir'); return false;">
-                                <span class="icon">📤</span>
-                                Subir Comprobantes
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link" onclick="mostrarSeccion('mis-comprobantes'); return false;">
-                                <span class="icon">📋</span>
-                                Mis Comprobantes
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </nav>
-
-            <div class="sidebar-footer">
-                <button class="btn-logout" onclick="auth.logout()">
-                    Cerrar Sesión
-                </button>
+        <div class="menu">
+            <h3>MENÚ</h3>
+            <div class="menu-item active" onclick="mostrarSeccion('subir')">
+                📤 Subir Comprobantes
             </div>
-        </aside>
-
-        <!-- Contenido principal -->
-        <main class="main-content">
-            <div class="content-header">
-                <h1 id="welcomeMessage">Bienvenido</h1>
-                <div class="cliente-info" id="clienteInfoContainer" style="display: none;">
-                    <strong>Cliente:</strong> <span id="nombreCliente">Cargando...</span>
-                </div>
-                <p>Panel de servicios de outsourcing</p>
+            <div class="menu-item" onclick="mostrarSeccion('mis-comprobantes')">
+                📋 Mis Comprobantes
             </div>
+        </div>
 
-            <!-- Sección: Subir Comprobantes -->
-            <div id="seccion-subir" class="content-section active">
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title">Subir Comprobantes</h3>
-                    </div>
-                    <div class="card-body">
-                        <p style="margin-bottom: 20px; color: #555;">
-                            Puede subir sus comprobantes en formato PDF. Los archivos serán procesados por nuestro equipo.
-                        </p>
-                        <button class="action-button action-button-large" onclick="abrirModalSubir()">
-                            📤 Nuevo Comprobante
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Sección: Mis Comprobantes -->
-            <div id="seccion-mis-comprobantes" class="content-section">
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title">Mis Comprobantes</h3>
-                    </div>
-                    <div class="card-body">
-                        <div id="listaComprobantes">
-                            <div class="loading-spinner">
-                                <p>Cargando comprobantes...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
+        <button class="logout-btn" onclick="cerrarSesion()">Cerrar Sesión</button>
     </div>
 
-    <!-- Modal para subir comprobante -->
-    <div id="modalSubirComprobante" class="modal">
-        <div class="modal-content">
-            <h3>Subir Comprobante</h3>
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="content-card">
+            <h1>Bienvenido <span id="welcomeName"></span></h1>
+            <p class="subtitle">Panel de servicios de outsourcing</p>
 
-            <label>Tipo de Comprobante:</label>
-            <select id="tipoComprobante">
-                <option value="factura">Factura</option>
-                <option value="recibo">Recibo</option>
-                <option value="nota_credito">Nota de Crédito</option>
-                <option value="nota_debito">Nota de Débito</option>
-                <option value="otro">Otro</option>
-            </select>
+            <!-- Sección Subir Comprobantes -->
+            <div id="seccion-subir" class="section">
+                <h2>Subir Comprobantes</h2>
+                <p style="margin: 1rem 0;">Puede subir sus comprobantes en formato PDF. Los archivos serán procesados por nuestro equipo.</p>
+                <button class="btn btn-primary" onclick="abrirModalSubir()">📤 Nuevo Comprobante</button>
+            </div>
 
-            <label>Archivo (PDF):</label>
-            <input type="file" id="archivoComprobante" accept="application/pdf">
-
-            <label>Notas (opcional):</label>
-            <textarea id="notasComprobante" placeholder="Observaciones adicionales..."></textarea>
-
-            <div class="modal-buttons">
-                <button onclick="cerrarModalSubir()">Cancelar</button>
-                <button id="btnSubir" class="btn-primary" onclick="subirComprobante()">Subir</button>
+            <!-- Sección Mis Comprobantes -->
+            <div id="seccion-mis-comprobantes" class="section" style="display: none;">
+                <h2>Mis Comprobantes</h2>
+                <div id="listaComprobantes">
+                    <div class="empty-state">Cargando comprobantes...</div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Script de autenticación -->
-    <script src="auth.js"></script>
+    <!-- Modal Subir Comprobante -->
+    <div id="modalSubir" class="modal">
+        <div class="modal-content">
+            <h3>Subir Comprobante</h3>
+            
+            <div class="form-group">
+                <label>Tipo de Comprobante:</label>
+                <select id="tipoComprobante">
+                    <option value="factura">Factura</option>
+                    <option value="recibo">Recibo</option>
+                    <option value="nota_credito">Nota de Crédito</option>
+                    <option value="nota_debito">Nota de Débito</option>
+                    <option value="otro">Otro</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Archivo (PDF):</label>
+                <input type="file" id="archivoComprobante" accept="application/pdf">
+            </div>
+
+            <div class="form-group">
+                <label>Notas (opcional):</label>
+                <textarea id="notasComprobante" placeholder="Observaciones adicionales..."></textarea>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="cerrarModalSubir()">Cancelar</button>
+                <button class="btn btn-primary" onclick="subirComprobante()">Subir</button>
+            </div>
+        </div>
+    </div>
 
     <script>
-        // Inicialización de Supabase - UNA SOLA VEZ
+        // ============================================
+        // CONFIGURACIÓN SUPABASE
+        // ============================================
         const SUPABASE_URL = 'https://jxbgqcxdbpkcvoihbthf.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4YmdxY3hkYnBrY3ZvaWhidGhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzI3NDI3NzUsImV4cCI6MjA0ODMxODc3NX0.4YOuUhc8mYEVkLFE5zJbiXq1emYqsxLYN3f0v2d3TXo';
-
+        
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // Verificar inicialización
-        console.log('Supabase client inicializado:', supabaseClient);
-        console.log('Storage disponible:', supabaseClient.storage);
+        console.log('Supabase inicializado:', supabaseClient);
 
-        let sessionData = null;
+        // ============================================
+        // INICIALIZACIÓN
+        // ============================================
+        document.addEventListener('DOMContentLoaded', function() {
+            verificarSesion();
+            cargarInfoUsuario();
+        });
 
-        // Verificar sesión al cargar
-        document.addEventListener('DOMContentLoaded', async () => {
-            // Verificar que sea cliente
-            const session = auth.requireRole('cliente');
-
-            if (!session) {
+        function verificarSesion() {
+            const sesion = localStorage.getItem('sesion_outsourcing');
+            if (!sesion) {
+                window.location.href = 'login.html';
                 return;
             }
 
-            sessionData = session;
+            const sesionData = JSON.parse(sesion);
+            if (sesionData.rol !== 'cliente') {
+                window.location.href = 'panel-admin.html';
+            }
+        }
 
-            // Mostrar nombre del usuario
-            document.getElementById('userName').textContent = session.nombre;
-            document.getElementById('welcomeMessage').textContent = `Bienvenido ${session.nombre}`;
-
-            // Cargar información del cliente asignado
-            await cargarInfoCliente();
-
-            console.log('Usuario cliente cargado. Cliente ID:', session.cliente_id);
-        });
-
-        // Cargar información del cliente asignado
-        async function cargarInfoCliente() {
+        async function cargarInfoUsuario() {
             try {
+                const sesion = JSON.parse(localStorage.getItem('sesion_outsourcing'));
+                
                 const { data, error } = await supabaseClient
                     .from('usuarios_comprobantes')
                     .select(`
                         nombre,
                         email,
-                        cliente_id,
                         clientes(razon_social, cuit)
                     `)
-                    .eq('id', sessionData.userId)
+                    .eq('id', sesion.userId)
                     .single();
 
-                if (error) {
-                    console.error('Error al cargar información del cliente:', error);
-                    return;
+                if (error) throw error;
+
+                document.getElementById('userName').textContent = data.nombre;
+                document.getElementById('welcomeName').textContent = data.nombre;
+                
+                if (data.clientes) {
+                    document.getElementById('clientName').textContent = 'Cliente: ' + data.clientes.razon_social;
                 }
 
-                if (data && data.clientes) {
-                    document.getElementById('nombreCliente').textContent = data.clientes.razon_social;
-                    document.getElementById('clienteInfoContainer').style.display = 'block';
-                }
             } catch (err) {
-                console.error('Error:', err);
+                console.error('Error cargando info:', err);
             }
         }
 
-        // Mostrar sección específica
+        // ============================================
+        // NAVEGACIÓN
+        // ============================================
         function mostrarSeccion(seccion) {
-            // Ocultar todas las secciones
-            document.querySelectorAll('.content-section').forEach(s => {
-                s.classList.remove('active');
+            document.getElementById('seccion-subir').style.display = 'none';
+            document.getElementById('seccion-mis-comprobantes').style.display = 'none';
+
+            document.querySelectorAll('.menu-item').forEach(item => {
+                item.classList.remove('active');
             });
 
-            // Remover clase active de todos los links
-            document.querySelectorAll('.nav-link').forEach(link => {
-                link.classList.remove('active');
-            });
-
-            // Mostrar la sección seleccionada
             if (seccion === 'subir') {
-                document.getElementById('seccion-subir').classList.add('active');
-                document.querySelector('a[onclick*="subir"]').classList.add('active');
+                document.getElementById('seccion-subir').style.display = 'block';
+                document.querySelectorAll('.menu-item')[0].classList.add('active');
             } else if (seccion === 'mis-comprobantes') {
-                document.getElementById('seccion-mis-comprobantes').classList.add('active');
-                document.querySelector('a[onclick*="mis-comprobantes"]').classList.add('active');
+                document.getElementById('seccion-mis-comprobantes').style.display = 'block';
+                document.querySelectorAll('.menu-item')[1].classList.add('active');
                 cargarComprobantes();
             }
         }
 
-        // Abrir modal de subir comprobante
+        // ============================================
+        // MODAL
+        // ============================================
         function abrirModalSubir() {
-            document.getElementById('modalSubirComprobante').style.display = 'block';
+            document.getElementById('modalSubir').classList.add('active');
         }
 
-        // Cerrar modal de subir comprobante
         function cerrarModalSubir() {
-            document.getElementById('modalSubirComprobante').style.display = 'none';
+            document.getElementById('modalSubir').classList.remove('active');
             document.getElementById('archivoComprobante').value = '';
             document.getElementById('notasComprobante').value = '';
-            document.getElementById('tipoComprobante').value = 'factura';
         }
 
-        // Cerrar modal al hacer clic fuera de él
-        window.onclick = function(event) {
-            const modal = document.getElementById('modalSubirComprobante');
-            if (event.target === modal) {
-                cerrarModalSubir();
-            }
-        }
-
-        // Subir comprobante
+        // ============================================
+        // SUBIR COMPROBANTE
+        // ============================================
         async function subirComprobante() {
-            console.log('=== Iniciando subida de comprobante ===');
-
+            console.log('=== Iniciando subida ===');
+            
             const archivo = document.getElementById('archivoComprobante').files[0];
             const tipo = document.getElementById('tipoComprobante').value;
             const notas = document.getElementById('notasComprobante').value;
 
-            console.log('Archivo seleccionado:', archivo);
-            console.log('Tipo:', tipo);
-
             if (!archivo) {
-                alert('Seleccione un archivo');
+                alert('Por favor seleccione un archivo');
                 return;
             }
 
@@ -514,34 +472,21 @@
             }
 
             try {
-                const sesionStr = localStorage.getItem('sesion_outsourcing');
-                console.log('Sesión string:', sesionStr);
-
-                if (!sesionStr) {
-                    alert('Sesión expirada. Por favor vuelva a iniciar sesión.');
-                    window.location.href = 'login.html';
-                    return;
-                }
-
-                const sesion = JSON.parse(sesionStr);
-                console.log('Sesión parseada:', sesion);
-                console.log('clienteId:', sesion.clienteId);
-                console.log('userId:', sesion.userId);
+                const sesion = JSON.parse(localStorage.getItem('sesion_outsourcing'));
+                console.log('Sesión:', sesion);
 
                 if (!sesion.clienteId) {
                     alert('Error: No se encontró el ID del cliente. Por favor cierre sesión y vuelva a iniciar.');
                     return;
                 }
 
-                // Nombre único para el archivo
                 const timestamp = Date.now();
                 const nombreArchivo = `${timestamp}_${archivo.name}`;
                 const rutaArchivo = `${sesion.clienteId}/${nombreArchivo}`;
 
-                console.log('Ruta del archivo:', rutaArchivo);
-                console.log('Iniciando upload a Storage...');
+                console.log('Subiendo a Storage...');
+                console.log('Ruta:', rutaArchivo);
 
-                // Subir a Supabase Storage
                 const { data: uploadData, error: uploadError } = await supabaseClient.storage
                     .from('comprobantes')
                     .upload(rutaArchivo, archivo, {
@@ -549,24 +494,21 @@
                         upsert: false
                     });
 
-                console.log('Upload data:', uploadData);
-                console.log('Upload error:', uploadError);
+                console.log('Upload result:', uploadData, uploadError);
 
                 if (uploadError) {
-                    console.error('Error en upload:', uploadError);
+                    console.error('Error upload:', uploadError);
                     throw uploadError;
                 }
 
-                // Obtener URL pública
                 const { data: urlData } = supabaseClient.storage
                     .from('comprobantes')
                     .getPublicUrl(rutaArchivo);
 
                 console.log('URL pública:', urlData.publicUrl);
 
-                // Guardar en base de datos
-                console.log('Guardando en base de datos...');
-                const { data: dbData, error: dbError } = await supabaseClient
+                console.log('Guardando en BD...');
+                const { error: dbError } = await supabaseClient
                     .from('comprobantes')
                     .insert({
                         cliente_id: sesion.clienteId,
@@ -576,122 +518,77 @@
                         tipo_comprobante: tipo,
                         notas: notas,
                         estado: 'pendiente'
-                    })
-                    .select();
-
-                console.log('DB data:', dbData);
-                console.log('DB error:', dbError);
+                    });
 
                 if (dbError) {
-                    console.error('Error en DB:', dbError);
+                    console.error('Error BD:', dbError);
                     throw dbError;
                 }
 
-                console.log('Comprobante subido exitosamente');
                 alert('¡Comprobante subido exitosamente!');
-
                 cerrarModalSubir();
-                cargarComprobantes();
-
+                
             } catch (err) {
                 console.error('Error completo:', err);
                 alert('Error al subir comprobante: ' + err.message);
             }
         }
 
-        // Cargar comprobantes
+        // ============================================
+        // CARGAR COMPROBANTES
+        // ============================================
         async function cargarComprobantes() {
-            const contenedor = document.getElementById('listaComprobantes');
-
-            // Mostrar loading
-            contenedor.innerHTML = '<div class="loading-spinner"><p>Cargando comprobantes...</p></div>';
-
             try {
+                const sesion = JSON.parse(localStorage.getItem('sesion_outsourcing'));
+                
                 const { data, error } = await supabaseClient
                     .from('comprobantes')
                     .select('*')
-                    .eq('cliente_id', sessionData.cliente_id)
+                    .eq('cliente_id', sesion.clienteId)
                     .order('fecha_subida', { ascending: false });
 
-                if (error) {
-                    console.error('Error al cargar comprobantes:', error);
-                    contenedor.innerHTML = '<div class="empty-message"><p>❌ Error al cargar los comprobantes</p></div>';
-                    return;
-                }
+                if (error) throw error;
+
+                const container = document.getElementById('listaComprobantes');
 
                 if (!data || data.length === 0) {
-                    contenedor.innerHTML = `
-                        <div class="empty-message">
-                            <p>📋 No hay comprobantes subidos todavía</p>
-                            <button class="action-button" onclick="mostrarSeccion('subir')" style="margin-top: 15px;">
-                                Subir primer comprobante
-                            </button>
-                        </div>
-                    `;
+                    container.innerHTML = '<div class="empty-state">No hay comprobantes subidos todavía</div>';
                     return;
                 }
 
-                // Renderizar lista de comprobantes
-                renderizarListaComprobantes(data);
+                let html = '';
+                data.forEach(comp => {
+                    const fecha = new Date(comp.fecha_subida).toLocaleDateString('es-AR');
+                    html += `
+                        <div class="comprobante-item">
+                            <div class="comprobante-info">
+                                <strong>${comp.archivo_nombre}</strong>
+                                <span>Tipo: ${comp.tipo_comprobante}</span>
+                                <span>Fecha: ${fecha}</span>
+                                <span class="estado-badge estado-${comp.estado}">${comp.estado}</span>
+                            </div>
+                            <div>
+                                <a href="${comp.archivo_url}" target="_blank" class="btn btn-primary">Ver PDF</a>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = html;
 
             } catch (err) {
                 console.error('Error:', err);
-                contenedor.innerHTML = '<div class="empty-message"><p>❌ Error al cargar los comprobantes</p></div>';
+                document.getElementById('listaComprobantes').innerHTML = 
+                    '<div class="empty-state">Error al cargar comprobantes</div>';
             }
         }
 
-        // Renderizar lista de comprobantes
-        function renderizarListaComprobantes(comprobantes) {
-            const html = comprobantes.map(c => {
-                const fecha = new Date(c.fecha_subida).toLocaleDateString('es-AR', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-
-                return `
-                    <div class="comprobante-item">
-                        <div class="comprobante-info">
-                            <strong>📄 ${c.archivo_nombre}</strong>
-                            <div>
-                                <span class="comprobante-tipo">${formatearTipo(c.tipo_comprobante)}</span>
-                                <span> • ${fecha}</span>
-                            </div>
-                            ${c.notas ? `<span style="color: #555;">📝 ${c.notas}</span>` : ''}
-                            <span class="estado-badge estado-${c.estado}">${formatearEstado(c.estado)}</span>
-                        </div>
-                        <div class="comprobante-acciones">
-                            <a href="${c.archivo_url}" target="_blank" rel="noopener noreferrer">👁️ Ver PDF</a>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            document.getElementById('listaComprobantes').innerHTML = html;
-        }
-
-        // Formatear tipo de comprobante
-        function formatearTipo(tipo) {
-            const tipos = {
-                'factura': 'Factura',
-                'recibo': 'Recibo',
-                'nota_credito': 'Nota de Crédito',
-                'nota_debito': 'Nota de Débito',
-                'otro': 'Otro'
-            };
-            return tipos[tipo] || tipo;
-        }
-
-        // Formatear estado
-        function formatearEstado(estado) {
-            const estados = {
-                'pendiente': 'Pendiente',
-                'procesado': 'Procesado',
-                'completado': 'Completado'
-            };
-            return estados[estado] || estado;
+        // ============================================
+        // CERRAR SESIÓN
+        // ============================================
+        function cerrarSesion() {
+            localStorage.removeItem('sesion_outsourcing');
+            window.location.href = 'login.html';
         }
     </script>
 </body>
