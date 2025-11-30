@@ -256,7 +256,7 @@
             <div class="sidebar-header">
                 <h1>Gestión</h1>
                 <div class="user-info">
-                    <span id="userName">Cargando...</span>
+                    <span id="currentUserName">Cargando...</span>
                 </div>
                 <span class="user-role">Admin</span>
             </div>
@@ -456,7 +456,7 @@
             console.log('Rol:', session.rol);
 
             // Mostrar nombre del usuario
-            document.getElementById('userName').textContent = session.nombre;
+            document.getElementById('currentUserName').textContent = session.nombre;
 
             // Inicializar Supabase
             console.log('Inicializando cliente de Supabase...');
