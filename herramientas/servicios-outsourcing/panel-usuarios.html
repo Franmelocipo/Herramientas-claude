@@ -698,6 +698,9 @@
             try {
                 console.log('Insertando usuario en Supabase...');
 
+                // TODO: Implementar cambio obligatorio de contraseña
+                // Temporalmente deshabilitado por issues técnicos
+                // Los usuarios pueden usar la contraseña temporal directamente
                 const { data, error } = await supabaseClient
                     .from('usuarios_comprobantes')
                     .insert([
@@ -707,7 +710,7 @@
                             rol: 'cliente',
                             nombre: nombre,
                             cliente_id: clienteId,
-                            requiere_cambio_password: true,
+                            requiere_cambio_password: false, // Temporalmente deshabilitado
                             activo: true
                         }
                     ])

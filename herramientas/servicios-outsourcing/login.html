@@ -279,16 +279,20 @@
                 if (result.success) {
                     // Login exitoso
 
-                    // Verificar si requiere cambio de password
-                    if (result.requiere_cambio_password) {
-                        showAlert('Primera vez: Debes cambiar tu contraseña. Redirigiendo...', 'success');
-                        setTimeout(() => {
-                            window.location.href = 'cambiar-password.html';
-                        }, 1500);
-                        return;
-                    }
+                    // TODO: Implementar cambio obligatorio de contraseña
+                    // Temporalmente deshabilitado por issues técnicos
+                    // Los usuarios pueden usar la contraseña temporal directamente
 
-                    // Login normal - redirigir según el rol
+                    // COMENTADO: Verificar si requiere cambio de password
+                    // if (result.requiere_cambio_password) {
+                    //     showAlert('Primera vez: Debes cambiar tu contraseña. Redirigiendo...', 'success');
+                    //     setTimeout(() => {
+                    //         window.location.href = 'cambiar-password.html';
+                    //     }, 1500);
+                    //     return;
+                    // }
+
+                    // Login normal - redirigir directamente según el rol
                     showAlert('Inicio de sesión exitoso. Redirigiendo...', 'success');
                     setTimeout(() => {
                         auth.redirectByRole(result.user.rol);
