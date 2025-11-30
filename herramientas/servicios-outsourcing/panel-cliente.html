@@ -387,6 +387,16 @@
     <script src="auth.js"></script>
 
     <script>
+        // Inicialización de Supabase - UNA SOLA VEZ
+        const SUPABASE_URL = 'https://jxbgqcxdbpkcvoihbthf.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4YmdxY3hkYnBrY3ZvaWhidGhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzI3NDI3NzUsImV4cCI6MjA0ODMxODc3NX0.4YOuUhc8mYEVkLFE5zJbiXq1emYqsxLYN3f0v2d3TXo';
+
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // Verificar inicialización
+        console.log('Supabase client inicializado:', supabaseClient);
+        console.log('Storage disponible:', supabaseClient.storage);
+
         let sessionData = null;
 
         // Verificar sesión al cargar
