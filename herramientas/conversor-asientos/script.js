@@ -2759,6 +2759,12 @@ function downloadTemplateSpecific() {
 
     // Crear hoja de datos
     const wsDatos = XLSX.utils.aoa_to_sheet(datos);
+
+    // Aplicar formato argentino a las columnas numéricas
+    // Para SOS Contador, el encabezado está en la fila 6 (índice 6)
+    const headerRowIndex = state.sourceType === 'soscontador' ? 6 : 0;
+    aplicarFormatoArgentino(wsDatos, headerRowIndex);
+
     XLSX.utils.book_append_sheet(wb, wsDatos, 'Datos');
 
     // Crear hoja de instrucciones
@@ -3145,6 +3151,57 @@ function eliminarMovimientoDesbalance(numeroAsiento, movIndex) {
 }
 
 /**
+ * Aplica formato de número argentino (coma decimal) a las columnas numéricas del Excel
+ * @param {Object} ws - Hoja de trabajo de XLSX
+ * @param {number} headerRow - Fila donde están los encabezados (por defecto 0)
+ * @param {Array<string>} columnNames - Nombres adicionales de columnas numéricas (opcional)
+ */
+function aplicarFormatoArgentino(ws, headerRow = 0, columnNames = []) {
+    if (!ws['!ref']) return;
+
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    // Lista de columnas numéricas comunes
+    const nombresColumnasNumericas = [
+        'Debe', 'Haber', 'Importe',
+        'DEBE', 'HABER', 'IMPORTE',
+        'Débito', 'Crédito', 'Saldo',
+        'Monto Debe', 'Monto Haber', 'Monto Saldo',
+        ...columnNames
+    ];
+
+    // Identificar las columnas numéricas por su encabezado
+    const columnasNumericas = new Map();
+
+    // Leer encabezados
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: headerRow, c: C });
+        const cell = ws[cellAddress];
+
+        if (cell && cell.v) {
+            const header = cell.v.toString();
+            // Verificar si el encabezado es una columna numérica
+            if (nombresColumnasNumericas.includes(header)) {
+                columnasNumericas.set(C, true);
+            }
+        }
+    }
+
+    // Aplicar formato a las celdas numéricas (desde fila siguiente al encabezado)
+    for (let R = headerRow + 1; R <= range.e.r; ++R) {
+        columnasNumericas.forEach((_, C) => {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = ws[cellAddress];
+
+            if (cell && cell.t === 'n') {  // Solo aplicar a celdas numéricas
+                // Formato argentino: #.##0,00 (punto separador de miles, coma decimal)
+                cell.z = '#.##0,00';
+            }
+        });
+    }
+}
+
+/**
  * Valida todos los asientos y exporta si no hay desbalances
  */
 function validarYExportar() {
@@ -3162,6 +3219,10 @@ function validarYExportar() {
         // Proceder con la exportación
         setTimeout(() => {
             const ws = XLSX.utils.json_to_sheet(state.finalData);
+
+            // Aplicar formato argentino a columnas numéricas
+            aplicarFormatoArgentino(ws);
+
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Asientos');
             const fileName = `asientos_${state.sourceType}_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -3198,6 +3259,10 @@ function downloadExcel() {
 
     // Si todo balancea, proceder con exportación
     const ws = XLSX.utils.json_to_sheet(state.finalData);
+
+    // Aplicar formato argentino a columnas numéricas
+    aplicarFormatoArgentino(ws);
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Asientos');
     const fileName = `asientos_${state.sourceType}_${new Date().toISOString().split('T')[0]}.xlsx`;
