@@ -2794,7 +2794,7 @@ function renderPreview() {
 
 /**
  * Valida el balance de los asientos generados
- * @returns {Array} Array de asientos desbalanceados
+ * @returns {Array} Array de asientos desbalanceados con movimientos incluidos
  */
 function validarBalance() {
     const asientosDesbalanceados = [];
@@ -2802,7 +2802,7 @@ function validarBalance() {
     // Agrupar movimientos por número de asiento
     const asientosPorNumero = {};
 
-    state.finalData.forEach(mov => {
+    state.finalData.forEach((mov, index) => {
         const numero = mov.Numero;
         if (!asientosPorNumero[numero]) {
             asientosPorNumero[numero] = {
@@ -2812,7 +2812,11 @@ function validarBalance() {
                 movimientos: []
             };
         }
-        asientosPorNumero[numero].movimientos.push(mov);
+        // Guardar el movimiento con su índice en finalData para poder editarlo
+        asientosPorNumero[numero].movimientos.push({
+            ...mov,
+            finalDataIndex: index
+        });
     });
 
     // Validar balance de cada asiento
@@ -2836,7 +2840,8 @@ function validarBalance() {
                 totalDebito: totalDebito,
                 totalCredito: totalCredito,
                 diferencia: diferencia,
-                cantidadMovimientos: asiento.movimientos.length
+                cantidadMovimientos: asiento.movimientos.length,
+                movimientos: asiento.movimientos // Incluir movimientos para edición
             });
         }
     });
@@ -2845,7 +2850,7 @@ function validarBalance() {
 }
 
 /**
- * Muestra el modal con los asientos desbalanceados
+ * Muestra el modal con los asientos desbalanceados con capacidad de edición
  * @param {Array} desbalanceados - Array de asientos desbalanceados
  */
 function mostrarModalDesbalance(desbalanceados) {
@@ -2853,16 +2858,49 @@ function mostrarModalDesbalance(desbalanceados) {
     const lista = document.getElementById('listaDesbalance');
 
     let html = '';
-    desbalanceados.forEach(asiento => {
+    desbalanceados.forEach((asiento, asientoIndex) => {
         html += `
-            <div class="desbalance-item">
-                <strong>Asiento #${asiento.numero} - ${asiento.fecha}</strong>
-                <div>
-                    <span><strong>Leyenda:</strong> ${asiento.leyenda || 'Sin leyenda'}</span>
-                    <span><strong>Movimientos:</strong> ${asiento.cantidadMovimientos}</span>
-                    <span><strong>Total Débito:</strong> $${asiento.totalDebito.toFixed(2)}</span>
-                    <span><strong>Total Crédito:</strong> $${asiento.totalCredito.toFixed(2)}</span>
-                    <span class="diferencia-text">⚠️ Diferencia: $${asiento.diferencia.toFixed(2)}</span>
+            <div class="asiento-desbalanceado" id="asiento-${asiento.numero}" style="border: 2px solid #f44336; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; background: #ffebee;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div>
+                        <strong style="font-size: 1.1rem;">Asiento #${asiento.numero}: ${asiento.leyenda || 'Sin leyenda'}</strong>
+                        <div id="balance-info-${asiento.numero}" style="margin-top: 0.5rem; font-size: 0.9rem;">
+                            <span>Total Débito: <strong>$${asiento.totalDebito.toFixed(2)}</strong></span> |
+                            <span>Total Crédito: <strong>$${asiento.totalCredito.toFixed(2)}</strong></span> |
+                            <span style="color: #f44336; font-weight: bold;">Diferencia: $${asiento.diferencia.toFixed(2)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabla de movimientos editables -->
+                <div style="background: white; border-radius: 6px; padding: 1rem; max-height: 300px; overflow-y: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #f5f5f5; border-bottom: 2px solid #ddd;">
+                                <th style="padding: 0.5rem; text-align: left;">Fecha</th>
+                                <th style="padding: 0.5rem; text-align: left;">Cuenta</th>
+                                <th style="padding: 0.5rem; text-align: left;">Leyenda</th>
+                                <th style="padding: 0.5rem; text-align: right;">Debe</th>
+                                <th style="padding: 0.5rem; text-align: right;">Haber</th>
+                                <th style="padding: 0.5rem; text-align: center; width: 60px;">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="movimientos-${asiento.numero}">
+                            ${generarFilasMovimientos(asiento.movimientos, asiento.numero)}
+                        </tbody>
+                    </table>
+
+                    <button onclick="agregarMovimientoDesbalance('${asiento.numero}')"
+                            class="btn-secondary"
+                            style="margin-top: 0.5rem; width: 100%; padding: 0.5rem;">
+                        + Agregar Movimiento
+                    </button>
+                </div>
+
+                <div style="margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button onclick="recalcularBalance('${asiento.numero}')" class="btn-primary">
+                        🔄 Recalcular Balance
+                    </button>
                 </div>
             </div>
         `;
@@ -2882,6 +2920,267 @@ function cerrarModalDesbalance() {
 
 // Hacer la función global para que pueda ser llamada desde el onclick del HTML
 window.cerrarModalDesbalance = cerrarModalDesbalance;
+
+/**
+ * Genera las filas HTML editables para los movimientos de un asiento
+ * @param {Array} movimientos - Array de movimientos
+ * @param {string} numeroAsiento - Número del asiento
+ * @returns {string} HTML de las filas
+ */
+function generarFilasMovimientos(movimientos, numeroAsiento) {
+    return movimientos.map((mov, movIndex) => {
+        const fechaValue = mov.Fecha || '';
+        const cuentaValue = mov.Cuenta || '';
+        const leyendaValue = mov.Leyenda || '';
+        const debeValue = mov.Debe || '';
+        const haberValue = mov.Haber || '';
+
+        return `
+            <tr style="border-bottom: 1px solid #eee;" data-mov-index="${movIndex}" data-final-index="${mov.finalDataIndex}">
+                <td style="padding: 0.5rem;">
+                    <input type="date"
+                           value="${fechaValue}"
+                           onchange="actualizarMovimiento('${numeroAsiento}', ${movIndex}, 'Fecha', this.value)"
+                           style="width: 100%; padding: 0.25rem; border: 1px solid #ddd; border-radius: 4px;">
+                </td>
+                <td style="padding: 0.5rem;">
+                    <input type="text"
+                           value="${cuentaValue}"
+                           onchange="actualizarMovimiento('${numeroAsiento}', ${movIndex}, 'Cuenta', this.value)"
+                           style="width: 100%; padding: 0.25rem; border: 1px solid #ddd; border-radius: 4px;"
+                           placeholder="Código cuenta">
+                </td>
+                <td style="padding: 0.5rem;">
+                    <input type="text"
+                           value="${leyendaValue}"
+                           onchange="actualizarMovimiento('${numeroAsiento}', ${movIndex}, 'Leyenda', this.value)"
+                           style="width: 100%; padding: 0.25rem; border: 1px solid #ddd; border-radius: 4px;"
+                           placeholder="Leyenda">
+                </td>
+                <td style="padding: 0.5rem;">
+                    <input type="number"
+                           step="0.01"
+                           value="${debeValue}"
+                           onchange="actualizarMovimiento('${numeroAsiento}', ${movIndex}, 'Debe', this.value)"
+                           style="width: 100%; padding: 0.25rem; border: 1px solid #ddd; border-radius: 4px; text-align: right;">
+                </td>
+                <td style="padding: 0.5rem;">
+                    <input type="number"
+                           step="0.01"
+                           value="${haberValue}"
+                           onchange="actualizarMovimiento('${numeroAsiento}', ${movIndex}, 'Haber', this.value)"
+                           style="width: 100%; padding: 0.25rem; border: 1px solid #ddd; border-radius: 4px; text-align: right;">
+                </td>
+                <td style="padding: 0.5rem; text-align: center;">
+                    <button onclick="eliminarMovimientoDesbalance('${numeroAsiento}', ${movIndex})"
+                            style="background: #f44336; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer;"
+                            title="Eliminar">
+                        🗑️
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+/**
+ * Actualiza un campo de un movimiento en el modal de desbalance
+ * @param {string} numeroAsiento - Número del asiento
+ * @param {number} movIndex - Índice del movimiento en la tabla
+ * @param {string} campo - Campo a actualizar
+ * @param {*} valor - Nuevo valor
+ */
+function actualizarMovimiento(numeroAsiento, movIndex, campo, valor) {
+    console.log(`Actualizando asiento ${numeroAsiento}, movimiento ${movIndex}, campo ${campo}:`, valor);
+
+    // Buscar el índice en finalData
+    const tbody = document.getElementById(`movimientos-${numeroAsiento}`);
+    const row = tbody.querySelectorAll('tr')[movIndex];
+    const finalDataIndex = parseInt(row.getAttribute('data-final-index'));
+
+    // Actualizar en state.finalData
+    if (finalDataIndex !== undefined && finalDataIndex >= 0) {
+        state.finalData[finalDataIndex][campo] = valor;
+        console.log(`✓ Actualizado en finalData[${finalDataIndex}].${campo} = ${valor}`);
+    }
+
+    // Si se actualiza Debe o Haber, recalcular automáticamente
+    if (campo === 'Debe' || campo === 'Haber') {
+        recalcularBalance(numeroAsiento);
+    }
+}
+
+/**
+ * Recalcula el balance de un asiento y actualiza el feedback visual
+ * @param {string} numeroAsiento - Número del asiento
+ */
+function recalcularBalance(numeroAsiento) {
+    console.log(`Recalculando balance del asiento #${numeroAsiento}...`);
+
+    // Obtener todos los movimientos de este asiento desde finalData
+    const movimientos = state.finalData.filter(mov => mov.Numero == numeroAsiento);
+
+    let totalDebito = 0;
+    let totalCredito = 0;
+
+    movimientos.forEach(mov => {
+        totalDebito += parseFloat(mov.Debe || 0);
+        totalCredito += parseFloat(mov.Haber || 0);
+    });
+
+    const diferencia = Math.abs(totalDebito - totalCredito);
+    const balancea = diferencia < 0.01;
+
+    console.log('Balance recalculado:', { totalDebito, totalCredito, diferencia, balancea });
+
+    // Actualizar la vista del balance
+    const balanceInfo = document.getElementById(`balance-info-${numeroAsiento}`);
+    if (balanceInfo) {
+        balanceInfo.innerHTML = `
+            <span>Total Débito: <strong>$${totalDebito.toFixed(2)}</strong></span> |
+            <span>Total Crédito: <strong>$${totalCredito.toFixed(2)}</strong></span> |
+            <span style="color: ${balancea ? '#4caf50' : '#f44336'}; font-weight: bold;">
+                ${balancea ? '✓ Balancea' : `Diferencia: $${diferencia.toFixed(2)}`}
+            </span>
+        `;
+    }
+
+    // Actualizar el contenedor del asiento
+    const asientoElement = document.getElementById(`asiento-${numeroAsiento}`);
+    if (asientoElement && balancea) {
+        asientoElement.style.borderColor = '#4caf50';
+        asientoElement.style.background = '#e8f5e9';
+
+        // Remover de la lista de desbalanceados después de 1 segundo
+        setTimeout(() => {
+            asientoElement.style.opacity = '0.5';
+            asientoElement.style.transition = 'opacity 0.5s';
+
+            setTimeout(() => {
+                asientoElement.remove();
+
+                // Verificar si quedan más asientos desbalanceados
+                const restantes = document.querySelectorAll('.asiento-desbalanceado');
+                if (restantes.length === 0) {
+                    alert('✓ Todos los asientos ahora balancean correctamente. Puede proceder a exportar.');
+                    cerrarModalDesbalance();
+                    // Actualizar la vista previa
+                    updatePreview();
+                }
+            }, 500);
+        }, 1000);
+    }
+}
+
+/**
+ * Agrega un nuevo movimiento a un asiento desbalanceado
+ * @param {string} numeroAsiento - Número del asiento
+ */
+function agregarMovimientoDesbalance(numeroAsiento) {
+    console.log(`Agregando movimiento al asiento #${numeroAsiento}`);
+
+    // Obtener el último movimiento de este asiento para copiar algunos datos
+    const movimientosExistentes = state.finalData.filter(mov => mov.Numero == numeroAsiento);
+    const ultimoMov = movimientosExistentes[movimientosExistentes.length - 1];
+
+    // Crear nuevo movimiento
+    const nuevoMovimiento = {
+        Fecha: ultimoMov.Fecha || new Date().toISOString().split('T')[0],
+        Numero: numeroAsiento,
+        Cuenta: '',
+        Debe: '',
+        Haber: '',
+        Leyenda: ultimoMov.Leyenda || ''
+    };
+
+    // Agregar a finalData
+    state.finalData.push(nuevoMovimiento);
+    const nuevoIndex = state.finalData.length - 1;
+
+    // Obtener todos los movimientos actualizados de este asiento
+    const movimientosActualizados = state.finalData
+        .map((mov, index) => ({ ...mov, finalDataIndex: index }))
+        .filter(mov => mov.Numero == numeroAsiento);
+
+    // Regenerar la tabla
+    const tbody = document.getElementById(`movimientos-${numeroAsiento}`);
+    tbody.innerHTML = generarFilasMovimientos(movimientosActualizados, numeroAsiento);
+
+    console.log(`✓ Movimiento agregado en finalData[${nuevoIndex}]`);
+}
+
+/**
+ * Elimina un movimiento de un asiento desbalanceado
+ * @param {string} numeroAsiento - Número del asiento
+ * @param {number} movIndex - Índice del movimiento en la tabla
+ */
+function eliminarMovimientoDesbalance(numeroAsiento, movIndex) {
+    if (!confirm('¿Está seguro de eliminar este movimiento?')) {
+        return;
+    }
+
+    console.log(`Eliminando movimiento ${movIndex} del asiento #${numeroAsiento}`);
+
+    // Buscar el índice en finalData
+    const tbody = document.getElementById(`movimientos-${numeroAsiento}`);
+    const row = tbody.querySelectorAll('tr')[movIndex];
+    const finalDataIndex = parseInt(row.getAttribute('data-final-index'));
+
+    if (finalDataIndex !== undefined && finalDataIndex >= 0) {
+        // Eliminar de finalData
+        state.finalData.splice(finalDataIndex, 1);
+        console.log(`✓ Eliminado de finalData[${finalDataIndex}]`);
+
+        // Obtener todos los movimientos actualizados de este asiento
+        const movimientosActualizados = state.finalData
+            .map((mov, index) => ({ ...mov, finalDataIndex: index }))
+            .filter(mov => mov.Numero == numeroAsiento);
+
+        // Regenerar la tabla
+        tbody.innerHTML = generarFilasMovimientos(movimientosActualizados, numeroAsiento);
+
+        // Recalcular balance
+        recalcularBalance(numeroAsiento);
+    }
+}
+
+/**
+ * Valida todos los asientos y exporta si no hay desbalances
+ */
+function validarYExportar() {
+    console.log('Revalidando asientos antes de exportar...');
+
+    const desbalanceados = validarBalance();
+
+    if (desbalanceados.length === 0) {
+        console.log('✓ Todos los asientos balancean correctamente');
+        cerrarModalDesbalance();
+
+        // Actualizar la vista previa
+        updatePreview();
+
+        // Proceder con la exportación
+        setTimeout(() => {
+            const ws = XLSX.utils.json_to_sheet(state.finalData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Asientos');
+            const fileName = `asientos_${state.sourceType}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            console.log('✅ Archivo Excel exportado exitosamente');
+        }, 300);
+    } else {
+        alert(`Aún hay ${desbalanceados.length} asiento(s) desbalanceado(s). Por favor corrija antes de exportar.`);
+        console.warn(`⚠️ Todavía hay ${desbalanceados.length} asientos desbalanceados`);
+    }
+}
+
+// Hacer las funciones globales para que puedan ser llamadas desde el HTML
+window.generarFilasMovimientos = generarFilasMovimientos;
+window.actualizarMovimiento = actualizarMovimiento;
+window.recalcularBalance = recalcularBalance;
+window.agregarMovimientoDesbalance = agregarMovimientoDesbalance;
+window.eliminarMovimientoDesbalance = eliminarMovimientoDesbalance;
+window.validarYExportar = validarYExportar;
 
 /**
  * Descarga el archivo Excel con los asientos
