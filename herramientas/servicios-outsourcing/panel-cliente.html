@@ -480,9 +480,21 @@
                     return;
                 }
 
+                // Sanitizar nombre del archivo para Supabase Storage
+                const nombreLimpio = archivo.name
+                    .normalize("NFD")                          // Normalizar caracteres Unicode
+                    .replace(/[\u0300-\u036f]/g, "")          // Remover tildes y diacríticos
+                    .replace(/[^a-zA-Z0-9.]/g, "_")           // Reemplazar espacios y caracteres especiales con _
+                    .replace(/_+/g, "_")                       // Múltiples guiones bajos a uno solo
+                    .toLowerCase();                            // Convertir a minúsculas
+
                 const timestamp = Date.now();
-                const nombreArchivo = `${timestamp}_${archivo.name}`;
+                const nombreArchivo = `${timestamp}_${nombreLimpio}`;
                 const rutaArchivo = `${sesion.clienteId}/${nombreArchivo}`;
+
+                console.log('Nombre original:', archivo.name);
+                console.log('Nombre sanitizado:', nombreLimpio);
+                console.log('Ruta completa:', rutaArchivo);
 
                 console.log('Subiendo a Storage...');
                 console.log('Ruta:', rutaArchivo);
