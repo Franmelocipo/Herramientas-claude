@@ -315,18 +315,40 @@ waitForSupabasePlanCuentas(() => {
   };
 
   /**
+   * Función auxiliar para esperar un tiempo
+   */
+  function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
    * Importar plan de cuentas desde archivo Excel
    * @param {File} file - Archivo Excel
    * @param {string} clienteId - ID del cliente
    * @returns {Promise<Object>} Resultado de la importación
    */
   window.importarPlanCuentas = async function(file, clienteId) {
+    // Elementos del DOM para el indicador de progreso
+    const progressDiv = document.getElementById('importProgress');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const progressDetail = document.getElementById('progressDetail');
+
     try {
       console.log('📤 Importando plan de cuentas...');
+
+      // Mostrar indicador
+      if (progressDiv) {
+        progressDiv.style.display = 'block';
+        progressText.textContent = 'Leyendo archivo Excel...';
+        progressBar.style.width = '10%';
+        progressBar.style.background = '#2196f3';
+      }
 
       // Validar que hay un cliente activo
       if (!clienteId) {
         alert('Debe seleccionar un cliente antes de importar el plan de cuentas');
+        if (progressDiv) progressDiv.style.display = 'none';
         return { success: false, imported: 0 };
       }
 
@@ -345,10 +367,20 @@ waitForSupabasePlanCuentas(() => {
 
       if (cuentas.length === 0) {
         alert('No se encontraron cuentas válidas en el archivo');
+        if (progressDiv) progressDiv.style.display = 'none';
         return { success: false, imported: 0 };
       }
 
+      if (progressText) progressText.textContent = 'Archivo leído correctamente';
+      if (progressDetail) progressDetail.textContent = `Encontradas ${cuentas.length} cuentas`;
+      if (progressBar) progressBar.style.width = '30%';
+
+      await delay(500);
+
       // Verificar si el cliente ya tiene plan de cuentas
+      if (progressText) progressText.textContent = 'Validando datos...';
+      if (progressBar) progressBar.style.width = '40%';
+
       const planExistente = await obtenerPlanCuentas(clienteId);
 
       if (planExistente.length > 0) {
@@ -362,50 +394,88 @@ waitForSupabasePlanCuentas(() => {
         if (accion) {
           // Reemplazar: eliminar todo primero
           console.log('🔄 Reemplazando plan de cuentas...');
+          if (progressText) progressText.textContent = 'Eliminando plan existente...';
           await eliminarPlanCuentas(clienteId);
         } else {
           console.log('➕ Agregando cuentas al plan existente...');
         }
       }
 
-      // Importar cuentas
+      // Preparar inserción
+      if (progressText) progressText.textContent = 'Preparando cuentas...';
+      if (progressBar) progressBar.style.width = '50%';
+
+      // Importar cuentas en lotes
       let imported = 0;
       let errors = 0;
+      const batchSize = 50;
+      const totalBatches = Math.ceil(cuentas.length / batchSize);
 
-      for (let i = 0; i < cuentas.length; i++) {
-        const cuenta = cuentas[i];
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const startIdx = batchIndex * batchSize;
+        const endIdx = Math.min((batchIndex + 1) * batchSize, cuentas.length);
+        const batch = cuentas.slice(startIdx, endIdx);
 
-        // Mostrar progreso
-        const progressMsg = `Importando cuenta ${i + 1} de ${cuentas.length}...`;
-        console.log(progressMsg);
+        if (progressText) {
+          progressText.textContent = `Guardando cuentas... (${batchIndex + 1}/${totalBatches})`;
+        }
+        if (progressDetail) {
+          progressDetail.textContent = `Procesadas ${endIdx} de ${cuentas.length}`;
+        }
+        if (progressBar) {
+          progressBar.style.width = `${50 + (batchIndex / totalBatches) * 45}%`;
+        }
 
-        try {
-          const result = await crearCuenta(
-            clienteId,
-            cuenta.codigo,
-            cuenta.cuenta,
-            cuenta.tipo
-          );
+        // Procesar el lote
+        for (const cuenta of batch) {
+          try {
+            const result = await crearCuenta(
+              clienteId,
+              cuenta.codigo,
+              cuenta.cuenta,
+              cuenta.tipo
+            );
 
-          if (result) {
-            imported++;
-          } else {
+            if (result) {
+              imported++;
+            } else {
+              errors++;
+            }
+          } catch (err) {
+            console.error(`Error importando cuenta ${cuenta.codigo}:`, err);
             errors++;
           }
-        } catch (err) {
-          console.error(`Error importando cuenta ${cuenta.codigo}:`, err);
-          errors++;
         }
+
+        await delay(100); // Pequeña pausa entre lotes
       }
 
-      // Mensaje final
-      const mensaje = `Se importaron ${imported} cuenta(s) exitosamente${errors > 0 ? `\nErrores: ${errors}` : ''}`;
-      alert(mensaje);
+      // Completado
+      if (progressBar) progressBar.style.width = '100%';
+      if (progressText) progressText.textContent = '✓ Importación completada';
+      if (progressDetail) {
+        progressDetail.textContent = `${imported} cuentas importadas exitosamente${errors > 0 ? ` (${errors} errores)` : ''}`;
+      }
+
+      // Ocultar después de 3 segundos
+      setTimeout(() => {
+        if (progressDiv) progressDiv.style.display = 'none';
+        if (progressBar) progressBar.style.width = '0%';
+      }, 3000);
+
       console.log('✅ Importación completada:', { imported, errors });
 
       return { success: true, imported, errors };
     } catch (error) {
       console.error('❌ Error importando plan de cuentas:', error);
+
+      if (progressBar) {
+        progressBar.style.width = '100%';
+        progressBar.style.background = '#f44336';
+      }
+      if (progressText) progressText.textContent = '✗ Error en la importación';
+      if (progressDetail) progressDetail.textContent = error.message;
+
       alert('Error al importar plan de cuentas: ' + error.message);
       return { success: false, imported: 0 };
     }

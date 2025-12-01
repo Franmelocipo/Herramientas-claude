@@ -1196,3 +1196,58 @@ body {
         width: 100%;
     }
 }
+
+/* Modal de Asientos Desbalanceados */
+.modal-desbalance {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-desbalance-content {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 800px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.desbalance-item {
+    border: 1px solid #f44336;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: #ffebee;
+}
+
+.desbalance-item strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #333;
+}
+
+.desbalance-item > div {
+    margin-top: 0.5rem;
+    font-size: 0.95rem;
+}
+
+.desbalance-item span {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.diferencia-text {
+    color: #f44336;
+    font-weight: bold;
+    font-size: 1.05rem;
+}

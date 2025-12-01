@@ -193,6 +193,22 @@
         </div>
     </div>
 
+    <!-- Modal Asientos Desbalanceados -->
+    <div id="modalDesbalance" class="modal-desbalance" style="display: none;">
+        <div class="modal-desbalance-content">
+            <h3 style="color: #f44336; margin-bottom: 1rem;">⚠️ Asientos Desbalanceados</h3>
+            <p style="margin-bottom: 1.5rem;">Los siguientes asientos no balancean y deben ser corregidos antes de exportar:</p>
+
+            <div id="listaDesbalance" style="max-height: 400px; overflow-y: auto; margin-bottom: 1.5rem;">
+                <!-- Se llena dinámicamente -->
+            </div>
+
+            <div class="modal-buttons" style="display: flex; gap: 1rem; justify-content: flex-end;">
+                <button onclick="cerrarModalDesbalance()" class="btn-secondary">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Módulos compartidos - Sistema centralizado de datos -->
     <script src="../../shared/dataStore.js"></script>
     <script src="../../shared/taxManager.js"></script>

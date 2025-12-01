@@ -2792,10 +2792,117 @@ function renderPreview() {
     elements.previewTableBody.innerHTML = html;
 }
 
+/**
+ * Valida el balance de los asientos generados
+ * @returns {Array} Array de asientos desbalanceados
+ */
+function validarBalance() {
+    const asientosDesbalanceados = [];
+
+    // Agrupar movimientos por número de asiento
+    const asientosPorNumero = {};
+
+    state.finalData.forEach(mov => {
+        const numero = mov.Numero;
+        if (!asientosPorNumero[numero]) {
+            asientosPorNumero[numero] = {
+                numero: numero,
+                fecha: mov.Fecha,
+                leyenda: mov.Leyenda,
+                movimientos: []
+            };
+        }
+        asientosPorNumero[numero].movimientos.push(mov);
+    });
+
+    // Validar balance de cada asiento
+    Object.values(asientosPorNumero).forEach(asiento => {
+        let totalDebito = 0;
+        let totalCredito = 0;
+
+        asiento.movimientos.forEach(mov => {
+            totalDebito += parseFloat(mov.Debe || 0);
+            totalCredito += parseFloat(mov.Haber || 0);
+        });
+
+        const diferencia = Math.abs(totalDebito - totalCredito);
+
+        // Tolerancia de 1 centavo por redondeo
+        if (diferencia > 0.01) {
+            asientosDesbalanceados.push({
+                numero: asiento.numero,
+                fecha: asiento.fecha,
+                leyenda: asiento.leyenda,
+                totalDebito: totalDebito,
+                totalCredito: totalCredito,
+                diferencia: diferencia,
+                cantidadMovimientos: asiento.movimientos.length
+            });
+        }
+    });
+
+    return asientosDesbalanceados;
+}
+
+/**
+ * Muestra el modal con los asientos desbalanceados
+ * @param {Array} desbalanceados - Array de asientos desbalanceados
+ */
+function mostrarModalDesbalance(desbalanceados) {
+    const modal = document.getElementById('modalDesbalance');
+    const lista = document.getElementById('listaDesbalance');
+
+    let html = '';
+    desbalanceados.forEach(asiento => {
+        html += `
+            <div class="desbalance-item">
+                <strong>Asiento #${asiento.numero} - ${asiento.fecha}</strong>
+                <div>
+                    <span><strong>Leyenda:</strong> ${asiento.leyenda || 'Sin leyenda'}</span>
+                    <span><strong>Movimientos:</strong> ${asiento.cantidadMovimientos}</span>
+                    <span><strong>Total Débito:</strong> $${asiento.totalDebito.toFixed(2)}</span>
+                    <span><strong>Total Crédito:</strong> $${asiento.totalCredito.toFixed(2)}</span>
+                    <span class="diferencia-text">⚠️ Diferencia: $${asiento.diferencia.toFixed(2)}</span>
+                </div>
+            </div>
+        `;
+    });
+
+    lista.innerHTML = html;
+    modal.style.display = 'flex';
+}
+
+/**
+ * Cierra el modal de asientos desbalanceados
+ */
+function cerrarModalDesbalance() {
+    const modal = document.getElementById('modalDesbalance');
+    modal.style.display = 'none';
+}
+
+// Hacer la función global para que pueda ser llamada desde el onclick del HTML
+window.cerrarModalDesbalance = cerrarModalDesbalance;
+
+/**
+ * Descarga el archivo Excel con los asientos
+ * Valida el balance antes de exportar
+ */
 function downloadExcel() {
+    // Validar balance antes de exportar
+    const desbalanceados = validarBalance();
+
+    if (desbalanceados.length > 0) {
+        console.warn(`⚠️ Se encontraron ${desbalanceados.length} asiento(s) desbalanceado(s)`);
+        mostrarModalDesbalance(desbalanceados);
+        return; // No permitir exportar
+    }
+
+    // Si todo balancea, proceder con exportación
     const ws = XLSX.utils.json_to_sheet(state.finalData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Asientos');
     const fileName = `asientos_${state.sourceType}_${new Date().toISOString().split('T')[0]}.xlsx`;
     XLSX.writeFile(wb, fileName);
+
+    console.log('✅ Archivo Excel exportado exitosamente');
 }
