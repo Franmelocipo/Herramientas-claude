@@ -12,7 +12,8 @@ const state = {
     activeSearchField: null,
     expandedGroups: {},     // Rastrear qué grupos están expandidos
     selectedItems: {},      // Rastrear items seleccionados para reagrupación {groupIdx: {itemIdx: true/false}}
-    selectedGroups: {}      // Rastrear grupos seleccionados para fusión {groupIdx: true/false}
+    selectedGroups: {},     // Rastrear grupos seleccionados para fusión {groupIdx: true/false}
+    planCuentas: []         // Plan de cuentas del cliente seleccionado
 };
 
 // ============================================
@@ -189,14 +190,14 @@ async function cargarPlanCuentasCliente(clienteId) {
         if (!cuentas || cuentas.length === 0) {
             mostrarInfoPlan('⚠️ Este cliente no tiene plan de cuentas. Configure el plan primero.', 'error');
             deshabilitarOpciones();
-            planCuentas = [];
+            state.planCuentas = [];
             return;
         }
 
         // Guardar las cuentas para usar en los selectores
-        planCuentas = cuentas.map(c => ({
+        state.planCuentas = cuentas.map(c => ({
             codigo: c.codigo,
-            cuenta: c.cuenta
+            nombre: c.cuenta  // Usar 'nombre' para consistencia con el resto del código
         }));
 
         mostrarInfoPlan(`✅ Plan de cuentas cargado: ${cuentas.length} cuentas`, 'success');
@@ -247,7 +248,6 @@ function habilitarOpciones() {
 // ELEMENTOS DEL DOM
 // ============================================
 let elements = {};
-let planCuentas = [];
 
 // ============================================
 // TIPOS DE FUENTE
@@ -456,9 +456,9 @@ function reset() {
 // FUNCIONES AUXILIARES PARA LA HERRAMIENTA
 // ============================================
 async function getClientAccounts() {
-    return planCuentas.map(cuenta => ({
+    return state.planCuentas.map(cuenta => ({
         code: cuenta.codigo,
-        description: cuenta.cuenta
+        description: cuenta.nombre
     }));
 }
 
