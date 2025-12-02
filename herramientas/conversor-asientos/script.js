@@ -2360,11 +2360,17 @@ function generateFinalExcel() {
                 if (debe > 0 || haber > 0) {
                     const importeNeto = parseFloat((debe - haber).toFixed(2));
 
-                    // Obtener el nombre de la cuenta desde el mapa de nombres
+                    // Obtener el nombre de la cuenta desde el mapa de nombres (para vista previa)
                     let nombreCuenta = '';
                     if (descCta && state.nombresCuentasPorDescripcion) {
                         nombreCuenta = state.nombresCuentasPorDescripcion[descCta] || '';
                     }
+
+                    // Generar leyenda con formato: N_COMP / PROVEEDOR
+                    const leyendaParts = [];
+                    if (nComp) leyendaParts.push(nComp);
+                    if (razonSocial) leyendaParts.push(razonSocial);
+                    const leyenda = leyendaParts.join(' / ');
 
                     allData.push({
                         Fecha: fecha,
@@ -2376,7 +2382,7 @@ function generateFinalExcel() {
                         'Tipo de auxiliar': 1,
                         Auxiliar: 1,
                         Importe: importeNeto,
-                        Leyenda: descripcionLinea || descripcionPrincipal,
+                        Leyenda: leyenda,
                         ExtraContable: 's'
                     });
                 }
@@ -3633,7 +3639,13 @@ function validarYExportar() {
 
         // Proceder con la exportación
         setTimeout(() => {
-            const ws = XLSX.utils.json_to_sheet(state.finalData);
+            // Filtrar la columna "Descripción Cuenta" antes de exportar
+            const dataParaExportar = state.finalData.map(row => {
+                const { 'Descripción Cuenta': _, ...rowSinDescripcion } = row;
+                return rowSinDescripcion;
+            });
+
+            const ws = XLSX.utils.json_to_sheet(dataParaExportar);
 
             // Aplicar formato argentino a columnas numéricas
             aplicarFormatoArgentino(ws);
@@ -3673,7 +3685,13 @@ function downloadExcel() {
     }
 
     // Si todo balancea, proceder con exportación
-    const ws = XLSX.utils.json_to_sheet(state.finalData);
+    // Filtrar la columna "Descripción Cuenta" antes de exportar
+    const dataParaExportar = state.finalData.map(row => {
+        const { 'Descripción Cuenta': _, ...rowSinDescripcion } = row;
+        return rowSinDescripcion;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(dataParaExportar);
 
     // Aplicar formato argentino a columnas numéricas
     aplicarFormatoArgentino(ws);
