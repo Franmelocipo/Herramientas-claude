@@ -1009,12 +1009,70 @@ function groupSimilarEntries(data) {
     }
 
     state.groupedData = Object.values(groups);
+
+    // Para registros del cliente, extraer descripciones únicas de contrapartida
+    if (state.sourceType === 'registros') {
+        extractDescripcionesUnicas();
+    }
+}
+
+// ============================================
+// EXTRACCIÓN DE DESCRIPCIONES ÚNICAS (REGISTROS)
+// ============================================
+/**
+ * Extrae todas las descripciones únicas de DESC_CTA de los registros del cliente.
+ * Estas descripciones representan las cuentas de contrapartida que necesitan asignación.
+ * En lugar de pedir una cuenta por cada asiento, pedimos una vez por descripción única.
+ */
+function extractDescripcionesUnicas() {
+    const descripcionesMap = new Map();
+
+    state.groupedData.forEach(grupo => {
+        grupo.items.forEach(item => {
+            const descCta = String(item['DESC_CTA'] || item['Desc_Cta'] || item['desc_cta'] || '').trim();
+            const debe = parseAmount(item['DEBE']);
+            const haber = parseAmount(item['HABER']);
+
+            // Solo procesar líneas que tienen DESC_CTA (son las líneas de contrapartida)
+            if (descCta) {
+                if (!descripcionesMap.has(descCta)) {
+                    descripcionesMap.set(descCta, {
+                        descripcion: descCta,
+                        count: 0,
+                        totalImporte: 0,
+                        asientos: new Set()
+                    });
+                }
+
+                const info = descripcionesMap.get(descCta);
+                info.count++;
+                info.totalImporte += Math.abs(debe - haber);
+                info.asientos.add(grupo.numeroInterno || grupo.concepto);
+            }
+        });
+    });
+
+    // Convertir a array y ordenar por frecuencia (más común primero)
+    state.descripcionesUnicas = Array.from(descripcionesMap.values())
+        .sort((a, b) => b.count - a.count);
+
+    // Inicializar objeto de asignaciones de cuenta por descripción si no existe
+    if (!state.cuentasPorDescripcion) {
+        state.cuentasPorDescripcion = {};
+    }
 }
 
 // ============================================
 // RENDERIZADO DE LISTA DE GRUPOS
 // ============================================
 function renderGroupsList() {
+    // PARA REGISTROS: Renderizar interfaz de descripciones únicas
+    if (state.sourceType === 'registros') {
+        renderDescripcionesUnicas();
+        return;
+    }
+
+    // PARA OTROS TIPOS: Renderizar interfaz estándar de grupos
     elements.groupStats.textContent = `${state.groupedData.length} grupos | ${state.sourceData.length} movimientos`;
 
     // SIEMPRE mostrar la sección de cuenta de contrapartida (banco/caja)
@@ -1169,6 +1227,253 @@ function renderGroupsList() {
         });
     });
 }
+
+// ============================================
+// RENDERIZADO DE DESCRIPCIONES ÚNICAS (REGISTROS)
+// ============================================
+function renderDescripcionesUnicas() {
+    const numAsientos = state.groupedData.length;
+    const numDescripciones = state.descripcionesUnicas ? state.descripcionesUnicas.length : 0;
+
+    elements.groupStats.textContent = `${numAsientos} asientos | ${numDescripciones} descripciones únicas de contrapartida`;
+
+    // Ocultar sección de cuenta de contrapartida global (no se usa para registros)
+    elements.bankAccountSection.classList.add('hidden');
+    elements.compensacionesInfo.classList.add('hidden');
+
+    // Información explicativa
+    let html = `
+        <div class="descripcion-info-box" style="background: #e3f2fd; padding: 16px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+            <h3 style="margin: 0 0 8px 0; color: #1976d2;">📋 Asignación por Descripción de Cuenta</h3>
+            <p style="margin: 0; color: #333;">
+                Se encontraron <strong>${numDescripciones} descripciones únicas</strong> de cuentas de contrapartida.
+                Asigne una cuenta contable a cada descripción y se aplicará automáticamente a <strong>todos los asientos</strong> que la contengan.
+            </p>
+        </div>
+    `;
+
+    // Renderizar cada descripción única
+    if (state.descripcionesUnicas && state.descripcionesUnicas.length > 0) {
+        html += state.descripcionesUnicas.map((desc, idx) => {
+            const cuentaAsignada = state.cuentasPorDescripcion[desc.descripcion] || '';
+
+            return `
+                <div class="descripcion-item" style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+                    <div style="display: flex; align-items: flex-start; gap: 16px;">
+                        <div style="flex: 1;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                <strong style="color: #1976d2; font-size: 15px;">${desc.descripcion}</strong>
+                                <span class="badge" style="background: #4caf50; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
+                                    Aparece en ${desc.count} ${desc.count === 1 ? 'asiento' : 'asientos'}
+                                </span>
+                            </div>
+                            <div style="color: #666; font-size: 13px;">
+                                Total: $${desc.totalImporte.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                            </div>
+                        </div>
+                        <div style="min-width: 200px;">
+                            <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Cuenta contable</label>
+                            <div class="input-with-dropdown">
+                                <input
+                                    type="text"
+                                    class="input-text descripcion-cuenta-input"
+                                    data-descripcion="${desc.descripcion}"
+                                    data-desc-idx="${idx}"
+                                    value="${cuentaAsignada}"
+                                    placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código de cuenta'}"
+                                    style="width: 100%;"
+                                >
+                                <div class="account-dropdown hidden" id="dropdown-desc-${idx}"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } else {
+        html += `
+            <div style="padding: 40px; text-align: center; color: #999;">
+                <p>No se encontraron descripciones de contrapartida.</p>
+            </div>
+        `;
+    }
+
+    elements.groupsList.innerHTML = html;
+
+    // Attach event listeners a los inputs de descripción
+    document.querySelectorAll('.descripcion-cuenta-input').forEach(input => {
+        const descripcion = input.dataset.descripcion;
+        const idx = parseInt(input.dataset.descIdx);
+
+        // Guardar cambios en tiempo real
+        input.addEventListener('input', (e) => {
+            const valor = e.target.value.trim();
+            state.cuentasPorDescripcion[descripcion] = valor;
+
+            if (getSelectedClientId() && valor.length > 0) {
+                handleDescripcionAccountInputChange(idx, descripcion);
+            }
+        });
+
+        // Mostrar dropdown al enfocar
+        input.addEventListener('focus', () => {
+            if (getSelectedClientId()) {
+                state.activeSearchField = `desc-${idx}`;
+                showDescripcionAccountDropdown(idx, descripcion);
+            }
+        });
+
+        // Navegación por teclado
+        input.addEventListener('keydown', (e) => {
+            handleDescripcionAccountInputKeydown(e, idx, descripcion);
+        });
+    });
+}
+
+// ============================================
+// FUNCIONES DE BÚSQUEDA PARA DESCRIPCIONES
+// ============================================
+function handleDescripcionAccountInputChange(idx, descripcion) {
+    const input = document.querySelector(`input[data-desc-idx="${idx}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-desc-${idx}`);
+
+    if (!dropdown) return;
+
+    if (searchTerm.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+
+    // Filtrar plan de cuentas
+    const filteredAccounts = state.planCuentas.filter(account => {
+        const codigo = String(account.codigo || '').toUpperCase();
+        const nombre = String(account.nombre || '').toUpperCase();
+        return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+    }).slice(0, 50);
+
+    if (filteredAccounts.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = filteredAccounts.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectDescripcionAccount('${descripcion}', ${idx}, '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function showDescripcionAccountDropdown(idx, descripcion) {
+    const input = document.querySelector(`input[data-desc-idx="${idx}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-desc-${idx}`);
+
+    if (!dropdown) return;
+
+    if (state.planCuentas.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No hay plan de cuentas cargado</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    let accountsToShow = state.planCuentas;
+    if (searchTerm.length > 0) {
+        accountsToShow = accountsToShow.filter(account => {
+            const codigo = String(account.codigo || '').toUpperCase();
+            const nombre = String(account.nombre || '').toUpperCase();
+            return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+        });
+    }
+
+    accountsToShow = accountsToShow.slice(0, 50);
+
+    if (accountsToShow.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = accountsToShow.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectDescripcionAccount('${descripcion}', ${idx}, '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function selectDescripcionAccount(descripcion, idx, codigo, nombre) {
+    // Guardar la cuenta en el mapa de descripciones
+    state.cuentasPorDescripcion[descripcion] = codigo;
+
+    // Actualizar el input
+    const input = document.querySelector(`input[data-desc-idx="${idx}"]`);
+    if (input) {
+        input.value = codigo;
+    }
+
+    // Ocultar dropdown
+    const dropdown = document.getElementById(`dropdown-desc-${idx}`);
+    if (dropdown) {
+        dropdown.classList.add('hidden');
+    }
+
+    // Mostrar feedback visual
+    console.log(`Asignado: "${descripcion}" → Cuenta ${codigo}`);
+}
+
+function handleDescripcionAccountInputKeydown(e, idx, descripcion) {
+    const dropdown = document.getElementById(`dropdown-desc-${idx}`);
+    if (!dropdown || dropdown.classList.contains('hidden')) return;
+
+    const items = dropdown.querySelectorAll('.dropdown-item');
+    if (items.length === 0) return;
+
+    const currentActive = dropdown.querySelector('.dropdown-item.active');
+    let currentIndex = currentActive ? parseInt(currentActive.dataset.index) : -1;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        currentIndex = Math.min(currentIndex + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        currentIndex = Math.max(currentIndex - 1, 0);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentIndex >= 0 && items[currentIndex]) {
+            items[currentIndex].click();
+        }
+        return;
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        dropdown.classList.add('hidden');
+        return;
+    } else {
+        return;
+    }
+
+    // Actualizar clase active
+    items.forEach(item => item.classList.remove('active'));
+    if (items[currentIndex]) {
+        items[currentIndex].classList.add('active');
+        items[currentIndex].scrollIntoView({ block: 'nearest' });
+    }
+}
+
+// Cerrar dropdowns al hacer click fuera
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.input-with-dropdown')) {
+        document.querySelectorAll('.account-dropdown').forEach(dropdown => {
+            dropdown.classList.add('hidden');
+        });
+    }
+});
 
 // ============================================
 // EXPANSIÓN DE GRUPOS
@@ -1933,24 +2238,38 @@ function generateFinalExcel() {
     // Validaciones simplificadas (nueva lógica)
     const errors = [];
 
-    // Validar cuenta de contrapartida global (obligatoria para todos)
-    if (!state.bankAccount) {
-        errors.push('Falta la cuenta de CONTRAPARTIDA (banco/caja)');
+    // VALIDACIÓN ESPECÍFICA PARA REGISTROS DEL CLIENTE
+    if (state.sourceType === 'registros') {
+        // Validar que todas las descripciones únicas tengan cuenta asignada
+        if (state.descripcionesUnicas && state.descripcionesUnicas.length > 0) {
+            state.descripcionesUnicas.forEach(desc => {
+                const cuentaAsignada = state.cuentasPorDescripcion[desc.descripcion];
+                if (!cuentaAsignada || cuentaAsignada.trim() === '') {
+                    errors.push(`Falta asignar cuenta para: "${desc.descripcion}"`);
+                }
+            });
+        }
+    } else {
+        // VALIDACIÓN PARA OTROS TIPOS DE ORIGEN
+        // Validar cuenta de contrapartida global (obligatoria para todos)
+        if (!state.bankAccount) {
+            errors.push('Falta la cuenta de CONTRAPARTIDA (banco/caja)');
+        }
+
+        // Validar que cada grupo tenga su cuenta asignada
+        state.groupedData.forEach((g, idx) => {
+            const hasCuenta = state.accountCodes[idx];
+
+            if (!hasCuenta) {
+                errors.push(`Grupo "${g.concepto}": falta asignar la cuenta`);
+            }
+
+            // Validar que la cuenta del grupo no sea igual a la contrapartida
+            if (hasCuenta && state.bankAccount && state.accountCodes[idx] === state.bankAccount) {
+                errors.push(`Grupo "${g.concepto}": la cuenta no puede ser igual a la contrapartida`);
+            }
+        });
     }
-
-    // Validar que cada grupo tenga su cuenta asignada
-    state.groupedData.forEach((g, idx) => {
-        const hasCuenta = state.accountCodes[idx];
-
-        if (!hasCuenta) {
-            errors.push(`Grupo "${g.concepto}": falta asignar la cuenta`);
-        }
-
-        // Validar que la cuenta del grupo no sea igual a la contrapartida
-        if (hasCuenta && state.bankAccount && state.accountCodes[idx] === state.bankAccount) {
-            errors.push(`Grupo "${g.concepto}": la cuenta no puede ser igual a la contrapartida`);
-        }
-    });
 
     if (errors.length > 0) {
         const maxErrors = 10;
@@ -1972,6 +2291,7 @@ function generateFinalExcel() {
         const cuentaGrupo = state.accountCodes[idx] || '';
 
         // REGISTROS DEL CLIENTE: Lógica especial - UN asiento por grupo (número interno)
+        // CADA LÍNEA usa la cuenta asignada según su DESC_CTA
         if (state.sourceType === 'registros') {
             if (g.items.length === 0) return;
 
@@ -1983,7 +2303,7 @@ function generateFinalExcel() {
             const razonSocial = primeraLinea['RAZON SOCIAL'] || primeraLinea['RAZON_SOCIAL'] ||
                                primeraLinea['Razon Social'] || primeraLinea['PROVEEDOR'] || '';
 
-            // Descripción principal del asiento (para la primera línea)
+            // Descripción principal del asiento (para las líneas principales)
             const descripcionPrincipal = [concepto, nComp, razonSocial].filter(Boolean).join(' / ');
 
             // Generar las líneas del asiento - cada línea del archivo se convierte en una línea del asiento
@@ -1992,23 +2312,26 @@ function generateFinalExcel() {
                 const haber = parseAmount(item['HABER']);
                 const descCta = String(item['DESC_CTA'] || item['Desc_Cta'] || item['desc_cta'] || '').trim();
 
-                // Determinar la cuenta contable y descripción para esta línea
+                // Determinar la cuenta contable según DESC_CTA
                 let cuentaLinea = '';
                 let descripcionLinea = '';
 
-                // Lógica: líneas con DEBE > 0 usan la cuenta del grupo, líneas con HABER > 0 usan contrapartida
-                if (debe > 0 && haber === 0) {
-                    // Línea de DEBE: usar cuenta del grupo
-                    cuentaLinea = cuentaGrupo;
-                    descripcionLinea = itemIdx === 0 ? descripcionPrincipal : descCta;
-                } else if (haber > 0 && debe === 0) {
-                    // Línea de HABER: usar contrapartida
-                    cuentaLinea = contrapartida;
-                    descripcionLinea = descCta || descripcionPrincipal;
-                } else if (debe > 0 && haber > 0) {
-                    // Línea con ambos (poco común): usar cuenta del grupo
-                    cuentaLinea = cuentaGrupo;
-                    descripcionLinea = descCta || descripcionPrincipal;
+                if (descCta) {
+                    // Esta línea tiene DESC_CTA: buscar la cuenta asignada para esta descripción
+                    cuentaLinea = state.cuentasPorDescripcion[descCta] || '';
+                    descripcionLinea = descCta;
+
+                    // Si no hay cuenta asignada para este DESC_CTA, mostrar error
+                    if (!cuentaLinea) {
+                        console.error(`No se encontró cuenta asignada para DESC_CTA: "${descCta}"`);
+                        cuentaLinea = ''; // Esto causará un error de validación
+                    }
+                } else {
+                    // Esta línea NO tiene DESC_CTA: es la línea principal del asiento
+                    // No agregar ninguna cuenta (estas líneas no se deben procesar)
+                    // En el formato de registros del cliente, todas las líneas deberían tener DESC_CTA
+                    console.warn(`Línea sin DESC_CTA en asiento ${g.concepto}:`, item);
+                    return; // Saltar esta línea
                 }
 
                 // Solo agregar si tiene importe
@@ -2023,7 +2346,7 @@ function generateFinalExcel() {
                         'Tipo de auxiliar': 1,
                         Auxiliar: 1,
                         Importe: importeNeto,
-                        Leyenda: descripcionLinea,
+                        Leyenda: descripcionLinea || descripcionPrincipal,
                         ExtraContable: 's'
                     });
                 }
