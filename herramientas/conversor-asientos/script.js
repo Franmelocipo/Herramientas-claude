@@ -840,25 +840,31 @@ function groupSimilarEntries(data) {
 
     } else if (state.sourceType === 'registros') {
         data.forEach((row) => {
-            const descCta = String(row['DESC_CTA'] || row['Desc_Cta'] || row['desc_cta'] || '').trim();
-            if (!descCta) return;
+            // CRÍTICO: Agrupar por número interno (N_INTER), NO por DESC_CTA
+            // Todas las líneas con el mismo N_INTER deben formar UN SOLO asiento
+            const numeroInterno = String(row['N_INTER'] || row['N_Inter'] || row['n_inter'] || '').trim();
+            if (!numeroInterno) return;
 
-            const proveedor = String(row['PROVEEDOR'] || row['Proveedor'] || row['proveedor'] || '').trim();
+            const descCta = String(row['DESC_CTA'] || row['Desc_Cta'] || row['desc_cta'] || '').trim();
+            const proveedor = String(row['PROVEEDOR'] || row['Proveedor'] || row['proveedor'] ||
+                                     row['RAZON SOCIAL'] || row['RAZON_SOCIAL'] || row['Razon Social'] || '').trim();
             const concepto = String(row['CONCEPTO'] || row['Concepto'] || row['concepto'] || '').trim();
+            const nComp = String(row['N_COMP'] || row['N_Comp'] || row['n_comp'] || '').trim();
 
             const debeVal = parseAmount(row['DEBE']);
             const haberVal = parseAmount(row['HABER']);
 
-            const key = descCta;
+            const key = numeroInterno;
 
             if (!groups[key]) {
                 groups[key] = {
-                    concepto: descCta,
-                    ejemploCompleto: proveedor ? `${proveedor} - ${concepto || descCta}` : `${concepto || descCta}`,
+                    concepto: numeroInterno,
+                    ejemploCompleto: [concepto, nComp, proveedor].filter(Boolean).join(' / '),
                     count: 0,
                     totalDebe: 0,
                     totalHaber: 0,
-                    items: []
+                    items: [],
+                    numeroInterno: numeroInterno
                 };
             }
 
@@ -1961,10 +1967,73 @@ function generateFinalExcel() {
     let numeroAsiento = 1;
     const contrapartida = state.bankAccount;
 
-    // NUEVA LÓGICA UNIFICADA: procesar cada grupo con la misma lógica
+    // NUEVA LÓGICA: Diferenciamos el tratamiento de registros del cliente
     state.groupedData.forEach((g, idx) => {
         const cuentaGrupo = state.accountCodes[idx] || '';
 
+        // REGISTROS DEL CLIENTE: Lógica especial - UN asiento por grupo (número interno)
+        if (state.sourceType === 'registros') {
+            if (g.items.length === 0) return;
+
+            // Obtener información del primer item para datos comunes del asiento
+            const primeraLinea = g.items[0];
+            const fecha = primeraLinea['FECHA'] || primeraLinea['Fecha'] || '';
+            const concepto = primeraLinea['CONCEPTO'] || primeraLinea['Concepto'] || '';
+            const nComp = primeraLinea['N_COMP'] || primeraLinea['N_Comp'] || '';
+            const razonSocial = primeraLinea['RAZON SOCIAL'] || primeraLinea['RAZON_SOCIAL'] ||
+                               primeraLinea['Razon Social'] || primeraLinea['PROVEEDOR'] || '';
+
+            // Descripción principal del asiento (para la primera línea)
+            const descripcionPrincipal = [concepto, nComp, razonSocial].filter(Boolean).join(' / ');
+
+            // Generar las líneas del asiento - cada línea del archivo se convierte en una línea del asiento
+            g.items.forEach((item, itemIdx) => {
+                const debe = parseAmount(item['DEBE']);
+                const haber = parseAmount(item['HABER']);
+                const descCta = String(item['DESC_CTA'] || item['Desc_Cta'] || item['desc_cta'] || '').trim();
+
+                // Determinar la cuenta contable y descripción para esta línea
+                let cuentaLinea = '';
+                let descripcionLinea = '';
+
+                // Lógica: líneas con DEBE > 0 usan la cuenta del grupo, líneas con HABER > 0 usan contrapartida
+                if (debe > 0 && haber === 0) {
+                    // Línea de DEBE: usar cuenta del grupo
+                    cuentaLinea = cuentaGrupo;
+                    descripcionLinea = itemIdx === 0 ? descripcionPrincipal : descCta;
+                } else if (haber > 0 && debe === 0) {
+                    // Línea de HABER: usar contrapartida
+                    cuentaLinea = contrapartida;
+                    descripcionLinea = descCta || descripcionPrincipal;
+                } else if (debe > 0 && haber > 0) {
+                    // Línea con ambos (poco común): usar cuenta del grupo
+                    cuentaLinea = cuentaGrupo;
+                    descripcionLinea = descCta || descripcionPrincipal;
+                }
+
+                // Solo agregar si tiene importe
+                if (debe > 0 || haber > 0) {
+                    const importeNeto = parseFloat((debe - haber).toFixed(2));
+                    allData.push({
+                        Fecha: fecha,
+                        Numero: numeroAsiento,
+                        Cuenta: cuentaLinea,
+                        Debe: parseFloat(debe.toFixed(2)),
+                        Haber: parseFloat(haber.toFixed(2)),
+                        'Tipo de auxiliar': 1,
+                        Auxiliar: 1,
+                        Importe: importeNeto,
+                        Leyenda: descripcionLinea,
+                        ExtraContable: 's'
+                    });
+                }
+            });
+
+            numeroAsiento++;
+            return; // No continuar con la lógica genérica
+        }
+
+        // LÓGICA GENÉRICA para otros tipos de origen
         g.items.forEach(item => {
             // Obtener fecha y descripción según el tipo de fuente
             let fecha = '';
@@ -1997,15 +2066,6 @@ function generateFinalExcel() {
                 importe = parseAmount(item['IMPORTE']);
                 // VEPs son pagos (negativos - sale del banco)
                 importe = -importe;
-            } else if (state.sourceType === 'registros') {
-                fecha = item['FECHA'] || item['Fecha'] || '';
-                const nComp = item['N_COMP'] || item['N_Comp'] || '';
-                const razonSocial = item['RAZON SOCIAL'] || item['RAZON_SOCIAL'] || item['Razon Social'] || item['PROVEEDOR'] || '';
-                const concepto = item['CONCEPTO'] || item['Concepto'] || '';
-                descripcion = [concepto, nComp, razonSocial].filter(Boolean).join(' / ');
-                const debeVal = parseAmount(item['DEBE']);
-                const haberVal = parseAmount(item['HABER']);
-                importe = debeVal - haberVal;
             } else if (state.sourceType === 'tabla') {
                 fecha = item['FECHA'] || item['Fecha'] || item['fecha'] || '';
                 descripcion = item['DESCRIPCION'] || item['Descripcion'] || item['descripcion'] || '';
@@ -2097,14 +2157,15 @@ function generateFinalExcel() {
 
     if (partidaDobleErrors.length > 0) {
         console.warn('Advertencias de partida doble:', partidaDobleErrors);
-        // Opcional: mostrar advertencia al usuario
-        // const maxErrors = 5;
-        // let warnMsg = `⚠️ Se encontraron ${partidaDobleErrors.length} asiento(s) desbalanceado(s):\n\n`;
-        // warnMsg += partidaDobleErrors.slice(0, maxErrors).map(e => `• ${e}`).join('\n');
-        // if (partidaDobleErrors.length > maxErrors) {
-        //     warnMsg += `\n\n... y ${partidaDobleErrors.length - maxErrors} más.`;
-        // }
-        // alert(warnMsg);
+        // Mostrar advertencia al usuario sobre asientos desbalanceados
+        const maxErrors = 5;
+        let warnMsg = `⚠️ ADVERTENCIA: Se encontraron ${partidaDobleErrors.length} asiento(s) desbalanceado(s):\n\n`;
+        warnMsg += partidaDobleErrors.slice(0, maxErrors).map(e => `• ${e}`).join('\n');
+        if (partidaDobleErrors.length > maxErrors) {
+            warnMsg += `\n\n... y ${partidaDobleErrors.length - maxErrors} más.`;
+        }
+        warnMsg += '\n\nLos asientos desbalanceados pueden causar errores al importar. Revise los datos antes de continuar.';
+        alert(warnMsg);
     }
 
     state.finalData = allData;
