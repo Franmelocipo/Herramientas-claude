@@ -185,9 +185,19 @@ Se generan dos grupos por cada par origen-destino:
 - **Origen**: Lo que sale de tu saldo a favor (HABER)
 - **Destino**: Donde se aplica la compensación (DEBE)
 
-### Registros
+### Registros del Cliente
 
-Se respeta el concepto de cuenta (DESC_CTA) del archivo original.
+Se agrupan por **Número Interno (N_INTER)**. Todas las líneas con el mismo número interno se consolidan en un solo asiento contable:
+
+- **Agrupación**: Por número interno (N_INTER)
+- **Estructura del asiento**:
+  - Líneas con DEBE > 0: usan la cuenta asignada al grupo
+  - Líneas con HABER > 0: usan la cuenta de contrapartida (banco/caja)
+  - Se mantienen los importes exactos de cada línea del archivo original
+  - Primera línea: descripción completa con concepto, N° comprobante y razón social
+  - Líneas siguientes: descripción de la cuenta (DESC_CTA)
+
+**Ejemplo**: Un pago a proveedor con 3 cheques (4 líneas en el archivo) genera UN solo asiento con 4 movimientos que balancea automáticamente.
 
 ## Solución de Problemas
 
