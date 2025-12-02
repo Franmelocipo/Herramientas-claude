@@ -1256,6 +1256,13 @@ function renderDescripcionesUnicas() {
     if (state.descripcionesUnicas && state.descripcionesUnicas.length > 0) {
         html += state.descripcionesUnicas.map((desc, idx) => {
             const cuentaAsignada = state.cuentasPorDescripcion[desc.descripcion] || '';
+            const nombreCuenta = state.nombresCuentasPorDescripcion?.[desc.descripcion] || '';
+
+            // Si hay cuenta asignada y nombre, mostrar formato completo
+            let valorInput = cuentaAsignada;
+            if (cuentaAsignada && nombreCuenta) {
+                valorInput = `${cuentaAsignada} - ${nombreCuenta}`;
+            }
 
             return `
                 <div class="descripcion-item" style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
@@ -1271,7 +1278,7 @@ function renderDescripcionesUnicas() {
                                 Total: $${desc.totalImporte.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                             </div>
                         </div>
-                        <div style="min-width: 200px;">
+                        <div style="min-width: 400px;">
                             <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Cuenta contable</label>
                             <div class="input-with-dropdown">
                                 <input
@@ -1279,9 +1286,9 @@ function renderDescripcionesUnicas() {
                                     class="input-text descripcion-cuenta-input"
                                     data-descripcion="${desc.descripcion}"
                                     data-desc-idx="${idx}"
-                                    value="${cuentaAsignada}"
-                                    placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código de cuenta'}"
-                                    style="width: 100%;"
+                                    value="${valorInput}"
+                                    placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta por código o nombre...' : 'Código de cuenta'}"
+                                    style="width: 100%; padding: 0.75rem; font-size: 0.95rem;"
                                 >
                                 <div class="account-dropdown hidden" id="dropdown-desc-${idx}"></div>
                             </div>
@@ -1409,13 +1416,28 @@ function showDescripcionAccountDropdown(idx, descripcion) {
 }
 
 function selectDescripcionAccount(descripcion, idx, codigo, nombre) {
-    // Guardar la cuenta en el mapa de descripciones
+    // Guardar la cuenta y el nombre en el mapa de descripciones
     state.cuentasPorDescripcion[descripcion] = codigo;
 
-    // Actualizar el input
+    // Guardar también el nombre de la cuenta para uso posterior
+    if (!state.nombresCuentasPorDescripcion) {
+        state.nombresCuentasPorDescripcion = {};
+    }
+    state.nombresCuentasPorDescripcion[descripcion] = nombre;
+
+    // Actualizar el input mostrando CÓDIGO - DESCRIPCIÓN
     const input = document.querySelector(`input[data-desc-idx="${idx}"]`);
     if (input) {
-        input.value = codigo;
+        input.value = `${codigo} - ${nombre}`;
+
+        // Agregar feedback visual de éxito
+        input.style.borderColor = '#4caf50';
+        input.style.borderWidth = '2px';
+        input.style.background = '#e8f5e9';
+        input.style.backgroundImage = 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\' viewBox=\'0 0 20 20\'%3E%3Cpath fill=\'%234caf50\' d=\'M0 11l2-2 5 5L18 3l2 2L7 18z\'/%3E%3C/svg%3E")';
+        input.style.backgroundRepeat = 'no-repeat';
+        input.style.backgroundPosition = 'right 10px center';
+        input.style.paddingRight = '35px';
     }
 
     // Ocultar dropdown
@@ -1425,7 +1447,7 @@ function selectDescripcionAccount(descripcion, idx, codigo, nombre) {
     }
 
     // Mostrar feedback visual
-    console.log(`Asignado: "${descripcion}" → Cuenta ${codigo}`);
+    console.log(`Asignado: "${descripcion}" → Cuenta ${codigo} - ${nombre}`);
 }
 
 function handleDescripcionAccountInputKeydown(e, idx, descripcion) {
@@ -2337,10 +2359,18 @@ function generateFinalExcel() {
                 // Solo agregar si tiene importe
                 if (debe > 0 || haber > 0) {
                     const importeNeto = parseFloat((debe - haber).toFixed(2));
+
+                    // Obtener el nombre de la cuenta desde el mapa de nombres
+                    let nombreCuenta = '';
+                    if (descCta && state.nombresCuentasPorDescripcion) {
+                        nombreCuenta = state.nombresCuentasPorDescripcion[descCta] || '';
+                    }
+
                     allData.push({
                         Fecha: fecha,
                         Numero: numeroAsiento,
                         Cuenta: cuentaLinea,
+                        'Descripción Cuenta': nombreCuenta,
                         Debe: parseFloat(debe.toFixed(2)),
                         Haber: parseFloat(haber.toFixed(2)),
                         'Tipo de auxiliar': 1,
@@ -2672,8 +2702,8 @@ function processRegistros(g, codeDebe, codeHaber, allData) {
         const debe = debeVal > 0 ? parseFloat(debeVal.toFixed(2)) : 0;
         const haber = haberVal > 0 ? parseFloat(haberVal.toFixed(2)) : 0;
 
+        // Generar leyenda con formato: N_COMP / PROVEEDOR
         const leyendaParts = [];
-        if (concepto) leyendaParts.push(concepto);
         if (nComp) leyendaParts.push(nComp);
         if (razonSocial) leyendaParts.push(razonSocial);
         const leyenda = leyendaParts.join(' / ');
@@ -3173,6 +3203,7 @@ function renderPreview() {
             <td>${r.Fecha}</td>
             <td class="numero-col">${r.Numero}</td>
             <td class="cuenta-col">${r.Cuenta}</td>
+            <td class="descripcion-cuenta-col" style="color: #666; font-size: 0.9em;">${r['Descripción Cuenta'] || ''}</td>
             <td class="text-right debe-col">${r.Debe > 0 ? r.Debe.toLocaleString('es-AR', { minimumFractionDigits: 2 }) : '-'}</td>
             <td class="text-right haber-col">${r.Haber > 0 ? r.Haber.toLocaleString('es-AR', { minimumFractionDigits: 2 }) : '-'}</td>
             <td class="leyenda-col">${r.Leyenda}</td>
