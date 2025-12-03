@@ -1,4 +1,33 @@
 // ============================================
+// LISTA DE CÓDIGOS DE IMPUESTO ARCA
+// ============================================
+const IMPUESTOS_ARCA = [
+    { codigo: '30', descripcion: 'IVA' },
+    { codigo: '301', descripcion: 'EMPLEADOR - APORTES SEG. SOCIAL' },
+    { codigo: '351', descripcion: 'CONTRIBUCIONES SEG. SOCIAL' },
+    { codigo: '352', descripcion: 'CONTRIBUCIONES OBRA SOCIAL' },
+    { codigo: '355', descripcion: 'APORTES OBRAS SOCIALES' },
+    { codigo: '302', descripcion: 'EMPLEADOR - CONTRIB. PAMI' },
+    { codigo: '356', descripcion: 'APORTES PAMI' },
+    { codigo: '10', descripcion: 'GANANCIAS' },
+    { codigo: '11', descripcion: 'BIENES PERSONALES' },
+    { codigo: '16', descripcion: 'MONOTRIBUTO' },
+    { codigo: '17', descripcion: 'AUTÓNOMOS' },
+    { codigo: '19', descripcion: 'INGRESOS BRUTOS' },
+    { codigo: '767', descripcion: 'APORTES RENATRE' },
+    { codigo: '768', descripcion: 'CONTRIB. RENATRE' },
+    { codigo: '217', descripcion: 'IMPUESTO CHEQUE' },
+    { codigo: '6', descripcion: 'RÉGIMEN NAC. SEGURIDAD SOCIAL' },
+    { codigo: '8', descripcion: 'INTERNOS' },
+    { codigo: '51', descripcion: 'COMBUSTIBLES' },
+    { codigo: '103', descripcion: 'RETENC. IVA' },
+    { codigo: '101', descripcion: 'RETENC. GANANCIAS' },
+    { codigo: '102', descripcion: 'RETENC. SEGURIDAD SOCIAL' },
+    { codigo: '777', descripcion: 'PERC. IVA' },
+    { codigo: '778', descripcion: 'PERC. GANANCIAS' }
+];
+
+// ============================================
 // INICIALIZACIÓN
 // ============================================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1021,6 +1050,54 @@ async function renderPlanCuentasList() {
     listElement.innerHTML = html;
 }
 
+// ============================================
+// FUNCIONES PARA SELECTOR DE IMPUESTOS
+// ============================================
+
+/**
+ * Renderiza los checkboxes de impuestos en un contenedor
+ * @param {string} containerId - ID del contenedor
+ * @param {Array} seleccionados - Array de códigos de impuesto ya seleccionados
+ */
+function renderizarSelectorImpuestos(containerId, seleccionados = []) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const seleccionadosSet = new Set(seleccionados.map(s => String(s)));
+
+    const html = IMPUESTOS_ARCA.map(imp => {
+        const isChecked = seleccionadosSet.has(imp.codigo) ? 'checked' : '';
+        return `
+            <label style="display: flex; align-items: center; padding: 6px 8px; cursor: pointer; border-radius: 4px; transition: background 0.2s; margin-bottom: 2px;"
+                   onmouseover="this.style.background='#e0f2fe'"
+                   onmouseout="this.style.background='transparent'">
+                <input type="checkbox"
+                       class="impuesto-checkbox"
+                       value="${imp.codigo}"
+                       ${isChecked}
+                       style="width: 16px; height: 16px; margin-right: 10px; cursor: pointer; accent-color: #2563eb;">
+                <span style="font-family: monospace; font-weight: 600; color: #1e40af; min-width: 40px;">${imp.codigo}</span>
+                <span style="margin-left: 8px; color: #475569; font-size: 13px;">- ${imp.descripcion}</span>
+            </label>
+        `;
+    }).join('');
+
+    container.innerHTML = html;
+}
+
+/**
+ * Obtiene los códigos de impuesto seleccionados de un contenedor
+ * @param {string} containerId - ID del contenedor
+ * @returns {Array} Array de códigos seleccionados
+ */
+function obtenerImpuestosSeleccionados(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return [];
+
+    const checkboxes = container.querySelectorAll('.impuesto-checkbox:checked');
+    return Array.from(checkboxes).map(cb => cb.value);
+}
+
 function showNuevaCuentaModal() {
     if (!currentClienteIdPlan) {
         alert('Debe abrir el plan de cuentas de un cliente primero');
@@ -1031,7 +1108,10 @@ function showNuevaCuentaModal() {
     document.getElementById('nuevaCuentaCodigo').value = '';
     document.getElementById('nuevaCuentaNombre').value = '';
     document.getElementById('nuevaCuentaTipo').value = '';
-    document.getElementById('nuevaCuentaCodigosImpuesto').value = '';
+
+    // Renderizar selector de impuestos sin ninguno seleccionado
+    renderizarSelectorImpuestos('nuevaCuentaImpuestosContainer', []);
+
     document.getElementById('nuevaCuentaCodigo').focus();
 }
 
@@ -1043,7 +1123,6 @@ async function crearCuentaUI() {
     const codigo = document.getElementById('nuevaCuentaCodigo').value.trim();
     const nombre = document.getElementById('nuevaCuentaNombre').value.trim();
     const tipo = document.getElementById('nuevaCuentaTipo').value;
-    const codigosImpuestoStr = document.getElementById('nuevaCuentaCodigosImpuesto').value.trim();
 
     if (!codigo || !nombre) {
         alert('El código y el nombre son obligatorios');
@@ -1055,16 +1134,11 @@ async function crearCuentaUI() {
         return;
     }
 
-    // Procesar códigos de impuesto
-    let codigosImpuestoArray = null;
-    if (codigosImpuestoStr) {
-        codigosImpuestoArray = codigosImpuestoStr
-            .split(',')
-            .map(c => c.trim())
-            .filter(c => c.length > 0);
-    }
+    // Obtener códigos de impuesto seleccionados del selector múltiple
+    const codigosImpuestoArray = obtenerImpuestosSeleccionados('nuevaCuentaImpuestosContainer');
 
-    const result = await crearCuenta(currentClienteIdPlan, codigo, nombre, tipo, codigosImpuestoArray);
+    const result = await crearCuenta(currentClienteIdPlan, codigo, nombre, tipo,
+        codigosImpuestoArray.length > 0 ? codigosImpuestoArray : null);
 
     if (result) {
         alert('Cuenta creada exitosamente');
@@ -1080,12 +1154,11 @@ function editarCuentaUI(cuentaId, codigoActual, nombreActual, tipoActual, codigo
     document.getElementById('editarCuentaNombre').value = nombreActual;
     document.getElementById('editarCuentaTipo').value = tipoActual || '';
 
-    // Cargar códigos de impuesto si existen
-    if (codigosImpuestoActuales && codigosImpuestoActuales.length > 0) {
-        document.getElementById('editarCuentaCodigosImpuesto').value = codigosImpuestoActuales.join(', ');
-    } else {
-        document.getElementById('editarCuentaCodigosImpuesto').value = '';
-    }
+    // Renderizar selector de impuestos con los códigos actuales pre-seleccionados
+    const codigosActuales = codigosImpuestoActuales && codigosImpuestoActuales.length > 0
+        ? codigosImpuestoActuales
+        : [];
+    renderizarSelectorImpuestos('editarCuentaImpuestosContainer', codigosActuales);
 
     document.getElementById('modalEditarCuenta').classList.remove('hidden');
     document.getElementById('editarCuentaCodigo').focus();
@@ -1100,23 +1173,14 @@ async function guardarCambiosCuenta() {
     const nuevoCodigo = document.getElementById('editarCuentaCodigo').value.trim();
     const nuevoNombre = document.getElementById('editarCuentaNombre').value.trim();
     const nuevoTipo = document.getElementById('editarCuentaTipo').value;
-    const codigosImpuestoStr = document.getElementById('editarCuentaCodigosImpuesto').value.trim();
 
     if (!nuevoCodigo || !nuevoNombre) {
         alert('El código y el nombre son obligatorios');
         return;
     }
 
-    // Procesar códigos de impuesto
-    let codigosImpuestoArray = null;
-    if (codigosImpuestoStr) {
-        codigosImpuestoArray = codigosImpuestoStr
-            .split(',')
-            .map(c => c.trim())
-            .filter(c => c.length > 0);
-    } else {
-        codigosImpuestoArray = []; // Array vacío para limpiar los códigos
-    }
+    // Obtener códigos de impuesto seleccionados del selector múltiple
+    const codigosImpuestoArray = obtenerImpuestosSeleccionados('editarCuentaImpuestosContainer');
 
     const result = await actualizarCuenta(cuentaId, nuevoCodigo, nuevoNombre, nuevoTipo, codigosImpuestoArray);
 

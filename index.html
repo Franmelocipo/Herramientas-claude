@@ -284,12 +284,14 @@
                 <option value="Egreso">Egreso</option>
             </select>
             <div style="margin-bottom: 16px;">
-                <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #475569;">
-                    Códigos de Impuesto (opcional)
-                    <span style="cursor: help;" title="Para asignación automática en VEPs ARCA. Ej: 351=Contrib.Seg.Social, 301=Empleador, 30=IVA">&#9432;</span>
+                <label style="display: block; margin-bottom: 8px; font-size: 13px; color: #475569; font-weight: 600;">
+                    Códigos de Impuesto ARCA (opcional)
+                    <span style="cursor: help;" title="Seleccione los códigos de impuesto para asignación automática en VEPs ARCA">&#9432;</span>
                 </label>
-                <input type="text" id="nuevaCuentaCodigosImpuesto" placeholder="Ej: 351, 301, 30" class="input-text">
-                <small style="display: block; margin-top: 4px; font-size: 11px; color: #64748b;">Códigos de impuesto separados por coma. Útil para VEPs ARCA.</small>
+                <div id="nuevaCuentaImpuestosContainer" class="impuestos-selector" style="max-height: 200px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; background: #f8fafc;">
+                    <div style="text-align: center; color: #64748b; padding: 12px;">Cargando impuestos...</div>
+                </div>
+                <small style="display: block; margin-top: 4px; font-size: 11px; color: #64748b;">Seleccione los impuestos que corresponden a esta cuenta.</small>
             </div>
             <div class="btn-group">
                 <button id="btnCancelNuevaCuenta" class="btn-secondary">Cancelar</button>
@@ -317,12 +319,14 @@
                 <option value="Egreso">Egreso</option>
             </select>
             <div style="margin-bottom: 16px;">
-                <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #475569;">
-                    Códigos de Impuesto (opcional)
-                    <span style="cursor: help;" title="Para asignación automática en VEPs ARCA. Ej: 351=Contrib.Seg.Social, 301=Empleador, 30=IVA">&#9432;</span>
+                <label style="display: block; margin-bottom: 8px; font-size: 13px; color: #475569; font-weight: 600;">
+                    Códigos de Impuesto ARCA (opcional)
+                    <span style="cursor: help;" title="Seleccione los códigos de impuesto para asignación automática en VEPs ARCA">&#9432;</span>
                 </label>
-                <input type="text" id="editarCuentaCodigosImpuesto" placeholder="Ej: 351, 301, 30" class="input-text">
-                <small style="display: block; margin-top: 4px; font-size: 11px; color: #64748b;">Códigos de impuesto separados por coma. Útil para VEPs ARCA.</small>
+                <div id="editarCuentaImpuestosContainer" class="impuestos-selector" style="max-height: 200px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; background: #f8fafc;">
+                    <div style="text-align: center; color: #64748b; padding: 12px;">Cargando impuestos...</div>
+                </div>
+                <small style="display: block; margin-top: 4px; font-size: 11px; color: #64748b;">Seleccione los impuestos que corresponden a esta cuenta.</small>
             </div>
             <div class="btn-group">
                 <button id="btnCancelEditarCuenta" class="btn-secondary">Cancelar</button>
