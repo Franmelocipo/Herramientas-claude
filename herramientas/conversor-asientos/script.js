@@ -69,7 +69,12 @@ function getSelectedClientId() {
 }
 
 function getTaxDatabase() {
-    return TaxManager.getAllTaxes();
+    // Verificar que TaxManager esté disponible y tenga el método getAllTaxes
+    if (typeof window.TaxManager !== 'undefined' && typeof window.TaxManager.getAllTaxes === 'function') {
+        return window.TaxManager.getAllTaxes();
+    }
+    console.warn('TaxManager no está disponible o no tiene el método getAllTaxes');
+    return [];
 }
 
 // ============================================
