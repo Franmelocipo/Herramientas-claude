@@ -283,6 +283,14 @@
                 <option value="Ingreso">Ingreso</option>
                 <option value="Egreso">Egreso</option>
             </select>
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #475569;">
+                    Códigos de Impuesto (opcional)
+                    <span style="cursor: help;" title="Para asignación automática en VEPs ARCA. Ej: 351=Contrib.Seg.Social, 301=Empleador, 30=IVA">&#9432;</span>
+                </label>
+                <input type="text" id="nuevaCuentaCodigosImpuesto" placeholder="Ej: 351, 301, 30" class="input-text">
+                <small style="display: block; margin-top: 4px; font-size: 11px; color: #64748b;">Códigos de impuesto separados por coma. Útil para VEPs ARCA.</small>
+            </div>
             <div class="btn-group">
                 <button id="btnCancelNuevaCuenta" class="btn-secondary">Cancelar</button>
                 <button id="btnCrearCuenta" class="btn-primary">Crear</button>
@@ -308,6 +316,14 @@
                 <option value="Ingreso">Ingreso</option>
                 <option value="Egreso">Egreso</option>
             </select>
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 4px; font-size: 13px; color: #475569;">
+                    Códigos de Impuesto (opcional)
+                    <span style="cursor: help;" title="Para asignación automática en VEPs ARCA. Ej: 351=Contrib.Seg.Social, 301=Empleador, 30=IVA">&#9432;</span>
+                </label>
+                <input type="text" id="editarCuentaCodigosImpuesto" placeholder="Ej: 351, 301, 30" class="input-text">
+                <small style="display: block; margin-top: 4px; font-size: 11px; color: #64748b;">Códigos de impuesto separados por coma. Útil para VEPs ARCA.</small>
+            </div>
             <div class="btn-group">
                 <button id="btnCancelEditarCuenta" class="btn-secondary">Cancelar</button>
                 <button id="btnGuardarCuenta" class="btn-primary">Guardar</button>

@@ -175,17 +175,37 @@ async function cargarPlanCuentasCliente(clienteId) {
     const infoElement = document.getElementById('clientePlanInfo');
 
     try {
-        const { data: cuentas, error } = await supabase
+        console.log('Cargando plan de cuentas para cliente:', clienteId);
+
+        let { data: cuentas, error } = await supabase
             .from('plan_cuentas')
             .select('codigo, cuenta, codigos_impuesto')
             .eq('cliente_id', clienteId)
             .order('codigo');
 
         if (error) {
-            console.error('Error cargando plan:', error);
-            mostrarInfoPlan('Error al cargar el plan de cuentas', 'error');
-            deshabilitarOpciones();
-            return;
+            console.error('Error en query:', error);
+            // Si el error es por columna faltante, hacer query sin esa columna
+            if (error.message && error.message.includes('codigos_impuesto')) {
+                console.log('Columna codigos_impuesto no existe, usando query sin ella');
+                const { data: dataFallback, error: errorFallback } = await supabase
+                    .from('plan_cuentas')
+                    .select('codigo, cuenta')
+                    .eq('cliente_id', clienteId)
+                    .order('codigo');
+
+                if (errorFallback) {
+                    console.error('Error en fallback query:', errorFallback);
+                    mostrarInfoPlan('Error al cargar el plan de cuentas', 'error');
+                    deshabilitarOpciones();
+                    return;
+                }
+                cuentas = dataFallback;
+            } else {
+                mostrarInfoPlan('Error al cargar el plan de cuentas', 'error');
+                deshabilitarOpciones();
+                return;
+            }
         }
 
         if (!cuentas || cuentas.length === 0) {
