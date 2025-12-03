@@ -1027,9 +1027,10 @@ function hidePlanCuentasModal() {
 }
 
 async function renderPlanCuentasList(forceReload = false) {
-    console.log('🔄 [renderPlanCuentasList] Renderizando lista de cuentas...');
+    console.log('🔄 [renderPlanCuentasList] ========== INICIO RENDER ==========');
     console.log('   - currentClienteIdPlan:', currentClienteIdPlan);
     console.log('   - forceReload:', forceReload);
+    console.log('   - planCuentasCache.length:', planCuentasCache.length);
 
     if (!currentClienteIdPlan) {
         console.error('❌ [renderPlanCuentasList] No hay cliente seleccionado');
@@ -1039,26 +1040,91 @@ async function renderPlanCuentasList(forceReload = false) {
     const listElement = document.getElementById('planCuentasList');
     const statsElement = document.getElementById('planCuentasStats');
 
+    // Variable para almacenar error si ocurre
+    let errorMessage = null;
+
     // Si necesitamos recargar o no hay cache, consultar a la base de datos
     let todasLasCuentas;
 
-    if (forceReload || planCuentasCache.length === 0 || !planCuentasCache[0] || planCuentasCache[0].cliente_id !== currentClienteIdPlan) {
+    const needsReload = forceReload ||
+                        planCuentasCache.length === 0 ||
+                        !planCuentasCache[0] ||
+                        planCuentasCache[0].cliente_id !== currentClienteIdPlan;
+
+    console.log('   - needsReload:', needsReload);
+
+    if (needsReload) {
         // Mostrar indicador de carga
         listElement.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;"><div class="spinner" style="margin: 0 auto 16px;"></div>Cargando plan de cuentas...</div>';
 
-        // Obtener las cuentas del cliente desde la base de datos
-        todasLasCuentas = await obtenerPlanCuentas(currentClienteIdPlan);
+        try {
+            // Obtener las cuentas del cliente desde la base de datos
+            console.log('   - Llamando a obtenerPlanCuentas...');
+            const resultado = await obtenerPlanCuentas(currentClienteIdPlan);
 
-        // Guardar en cache
-        planCuentasCache = todasLasCuentas;
-        console.log('💾 [renderPlanCuentasList] Cache actualizada:', planCuentasCache.length, 'cuentas');
+            console.log('   - Resultado recibido:', resultado);
+
+            // Manejar el nuevo formato de respuesta {data, error, isEmpty}
+            if (resultado && typeof resultado === 'object' && 'data' in resultado) {
+                // Nuevo formato
+                todasLasCuentas = resultado.data || [];
+                errorMessage = resultado.error;
+                console.log('   - Nuevo formato detectado. Error:', errorMessage, 'Cuentas:', todasLasCuentas.length);
+            } else if (Array.isArray(resultado)) {
+                // Formato antiguo (array directo) - compatibilidad
+                todasLasCuentas = resultado;
+                console.log('   - Formato array detectado. Cuentas:', todasLasCuentas.length);
+            } else {
+                // Respuesta inesperada
+                console.error('   - Respuesta inesperada:', resultado);
+                todasLasCuentas = [];
+                errorMessage = 'Respuesta inesperada del servidor';
+            }
+
+            // Guardar en cache solo si no hubo error
+            if (!errorMessage) {
+                planCuentasCache = todasLasCuentas;
+                console.log('💾 [renderPlanCuentasList] Cache actualizada:', planCuentasCache.length, 'cuentas');
+            } else {
+                // Si hubo error, limpiar cache para que reintente la próxima vez
+                planCuentasCache = [];
+                console.log('⚠️ [renderPlanCuentasList] Cache limpiada debido a error');
+            }
+        } catch (err) {
+            console.error('❌ [renderPlanCuentasList] Error cargando cuentas:', err);
+            todasLasCuentas = [];
+            errorMessage = err.message || 'Error desconocido al cargar el plan de cuentas';
+            planCuentasCache = [];
+        }
     } else {
         // Usar cache existente
         todasLasCuentas = planCuentasCache;
         console.log('📦 [renderPlanCuentasList] Usando cache:', planCuentasCache.length, 'cuentas');
     }
 
-    console.log('📊 [renderPlanCuentasList] Cuentas obtenidas:', todasLasCuentas.length);
+    console.log('📊 [renderPlanCuentasList] Resultado final:');
+    console.log('   - Cuentas:', todasLasCuentas.length);
+    console.log('   - Error:', errorMessage);
+
+    // Si hay error, mostrar mensaje de error
+    if (errorMessage) {
+        listElement.innerHTML = `
+            <div style="text-align: center; padding: 40px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;">
+                <span style="font-size: 48px; display: block; margin-bottom: 16px;">⚠️</span>
+                <h3 style="color: #dc2626; margin: 0 0 12px;">Error al cargar el plan de cuentas</h3>
+                <p style="color: #991b1b; margin: 0 0 16px;">${errorMessage}</p>
+                <button onclick="renderPlanCuentasList(true)"
+                        style="background: #dc2626; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: background 0.2s;"
+                        onmouseover="this.style.background='#b91c1c'"
+                        onmouseout="this.style.background='#dc2626'">
+                    🔄 Reintentar
+                </button>
+            </div>
+        `;
+        statsElement.textContent = 'Error al cargar datos';
+        console.log('🔄 [renderPlanCuentasList] ========== FIN (ERROR) ==========');
+        return;
+    }
 
     // Verificar que las cuentas pertenecen al cliente correcto
     if (todasLasCuentas.length > 0) {
@@ -1102,8 +1168,29 @@ async function renderPlanCuentasList(forceReload = false) {
     `;
 
     if (todasLasCuentas.length === 0) {
-        listElement.innerHTML = searchFilterHtml + '<div class="empty-state">No hay cuentas en el plan. Importa un archivo Excel o crea cuentas manualmente.</div>';
-        statsElement.textContent = '';
+        listElement.innerHTML = `
+            <div style="text-align: center; padding: 40px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px;">
+                <span style="font-size: 48px; display: block; margin-bottom: 16px;">📋</span>
+                <h3 style="color: #0369a1; margin: 0 0 12px;">Plan de cuentas vacío</h3>
+                <p style="color: #0c4a6e; margin: 0 0 16px;">Este cliente no tiene cuentas cargadas en el plan.</p>
+                <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                    <button onclick="showNuevaCuentaModal()"
+                            style="background: #0ea5e9; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: background 0.2s;"
+                            onmouseover="this.style.background='#0284c7'"
+                            onmouseout="this.style.background='#0ea5e9'">
+                        ➕ Crear cuenta manualmente
+                    </button>
+                    <label style="background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: background 0.2s; display: inline-block;"
+                           onmouseover="this.style.background='#059669'"
+                           onmouseout="this.style.background='#10b981'">
+                        📥 Importar desde Excel
+                        <input type="file" accept=".xlsx,.xls" onchange="importarPlanCuentasUI(event)" style="display: none;">
+                    </label>
+                </div>
+            </div>
+        `;
+        statsElement.textContent = 'Sin cuentas cargadas';
+        console.log('🔄 [renderPlanCuentasList] ========== FIN (SIN CUENTAS) ==========');
         return;
     }
 
@@ -1198,6 +1285,7 @@ async function renderPlanCuentasList(forceReload = false) {
     `;
 
     listElement.innerHTML = searchFilterHtml + tableHtml;
+    console.log('🔄 [renderPlanCuentasList] ========== FIN (EXITOSO) ==========');
 }
 
 /**
