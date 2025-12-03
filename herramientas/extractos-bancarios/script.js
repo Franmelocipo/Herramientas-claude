@@ -12,6 +12,7 @@ let clienteSeleccionadoNombre = '';
 const state = {
     selectedType: '',
     selectedBank: '',
+    selectedSubOption: '',  // Para bancos con sub-opciones (ej: Macro)
     file: null,
     extractedData: [],
     saldoInicial: null,
@@ -109,7 +110,15 @@ const banksBancarios = [
     { id: 'bbva', name: 'Banco BBVA' },
     { id: 'bpn', name: 'BPN (Banco Provincia Neuquén)' },
     { id: 'santander', name: 'Banco Santander' },
-    { id: 'macro', name: 'Banco Macro' },
+    {
+        id: 'macro',
+        name: 'Banco Macro',
+        hasSubOptions: true,
+        subOptions: [
+            { id: 'macro-resumen', name: 'Resumen de Movimientos', description: 'Últimos Movimientos - una columna de importe' },
+            { id: 'macro-extracto', name: 'Extracto Bancario', description: 'Detalle de Movimiento - columnas DEBITOS y CREDITOS separadas' }
+        ]
+    },
     { id: 'nacion', name: 'Banco Nación', disabled: true }
 ];
 
@@ -121,6 +130,10 @@ const banksInversiones = [
 const elements = {
     typeBtns: null,
     stepBank: null,
+    stepSubOption: null,
+    suboptionGrid: null,
+    suboptionTitle: null,
+    suboptionDescription: null,
     stepFile: null,
     stepConvert: null,
     bankGrid: null,
@@ -153,6 +166,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 function initElements() {
     elements.typeBtns = document.querySelectorAll('[data-type]');
     elements.stepBank = document.getElementById('step-bank');
+    elements.stepSubOption = document.getElementById('step-suboption');
+    elements.suboptionGrid = document.getElementById('suboption-grid');
+    elements.suboptionTitle = document.getElementById('suboption-title');
+    elements.suboptionDescription = document.getElementById('suboption-description');
     elements.stepFile = document.getElementById('step-file');
     elements.stepConvert = document.getElementById('step-convert');
     elements.bankGrid = document.getElementById('bank-grid');
@@ -197,6 +214,7 @@ function attachEventListeners() {
 function handleTypeSelect(type) {
     state.selectedType = type;
     state.selectedBank = '';
+    state.selectedSubOption = '';
     state.file = null;
     state.extractedData = [];
     state.saldoInicial = null;
@@ -208,6 +226,7 @@ function handleTypeSelect(type) {
 
     // Mostrar paso de banco
     elements.stepBank.classList.remove('hidden');
+    elements.stepSubOption.classList.add('hidden');
     elements.stepFile.classList.add('hidden');
     elements.stepConvert.classList.add('hidden');
     elements.previewSection.classList.add('hidden');
@@ -238,6 +257,7 @@ function handleTypeSelect(type) {
 
 function handleBankSelect(bankId) {
     state.selectedBank = bankId;
+    state.selectedSubOption = '';
     state.file = null;
     state.extractedData = [];
     state.saldoInicial = null;
@@ -245,6 +265,57 @@ function handleBankSelect(bankId) {
     // Actualizar UI
     document.querySelectorAll('.bank-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.bank === bankId);
+    });
+
+    // Buscar si el banco tiene sub-opciones
+    const banks = state.selectedType === 'bancario' ? banksBancarios : banksInversiones;
+    const selectedBank = banks.find(b => b.id === bankId);
+
+    if (selectedBank && selectedBank.hasSubOptions) {
+        // Mostrar paso de sub-opciones
+        elements.stepSubOption.classList.remove('hidden');
+        elements.stepFile.classList.add('hidden');
+        elements.stepConvert.classList.add('hidden');
+        elements.previewSection.classList.add('hidden');
+
+        // Actualizar título y descripción
+        elements.suboptionTitle.textContent = `Tipo de extracto de ${selectedBank.name}`;
+        elements.suboptionDescription.textContent = 'Selecciona el tipo de extracto que deseas convertir:';
+
+        // Llenar grid de sub-opciones
+        elements.suboptionGrid.innerHTML = selectedBank.subOptions.map(opt => `
+            <button class="suboption-btn" data-suboption="${opt.id}">
+                <div class="suboption-btn-title">${opt.name}</div>
+                <div class="suboption-btn-desc">${opt.description}</div>
+            </button>
+        `).join('');
+
+        // Agregar event listeners a botones de sub-opciones
+        document.querySelectorAll('.suboption-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                handleSubOptionSelect(btn.dataset.suboption);
+            });
+        });
+    } else {
+        // Mostrar paso de archivo directamente
+        elements.stepSubOption.classList.add('hidden');
+        elements.stepFile.classList.remove('hidden');
+        elements.stepConvert.classList.add('hidden');
+        elements.previewSection.classList.add('hidden');
+        elements.selectedFile.classList.add('hidden');
+    }
+
+    hideMessages();
+}
+
+function handleSubOptionSelect(subOptionId) {
+    state.selectedSubOption = subOptionId;
+    state.file = null;
+    state.extractedData = [];
+
+    // Actualizar UI
+    document.querySelectorAll('.suboption-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.suboption === subOptionId);
     });
 
     // Mostrar paso de archivo
@@ -316,7 +387,7 @@ async function handleConvert() {
         } else if (state.selectedBank === 'santander') {
             await processSantanderPDF(state.file);
         } else if (state.selectedBank === 'macro') {
-            await processMacroPDF(state.file);
+            await processMacroPDF(state.file, state.selectedSubOption);
         } else if (state.selectedBank === 'galicia-inversiones') {
             await processGaliciaInversionesPDF(state.file);
         }
@@ -1156,6 +1227,228 @@ function parseMacroWithPositions(linesWithPositions) {
     return filteredMovements;
 }
 
+// Parsear Extracto Bancario de Banco Macro (formato con columnas DEBITOS y CREDITOS separadas)
+// Estructura: FECHA | DESCRIPCION | REFERENCIA | DEBITOS | CREDITOS | SALDO
+// Puede contener múltiples cuentas en el mismo PDF
+function parseMacroExtractoBancario(linesWithPositions) {
+    const allMovements = [];
+    let currentAccount = null;
+    let inMovementsSection = false;
+
+    // Detectar posiciones de columnas
+    let debitosColumnX = null;
+    let creditosColumnX = null;
+    let saldoColumnX = null;
+
+    // Regex para detectar fecha al inicio de línea (DD/MM/YY)
+    const dateRegex = /^(\d{2}\/\d{2}\/\d{2})\b/;
+
+    console.log('Procesando Extracto Bancario Macro...');
+    console.log('='.repeat(80));
+
+    for (const lineData of linesWithPositions) {
+        const trimmedLine = lineData.text.trim();
+
+        // Detectar inicio de una cuenta nueva
+        if (/CUENTA\s+CORRIENTE\s+BANCARIA\s+NRO\.?:?\s*([\d\-]+)/i.test(trimmedLine)) {
+            const match = trimmedLine.match(/CUENTA\s+CORRIENTE\s+BANCARIA\s+NRO\.?:?\s*([\d\-]+)/i);
+            currentAccount = match ? match[1] : 'Desconocida';
+            console.log(`\n📄 Nueva cuenta detectada: ${currentAccount}`);
+            inMovementsSection = false;
+        }
+
+        // Detectar cabecera de movimientos para obtener posiciones de columnas
+        if (/DETALLE\s+DE\s+MOVIMIENTO/i.test(trimmedLine)) {
+            inMovementsSection = true;
+            console.log('   → Sección DETALLE DE MOVIMIENTO encontrada');
+            continue;
+        }
+
+        // Detectar encabezado de columnas
+        const textLower = trimmedLine.toLowerCase();
+        if (textLower.includes('debitos') || textLower.includes('débitos')) {
+            for (const item of lineData.items) {
+                const itemText = item.text.toLowerCase();
+                if (itemText.includes('debitos') || itemText.includes('débitos')) {
+                    debitosColumnX = item.x;
+                } else if (itemText.includes('creditos') || itemText.includes('créditos')) {
+                    creditosColumnX = item.x;
+                } else if (itemText === 'saldo') {
+                    saldoColumnX = item.x;
+                }
+            }
+            if (debitosColumnX && creditosColumnX) {
+                console.log(`   Columnas detectadas - Débitos X: ${debitosColumnX?.toFixed(1)}, Créditos X: ${creditosColumnX?.toFixed(1)}, Saldo X: ${saldoColumnX?.toFixed(1)}`);
+            }
+            continue;
+        }
+
+        // Ignorar líneas especiales
+        if (/SALDO\s+ULTIMO\s+EXTRACTO/i.test(trimmedLine) ||
+            /SALDO\s+FINAL\s+AL\s+DIA/i.test(trimmedLine) ||
+            /TOTAL\s+COBRADO\s+DEL\s+IMP/i.test(trimmedLine) ||
+            /^FECHA\s+DESCRIPCION/i.test(trimmedLine) ||
+            /Clave\s+Bancaria\s+Uniforme/i.test(trimmedLine) ||
+            /Periodo\s+del\s+Extracto/i.test(trimmedLine) ||
+            /Resumen\s+General/i.test(trimmedLine) ||
+            /Saldo\s+Cuentas\s+en\s+PESOS/i.test(trimmedLine) ||
+            /Sr\(es\):/i.test(trimmedLine) ||
+            /C\.U\.I\.T/i.test(trimmedLine) ||
+            /Sucursal\s+\d+/i.test(trimmedLine) ||
+            /^\s*$/.test(trimmedLine)) {
+            continue;
+        }
+
+        // Procesar líneas de movimiento (comienzan con fecha DD/MM/YY)
+        const dateMatch = trimmedLine.match(dateRegex);
+
+        if (dateMatch && inMovementsSection) {
+            // Convertir fecha de DD/MM/YY a DD/MM/YYYY
+            const dateParts = dateMatch[1].split('/');
+            const year = parseInt(dateParts[2]);
+            const fullYear = year < 50 ? `20${dateParts[2]}` : `19${dateParts[2]}`;
+            const fecha = `${dateParts[0]}/${dateParts[1]}/${fullYear}`;
+
+            // Encontrar todos los importes con sus posiciones X
+            const amountsWithPositions = [];
+            for (const item of lineData.items) {
+                // Formato: 1.234,56 o 123,45 (sin signo negativo en este formato)
+                const amountMatch = item.text.match(/^([\d.]+,\d{2})$/);
+                if (amountMatch) {
+                    amountsWithPositions.push({
+                        value: amountMatch[1],
+                        x: item.x,
+                        text: item.text
+                    });
+                }
+            }
+
+            // Ordenar por posición X (izquierda a derecha)
+            amountsWithPositions.sort((a, b) => a.x - b.x);
+
+            // Extraer descripción
+            let descripcion = trimmedLine;
+            descripcion = descripcion.replace(dateRegex, '').trim();
+            // Remover importes del texto
+            descripcion = descripcion.replace(/[\d.]+,\d{2}/g, '').trim();
+
+            // Extraer referencia (número al final de la descripción antes de los importes)
+            const referenciaMatch = descripcion.match(/\b(\d+)\s*$/);
+            const referencia = referenciaMatch ? referenciaMatch[1] : '0';
+            if (referenciaMatch) {
+                descripcion = descripcion.replace(/\b\d+\s*$/, '').trim();
+            }
+
+            // Clasificar importes por posición de columna
+            let debito = '0';
+            let credito = '0';
+            let saldo = '0';
+
+            // Si tenemos posiciones de columnas detectadas, usarlas
+            if (debitosColumnX && creditosColumnX) {
+                const midPointDC = (debitosColumnX + creditosColumnX) / 2;
+                const midPointCS = creditosColumnX && saldoColumnX ? (creditosColumnX + saldoColumnX) / 2 : creditosColumnX + 100;
+
+                for (const amount of amountsWithPositions) {
+                    if (amount.x < midPointDC) {
+                        debito = amount.value;
+                    } else if (amount.x < midPointCS) {
+                        credito = amount.value;
+                    } else {
+                        saldo = amount.value;
+                    }
+                }
+            } else {
+                // Fallback: asumir orden DEBITO, CREDITO, SALDO
+                if (amountsWithPositions.length >= 1) {
+                    saldo = amountsWithPositions[amountsWithPositions.length - 1].value;
+                }
+                if (amountsWithPositions.length >= 2) {
+                    // Si hay 2 importes además del saldo, el primero es débito o crédito
+                    const movAmount = amountsWithPositions[amountsWithPositions.length - 2];
+                    // En este formato, si hay valor en una posición es ese tipo
+                    if (amountsWithPositions.length === 2) {
+                        // Solo hay un importe y saldo - determinar por posición relativa
+                        debito = movAmount.value;
+                    }
+                }
+                if (amountsWithPositions.length >= 3) {
+                    debito = amountsWithPositions[0].value;
+                    credito = amountsWithPositions[1].value;
+                }
+            }
+
+            // Si tanto débito como crédito son 0 pero hay importes, intentar clasificar
+            if (debito === '0' && credito === '0' && amountsWithPositions.length >= 2) {
+                // Tomar el penúltimo como el movimiento
+                const movValue = amountsWithPositions[amountsWithPositions.length - 2].value;
+                // Por defecto asignar como débito (se puede mejorar con más contexto)
+                debito = movValue;
+            }
+
+            console.log(`  ${fecha} | ${descripcion.substring(0, 40)}... | D:${debito} | C:${credito} | S:${saldo}`);
+
+            allMovements.push({
+                fecha: fecha,
+                descripcion: descripcion,
+                origen: referencia,
+                debito: debito,
+                credito: credito,
+                saldo: saldo,
+                cuenta: currentAccount || 'Principal'
+            });
+        }
+    }
+
+    // Limpiar descripciones y filtrar movimientos inválidos
+    const filteredMovements = allMovements
+        .filter(mov => {
+            // Filtrar descripciones vacías o muy cortas
+            if (!mov.descripcion || mov.descripcion.length < 2) {
+                return false;
+            }
+            // Filtrar líneas de totales
+            if (/^Total\b/i.test(mov.descripcion)) {
+                return false;
+            }
+            return true;
+        })
+        .map(mov => {
+            mov.descripcion = mov.descripcion
+                .replace(/\s+/g, ' ')
+                .trim();
+            return mov;
+        });
+
+    console.log('='.repeat(80));
+    console.log('Movimientos Extracto Bancario Macro encontrados:', filteredMovements.length);
+
+    return filteredMovements;
+}
+
+// Detectar automáticamente el tipo de extracto de Banco Macro
+function detectMacroExtractType(linesWithPositions) {
+    for (const lineData of linesWithPositions) {
+        const text = lineData.text;
+
+        // Si contiene "Últimos Movimientos" es el formato Resumen
+        if (/Últimos\s+Movimientos/i.test(text)) {
+            console.log('Tipo detectado: Resumen de Movimientos (por "Últimos Movimientos")');
+            return 'macro-resumen';
+        }
+
+        // Si contiene "Resumen General" o "DETALLE DE MOVIMIENTO" es Extracto Bancario
+        if (/Resumen\s+General/i.test(text) || /DETALLE\s+DE\s+MOVIMIENTO/i.test(text)) {
+            console.log('Tipo detectado: Extracto Bancario (por "Resumen General" o "DETALLE DE MOVIMIENTO")');
+            return 'macro-extracto';
+        }
+    }
+
+    // Por defecto, asumir el formato original
+    console.log('Tipo no detectado, usando Resumen de Movimientos por defecto');
+    return 'macro-resumen';
+}
+
 // Parsear extracto Santander usando posiciones de columnas
 // Estructura: Fecha | Comprobante | Movimiento | DÉBITO | CRÉDITO | Saldo
 // Determina débito/crédito por la posición X en el PDF
@@ -1618,21 +1911,41 @@ async function processBPNPDF(pdfFile) {
     }
 }
 
-async function processMacroPDF(pdfFile) {
+async function processMacroPDF(pdfFile, subOption = '') {
     try {
         // Extraer texto CON POSICIONES para determinar columnas
         const linesWithPositions = await extractTextWithPositions(pdfFile);
         console.log('Líneas extraídas del PDF Macro:', linesWithPositions.length);
 
         // Banco Macro no muestra saldo inicial explícitamente en el encabezado
-        // El saldo se obtiene de la primera fila de movimientos
         state.saldoInicial = null;
 
-        // Parsear movimientos usando POSICIONES DE COLUMNAS
-        const movements = parseMacroWithPositions(linesWithPositions);
+        // Determinar qué tipo de extracto es
+        let extractType = subOption;
+
+        // Si no se especificó sub-opción, detectar automáticamente
+        if (!extractType) {
+            extractType = detectMacroExtractType(linesWithPositions);
+            console.log('Tipo de extracto detectado automáticamente:', extractType);
+        } else {
+            console.log('Tipo de extracto seleccionado por usuario:', extractType);
+        }
+
+        // Parsear según el tipo de extracto
+        let movements;
+        if (extractType === 'macro-extracto') {
+            // Extracto Bancario (columnas DEBITOS y CREDITOS separadas)
+            movements = parseMacroExtractoBancario(linesWithPositions);
+        } else {
+            // Resumen de Movimientos (columna única de Importe con signo)
+            movements = parseMacroWithPositions(linesWithPositions);
+        }
 
         if (movements.length === 0) {
-            showError('No se encontraron movimientos en el PDF. Verifique que el archivo contenga movimientos con formato de fecha DD/MM/YYYY.');
+            const formatoMsg = extractType === 'macro-extracto'
+                ? 'Extracto Bancario (DD/MM/YY)'
+                : 'Resumen de Movimientos (DD/MM/YYYY)';
+            showError(`No se encontraron movimientos en el PDF. Verifique que el archivo sea del formato "${formatoMsg}".`);
             return;
         }
 
@@ -1642,8 +1955,20 @@ async function processMacroPDF(pdfFile) {
             console.log('Último movimiento:', movements[movements.length - 1]);
         }
 
+        // Verificar si hay múltiples cuentas
+        if (extractType === 'macro-extracto') {
+            const cuentas = [...new Set(movements.map(m => m.cuenta).filter(c => c))];
+            if (cuentas.length > 1) {
+                console.log('Cuentas encontradas:', cuentas);
+                showSuccess(`¡Archivo procesado! ${movements.length} movimientos de ${cuentas.length} cuentas: ${cuentas.join(', ')}`);
+            } else {
+                showSuccess(`¡Archivo procesado exitosamente! ${movements.length} movimientos encontrados.`);
+            }
+        } else {
+            showSuccess(`¡Archivo procesado exitosamente! ${movements.length} movimientos encontrados.`);
+        }
+
         state.extractedData = movements;
-        showSuccess(`¡Archivo procesado exitosamente! ${movements.length} movimientos encontrados.`);
         renderPreview();
 
     } catch (err) {
