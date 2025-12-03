@@ -3055,6 +3055,9 @@ function generateFinalExcel() {
                 const codImpuesto = item['COD_IMPUESTO'] || item['Cod_Impuesto'] || item['cod_impuesto'] || '';
                 const importe = parseAmount(item['IMPORTE']);
 
+                // Sumar al total del VEP para la contrapartida bancaria
+                totalVep += importe;
+
                 // ASIGNACIÓN DE CUENTA POR CÓDIGO DE IMPUESTO (nueva lógica)
                 let cuentaImpuesto = '';
                 let descripcionCuenta = '';
