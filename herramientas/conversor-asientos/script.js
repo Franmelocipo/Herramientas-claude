@@ -1107,12 +1107,588 @@ function extractDescripcionesUnicas() {
 }
 
 // ============================================
+// EXTRACCIÓN DE IMPUESTOS Y BANCOS ÚNICOS (VEPs)
+// ============================================
+/**
+ * Extrae los códigos de impuesto únicos de todos los VEPs cargados
+ * @returns {Array} Array con información de cada impuesto único
+ */
+function extraerImpuestosUnicos() {
+    const impuestosMap = new Map();
+
+    state.groupedData.forEach(grupo => {
+        grupo.items.forEach(item => {
+            const codImpuesto = String(item['COD_IMPUESTO'] || item['Cod_Impuesto'] || item['cod_impuesto'] || '').trim();
+            const impuesto = String(item['IMPUESTO'] || item['Impuesto'] || item['impuesto'] || '').trim();
+            const importe = parseAmount(item['IMPORTE']);
+
+            if (codImpuesto) {
+                if (!impuestosMap.has(codImpuesto)) {
+                    impuestosMap.set(codImpuesto, {
+                        codigo: codImpuesto,
+                        descripcion: impuesto,
+                        contador: 0,
+                        totalImporte: 0,
+                        veps: new Set()
+                    });
+                }
+
+                const info = impuestosMap.get(codImpuesto);
+                info.contador++;
+                info.totalImporte += Math.abs(importe);
+                info.veps.add(grupo.nroVep || grupo.concepto);
+            }
+        });
+    });
+
+    return Array.from(impuestosMap.values())
+        .map(imp => ({
+            ...imp,
+            cantidadVeps: imp.veps.size
+        }))
+        .sort((a, b) => b.contador - a.contador);
+}
+
+/**
+ * Extrae los bancos/entidades de pago únicos de todos los VEPs cargados
+ * @returns {Array} Array con información de cada banco único
+ */
+function extraerBancosUnicos() {
+    const bancosMap = new Map();
+
+    state.groupedData.forEach(grupo => {
+        const banco = String(grupo.entidadPago || '').trim();
+        const totalVep = grupo.totalDebe || 0;
+
+        if (banco) {
+            if (!bancosMap.has(banco)) {
+                bancosMap.set(banco, {
+                    nombre: banco,
+                    contador: 0,
+                    totalImporte: 0
+                });
+            }
+
+            const info = bancosMap.get(banco);
+            info.contador++;
+            info.totalImporte += totalVep;
+        }
+    });
+
+    return Array.from(bancosMap.values())
+        .sort((a, b) => b.contador - a.contador);
+}
+
+/**
+ * Renderiza la interfaz de asignación de cuentas para VEPs
+ * Agrupa por código de impuesto (débito) y banco (crédito)
+ */
+function renderAsignacionVeps() {
+    const impuestosUnicos = extraerImpuestosUnicos();
+    const bancosUnicos = extraerBancosUnicos();
+
+    // Guardar en state para uso posterior
+    state.impuestosUnicos = impuestosUnicos;
+    state.bancosUnicos = bancosUnicos;
+
+    // Inicializar mapas de asignación si no existen
+    if (!state.cuentasPorImpuesto) {
+        state.cuentasPorImpuesto = {};
+    }
+    if (!state.cuentasPorBanco) {
+        state.cuentasPorBanco = {};
+    }
+    if (!state.nombresCuentasPorImpuesto) {
+        state.nombresCuentasPorImpuesto = {};
+    }
+    if (!state.nombresCuentasPorBanco) {
+        state.nombresCuentasPorBanco = {};
+    }
+
+    // Pre-asignar cuentas automáticas desde mapeoImpuestos (plan de cuentas)
+    impuestosUnicos.forEach(imp => {
+        if (state.mapeoImpuestos[imp.codigo] && !state.cuentasPorImpuesto[imp.codigo]) {
+            state.cuentasPorImpuesto[imp.codigo] = state.mapeoImpuestos[imp.codigo].codigo;
+            state.nombresCuentasPorImpuesto[imp.codigo] = state.mapeoImpuestos[imp.codigo].nombre;
+        }
+    });
+
+    console.log('Estructura VEPs:', {
+        totalVEPs: state.groupedData.length,
+        totalAsientos: state.groupedData.length,
+        impuestosUnicos: impuestosUnicos.length,
+        bancosUnicos: bancosUnicos.length
+    });
+
+    elements.groupStats.textContent = `${state.groupedData.length} VEPs → ${state.groupedData.length} asientos | ${impuestosUnicos.length} impuestos | ${bancosUnicos.length} bancos`;
+
+    // Ocultar sección de cuenta de contrapartida global (usaremos cuentas por banco)
+    elements.bankAccountSection.classList.add('hidden');
+    elements.compensacionesInfo.classList.add('hidden');
+
+    // HTML principal
+    let html = `
+        <div class="asignacion-veps-container">
+            <div class="descripcion-info-box" style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4caf50;">
+                <h3 style="margin: 0 0 8px 0; color: #2e7d32;">Asignar Cuentas Contables</h3>
+                <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+                    <p style="margin: 0; color: #333;">
+                        <strong>${state.groupedData.length} VEPs</strong> → Generarán <strong>${state.groupedData.length} asientos</strong>
+                    </p>
+                    <p style="margin: 0; color: #333;">
+                        <strong>${impuestosUnicos.length}</strong> tipos de impuesto diferentes
+                    </p>
+                    <p style="margin: 0; color: #333;">
+                        <strong>${bancosUnicos.length}</strong> ${bancosUnicos.length === 1 ? 'banco' : 'bancos'} diferentes
+                    </p>
+                </div>
+            </div>
+
+            <!-- SECCIÓN IMPUESTOS (DÉBITO) -->
+            <div class="seccion-cuentas" style="margin-bottom: 24px;">
+                <h4 style="color: #1976d2; border-bottom: 2px solid #1976d2; padding-bottom: 8px; margin-bottom: 16px;">
+                    Impuestos (Débito)
+                </h4>
+                <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
+                    Asigna una cuenta para cada tipo de impuesto. Se aplicará a <strong>TODOS</strong> los asientos que contengan ese impuesto.
+                </p>
+    `;
+
+    // Renderizar impuestos
+    impuestosUnicos.forEach((impuesto, idx) => {
+        const cuentaAsignada = state.cuentasPorImpuesto[impuesto.codigo] || '';
+        const nombreCuenta = state.nombresCuentasPorImpuesto[impuesto.codigo] || '';
+        let valorInput = cuentaAsignada;
+        if (cuentaAsignada && nombreCuenta) {
+            valorInput = `${cuentaAsignada} - ${nombreCuenta}`;
+        }
+
+        const tieneAsignacionAuto = state.mapeoImpuestos[impuesto.codigo] ? true : false;
+
+        html += `
+            <div class="asignacion-item" style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 12px; ${tieneAsignacionAuto ? 'border-left: 4px solid #4caf50;' : ''}">
+                <div style="display: flex; align-items: flex-start; gap: 16px;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <strong style="color: #1976d2; font-size: 15px;">${impuesto.codigo} - ${impuesto.descripcion}</strong>
+                            <span class="badge" style="background: #2196f3; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
+                                ${impuesto.cantidadVeps} VEP(s)
+                            </span>
+                            ${tieneAsignacionAuto ? '<span style="color: #4caf50; font-size: 12px;">✓ Asignación automática</span>' : ''}
+                        </div>
+                        <div style="color: #666; font-size: 13px;">
+                            Total: $${impuesto.totalImporte.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        </div>
+                    </div>
+                    <div style="min-width: 400px;">
+                        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Cuenta contable (Débito)</label>
+                        <div class="input-with-dropdown">
+                            <input
+                                type="text"
+                                class="input-text impuesto-cuenta-input"
+                                data-codigo-impuesto="${impuesto.codigo}"
+                                data-impuesto-idx="${idx}"
+                                value="${valorInput}"
+                                placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código de cuenta'}"
+                                style="width: 100%; padding: 0.75rem; font-size: 0.95rem; ${valorInput ? 'border-color: #4caf50; background: #e8f5e9;' : ''}"
+                            >
+                            <div class="account-dropdown hidden" id="dropdown-impuesto-${idx}"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+
+            <!-- SECCIÓN BANCOS (CRÉDITO) -->
+            <div class="seccion-cuentas">
+                <h4 style="color: #388e3c; border-bottom: 2px solid #388e3c; padding-bottom: 8px; margin-bottom: 16px;">
+                    Bancos (Crédito)
+                </h4>
+                <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
+                    Asigna una cuenta para cada banco. Se aplicará a <strong>TODOS</strong> los pagos realizados desde ese banco.
+                </p>
+    `;
+
+    // Renderizar bancos
+    bancosUnicos.forEach((banco, idx) => {
+        const cuentaAsignada = state.cuentasPorBanco[banco.nombre] || '';
+        const nombreCuenta = state.nombresCuentasPorBanco[banco.nombre] || '';
+        let valorInput = cuentaAsignada;
+        if (cuentaAsignada && nombreCuenta) {
+            valorInput = `${cuentaAsignada} - ${nombreCuenta}`;
+        }
+
+        html += `
+            <div class="asignacion-item" style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+                <div style="display: flex; align-items: flex-start; gap: 16px;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <strong style="color: #388e3c; font-size: 15px;">${banco.nombre}</strong>
+                            <span class="badge" style="background: #4caf50; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
+                                ${banco.contador} VEP(s)
+                            </span>
+                        </div>
+                        <div style="color: #666; font-size: 13px;">
+                            Total: $${banco.totalImporte.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        </div>
+                    </div>
+                    <div style="min-width: 400px;">
+                        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Cuenta contable (Crédito/Banco)</label>
+                        <div class="input-with-dropdown">
+                            <input
+                                type="text"
+                                class="input-text banco-cuenta-input"
+                                data-banco="${banco.nombre}"
+                                data-banco-idx="${idx}"
+                                value="${valorInput}"
+                                placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código de cuenta'}"
+                                style="width: 100%; padding: 0.75rem; font-size: 0.95rem; ${valorInput ? 'border-color: #4caf50; background: #e8f5e9;' : ''}"
+                            >
+                            <div class="account-dropdown hidden" id="dropdown-banco-${idx}"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+        </div>
+    `;
+
+    elements.groupsList.innerHTML = html;
+
+    // Attach event listeners para inputs de impuestos
+    document.querySelectorAll('.impuesto-cuenta-input').forEach(input => {
+        const codigoImpuesto = input.dataset.codigoImpuesto;
+        const idx = parseInt(input.dataset.impuestoIdx);
+
+        input.addEventListener('input', (e) => {
+            if (getSelectedClientId()) {
+                handleImpuestoCuentaInputChange(idx, codigoImpuesto);
+            }
+        });
+
+        input.addEventListener('focus', () => {
+            if (getSelectedClientId()) {
+                state.activeSearchField = `impuesto-${idx}`;
+                showImpuestoCuentaDropdown(idx, codigoImpuesto);
+            }
+        });
+
+        input.addEventListener('keydown', (e) => {
+            handleImpuestoCuentaInputKeydown(e, idx, codigoImpuesto);
+        });
+    });
+
+    // Attach event listeners para inputs de bancos
+    document.querySelectorAll('.banco-cuenta-input').forEach(input => {
+        const banco = input.dataset.banco;
+        const idx = parseInt(input.dataset.bancoIdx);
+
+        input.addEventListener('input', (e) => {
+            if (getSelectedClientId()) {
+                handleBancoCuentaInputChange(idx, banco);
+            }
+        });
+
+        input.addEventListener('focus', () => {
+            if (getSelectedClientId()) {
+                state.activeSearchField = `banco-${idx}`;
+                showBancoCuentaDropdown(idx, banco);
+            }
+        });
+
+        input.addEventListener('keydown', (e) => {
+            handleBancoCuentaInputKeydown(e, idx, banco);
+        });
+    });
+}
+
+// ============================================
+// FUNCIONES DE BÚSQUEDA PARA IMPUESTOS (VEPs)
+// ============================================
+function handleImpuestoCuentaInputChange(idx, codigoImpuesto) {
+    const input = document.querySelector(`input[data-impuesto-idx="${idx}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-impuesto-${idx}`);
+
+    if (!dropdown) return;
+
+    if (searchTerm.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+
+    const filteredAccounts = state.planCuentas.filter(account => {
+        const codigo = String(account.codigo || '').toUpperCase();
+        const nombre = String(account.nombre || '').toUpperCase();
+        return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+    }).slice(0, 50);
+
+    if (filteredAccounts.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = filteredAccounts.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectImpuestoCuenta('${codigoImpuesto}', ${idx}, '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function showImpuestoCuentaDropdown(idx, codigoImpuesto) {
+    const input = document.querySelector(`input[data-impuesto-idx="${idx}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-impuesto-${idx}`);
+
+    if (!dropdown) return;
+
+    if (state.planCuentas.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No hay plan de cuentas cargado</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    let accountsToShow = state.planCuentas;
+    if (searchTerm.length > 0) {
+        accountsToShow = accountsToShow.filter(account => {
+            const codigo = String(account.codigo || '').toUpperCase();
+            const nombre = String(account.nombre || '').toUpperCase();
+            return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+        });
+    }
+
+    accountsToShow = accountsToShow.slice(0, 50);
+
+    if (accountsToShow.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = accountsToShow.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectImpuestoCuenta('${codigoImpuesto}', ${idx}, '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function selectImpuestoCuenta(codigoImpuesto, idx, codigo, nombre) {
+    state.cuentasPorImpuesto[codigoImpuesto] = codigo;
+    state.nombresCuentasPorImpuesto[codigoImpuesto] = nombre;
+
+    const input = document.querySelector(`input[data-impuesto-idx="${idx}"]`);
+    if (input) {
+        input.value = `${codigo} - ${nombre}`;
+        input.style.borderColor = '#4caf50';
+        input.style.background = '#e8f5e9';
+    }
+
+    const dropdown = document.getElementById(`dropdown-impuesto-${idx}`);
+    if (dropdown) {
+        dropdown.classList.add('hidden');
+    }
+
+    console.log(`Impuesto ${codigoImpuesto} → Cuenta ${codigo} - ${nombre}`);
+}
+
+function handleImpuestoCuentaInputKeydown(e, idx, codigoImpuesto) {
+    const dropdown = document.getElementById(`dropdown-impuesto-${idx}`);
+    if (!dropdown || dropdown.classList.contains('hidden')) return;
+
+    const items = dropdown.querySelectorAll('.dropdown-item');
+    if (items.length === 0) return;
+
+    const currentActive = dropdown.querySelector('.dropdown-item.active');
+    let currentIndex = currentActive ? parseInt(currentActive.dataset.index) : -1;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        currentIndex = Math.min(currentIndex + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        currentIndex = Math.max(currentIndex - 1, 0);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentIndex >= 0 && items[currentIndex]) {
+            items[currentIndex].click();
+        }
+        return;
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        dropdown.classList.add('hidden');
+        return;
+    } else {
+        return;
+    }
+
+    items.forEach(item => item.classList.remove('active'));
+    if (items[currentIndex]) {
+        items[currentIndex].classList.add('active');
+        items[currentIndex].scrollIntoView({ block: 'nearest' });
+    }
+}
+
+// ============================================
+// FUNCIONES DE BÚSQUEDA PARA BANCOS (VEPs)
+// ============================================
+function handleBancoCuentaInputChange(idx, banco) {
+    const input = document.querySelector(`input[data-banco-idx="${idx}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-banco-${idx}`);
+
+    if (!dropdown) return;
+
+    if (searchTerm.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+
+    const filteredAccounts = state.planCuentas.filter(account => {
+        const codigo = String(account.codigo || '').toUpperCase();
+        const nombre = String(account.nombre || '').toUpperCase();
+        return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+    }).slice(0, 50);
+
+    if (filteredAccounts.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = filteredAccounts.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectBancoCuenta('${banco.replace(/'/g, "\\'")}', ${idx}, '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function showBancoCuentaDropdown(idx, banco) {
+    const input = document.querySelector(`input[data-banco-idx="${idx}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-banco-${idx}`);
+
+    if (!dropdown) return;
+
+    if (state.planCuentas.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No hay plan de cuentas cargado</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    let accountsToShow = state.planCuentas;
+    if (searchTerm.length > 0) {
+        accountsToShow = accountsToShow.filter(account => {
+            const codigo = String(account.codigo || '').toUpperCase();
+            const nombre = String(account.nombre || '').toUpperCase();
+            return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+        });
+    }
+
+    accountsToShow = accountsToShow.slice(0, 50);
+
+    if (accountsToShow.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = accountsToShow.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectBancoCuenta('${banco.replace(/'/g, "\\'")}', ${idx}, '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function selectBancoCuenta(banco, idx, codigo, nombre) {
+    state.cuentasPorBanco[banco] = codigo;
+    state.nombresCuentasPorBanco[banco] = nombre;
+
+    const input = document.querySelector(`input[data-banco-idx="${idx}"]`);
+    if (input) {
+        input.value = `${codigo} - ${nombre}`;
+        input.style.borderColor = '#4caf50';
+        input.style.background = '#e8f5e9';
+    }
+
+    const dropdown = document.getElementById(`dropdown-banco-${idx}`);
+    if (dropdown) {
+        dropdown.classList.add('hidden');
+    }
+
+    console.log(`Banco ${banco} → Cuenta ${codigo} - ${nombre}`);
+}
+
+function handleBancoCuentaInputKeydown(e, idx, banco) {
+    const dropdown = document.getElementById(`dropdown-banco-${idx}`);
+    if (!dropdown || dropdown.classList.contains('hidden')) return;
+
+    const items = dropdown.querySelectorAll('.dropdown-item');
+    if (items.length === 0) return;
+
+    const currentActive = dropdown.querySelector('.dropdown-item.active');
+    let currentIndex = currentActive ? parseInt(currentActive.dataset.index) : -1;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        currentIndex = Math.min(currentIndex + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        currentIndex = Math.max(currentIndex - 1, 0);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentIndex >= 0 && items[currentIndex]) {
+            items[currentIndex].click();
+        }
+        return;
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        dropdown.classList.add('hidden');
+        return;
+    } else {
+        return;
+    }
+
+    items.forEach(item => item.classList.remove('active'));
+    if (items[currentIndex]) {
+        items[currentIndex].classList.add('active');
+        items[currentIndex].scrollIntoView({ block: 'nearest' });
+    }
+}
+
+// ============================================
 // RENDERIZADO DE LISTA DE GRUPOS
 // ============================================
 function renderGroupsList() {
     // PARA REGISTROS: Renderizar interfaz de descripciones únicas
     if (state.sourceType === 'registros') {
         renderDescripcionesUnicas();
+        return;
+    }
+
+    // PARA VEPs: Renderizar interfaz de asignación por código de impuesto
+    if (state.sourceType === 'veps') {
+        renderAsignacionVeps();
         return;
     }
 
@@ -2315,6 +2891,27 @@ function generateFinalExcel() {
                 }
             });
         }
+    } else if (state.sourceType === 'veps') {
+        // VALIDACIÓN ESPECÍFICA PARA VEPs
+        // Validar que todos los códigos de impuesto tengan cuenta asignada
+        if (state.impuestosUnicos && state.impuestosUnicos.length > 0) {
+            state.impuestosUnicos.forEach(imp => {
+                const cuentaAsignada = state.cuentasPorImpuesto?.[imp.codigo] || state.mapeoImpuestos?.[imp.codigo]?.codigo;
+                if (!cuentaAsignada || cuentaAsignada.trim() === '') {
+                    errors.push(`Impuesto "${imp.codigo} - ${imp.descripcion}": falta asignar cuenta`);
+                }
+            });
+        }
+
+        // Validar que todos los bancos tengan cuenta asignada
+        if (state.bancosUnicos && state.bancosUnicos.length > 0) {
+            state.bancosUnicos.forEach(banco => {
+                const cuentaAsignada = state.cuentasPorBanco?.[banco.nombre];
+                if (!cuentaAsignada || cuentaAsignada.trim() === '') {
+                    errors.push(`Banco "${banco.nombre}": falta asignar cuenta`);
+                }
+            });
+        }
     } else {
         // VALIDACIÓN PARA OTROS TIPOS DE ORIGEN
         // Validar cuenta de contrapartida global (obligatoria para todos)
@@ -2437,6 +3034,7 @@ function generateFinalExcel() {
         }
 
         // LÓGICA ESPECÍFICA PARA VEPs: Un asiento por VEP (con múltiples líneas)
+        // NUEVA LÓGICA: Usa asignaciones por código de impuesto y por banco
         if (state.sourceType === 'veps') {
             if (g.items.length === 0) return;
 
@@ -2462,15 +3060,21 @@ function generateFinalExcel() {
                 const conceptoDetalle = subconcepto || concepto;
                 const leyenda = `${impuesto} - ${conceptoDetalle} / ${periodo} / VEP ${nroVep}`;
 
-                // ASIGNACIÓN AUTOMÁTICA DE CUENTA POR CÓDIGO DE IMPUESTO
-                let cuentaImpuesto = cuentaGrupo; // Por defecto, usar cuenta del grupo
+                // ASIGNACIÓN DE CUENTA POR CÓDIGO DE IMPUESTO (nueva lógica)
+                let cuentaImpuesto = '';
                 let descripcionCuenta = '';
 
-                if (codImpuesto && state.mapeoImpuestos[codImpuesto]) {
-                    // Hay mapeo automático para este código de impuesto
+                // 1. Primero buscar en cuentasPorImpuesto (asignación manual del usuario)
+                if (codImpuesto && state.cuentasPorImpuesto && state.cuentasPorImpuesto[codImpuesto]) {
+                    cuentaImpuesto = state.cuentasPorImpuesto[codImpuesto];
+                    descripcionCuenta = state.nombresCuentasPorImpuesto?.[codImpuesto] || '';
+                    console.log(`✅ Cuenta asignada (manual): Cod.${codImpuesto} → ${cuentaImpuesto} (${descripcionCuenta})`);
+                }
+                // 2. Fallback a mapeoImpuestos (asignación automática del plan de cuentas)
+                else if (codImpuesto && state.mapeoImpuestos && state.mapeoImpuestos[codImpuesto]) {
                     cuentaImpuesto = state.mapeoImpuestos[codImpuesto].codigo;
                     descripcionCuenta = state.mapeoImpuestos[codImpuesto].nombre;
-                    console.log(`✅ Cuenta asignada automáticamente: Cod.${codImpuesto} → ${cuentaImpuesto} (${descripcionCuenta})`);
+                    console.log(`✅ Cuenta asignada (automática): Cod.${codImpuesto} → ${cuentaImpuesto} (${descripcionCuenta})`);
                 }
 
                 // Línea de débito (pago de impuesto)
@@ -2491,12 +3095,27 @@ function generateFinalExcel() {
             });
 
             // UNA SOLA línea de CRÉDITO (contrapartida - banco)
+            // NUEVA LÓGICA: Buscar cuenta asignada al banco específico
+            let cuentaBanco = '';
+            let descripcionBanco = '';
+
+            // 1. Primero buscar en cuentasPorBanco (asignación por banco)
+            if (entidadPago && state.cuentasPorBanco && state.cuentasPorBanco[entidadPago]) {
+                cuentaBanco = state.cuentasPorBanco[entidadPago];
+                descripcionBanco = state.nombresCuentasPorBanco?.[entidadPago] || '';
+                console.log(`✅ Banco asignado: ${entidadPago} → ${cuentaBanco} (${descripcionBanco})`);
+            }
+            // 2. Fallback a contrapartida global (si existe)
+            else if (contrapartida) {
+                cuentaBanco = contrapartida;
+            }
+
             const leyendaContrapartida = `Pago VEP ${nroVep} / ${periodo}${entidadPago ? ` / ${entidadPago}` : ''}`;
             allData.push({
                 Fecha: fecha,
                 Numero: numeroAsiento,
-                Cuenta: contrapartida,
-                'Descripción Cuenta': '',
+                Cuenta: cuentaBanco,
+                'Descripción Cuenta': descripcionBanco,
                 Debe: 0,
                 Haber: parseFloat(totalVep.toFixed(2)),
                 'Tipo de auxiliar': 1,
