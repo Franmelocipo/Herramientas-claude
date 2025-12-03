@@ -64,6 +64,45 @@ function parseCodigosImpuesto(valor) {
     return [];
 }
 
+// ============================================
+// BÚSQUEDA DE CUENTAS POR CÓDIGO DE IMPUESTO CON MATCH PARCIAL
+// ============================================
+/**
+ * Busca la cuenta asignada para un código de impuesto.
+ * Los VEPs tienen códigos simples como "351" pero el mapeo del plan de cuentas
+ * guarda códigos compuestos como "351-19-19" (impuesto-concepto-subconcepto).
+ * Esta función hace match parcial para encontrar la cuenta correcta.
+ *
+ * @param {string} codigoImpuesto - Código de impuesto del VEP (ej: "351")
+ * @returns {Object|null} {codigo, nombre} de la cuenta contable o null si no se encuentra
+ */
+function buscarCuentaParaImpuesto(codigoImpuesto) {
+    if (!codigoImpuesto || !state.mapeoImpuestos) {
+        return null;
+    }
+
+    const codigo = String(codigoImpuesto).trim();
+
+    // 1. Primero buscar coincidencia exacta
+    if (state.mapeoImpuestos[codigo]) {
+        console.log(`   ✓ Match exacto para impuesto ${codigo}:`, state.mapeoImpuestos[codigo].codigo);
+        return state.mapeoImpuestos[codigo];
+    }
+
+    // 2. Si no hay coincidencia exacta, buscar match parcial
+    // El código del VEP puede ser "351" y el mapeo tener "351-19-19"
+    for (const [codigoCompleto, cuenta] of Object.entries(state.mapeoImpuestos)) {
+        // El código completo empieza con el código del impuesto seguido de "-"
+        if (codigoCompleto.startsWith(codigo + '-')) {
+            console.log(`   ✓ Match parcial para impuesto ${codigo} → ${codigoCompleto}:`, cuenta.codigo);
+            return cuenta;
+        }
+    }
+
+    console.log(`   ✗ Sin match para impuesto ${codigo}`);
+    return null;
+}
+
 function getSelectedClientId() {
     return clienteSeleccionadoId;
 }
@@ -1259,10 +1298,18 @@ function renderAsignacionVeps() {
     }
 
     // Pre-asignar cuentas automáticas desde mapeoImpuestos (plan de cuentas)
+    // Usa buscarCuentaParaImpuesto para match parcial (VEPs tienen "351", mapeo tiene "351-19-19")
+    console.log('🔍 Buscando asignaciones automáticas para', impuestosUnicos.length, 'impuestos...');
+    console.log('   Contenido del mapeo:', JSON.stringify(state.mapeoImpuestos, null, 2));
+
     impuestosUnicos.forEach(imp => {
-        if (state.mapeoImpuestos[imp.codigo] && !state.cuentasPorImpuesto[imp.codigo]) {
-            state.cuentasPorImpuesto[imp.codigo] = state.mapeoImpuestos[imp.codigo].codigo;
-            state.nombresCuentasPorImpuesto[imp.codigo] = state.mapeoImpuestos[imp.codigo].nombre;
+        if (!state.cuentasPorImpuesto[imp.codigo]) {
+            const cuentaEncontrada = buscarCuentaParaImpuesto(imp.codigo);
+            if (cuentaEncontrada) {
+                state.cuentasPorImpuesto[imp.codigo] = cuentaEncontrada.codigo;
+                state.nombresCuentasPorImpuesto[imp.codigo] = cuentaEncontrada.nombre;
+                console.log(`   ✅ Pre-asignado: ${imp.codigo} → ${cuentaEncontrada.codigo} (${cuentaEncontrada.nombre})`);
+            }
         }
     });
 
@@ -1316,7 +1363,8 @@ function renderAsignacionVeps() {
             valorInput = `${cuentaAsignada} - ${nombreCuenta}`;
         }
 
-        const tieneAsignacionAuto = state.mapeoImpuestos[impuesto.codigo] ? true : false;
+        // Usa buscarCuentaParaImpuesto para match parcial (VEPs: "351", mapeo: "351-19-19")
+        const tieneAsignacionAuto = buscarCuentaParaImpuesto(impuesto.codigo) ? true : false;
 
         html += `
             <div class="asignacion-item" style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 12px; ${tieneAsignacionAuto ? 'border-left: 4px solid #4caf50;' : ''}">
@@ -3122,10 +3170,14 @@ function generateFinalExcel() {
                     console.log(`✅ Cuenta asignada (manual): Cod.${codImpuesto} → ${cuentaImpuesto} (${descripcionCuenta})`);
                 }
                 // 2. Fallback a mapeoImpuestos (asignación automática del plan de cuentas)
-                else if (codImpuesto && state.mapeoImpuestos && state.mapeoImpuestos[codImpuesto]) {
-                    cuentaImpuesto = state.mapeoImpuestos[codImpuesto].codigo;
-                    descripcionCuenta = state.mapeoImpuestos[codImpuesto].nombre;
-                    console.log(`✅ Cuenta asignada (automática): Cod.${codImpuesto} → ${cuentaImpuesto} (${descripcionCuenta})`);
+                // Usa buscarCuentaParaImpuesto para match parcial (VEPs: "351", mapeo: "351-19-19")
+                else if (codImpuesto) {
+                    const cuentaEncontrada = buscarCuentaParaImpuesto(codImpuesto);
+                    if (cuentaEncontrada) {
+                        cuentaImpuesto = cuentaEncontrada.codigo;
+                        descripcionCuenta = cuentaEncontrada.nombre;
+                        console.log(`✅ Cuenta asignada (automática): Cod.${codImpuesto} → ${cuentaImpuesto} (${descripcionCuenta})`);
+                    }
                 }
 
                 // Línea de débito (pago de impuesto)
