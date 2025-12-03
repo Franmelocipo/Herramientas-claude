@@ -235,6 +235,51 @@ body {
     margin-top: 4px;
 }
 
+/* Sub-opciones de banco (ej: Macro) */
+.suboption-description {
+    color: #6b7280;
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+.suboption-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.suboption-btn {
+    padding: 20px;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: left;
+}
+
+.suboption-btn:hover {
+    border-color: #4f46e5;
+    background: #eef2ff;
+}
+
+.suboption-btn.active {
+    border-color: #4f46e5;
+    background: #eef2ff;
+}
+
+.suboption-btn-title {
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
+.suboption-btn-desc {
+    font-size: 13px;
+    color: #6b7280;
+}
+
 .file-drop-zone {
     border: 2px dashed #d1d5db;
     border-radius: 12px;
