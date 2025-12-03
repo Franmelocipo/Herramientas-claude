@@ -1321,20 +1321,33 @@ async function renderPlanCuentasList(forceReload = false) {
                 ${cuentasFiltradas.map(cuenta => {
                     // Manejar codigos_impuesto que puede ser null, string o array
                     const codigosImpuestoRaw = cuenta.codigos_impuesto;
-                    let codigosImpuestoTexto = '';
-                    if (codigosImpuestoRaw) {
-                        codigosImpuestoTexto = Array.isArray(codigosImpuestoRaw)
-                            ? codigosImpuestoRaw.join(', ')
-                            : codigosImpuestoRaw;
-                    }
-                    const codigosImpuestoDisplay = codigosImpuestoTexto
-                        ? `<span style="background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: monospace;">${codigosImpuestoTexto}</span>`
-                        : '<span style="color: #94a3b8;">-</span>';
                     // Para el JSON, convertir a array si es string
                     const codigosImpuestoArray = codigosImpuestoRaw
                         ? (Array.isArray(codigosImpuestoRaw) ? codigosImpuestoRaw : codigosImpuestoRaw.split(',').map(c => c.trim()).filter(c => c))
                         : [];
                     const codigosImpuestoJson = JSON.stringify(codigosImpuestoArray).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+                    // Generar el display de impuestos con formato "X asignados" y botón ver
+                    let codigosImpuestoDisplay;
+                    const cantidadImpuestos = codigosImpuestoArray.length;
+                    if (cantidadImpuestos === 0) {
+                        codigosImpuestoDisplay = '<span style="color: #94a3b8;">Sin asignar</span>';
+                    } else {
+                        const textoAsignados = cantidadImpuestos === 1 ? '1 asignado' : `${cantidadImpuestos} asignados`;
+                        codigosImpuestoDisplay = `
+                            <span style="display: inline-flex; align-items: center; gap: 6px;">
+                                <span style="background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 500;">${textoAsignados}</span>
+                                <button type="button"
+                                    onclick="event.stopPropagation(); mostrarDetalleImpuestos(${codigosImpuestoJson}, this)"
+                                    style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 2px 6px; border-radius: 4px; cursor: pointer; font-size: 11px; display: inline-flex; align-items: center; gap: 3px; transition: all 0.2s;"
+                                    onmouseover="this.style.background='#e2e8f0'; this.style.borderColor='#94a3b8';"
+                                    onmouseout="this.style.background='#f1f5f9'; this.style.borderColor='#cbd5e1';"
+                                    title="Ver detalle de impuestos">
+                                    👁 Ver
+                                </button>
+                            </span>
+                        `;
+                    }
 
                     // Resaltar términos de búsqueda
                     let codigoDisplay = cuenta.codigo;
@@ -1403,6 +1416,124 @@ function limpiarFiltrosPlanCuentas() {
 }
 
 // ============================================
+// POPUP DE DETALLE DE IMPUESTOS ASIGNADOS
+// ============================================
+
+/**
+ * Variable global para el popup activo
+ */
+let popupDetalleImpuestosActivo = null;
+
+/**
+ * Muestra un popup con el detalle de los impuestos asignados a una cuenta
+ * @param {Array} codigosImpuesto - Array de códigos de impuesto (formato: "10-108-51")
+ * @param {HTMLElement} boton - Elemento botón que disparó el evento
+ */
+async function mostrarDetalleImpuestos(codigosImpuesto, boton) {
+    // Si hay un popup abierto, cerrarlo
+    cerrarPopupDetalleImpuestos();
+
+    if (!codigosImpuesto || codigosImpuesto.length === 0) {
+        return;
+    }
+
+    // Obtener impuestos desde cache
+    const todosLosImpuestos = await obtenerImpuestosBase();
+
+    // Crear mapa de código -> descripción
+    const mapaImpuestos = {};
+    todosLosImpuestos.forEach(imp => {
+        mapaImpuestos[imp.codigoCompuesto] = imp.descripcionCompleta || 'Sin descripción';
+    });
+
+    // Crear contenido del popup
+    const listaHtml = codigosImpuesto.map(codigo => {
+        const descripcion = mapaImpuestos[codigo] || 'Descripción no encontrada';
+        return `
+            <div style="padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
+                <div style="font-family: monospace; font-weight: 600; color: #1e40af; font-size: 13px;">${codigo}</div>
+                <div style="color: #475569; font-size: 12px; margin-top: 2px;">${descripcion}</div>
+            </div>
+        `;
+    }).join('');
+
+    // Crear el popup
+    const popup = document.createElement('div');
+    popup.id = 'popupDetalleImpuestos';
+    popup.innerHTML = `
+        <div style="background: white; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); min-width: 300px; max-width: 450px; max-height: 350px; overflow: hidden; display: flex; flex-direction: column;">
+            <div style="padding: 12px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 600; color: #1e293b; font-size: 14px;">
+                    Impuestos asignados (${codigosImpuesto.length})
+                </span>
+                <button onclick="cerrarPopupDetalleImpuestos()"
+                    style="background: none; border: none; cursor: pointer; font-size: 18px; color: #64748b; padding: 0 4px; line-height: 1;"
+                    title="Cerrar">×</button>
+            </div>
+            <div style="padding: 8px 16px; overflow-y: auto; flex: 1;">
+                ${listaHtml}
+            </div>
+        </div>
+    `;
+    popup.style.cssText = 'position: fixed; z-index: 10000;';
+
+    document.body.appendChild(popup);
+    popupDetalleImpuestosActivo = popup;
+
+    // Posicionar el popup cerca del botón
+    const rect = boton.getBoundingClientRect();
+    const popupRect = popup.getBoundingClientRect();
+
+    // Calcular posición inicial (a la derecha del botón)
+    let left = rect.right + 8;
+    let top = rect.top - 10;
+
+    // Ajustar si se sale de la pantalla por la derecha
+    if (left + popupRect.width > window.innerWidth - 20) {
+        left = rect.left - popupRect.width - 8;
+    }
+
+    // Ajustar si se sale de la pantalla por abajo
+    if (top + popupRect.height > window.innerHeight - 20) {
+        top = window.innerHeight - popupRect.height - 20;
+    }
+
+    // Ajustar si se sale por arriba
+    if (top < 20) {
+        top = 20;
+    }
+
+    popup.style.left = `${left}px`;
+    popup.style.top = `${top}px`;
+
+    // Cerrar al hacer clic fuera
+    setTimeout(() => {
+        document.addEventListener('click', cerrarPopupAlClickFuera);
+    }, 100);
+}
+
+/**
+ * Cierra el popup de detalle de impuestos
+ */
+function cerrarPopupDetalleImpuestos() {
+    if (popupDetalleImpuestosActivo) {
+        popupDetalleImpuestosActivo.remove();
+        popupDetalleImpuestosActivo = null;
+    }
+    document.removeEventListener('click', cerrarPopupAlClickFuera);
+}
+
+/**
+ * Cierra el popup si se hace clic fuera de él
+ */
+function cerrarPopupAlClickFuera(event) {
+    const popup = document.getElementById('popupDetalleImpuestos');
+    if (popup && !popup.contains(event.target)) {
+        cerrarPopupDetalleImpuestos();
+    }
+}
+
+// ============================================
 // FUNCIONES PARA SELECTOR DE IMPUESTOS
 // ============================================
 
@@ -1413,8 +1544,17 @@ function limpiarFiltrosPlanCuentas() {
  * @param {Array} seleccionados - Array de códigos de impuesto ya seleccionados (formato: "10-108-51")
  */
 async function renderizarSelectorImpuestos(containerId, seleccionados = []) {
+    console.log('📋 [renderizarSelectorImpuestos] Iniciando:', {
+        containerId,
+        seleccionados,
+        cantidadSeleccionados: seleccionados.length
+    });
+
     const container = document.getElementById(containerId);
-    if (!container) return;
+    if (!container) {
+        console.error('❌ [renderizarSelectorImpuestos] Contenedor no encontrado:', containerId);
+        return;
+    }
 
     // Mostrar loading
     container.innerHTML = `
@@ -1442,8 +1582,17 @@ async function renderizarSelectorImpuestos(containerId, seleccionados = []) {
     const selectorId = containerId + '_selector';
     const searchId = containerId + '_search';
 
-    // Crear set de seleccionados
-    const seleccionadosSet = new Set(seleccionados.map(s => String(s)));
+    // Crear set de seleccionados (normalizar los códigos)
+    const seleccionadosSet = new Set(seleccionados.map(s => String(s).trim()));
+
+    // Log para depuración: verificar qué impuestos coinciden
+    if (seleccionados.length > 0) {
+        const coincidencias = impuestos.filter(imp => seleccionadosSet.has(imp.codigoCompuesto));
+        console.log('   - Impuestos que coinciden para pre-selección:', coincidencias.length, 'de', seleccionados.length);
+        if (coincidencias.length !== seleccionados.length) {
+            console.warn('   - Códigos no encontrados:', seleccionados.filter(s => !impuestos.some(imp => imp.codigoCompuesto === String(s).trim())));
+        }
+    }
 
     // Renderizar el selector completo con búsqueda
     const renderCheckboxes = (impuestosFiltrados) => {
@@ -1610,6 +1759,14 @@ async function crearCuentaUI() {
 }
 
 async function editarCuentaUI(cuentaId, codigoActual, nombreActual, tipoActual, codigosImpuestoActuales) {
+    console.log('🔧 [editarCuentaUI] Abriendo modal de edición:', {
+        cuentaId,
+        codigoActual,
+        nombreActual,
+        tipoActual,
+        codigosImpuestoActuales
+    });
+
     // Mostrar modal de edición con los valores actuales
     document.getElementById('editarCuentaId').value = cuentaId;
     document.getElementById('editarCuentaCodigo').value = codigoActual;
@@ -1619,9 +1776,17 @@ async function editarCuentaUI(cuentaId, codigoActual, nombreActual, tipoActual, 
     document.getElementById('modalEditarCuenta').classList.remove('hidden');
 
     // Renderizar selector de impuestos con los códigos actuales pre-seleccionados (ahora es async)
-    const codigosActuales = codigosImpuestoActuales && codigosImpuestoActuales.length > 0
-        ? codigosImpuestoActuales
-        : [];
+    // Asegurar que los códigos sean un array válido
+    let codigosActuales = [];
+    if (codigosImpuestoActuales) {
+        if (Array.isArray(codigosImpuestoActuales)) {
+            codigosActuales = codigosImpuestoActuales.filter(c => c && c.trim());
+        } else if (typeof codigosImpuestoActuales === 'string') {
+            codigosActuales = codigosImpuestoActuales.split(',').map(c => c.trim()).filter(c => c);
+        }
+    }
+
+    console.log('   - Códigos a pre-seleccionar:', codigosActuales);
     await renderizarSelectorImpuestos('editarCuentaImpuestosContainer', codigosActuales);
 
     document.getElementById('editarCuentaCodigo').focus();
@@ -1644,6 +1809,14 @@ async function guardarCambiosCuenta() {
 
     // Obtener códigos de impuesto seleccionados del selector múltiple
     const codigosImpuestoArray = obtenerImpuestosSeleccionados('editarCuentaImpuestosContainer');
+
+    console.log('💾 [guardarCambiosCuenta] Guardando cambios:', {
+        cuentaId,
+        nuevoCodigo,
+        nuevoNombre,
+        nuevoTipo,
+        codigosImpuestoArray
+    });
 
     const result = await actualizarCuenta(cuentaId, nuevoCodigo, nuevoNombre, nuevoTipo, codigosImpuestoArray);
 
