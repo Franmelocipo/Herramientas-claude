@@ -979,37 +979,177 @@ function mostrarNotificacion(mensaje, tipo = 'info') {
 // ============================================
 
 let currentClienteIdPlan = null;
+let currentClienteNombrePlan = null;
+
+// Variables para búsqueda y filtro del plan de cuentas
+let planCuentasSearchTerm = '';
+let planCuentasTipoFiltro = '';
+
+// Cache de cuentas cargadas (para evitar consultas repetidas al filtrar)
+let planCuentasCache = [];
 
 async function abrirPlanCuentas(clienteId, razonSocial) {
-    currentClienteIdPlan = clienteId;
+    console.log('🔵 [abrirPlanCuentas] Abriendo plan de cuentas...');
+    console.log('   - clienteId:', clienteId);
+    console.log('   - razonSocial:', razonSocial);
+
+    // Validar que se proporcionen los parámetros
+    if (!clienteId) {
+        console.error('❌ [abrirPlanCuentas] Error: clienteId no proporcionado');
+        alert('Error: No se pudo identificar el cliente');
+        return;
+    }
+
+    // Guardar el ID del cliente actual
+    currentClienteIdPlan = String(clienteId).trim();
+    currentClienteNombrePlan = razonSocial;
+
+    console.log('   - currentClienteIdPlan guardado:', currentClienteIdPlan);
+
+    // Resetear filtros al abrir
+    planCuentasSearchTerm = '';
+    planCuentasTipoFiltro = '';
+
     document.getElementById('planCuentasClienteNombre').textContent = razonSocial;
     document.getElementById('modalPlanCuentas').classList.remove('hidden');
+
     await renderPlanCuentasList();
 }
 
 function hidePlanCuentasModal() {
     document.getElementById('modalPlanCuentas').classList.add('hidden');
     currentClienteIdPlan = null;
+    currentClienteNombrePlan = null;
+    // Limpiar cache y filtros al cerrar
+    planCuentasCache = [];
+    planCuentasSearchTerm = '';
+    planCuentasTipoFiltro = '';
 }
 
-async function renderPlanCuentasList() {
-    if (!currentClienteIdPlan) return;
+async function renderPlanCuentasList(forceReload = false) {
+    console.log('🔄 [renderPlanCuentasList] Renderizando lista de cuentas...');
+    console.log('   - currentClienteIdPlan:', currentClienteIdPlan);
+    console.log('   - forceReload:', forceReload);
 
-    const cuentas = await obtenerPlanCuentas(currentClienteIdPlan);
+    if (!currentClienteIdPlan) {
+        console.error('❌ [renderPlanCuentasList] No hay cliente seleccionado');
+        return;
+    }
+
     const listElement = document.getElementById('planCuentasList');
     const statsElement = document.getElementById('planCuentasStats');
 
-    if (cuentas.length === 0) {
-        listElement.innerHTML = '<div class="empty-state">No hay cuentas en el plan. Importa un archivo Excel o crea cuentas manualmente.</div>';
+    // Si necesitamos recargar o no hay cache, consultar a la base de datos
+    let todasLasCuentas;
+
+    if (forceReload || planCuentasCache.length === 0 || !planCuentasCache[0] || planCuentasCache[0].cliente_id !== currentClienteIdPlan) {
+        // Mostrar indicador de carga
+        listElement.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;"><div class="spinner" style="margin: 0 auto 16px;"></div>Cargando plan de cuentas...</div>';
+
+        // Obtener las cuentas del cliente desde la base de datos
+        todasLasCuentas = await obtenerPlanCuentas(currentClienteIdPlan);
+
+        // Guardar en cache
+        planCuentasCache = todasLasCuentas;
+        console.log('💾 [renderPlanCuentasList] Cache actualizada:', planCuentasCache.length, 'cuentas');
+    } else {
+        // Usar cache existente
+        todasLasCuentas = planCuentasCache;
+        console.log('📦 [renderPlanCuentasList] Usando cache:', planCuentasCache.length, 'cuentas');
+    }
+
+    console.log('📊 [renderPlanCuentasList] Cuentas obtenidas:', todasLasCuentas.length);
+
+    // Verificar que las cuentas pertenecen al cliente correcto
+    if (todasLasCuentas.length > 0) {
+        const primeraClienteId = todasLasCuentas[0].cliente_id;
+        if (primeraClienteId !== currentClienteIdPlan) {
+            console.warn('⚠️ [renderPlanCuentasList] ADVERTENCIA: cliente_id de las cuentas no coincide!');
+            console.warn('   - Esperado:', currentClienteIdPlan);
+            console.warn('   - Recibido:', primeraClienteId);
+        }
+    }
+
+    // Renderizar búsqueda y filtros
+    const searchFilterHtml = `
+        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 250px;">
+                <div style="position: relative;">
+                    <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 16px;">🔍</span>
+                    <input type="text"
+                           id="planCuentasSearch"
+                           placeholder="Buscar por código o nombre de cuenta..."
+                           value="${planCuentasSearchTerm}"
+                           style="width: 100%; padding: 10px 12px 10px 40px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s, box-shadow 0.2s;"
+                           onfocus="this.style.borderColor='#3b82f6'; this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.1)';"
+                           onblur="this.style.borderColor='#e2e8f0'; this.style.boxShadow='none';"
+                           oninput="filtrarPlanCuentas()">
+                </div>
+            </div>
+            <div style="min-width: 180px;">
+                <select id="planCuentasTipoFilter"
+                        style="width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: white; cursor: pointer; transition: border-color 0.2s;"
+                        onchange="filtrarPlanCuentas()">
+                    <option value="">Todos los tipos</option>
+                    <option value="Activo" ${planCuentasTipoFiltro === 'Activo' ? 'selected' : ''}>Activo</option>
+                    <option value="Pasivo" ${planCuentasTipoFiltro === 'Pasivo' ? 'selected' : ''}>Pasivo</option>
+                    <option value="Patrimonio Neto" ${planCuentasTipoFiltro === 'Patrimonio Neto' ? 'selected' : ''}>Patrimonio Neto</option>
+                    <option value="Ingreso" ${planCuentasTipoFiltro === 'Ingreso' ? 'selected' : ''}>Ingreso</option>
+                    <option value="Egreso" ${planCuentasTipoFiltro === 'Egreso' ? 'selected' : ''}>Egreso</option>
+                </select>
+            </div>
+        </div>
+    `;
+
+    if (todasLasCuentas.length === 0) {
+        listElement.innerHTML = searchFilterHtml + '<div class="empty-state">No hay cuentas en el plan. Importa un archivo Excel o crea cuentas manualmente.</div>';
         statsElement.textContent = '';
         return;
     }
 
-    // Contar cuentas con códigos de impuesto configurados
-    const cuentasConImpuestos = cuentas.filter(c => c.codigos_impuesto && c.codigos_impuesto.length > 0).length;
-    statsElement.textContent = `Total de cuentas: ${cuentas.length}${cuentasConImpuestos > 0 ? ` | ${cuentasConImpuestos} con códigos de impuesto` : ''}`;
+    // Aplicar filtros
+    let cuentasFiltradas = todasLasCuentas;
 
-    const html = `
+    // Filtrar por término de búsqueda
+    if (planCuentasSearchTerm.trim()) {
+        const termino = planCuentasSearchTerm.toLowerCase().trim();
+        cuentasFiltradas = cuentasFiltradas.filter(cuenta =>
+            cuenta.codigo.toLowerCase().includes(termino) ||
+            cuenta.cuenta.toLowerCase().includes(termino)
+        );
+    }
+
+    // Filtrar por tipo
+    if (planCuentasTipoFiltro) {
+        cuentasFiltradas = cuentasFiltradas.filter(cuenta =>
+            cuenta.tipo === planCuentasTipoFiltro
+        );
+    }
+
+    // Estadísticas
+    const cuentasConImpuestos = todasLasCuentas.filter(c => c.codigos_impuesto && c.codigos_impuesto.length > 0).length;
+    let statsText = `Total de cuentas: ${todasLasCuentas.length}`;
+    if (cuentasConImpuestos > 0) {
+        statsText += ` | ${cuentasConImpuestos} con códigos de impuesto`;
+    }
+    if (cuentasFiltradas.length !== todasLasCuentas.length) {
+        statsText += ` | Mostrando: ${cuentasFiltradas.length}`;
+    }
+    statsElement.textContent = statsText;
+
+    // Mensaje si no hay resultados después del filtro
+    if (cuentasFiltradas.length === 0) {
+        listElement.innerHTML = searchFilterHtml + `
+            <div class="empty-state" style="background: #fef3c7; border: 1px solid #f59e0b; padding: 20px; border-radius: 8px; text-align: center;">
+                <span style="font-size: 24px;">🔍</span>
+                <p style="margin: 12px 0 0; color: #92400e;">No se encontraron cuentas con los filtros aplicados.</p>
+                <button onclick="limpiarFiltrosPlanCuentas()" style="margin-top: 12px; background: #f59e0b; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;">Limpiar filtros</button>
+            </div>
+        `;
+        return;
+    }
+
+    const tableHtml = `
         <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
             <thead>
                 <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
@@ -1021,7 +1161,7 @@ async function renderPlanCuentasList() {
                 </tr>
             </thead>
             <tbody>
-                ${cuentas.map(cuenta => {
+                ${cuentasFiltradas.map(cuenta => {
                     const codigosImpuesto = cuenta.codigos_impuesto && cuenta.codigos_impuesto.length > 0
                         ? cuenta.codigos_impuesto
                         : [];
@@ -1030,15 +1170,25 @@ async function renderPlanCuentasList() {
                         : '<span style="color: #94a3b8;">-</span>';
                     const codigosImpuestoJson = JSON.stringify(codigosImpuesto).replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
+                    // Resaltar términos de búsqueda
+                    let codigoDisplay = cuenta.codigo;
+                    let cuentaDisplay = cuenta.cuenta;
+                    if (planCuentasSearchTerm.trim()) {
+                        const termino = planCuentasSearchTerm.trim();
+                        const regex = new RegExp(`(${termino.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                        codigoDisplay = cuenta.codigo.replace(regex, '<mark style="background: #fef08a; padding: 1px 2px; border-radius: 2px;">$1</mark>');
+                        cuentaDisplay = cuenta.cuenta.replace(regex, '<mark style="background: #fef08a; padding: 1px 2px; border-radius: 2px;">$1</mark>');
+                    }
+
                     return `
-                    <tr style="border-bottom: 1px solid #e2e8f0;">
-                        <td style="padding: 12px; color: #1e293b; font-family: monospace;">${cuenta.codigo}</td>
-                        <td style="padding: 12px; color: #1e293b;">${cuenta.cuenta}</td>
+                    <tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
+                        <td style="padding: 12px; color: #1e293b; font-family: monospace;">${codigoDisplay}</td>
+                        <td style="padding: 12px; color: #1e293b;">${cuentaDisplay}</td>
                         <td style="padding: 12px; color: #64748b;">${cuenta.tipo || '-'}</td>
                         <td style="padding: 12px;">${codigosImpuestoDisplay}</td>
                         <td style="padding: 12px; text-align: center;">
-                            <button onclick="editarCuentaUI('${cuenta.id}', '${cuenta.codigo}', '${cuenta.cuenta.replace(/'/g, "\\'")}', '${cuenta.tipo || ''}', ${codigosImpuestoJson})" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 8px; font-size: 13px;">✏️ Editar</button>
-                            <button onclick="eliminarCuentaUI('${cuenta.id}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Eliminar</button>
+                            <button onclick="editarCuentaUI('${cuenta.id}', '${cuenta.codigo}', '${cuenta.cuenta.replace(/'/g, "\\'")}', '${cuenta.tipo || ''}', ${codigosImpuestoJson})" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 8px; font-size: 13px; transition: background 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">Editar</button>
+                            <button onclick="eliminarCuentaUI('${cuenta.id}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: background 0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">Eliminar</button>
                         </td>
                     </tr>
                     `;
@@ -1047,7 +1197,42 @@ async function renderPlanCuentasList() {
         </table>
     `;
 
-    listElement.innerHTML = html;
+    listElement.innerHTML = searchFilterHtml + tableHtml;
+}
+
+/**
+ * Filtrar plan de cuentas según búsqueda y tipo
+ * Esta función usa los datos en cache, NO hace nuevas consultas a la base de datos
+ */
+function filtrarPlanCuentas() {
+    const searchInput = document.getElementById('planCuentasSearch');
+    const tipoFilter = document.getElementById('planCuentasTipoFilter');
+
+    planCuentasSearchTerm = searchInput ? searchInput.value : '';
+    planCuentasTipoFiltro = tipoFilter ? tipoFilter.value : '';
+
+    console.log('🔍 [filtrarPlanCuentas] Aplicando filtros (usando cache)...');
+    console.log('   - Búsqueda:', planCuentasSearchTerm);
+    console.log('   - Tipo:', planCuentasTipoFiltro);
+
+    // NO forzar recarga, usar la cache existente
+    renderPlanCuentasList(false);
+}
+
+/**
+ * Limpiar filtros del plan de cuentas
+ */
+function limpiarFiltrosPlanCuentas() {
+    planCuentasSearchTerm = '';
+    planCuentasTipoFiltro = '';
+
+    const searchInput = document.getElementById('planCuentasSearch');
+    const tipoFilter = document.getElementById('planCuentasTipoFilter');
+
+    if (searchInput) searchInput.value = '';
+    if (tipoFilter) tipoFilter.value = '';
+
+    renderPlanCuentasList();
 }
 
 // ============================================
@@ -1143,7 +1328,8 @@ async function crearCuentaUI() {
     if (result) {
         alert('Cuenta creada exitosamente');
         hideNuevaCuentaModal();
-        await renderPlanCuentasList();
+        // Forzar recarga de la cache después de crear
+        await renderPlanCuentasList(true);
     }
 }
 
@@ -1187,7 +1373,8 @@ async function guardarCambiosCuenta() {
     if (result) {
         alert('Cuenta actualizada exitosamente');
         hideEditarCuentaModal();
-        await renderPlanCuentasList();
+        // Forzar recarga de la cache después de actualizar
+        await renderPlanCuentasList(true);
     }
 }
 
@@ -1200,7 +1387,8 @@ async function eliminarCuentaUI(cuentaId) {
 
     if (result) {
         alert('Cuenta eliminada exitosamente');
-        await renderPlanCuentasList();
+        // Forzar recarga de la cache después de eliminar
+        await renderPlanCuentasList(true);
     }
 }
 
@@ -1217,7 +1405,8 @@ async function importarPlanCuentasUI(event) {
     const result = await importarPlanCuentas(file, currentClienteIdPlan);
 
     if (result.success) {
-        await renderPlanCuentasList();
+        // Forzar recarga de la cache después de importar
+        await renderPlanCuentasList(true);
     }
 
     event.target.value = '';
@@ -1246,7 +1435,8 @@ async function eliminarPlanCompletoUI() {
 
         if (success) {
             alert('Plan de cuentas eliminado correctamente');
-            await renderPlanCuentasList();
+            // Forzar recarga de la cache después de eliminar todo
+            await renderPlanCuentasList(true);
         }
     } catch (error) {
         console.error('Error eliminando plan de cuentas:', error);

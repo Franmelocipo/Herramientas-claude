@@ -115,23 +115,43 @@ waitForSupabasePlanCuentas(() => {
    */
   window.obtenerPlanCuentas = async function(clienteId) {
     try {
-      console.log('📊 Obteniendo plan de cuentas para cliente:', clienteId);
+      // Validar que se proporcionó un clienteId
+      if (!clienteId) {
+        console.error('❌ [obtenerPlanCuentas] Error: clienteId es null o undefined');
+        return [];
+      }
+
+      // Asegurar que el clienteId sea un string limpio
+      const clienteIdStr = String(clienteId).trim();
+
+      console.log('📊 [obtenerPlanCuentas] Obteniendo plan de cuentas...');
+      console.log('   - clienteId recibido:', clienteId);
+      console.log('   - clienteId (string):', clienteIdStr);
+      console.log('   - tipo:', typeof clienteId);
 
       const { data, error } = await supabaseClient
         .from('plan_cuentas')
         .select('*')
-        .eq('cliente_id', clienteId)
+        .eq('cliente_id', clienteIdStr)
         .order('codigo', { ascending: true });
 
       if (error) {
-        console.error('❌ Error:', error);
+        console.error('❌ [obtenerPlanCuentas] Error de Supabase:', error);
+        console.error('   - Mensaje:', error.message);
+        console.error('   - Detalles:', error.details);
         return [];
       }
 
-      console.log('✅ Plan de cuentas obtenido:', data);
+      console.log('✅ [obtenerPlanCuentas] Plan de cuentas obtenido:');
+      console.log('   - Total cuentas:', data ? data.length : 0);
+      if (data && data.length > 0) {
+        console.log('   - Primera cuenta:', data[0].codigo, '-', data[0].cuenta);
+        console.log('   - cliente_id de la primera cuenta:', data[0].cliente_id);
+      }
+
       return data || [];
     } catch (err) {
-      console.error('❌ Error general:', err);
+      console.error('❌ [obtenerPlanCuentas] Error general:', err);
       return [];
     }
   };
