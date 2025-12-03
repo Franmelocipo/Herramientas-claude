@@ -142,22 +142,28 @@ waitForSupabasePlanCuentas(() => {
    * @param {string} codigo - Código de la cuenta
    * @param {string} cuenta - Descripción de la cuenta
    * @param {string} tipo - Tipo de cuenta
+   * @param {Array<string>} codigosImpuesto - Array de códigos de impuesto asociados (opcional)
    * @returns {Promise<Object|null>} Cuenta creada o null
    */
-  window.crearCuenta = async function(clienteId, codigo, cuenta, tipo) {
+  window.crearCuenta = async function(clienteId, codigo, cuenta, tipo, codigosImpuesto = null) {
     try {
-      console.log('📝 Creando cuenta:', codigo, cuenta, tipo);
+      console.log('📝 Creando cuenta:', codigo, cuenta, tipo, codigosImpuesto);
+
+      const cuentaData = {
+        cliente_id: clienteId,
+        codigo: codigo,
+        cuenta: cuenta,
+        tipo: tipo
+      };
+
+      // Agregar códigos de impuesto si se proporcionan
+      if (codigosImpuesto && codigosImpuesto.length > 0) {
+        cuentaData.codigos_impuesto = codigosImpuesto;
+      }
 
       const { data, error } = await supabaseClient
         .from('plan_cuentas')
-        .insert([
-          {
-            cliente_id: clienteId,
-            codigo: codigo,
-            cuenta: cuenta,
-            tipo: tipo
-          }
-        ])
+        .insert([cuentaData])
         .select();
 
       if (error) {
@@ -181,19 +187,27 @@ waitForSupabasePlanCuentas(() => {
    * @param {string} codigo - Código de la cuenta
    * @param {string} cuenta - Descripción de la cuenta
    * @param {string} tipo - Tipo de cuenta
+   * @param {Array<string>} codigosImpuesto - Array de códigos de impuesto asociados (opcional)
    * @returns {Promise<Object|null>} Cuenta actualizada o null
    */
-  window.actualizarCuenta = async function(cuentaId, codigo, cuenta, tipo) {
+  window.actualizarCuenta = async function(cuentaId, codigo, cuenta, tipo, codigosImpuesto = null) {
     try {
       console.log('✏️ Actualizando cuenta:', cuentaId);
 
+      const updateData = {
+        codigo: codigo,
+        cuenta: cuenta,
+        tipo: tipo
+      };
+
+      // Actualizar códigos de impuesto si se proporcionan
+      if (codigosImpuesto !== null) {
+        updateData.codigos_impuesto = codigosImpuesto.length > 0 ? codigosImpuesto : null;
+      }
+
       const { data, error } = await supabaseClient
         .from('plan_cuentas')
-        .update({
-          codigo: codigo,
-          cuenta: cuenta,
-          tipo: tipo
-        })
+        .update(updateData)
         .eq('id', cuentaId)
         .select();
 
@@ -481,15 +495,59 @@ waitForSupabasePlanCuentas(() => {
     }
   };
 
+  /**
+   * Cargar mapeo de códigos de impuesto a cuentas contables
+   * @param {string} clienteId - ID del cliente
+   * @returns {Promise<Object>} Mapeo de código_impuesto → {codigo, nombre}
+   */
+  window.cargarMapeoImpuestos = async function(clienteId) {
+    try {
+      console.log('📊 Cargando mapeo de impuestos para cliente:', clienteId);
+
+      const { data, error } = await supabaseClient
+        .from('plan_cuentas')
+        .select('codigo, cuenta, codigos_impuesto')
+        .eq('cliente_id', clienteId)
+        .not('codigos_impuesto', 'is', null);
+
+      if (error) {
+        console.error('❌ Error:', error);
+        return {};
+      }
+
+      // Crear mapa: código_impuesto → cuenta_contable
+      const mapeo = {};
+      if (data && data.length > 0) {
+        data.forEach(cuenta => {
+          if (cuenta.codigos_impuesto && cuenta.codigos_impuesto.length > 0) {
+            cuenta.codigos_impuesto.forEach(codImpuesto => {
+              mapeo[codImpuesto] = {
+                codigo: cuenta.codigo,
+                nombre: cuenta.cuenta
+              };
+            });
+          }
+        });
+      }
+
+      console.log('✅ Mapeo de impuestos cargado:', Object.keys(mapeo).length, 'códigos');
+      return mapeo;
+    } catch (err) {
+      console.error('❌ Error cargando mapeo de impuestos:', err);
+      return {};
+    }
+  };
+
   console.log('✅ Funciones de plan de cuentas disponibles:');
   console.log('  - seleccionarCliente(clienteId, razonSocial)');
   console.log('  - obtenerClienteActivo()');
   console.log('  - limpiarClienteActivo()');
   console.log('  - obtenerPlanCuentas(clienteId)');
-  console.log('  - crearCuenta(clienteId, codigo, cuenta, tipo)');
-  console.log('  - actualizarCuenta(cuentaId, codigo, cuenta, tipo)');
+  console.log('  - crearCuenta(clienteId, codigo, cuenta, tipo, codigosImpuesto)');
+  console.log('  - actualizarCuenta(cuentaId, codigo, cuenta, tipo, codigosImpuesto)');
   console.log('  - eliminarCuenta(cuentaId)');
   console.log('  - eliminarPlanCuentas(clienteId)');
   console.log('  - descargarPlantillaPlan()');
   console.log('  - importarPlanCuentas(file, clienteId)');
+  console.log('  - cargarMapeoImpuestos(clienteId)');
 });

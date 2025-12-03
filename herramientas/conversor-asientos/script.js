@@ -13,7 +13,8 @@ const state = {
     expandedGroups: {},     // Rastrear qué grupos están expandidos
     selectedItems: {},      // Rastrear items seleccionados para reagrupación {groupIdx: {itemIdx: true/false}}
     selectedGroups: {},     // Rastrear grupos seleccionados para fusión {groupIdx: true/false}
-    planCuentas: []         // Plan de cuentas del cliente seleccionado
+    planCuentas: [],        // Plan de cuentas del cliente seleccionado
+    mapeoImpuestos: {}      // Mapeo de códigos de impuesto a cuentas contables
 };
 
 // ============================================
@@ -176,7 +177,7 @@ async function cargarPlanCuentasCliente(clienteId) {
     try {
         const { data: cuentas, error } = await supabase
             .from('plan_cuentas')
-            .select('codigo, cuenta')
+            .select('codigo, cuenta, codigos_impuesto')
             .eq('cliente_id', clienteId)
             .order('codigo');
 
@@ -191,17 +192,37 @@ async function cargarPlanCuentasCliente(clienteId) {
             mostrarInfoPlan('⚠️ Este cliente no tiene plan de cuentas. Configure el plan primero.', 'error');
             deshabilitarOpciones();
             state.planCuentas = [];
+            state.mapeoImpuestos = {};
             return;
         }
 
         // Guardar las cuentas para usar en los selectores
         state.planCuentas = cuentas.map(c => ({
             codigo: c.codigo,
-            nombre: c.cuenta  // Usar 'nombre' para consistencia con el resto del código
+            nombre: c.cuenta,  // Usar 'nombre' para consistencia con el resto del código
+            codigos_impuesto: c.codigos_impuesto || []
         }));
 
-        mostrarInfoPlan(`✅ Plan de cuentas cargado: ${cuentas.length} cuentas`, 'success');
+        // Construir mapeo de códigos de impuesto a cuentas
+        state.mapeoImpuestos = {};
+        cuentas.forEach(cuenta => {
+            if (cuenta.codigos_impuesto && cuenta.codigos_impuesto.length > 0) {
+                cuenta.codigos_impuesto.forEach(codImpuesto => {
+                    state.mapeoImpuestos[codImpuesto] = {
+                        codigo: cuenta.codigo,
+                        nombre: cuenta.cuenta
+                    };
+                });
+            }
+        });
+
+        const numCodigosImpuesto = Object.keys(state.mapeoImpuestos).length;
+        mostrarInfoPlan(
+            `✅ Plan de cuentas cargado: ${cuentas.length} cuentas${numCodigosImpuesto > 0 ? ` | ${numCodigosImpuesto} códigos de impuesto configurados` : ''}`,
+            'success'
+        );
         console.log('Plan de cuentas cargado:', cuentas.length, 'cuentas');
+        console.log('Mapeo de impuestos:', numCodigosImpuesto, 'códigos');
 
         habilitarOpciones();
 
@@ -807,45 +828,38 @@ function groupSimilarEntries(data) {
         });
 
     } else if (state.sourceType === 'veps') {
+        // CAMBIO: Agrupar por VEP, no por impuesto
+        // Un VEP = Un asiento (con múltiples líneas de débito y una de crédito)
         data.forEach((row) => {
             const nroVep = String(row['NRO_VEP'] || row['Nro_VEP'] || row['nro_vep'] || '').trim();
             if (!nroVep) return;
 
-            const impuesto = String(row['IMPUESTO'] || row['Impuesto'] || row['impuesto'] || '').trim();
-            const codSubconcepto = String(row['COD_SUBCONCEPTO'] || row['Cod_Subconcepto'] || row['cod_subconcepto'] || '').trim();
-            const subconcepto = String(row['SUBCONCEPTO'] || row['Subconcepto'] || row['subconcepto'] || '').trim();
-
+            const periodo = String(row['PERIODO'] || row['Periodo'] || row['periodo'] || '').trim();
+            const fecha = String(row['FECHA'] || row['Fecha'] || row['fecha'] || '').trim();
+            const entidadPago = String(row['ENTIDAD_PAGO'] || row['Entidad_Pago'] || row['entidad_pago'] || '').trim();
             const importe = parseAmount(row['IMPORTE']);
 
-            let key;
-            if (codSubconcepto === '51' || (subconcepto.toUpperCase().includes('INTERES') && subconcepto.toUpperCase().includes('RESARCITORIO'))) {
-                key = 'INTERESES RESARCITORIOS';
-            } else {
-                key = impuesto;
-            }
+            // Clave de agrupación: número de VEP
+            const key = `VEP ${nroVep}`;
 
             if (!groups[key]) {
                 groups[key] = {
                     concepto: key,
-                    ejemploCompleto: key,
+                    ejemploCompleto: `VEP ${nroVep} / ${periodo}${entidadPago ? ` / ${entidadPago}` : ''}`,
                     count: 0,
                     totalDebe: 0,
                     totalHaber: 0,
                     items: [],
-                    veps: new Set()
+                    nroVep: nroVep,
+                    periodo: periodo,
+                    fecha: fecha,
+                    entidadPago: entidadPago
                 };
             }
 
             groups[key].count++;
             groups[key].totalDebe += importe;
             groups[key].items.push(row);
-            groups[key].veps.add(nroVep);
-        });
-
-        Object.values(groups).forEach(group => {
-            group.vepsArray = Array.from(group.veps);
-            group.ejemploCompleto = `${group.concepto} (${group.vepsArray.length} VEP${group.vepsArray.length > 1 ? 's' : ''})`;
-            delete group.veps;
         });
 
     } else if (state.sourceType === 'registros') {
@@ -2402,6 +2416,80 @@ function generateFinalExcel() {
             return; // No continuar con la lógica genérica
         }
 
+        // LÓGICA ESPECÍFICA PARA VEPs: Un asiento por VEP (con múltiples líneas)
+        if (state.sourceType === 'veps') {
+            if (g.items.length === 0) return;
+
+            const primeraLinea = g.items[0];
+            const fecha = primeraLinea['FECHA'] || primeraLinea['Fecha'] || '';
+            const nroVep = g.nroVep || primeraLinea['NRO_VEP'] || primeraLinea['Nro_VEP'] || '';
+            const periodo = g.periodo || primeraLinea['PERIODO'] || primeraLinea['Periodo'] || '';
+            const entidadPago = g.entidadPago || primeraLinea['ENTIDAD_PAGO'] || primeraLinea['Entidad_Pago'] || '';
+
+            let totalVep = 0;
+
+            // TODAS las líneas de DÉBITO (impuestos) van con el MISMO número de asiento
+            g.items.forEach(item => {
+                const impuesto = item['IMPUESTO'] || item['Impuesto'] || '';
+                const concepto = item['CONCEPTO'] || item['Concepto'] || '';
+                const subconcepto = item['SUBCONCEPTO'] || item['Subconcepto'] || '';
+                const codImpuesto = item['COD_IMPUESTO'] || item['Cod_Impuesto'] || item['cod_impuesto'] || '';
+                const importe = parseAmount(item['IMPORTE']);
+
+                totalVep += importe;
+
+                // Leyenda para esta línea de débito
+                const conceptoDetalle = subconcepto || concepto;
+                const leyenda = `${impuesto} - ${conceptoDetalle} / ${periodo} / VEP ${nroVep}`;
+
+                // ASIGNACIÓN AUTOMÁTICA DE CUENTA POR CÓDIGO DE IMPUESTO
+                let cuentaImpuesto = cuentaGrupo; // Por defecto, usar cuenta del grupo
+                let descripcionCuenta = '';
+
+                if (codImpuesto && state.mapeoImpuestos[codImpuesto]) {
+                    // Hay mapeo automático para este código de impuesto
+                    cuentaImpuesto = state.mapeoImpuestos[codImpuesto].codigo;
+                    descripcionCuenta = state.mapeoImpuestos[codImpuesto].nombre;
+                    console.log(`✅ Cuenta asignada automáticamente: Cod.${codImpuesto} → ${cuentaImpuesto} (${descripcionCuenta})`);
+                }
+
+                // Línea de débito (pago de impuesto)
+                allData.push({
+                    Fecha: fecha,
+                    Numero: numeroAsiento,
+                    Cuenta: cuentaImpuesto,
+                    'Descripción Cuenta': descripcionCuenta,
+                    Debe: parseFloat(importe.toFixed(2)),
+                    Haber: 0,
+                    'Tipo de auxiliar': 1,
+                    Auxiliar: 1,
+                    Importe: parseFloat(importe.toFixed(2)),
+                    Leyenda: leyenda,
+                    ExtraContable: 's',
+                    COD_IMPUESTO: codImpuesto  // Guardar código de impuesto para referencia
+                });
+            });
+
+            // UNA SOLA línea de CRÉDITO (contrapartida - banco)
+            const leyendaContrapartida = `Pago VEP ${nroVep} / ${periodo}${entidadPago ? ` / ${entidadPago}` : ''}`;
+            allData.push({
+                Fecha: fecha,
+                Numero: numeroAsiento,
+                Cuenta: contrapartida,
+                'Descripción Cuenta': '',
+                Debe: 0,
+                Haber: parseFloat(totalVep.toFixed(2)),
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat((-totalVep).toFixed(2)),
+                Leyenda: leyendaContrapartida,
+                ExtraContable: 's'
+            });
+
+            numeroAsiento++;
+            return; // No continuar con la lógica genérica
+        }
+
         // LÓGICA GENÉRICA para otros tipos de origen
         g.items.forEach(item => {
             // Obtener fecha y descripción según el tipo de fuente
@@ -2425,24 +2513,6 @@ function generateFinalExcel() {
                 importe = parseAmount(item['Importe']);
                 // Origen = sale (negativo), Destino = entra (positivo)
                 if (g.isOrigen) importe = -importe;
-            } else if (state.sourceType === 'veps') {
-                fecha = item['FECHA'] || item['Fecha'] || '';
-                const nroVep = item['NRO_VEP'] || item['Nro_VEP'] || '';
-                const impuesto = item['IMPUESTO'] || item['Impuesto'] || '';
-                const concepto = item['CONCEPTO'] || item['Concepto'] || '';
-                const subconcepto = item['SUBCONCEPTO'] || item['Subconcepto'] || '';
-                const periodo = item['PERIODO'] || item['Periodo'] || '';
-                const entidadPago = item['ENTIDAD_PAGO'] || item['Entidad_Pago'] || '';
-                // Usar subconcepto si está disponible, sino concepto
-                const conceptoDetalle = subconcepto || concepto;
-                descripcion = `${impuesto} - ${conceptoDetalle} / ${periodo} / VEP ${nroVep}`;
-                // Agregar entidad de pago si está disponible
-                if (entidadPago) {
-                    descripcion = `${descripcion} / ${entidadPago}`;
-                }
-                importe = parseAmount(item['IMPORTE']);
-                // VEPs son pagos (negativos - sale del banco)
-                importe = -importe;
             } else if (state.sourceType === 'tabla') {
                 fecha = item['FECHA'] || item['Fecha'] || item['fecha'] || '';
                 descripcion = item['DESCRIPCION'] || item['Descripcion'] || item['descripcion'] || '';
