@@ -111,48 +111,75 @@ waitForSupabasePlanCuentas(() => {
   /**
    * Obtener plan de cuentas de un cliente
    * @param {string} clienteId - ID del cliente
-   * @returns {Promise<Array>} Lista de cuentas
+   * @returns {Promise<Object>} Objeto con {data: Array, error: string|null, isEmpty: boolean}
    */
   window.obtenerPlanCuentas = async function(clienteId) {
+    console.log('📊 [obtenerPlanCuentas] ========== INICIO CARGA ==========');
+    console.log('   - clienteId recibido:', clienteId);
+    console.log('   - tipo:', typeof clienteId);
+
     try {
       // Validar que se proporcionó un clienteId
       if (!clienteId) {
         console.error('❌ [obtenerPlanCuentas] Error: clienteId es null o undefined');
-        return [];
+        return { data: [], error: 'ID de cliente no proporcionado', isEmpty: true };
       }
 
       // Asegurar que el clienteId sea un string limpio
       const clienteIdStr = String(clienteId).trim();
-
-      console.log('📊 [obtenerPlanCuentas] Obteniendo plan de cuentas...');
-      console.log('   - clienteId recibido:', clienteId);
       console.log('   - clienteId (string):', clienteIdStr);
-      console.log('   - tipo:', typeof clienteId);
 
-      const { data, error } = await supabaseClient
+      // Crear promesa con timeout de 15 segundos
+      const timeoutMs = 15000;
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout: La consulta tardó más de 15 segundos')), timeoutMs)
+      );
+
+      const queryPromise = supabaseClient
         .from('plan_cuentas')
         .select('*')
         .eq('cliente_id', clienteIdStr)
         .order('codigo', { ascending: true });
 
+      console.log('   - Ejecutando consulta a Supabase...');
+      const startTime = Date.now();
+
+      // Ejecutar con timeout
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+
+      const elapsed = Date.now() - startTime;
+      console.log(`   - Consulta completada en ${elapsed}ms`);
+
       if (error) {
         console.error('❌ [obtenerPlanCuentas] Error de Supabase:', error);
         console.error('   - Mensaje:', error.message);
+        console.error('   - Código:', error.code);
         console.error('   - Detalles:', error.details);
-        return [];
+        console.log('📊 [obtenerPlanCuentas] ========== FIN (CON ERROR) ==========');
+        return { data: [], error: `Error de base de datos: ${error.message}`, isEmpty: true };
       }
 
-      console.log('✅ [obtenerPlanCuentas] Plan de cuentas obtenido:');
-      console.log('   - Total cuentas:', data ? data.length : 0);
-      if (data && data.length > 0) {
-        console.log('   - Primera cuenta:', data[0].codigo, '-', data[0].cuenta);
-        console.log('   - cliente_id de la primera cuenta:', data[0].cliente_id);
-      }
+      const cuentas = data || [];
+      const isEmpty = cuentas.length === 0;
 
-      return data || [];
+      console.log('✅ [obtenerPlanCuentas] Resultado:');
+      console.log('   - Total cuentas:', cuentas.length);
+      console.log('   - isEmpty:', isEmpty);
+      if (cuentas.length > 0) {
+        console.log('   - Primera cuenta:', cuentas[0].codigo, '-', cuentas[0].cuenta);
+        console.log('   - cliente_id de la primera cuenta:', cuentas[0].cliente_id);
+      } else {
+        console.log('   - (El cliente no tiene cuentas cargadas)');
+      }
+      console.log('📊 [obtenerPlanCuentas] ========== FIN (EXITOSO) ==========');
+
+      return { data: cuentas, error: null, isEmpty };
     } catch (err) {
       console.error('❌ [obtenerPlanCuentas] Error general:', err);
-      return [];
+      console.error('   - Tipo:', err.name);
+      console.error('   - Mensaje:', err.message);
+      console.log('📊 [obtenerPlanCuentas] ========== FIN (EXCEPCIÓN) ==========');
+      return { data: [], error: err.message, isEmpty: true };
     }
   };
 
@@ -415,7 +442,9 @@ waitForSupabasePlanCuentas(() => {
       if (progressText) progressText.textContent = 'Validando datos...';
       if (progressBar) progressBar.style.width = '40%';
 
-      const planExistente = await obtenerPlanCuentas(clienteId);
+      const resultadoPlan = await obtenerPlanCuentas(clienteId);
+      // Manejar nuevo formato de respuesta {data, error, isEmpty}
+      const planExistente = resultadoPlan && resultadoPlan.data ? resultadoPlan.data : (Array.isArray(resultadoPlan) ? resultadoPlan : []);
 
       if (planExistente.length > 0) {
         const accion = confirm(
