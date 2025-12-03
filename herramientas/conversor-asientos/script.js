@@ -3046,19 +3046,14 @@ function generateFinalExcel() {
 
             let totalVep = 0;
 
+            // LEYENDA UNIFORME para TODAS las líneas del asiento (DEBE y HABER)
+            // Formato: "Pago VEP [NUMERO_VEP] / [PERIODO] / [BANCO]"
+            const leyendaUniforme = `Pago VEP ${nroVep} / ${periodo}${entidadPago ? ` / ${entidadPago}` : ''}`;
+
             // TODAS las líneas de DÉBITO (impuestos) van con el MISMO número de asiento
             g.items.forEach(item => {
-                const impuesto = item['IMPUESTO'] || item['Impuesto'] || '';
-                const concepto = item['CONCEPTO'] || item['Concepto'] || '';
-                const subconcepto = item['SUBCONCEPTO'] || item['Subconcepto'] || '';
                 const codImpuesto = item['COD_IMPUESTO'] || item['Cod_Impuesto'] || item['cod_impuesto'] || '';
                 const importe = parseAmount(item['IMPORTE']);
-
-                totalVep += importe;
-
-                // Leyenda para esta línea de débito
-                const conceptoDetalle = subconcepto || concepto;
-                const leyenda = `${impuesto} - ${conceptoDetalle} / ${periodo} / VEP ${nroVep}`;
 
                 // ASIGNACIÓN DE CUENTA POR CÓDIGO DE IMPUESTO (nueva lógica)
                 let cuentaImpuesto = '';
@@ -3088,7 +3083,7 @@ function generateFinalExcel() {
                     'Tipo de auxiliar': 1,
                     Auxiliar: 1,
                     Importe: parseFloat(importe.toFixed(2)),
-                    Leyenda: leyenda,
+                    Leyenda: leyendaUniforme,
                     ExtraContable: 's',
                     COD_IMPUESTO: codImpuesto  // Guardar código de impuesto para referencia
                 });
@@ -3110,7 +3105,7 @@ function generateFinalExcel() {
                 cuentaBanco = contrapartida;
             }
 
-            const leyendaContrapartida = `Pago VEP ${nroVep} / ${periodo}${entidadPago ? ` / ${entidadPago}` : ''}`;
+            // Línea de crédito (banco) - usa la misma leyenda uniforme
             allData.push({
                 Fecha: fecha,
                 Numero: numeroAsiento,
@@ -3121,7 +3116,7 @@ function generateFinalExcel() {
                 'Tipo de auxiliar': 1,
                 Auxiliar: 1,
                 Importe: parseFloat((-totalVep).toFixed(2)),
-                Leyenda: leyendaContrapartida,
+                Leyenda: leyendaUniforme,
                 ExtraContable: 's'
             });
 
@@ -4419,10 +4414,10 @@ function downloadExcel() {
     }
 
     // Si todo balancea, proceder con exportación
-    // Filtrar la columna "Descripción Cuenta" antes de exportar
+    // Filtrar columnas internas antes de exportar (Descripción Cuenta y COD_IMPUESTO)
     const dataParaExportar = state.finalData.map(row => {
-        const { 'Descripción Cuenta': _, ...rowSinDescripcion } = row;
-        return rowSinDescripcion;
+        const { 'Descripción Cuenta': _, 'COD_IMPUESTO': __, ...rowLimpia } = row;
+        return rowLimpia;
     });
 
     const ws = XLSX.utils.json_to_sheet(dataParaExportar);
