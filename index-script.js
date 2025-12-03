@@ -5,6 +5,53 @@ let impuestosCache = null;
 let impuestosCacheTimestamp = null;
 const IMPUESTOS_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
+// ============================================
+// FUNCIÓN HELPER PARA PARSEAR CÓDIGOS DE IMPUESTO
+// ============================================
+/**
+ * Parsea el campo codigos_impuesto que puede venir en varios formatos:
+ * - null/undefined → []
+ * - array nativo → array
+ * - string JSON (empieza con '[') → JSON.parse
+ * - string con comas → split por comas
+ * @param {any} codigosRaw - Valor crudo del campo codigos_impuesto
+ * @returns {Array<string>} Array de códigos de impuesto
+ */
+function parseCodigosImpuesto(codigosRaw) {
+    if (!codigosRaw) {
+        return [];
+    }
+
+    // Si ya es un array, devolverlo filtrado
+    if (Array.isArray(codigosRaw)) {
+        return codigosRaw.filter(c => c && (typeof c === 'string' ? c.trim() : c));
+    }
+
+    // Si es un string
+    if (typeof codigosRaw === 'string') {
+        const trimmed = codigosRaw.trim();
+
+        // Si parece un JSON array, intentar parsearlo
+        if (trimmed.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) {
+                    return parsed.filter(c => c && (typeof c === 'string' ? c.trim() : c));
+                }
+            } catch (e) {
+                console.warn('Error parseando JSON de códigos de impuesto:', e);
+            }
+        }
+
+        // Si no es JSON, hacer split por comas
+        return trimmed.split(',').map(c => c.trim()).filter(c => c);
+    }
+
+    // Para cualquier otro tipo, devolver array vacío
+    console.warn('Tipo inesperado para codigos_impuesto:', typeof codigosRaw, codigosRaw);
+    return [];
+}
+
 /**
  * Obtener impuestos desde Supabase (con cache)
  * Usa la tabla impuestos_base con las columnas:
@@ -1319,12 +1366,8 @@ async function renderPlanCuentasList(forceReload = false) {
             </thead>
             <tbody>
                 ${cuentasFiltradas.map(cuenta => {
-                    // Manejar codigos_impuesto que puede ser null, string o array
-                    const codigosImpuestoRaw = cuenta.codigos_impuesto;
-                    // Para el JSON, convertir a array si es string
-                    const codigosImpuestoArray = codigosImpuestoRaw
-                        ? (Array.isArray(codigosImpuestoRaw) ? codigosImpuestoRaw : codigosImpuestoRaw.split(',').map(c => c.trim()).filter(c => c))
-                        : [];
+                    // Usar función helper para parsear códigos de impuesto (maneja null, string, array, JSON)
+                    const codigosImpuestoArray = parseCodigosImpuesto(cuenta.codigos_impuesto);
                     const codigosImpuestoJson = JSON.stringify(codigosImpuestoArray).replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
                     // Generar el display de impuestos con formato "X asignados" y botón ver
@@ -1775,16 +1818,9 @@ async function editarCuentaUI(cuentaId, codigoActual, nombreActual, tipoActual, 
 
     document.getElementById('modalEditarCuenta').classList.remove('hidden');
 
-    // Renderizar selector de impuestos con los códigos actuales pre-seleccionados (ahora es async)
-    // Asegurar que los códigos sean un array válido
-    let codigosActuales = [];
-    if (codigosImpuestoActuales) {
-        if (Array.isArray(codigosImpuestoActuales)) {
-            codigosActuales = codigosImpuestoActuales.filter(c => c && c.trim());
-        } else if (typeof codigosImpuestoActuales === 'string') {
-            codigosActuales = codigosImpuestoActuales.split(',').map(c => c.trim()).filter(c => c);
-        }
-    }
+    // Renderizar selector de impuestos con los códigos actuales pre-seleccionados
+    // Usar función helper para parsear códigos (maneja null, string, array, JSON)
+    const codigosActuales = parseCodigosImpuesto(codigosImpuestoActuales);
 
     console.log('   - Códigos a pre-seleccionar:', codigosActuales);
     await renderizarSelectorImpuestos('editarCuentaImpuestosContainer', codigosActuales);
