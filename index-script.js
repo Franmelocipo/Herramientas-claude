@@ -976,7 +976,9 @@ async function renderPlanCuentasList() {
         return;
     }
 
-    statsElement.textContent = `Total de cuentas: ${cuentas.length}`;
+    // Contar cuentas con códigos de impuesto configurados
+    const cuentasConImpuestos = cuentas.filter(c => c.codigos_impuesto && c.codigos_impuesto.length > 0).length;
+    statsElement.textContent = `Total de cuentas: ${cuentas.length}${cuentasConImpuestos > 0 ? ` | ${cuentasConImpuestos} con códigos de impuesto` : ''}`;
 
     const html = `
         <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
@@ -984,22 +986,34 @@ async function renderPlanCuentasList() {
                 <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
                     <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569; width: 120px;">Código</th>
                     <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569;">Cuenta</th>
-                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569; width: 150px;">Tipo</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569; width: 120px;">Tipo</th>
+                    <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569; width: 140px;">Cód. Impuestos</th>
                     <th style="padding: 12px; text-align: center; font-weight: 600; color: #475569; width: 180px;">Acciones</th>
                 </tr>
             </thead>
             <tbody>
-                ${cuentas.map(cuenta => `
+                ${cuentas.map(cuenta => {
+                    const codigosImpuesto = cuenta.codigos_impuesto && cuenta.codigos_impuesto.length > 0
+                        ? cuenta.codigos_impuesto
+                        : [];
+                    const codigosImpuestoDisplay = codigosImpuesto.length > 0
+                        ? `<span style="background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: monospace;">${codigosImpuesto.join(', ')}</span>`
+                        : '<span style="color: #94a3b8;">-</span>';
+                    const codigosImpuestoJson = JSON.stringify(codigosImpuesto).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+                    return `
                     <tr style="border-bottom: 1px solid #e2e8f0;">
                         <td style="padding: 12px; color: #1e293b; font-family: monospace;">${cuenta.codigo}</td>
                         <td style="padding: 12px; color: #1e293b;">${cuenta.cuenta}</td>
                         <td style="padding: 12px; color: #64748b;">${cuenta.tipo || '-'}</td>
+                        <td style="padding: 12px;">${codigosImpuestoDisplay}</td>
                         <td style="padding: 12px; text-align: center;">
-                            <button onclick="editarCuentaUI('${cuenta.id}', '${cuenta.codigo}', '${cuenta.cuenta.replace(/'/g, "\\'")}', '${cuenta.tipo || ''}')" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 8px; font-size: 13px;">✏️ Editar</button>
+                            <button onclick="editarCuentaUI('${cuenta.id}', '${cuenta.codigo}', '${cuenta.cuenta.replace(/'/g, "\\'")}', '${cuenta.tipo || ''}', ${codigosImpuestoJson})" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 8px; font-size: 13px;">✏️ Editar</button>
                             <button onclick="eliminarCuentaUI('${cuenta.id}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Eliminar</button>
                         </td>
                     </tr>
-                `).join('')}
+                    `;
+                }).join('')}
             </tbody>
         </table>
     `;
@@ -1017,6 +1031,7 @@ function showNuevaCuentaModal() {
     document.getElementById('nuevaCuentaCodigo').value = '';
     document.getElementById('nuevaCuentaNombre').value = '';
     document.getElementById('nuevaCuentaTipo').value = '';
+    document.getElementById('nuevaCuentaCodigosImpuesto').value = '';
     document.getElementById('nuevaCuentaCodigo').focus();
 }
 
@@ -1028,6 +1043,7 @@ async function crearCuentaUI() {
     const codigo = document.getElementById('nuevaCuentaCodigo').value.trim();
     const nombre = document.getElementById('nuevaCuentaNombre').value.trim();
     const tipo = document.getElementById('nuevaCuentaTipo').value;
+    const codigosImpuestoStr = document.getElementById('nuevaCuentaCodigosImpuesto').value.trim();
 
     if (!codigo || !nombre) {
         alert('El código y el nombre son obligatorios');
@@ -1039,7 +1055,16 @@ async function crearCuentaUI() {
         return;
     }
 
-    const result = await crearCuenta(currentClienteIdPlan, codigo, nombre, tipo);
+    // Procesar códigos de impuesto
+    let codigosImpuestoArray = null;
+    if (codigosImpuestoStr) {
+        codigosImpuestoArray = codigosImpuestoStr
+            .split(',')
+            .map(c => c.trim())
+            .filter(c => c.length > 0);
+    }
+
+    const result = await crearCuenta(currentClienteIdPlan, codigo, nombre, tipo, codigosImpuestoArray);
 
     if (result) {
         alert('Cuenta creada exitosamente');
@@ -1048,12 +1073,19 @@ async function crearCuentaUI() {
     }
 }
 
-function editarCuentaUI(cuentaId, codigoActual, nombreActual, tipoActual) {
+function editarCuentaUI(cuentaId, codigoActual, nombreActual, tipoActual, codigosImpuestoActuales) {
     // Mostrar modal de edición con los valores actuales
     document.getElementById('editarCuentaId').value = cuentaId;
     document.getElementById('editarCuentaCodigo').value = codigoActual;
     document.getElementById('editarCuentaNombre').value = nombreActual;
     document.getElementById('editarCuentaTipo').value = tipoActual || '';
+
+    // Cargar códigos de impuesto si existen
+    if (codigosImpuestoActuales && codigosImpuestoActuales.length > 0) {
+        document.getElementById('editarCuentaCodigosImpuesto').value = codigosImpuestoActuales.join(', ');
+    } else {
+        document.getElementById('editarCuentaCodigosImpuesto').value = '';
+    }
 
     document.getElementById('modalEditarCuenta').classList.remove('hidden');
     document.getElementById('editarCuentaCodigo').focus();
@@ -1068,13 +1100,25 @@ async function guardarCambiosCuenta() {
     const nuevoCodigo = document.getElementById('editarCuentaCodigo').value.trim();
     const nuevoNombre = document.getElementById('editarCuentaNombre').value.trim();
     const nuevoTipo = document.getElementById('editarCuentaTipo').value;
+    const codigosImpuestoStr = document.getElementById('editarCuentaCodigosImpuesto').value.trim();
 
     if (!nuevoCodigo || !nuevoNombre) {
         alert('El código y el nombre son obligatorios');
         return;
     }
 
-    const result = await actualizarCuenta(cuentaId, nuevoCodigo, nuevoNombre, nuevoTipo);
+    // Procesar códigos de impuesto
+    let codigosImpuestoArray = null;
+    if (codigosImpuestoStr) {
+        codigosImpuestoArray = codigosImpuestoStr
+            .split(',')
+            .map(c => c.trim())
+            .filter(c => c.length > 0);
+    } else {
+        codigosImpuestoArray = []; // Array vacío para limpiar los códigos
+    }
+
+    const result = await actualizarCuenta(cuentaId, nuevoCodigo, nuevoNombre, nuevoTipo, codigosImpuestoArray);
 
     if (result) {
         alert('Cuenta actualizada exitosamente');
