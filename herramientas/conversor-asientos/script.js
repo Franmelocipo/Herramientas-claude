@@ -13,7 +13,8 @@ const state = {
     expandedGroups: {},     // Rastrear qué grupos están expandidos
     selectedItems: {},      // Rastrear items seleccionados para reagrupación {groupIdx: {itemIdx: true/false}}
     selectedGroups: {},     // Rastrear grupos seleccionados para fusión {groupIdx: true/false}
-    planCuentas: []         // Plan de cuentas del cliente seleccionado
+    planCuentas: [],        // Plan de cuentas del cliente seleccionado
+    mapeoImpuestos: {}      // Mapeo de códigos de impuesto a cuentas contables
 };
 
 // ============================================
@@ -176,7 +177,7 @@ async function cargarPlanCuentasCliente(clienteId) {
     try {
         const { data: cuentas, error } = await supabase
             .from('plan_cuentas')
-            .select('codigo, cuenta')
+            .select('codigo, cuenta, codigos_impuesto')
             .eq('cliente_id', clienteId)
             .order('codigo');
 
@@ -191,17 +192,37 @@ async function cargarPlanCuentasCliente(clienteId) {
             mostrarInfoPlan('⚠️ Este cliente no tiene plan de cuentas. Configure el plan primero.', 'error');
             deshabilitarOpciones();
             state.planCuentas = [];
+            state.mapeoImpuestos = {};
             return;
         }
 
         // Guardar las cuentas para usar en los selectores
         state.planCuentas = cuentas.map(c => ({
             codigo: c.codigo,
-            nombre: c.cuenta  // Usar 'nombre' para consistencia con el resto del código
+            nombre: c.cuenta,  // Usar 'nombre' para consistencia con el resto del código
+            codigos_impuesto: c.codigos_impuesto || []
         }));
 
-        mostrarInfoPlan(`✅ Plan de cuentas cargado: ${cuentas.length} cuentas`, 'success');
+        // Construir mapeo de códigos de impuesto a cuentas
+        state.mapeoImpuestos = {};
+        cuentas.forEach(cuenta => {
+            if (cuenta.codigos_impuesto && cuenta.codigos_impuesto.length > 0) {
+                cuenta.codigos_impuesto.forEach(codImpuesto => {
+                    state.mapeoImpuestos[codImpuesto] = {
+                        codigo: cuenta.codigo,
+                        nombre: cuenta.cuenta
+                    };
+                });
+            }
+        });
+
+        const numCodigosImpuesto = Object.keys(state.mapeoImpuestos).length;
+        mostrarInfoPlan(
+            `✅ Plan de cuentas cargado: ${cuentas.length} cuentas${numCodigosImpuesto > 0 ? ` | ${numCodigosImpuesto} códigos de impuesto configurados` : ''}`,
+            'success'
+        );
         console.log('Plan de cuentas cargado:', cuentas.length, 'cuentas');
+        console.log('Mapeo de impuestos:', numCodigosImpuesto, 'códigos');
 
         habilitarOpciones();
 
@@ -2421,12 +2442,23 @@ function generateFinalExcel() {
                 const conceptoDetalle = subconcepto || concepto;
                 const leyenda = `${impuesto} - ${conceptoDetalle} / ${periodo} / VEP ${nroVep}`;
 
+                // ASIGNACIÓN AUTOMÁTICA DE CUENTA POR CÓDIGO DE IMPUESTO
+                let cuentaImpuesto = cuentaGrupo; // Por defecto, usar cuenta del grupo
+                let descripcionCuenta = '';
+
+                if (codImpuesto && state.mapeoImpuestos[codImpuesto]) {
+                    // Hay mapeo automático para este código de impuesto
+                    cuentaImpuesto = state.mapeoImpuestos[codImpuesto].codigo;
+                    descripcionCuenta = state.mapeoImpuestos[codImpuesto].nombre;
+                    console.log(`✅ Cuenta asignada automáticamente: Cod.${codImpuesto} → ${cuentaImpuesto} (${descripcionCuenta})`);
+                }
+
                 // Línea de débito (pago de impuesto)
                 allData.push({
                     Fecha: fecha,
                     Numero: numeroAsiento,
-                    Cuenta: cuentaGrupo,
-                    'Descripción Cuenta': '',
+                    Cuenta: cuentaImpuesto,
+                    'Descripción Cuenta': descripcionCuenta,
                     Debe: parseFloat(importe.toFixed(2)),
                     Haber: 0,
                     'Tipo de auxiliar': 1,
@@ -2434,7 +2466,7 @@ function generateFinalExcel() {
                     Importe: parseFloat(importe.toFixed(2)),
                     Leyenda: leyenda,
                     ExtraContable: 's',
-                    COD_IMPUESTO: codImpuesto  // Guardar código de impuesto para asignación automática
+                    COD_IMPUESTO: codImpuesto  // Guardar código de impuesto para referencia
                 });
             });
 
