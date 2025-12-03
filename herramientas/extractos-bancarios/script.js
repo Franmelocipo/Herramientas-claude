@@ -109,6 +109,7 @@ const banksBancarios = [
     { id: 'bbva', name: 'Banco BBVA' },
     { id: 'bpn', name: 'BPN (Banco Provincia Neuquén)' },
     { id: 'santander', name: 'Banco Santander' },
+    { id: 'macro', name: 'Banco Macro' },
     { id: 'nacion', name: 'Banco Nación', disabled: true }
 ];
 
@@ -314,6 +315,8 @@ async function handleConvert() {
             await processBPNPDF(state.file);
         } else if (state.selectedBank === 'santander') {
             await processSantanderPDF(state.file);
+        } else if (state.selectedBank === 'macro') {
+            await processMacroPDF(state.file);
         } else if (state.selectedBank === 'galicia-inversiones') {
             await processGaliciaInversionesPDF(state.file);
         }
@@ -946,6 +949,213 @@ function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
     return filteredMovements;
 }
 
+// Parsear extracto Banco Macro usando posiciones de columnas
+// Estructura: Fecha | Nro. de Referencia | Causal | Concepto | Importe | Saldo
+// Importe: $ -1.234,56 (negativo = débito) o $ 1.234,56 (positivo = crédito)
+function parseMacroWithPositions(linesWithPositions) {
+    const movements = [];
+    let currentMovement = null;
+    let inMovementsSection = false;
+
+    // Detectar posiciones de columnas buscando el header
+    let importeColumnX = null;
+    let saldoColumnX = null;
+
+    // Buscar la línea de encabezado para determinar posiciones de columnas
+    for (const lineData of linesWithPositions) {
+        const text = lineData.text.toLowerCase();
+        if (text.includes('importe') && text.includes('saldo')) {
+            for (const item of lineData.items) {
+                const itemText = item.text.toLowerCase();
+                if (itemText === 'importe' || itemText.includes('importe')) {
+                    importeColumnX = item.x;
+                } else if (itemText === 'saldo') {
+                    saldoColumnX = item.x;
+                }
+            }
+            if (importeColumnX && saldoColumnX) {
+                console.log('Columnas Macro detectadas - Importe X:', importeColumnX, 'Saldo X:', saldoColumnX);
+                inMovementsSection = true;
+                break;
+            }
+        }
+    }
+
+    // Si no encontramos las columnas exactas, usar valores por defecto
+    if (!importeColumnX || !saldoColumnX) {
+        importeColumnX = 400;
+        saldoColumnX = 500;
+        console.log('Usando posiciones de columnas por defecto para Macro');
+    }
+
+    // Calcular el punto medio entre importe y saldo para clasificar
+    const midPoint = (importeColumnX + saldoColumnX) / 2;
+
+    // Regex para detectar fecha al inicio de línea (DD/MM/YYYY)
+    const dateRegex = /^(\d{2}\/\d{2}\/\d{4})\b/;
+
+    console.log('Procesando', linesWithPositions.length, 'líneas del PDF Macro');
+    console.log('='.repeat(80));
+
+    for (const lineData of linesWithPositions) {
+        const trimmedLine = lineData.text.trim();
+
+        // Ignorar líneas vacías o de encabezado
+        if (!trimmedLine ||
+            /^(Fecha|Nro\.\s*de\s*Referencia|Causal|Concepto|Importe|Saldo)$/i.test(trimmedLine) ||
+            /Últimos\s+Movimientos/i.test(trimmedLine) ||
+            /CUENTA\s+CORRIENTE/i.test(trimmedLine) ||
+            /Tipo:\s*Cuenta/i.test(trimmedLine) ||
+            /Número:\s*\d+/i.test(trimmedLine) ||
+            /Moneda:\s*PESOS/i.test(trimmedLine) ||
+            /Fecha\s+de\s+descarga/i.test(trimmedLine) ||
+            /Operador:/i.test(trimmedLine) ||
+            /Empresa:/i.test(trimmedLine)) {
+            continue;
+        }
+
+        // Detectar inicio de sección de movimientos
+        if (/FechaNro\.\s*de\s*Referencia|Fecha.*Referencia.*Causal.*Concepto.*Importe.*Saldo/i.test(trimmedLine)) {
+            inMovementsSection = true;
+            continue;
+        }
+
+        // Verificar si la línea empieza con fecha (DD/MM/YYYY)
+        const dateMatch = trimmedLine.match(dateRegex);
+
+        if (dateMatch) {
+            // Guardar movimiento anterior si existe
+            if (currentMovement) {
+                movements.push(currentMovement);
+            }
+
+            const fecha = dateMatch[1];
+
+            // Encontrar todos los importes con sus posiciones X
+            // Formato Macro: $ -1.234,56 o $ 1.234,56
+            const amountsWithPositions = [];
+            for (const item of lineData.items) {
+                // Buscar items que sean importes (con o sin signo, con o sin $)
+                // Formatos: $ -1.234,56 | $ 1.234,56 | -1.234,56 | 1.234,56
+                const amountMatch = item.text.match(/^\$?\s*(-?\s*[\d.]+,\d{2})$/) ||
+                                   item.text.match(/^(-?\d{1,3}(?:\.\d{3})*,\d{2})$/);
+                if (amountMatch) {
+                    amountsWithPositions.push({
+                        value: amountMatch[1].replace(/\s+/g, ''),
+                        x: item.x,
+                        text: item.text
+                    });
+                }
+            }
+
+            // Ordenar por posición X (izquierda a derecha)
+            amountsWithPositions.sort((a, b) => a.x - b.x);
+
+            // Extraer descripción (concepto)
+            let descripcion = trimmedLine;
+            descripcion = descripcion.replace(dateRegex, '').trim();
+            // Remover importes del texto
+            descripcion = descripcion.replace(/\$?\s*-?\s*[\d.]+,\d{2}/g, '').trim();
+
+            // Extraer referencia (número largo al inicio después de la fecha)
+            const referenciaMatch = descripcion.match(/^(\d{4,})/);
+            const referencia = referenciaMatch ? referenciaMatch[1] : '';
+            if (referencia) {
+                descripcion = descripcion.replace(referencia, '').trim();
+            }
+
+            // Extraer causal (número de 3-4 dígitos después de la referencia)
+            const causalMatch = descripcion.match(/^(\d{3,4})\b/);
+            if (causalMatch) {
+                descripcion = descripcion.replace(causalMatch[1], '').trim();
+            }
+
+            // Clasificar importes
+            let debito = '0';
+            let credito = '0';
+            let saldo = '0';
+
+            // Log para debug
+            console.log(`Fila PDF Macro: ${trimmedLine.substring(0, 100)}`);
+            console.log(`  Importes encontrados: ${amountsWithPositions.length}`);
+            amountsWithPositions.forEach((a, i) => {
+                console.log(`    [${i}] valor: ${a.value}, X: ${a.x.toFixed(1)}`);
+            });
+
+            if (amountsWithPositions.length >= 1) {
+                // El último siempre es saldo (columna más a la derecha)
+                saldo = amountsWithPositions[amountsWithPositions.length - 1].value;
+                // Remover el signo negativo del saldo si lo tiene (el saldo siempre es positivo)
+                saldo = saldo.replace('-', '');
+            }
+
+            if (amountsWithPositions.length >= 2) {
+                // El penúltimo es el importe del movimiento
+                const importeValue = amountsWithPositions[amountsWithPositions.length - 2].value;
+
+                // En Banco Macro, el signo determina si es débito o crédito
+                // Negativo = Débito (salida de dinero)
+                // Positivo = Crédito (entrada de dinero)
+                if (importeValue.includes('-')) {
+                    // Es un débito - guardar valor absoluto
+                    debito = importeValue.replace('-', '');
+                } else {
+                    // Es un crédito
+                    credito = importeValue;
+                }
+            }
+
+            console.log(`  → Débito: ${debito} | Crédito: ${credito} | Saldo: ${saldo}`);
+            console.log('-'.repeat(80));
+
+            currentMovement = {
+                fecha: fecha,
+                descripcion: descripcion,
+                origen: referencia,
+                debito: debito,
+                credito: credito,
+                saldo: saldo
+            };
+
+        } else if (currentMovement) {
+            // Es continuación de la descripción
+            if (!/^(Fecha|Nro|Causal|Concepto|Importe|Saldo|Últimos|CUENTA|Tipo|Número|Moneda|Operador|Empresa)/i.test(trimmedLine)) {
+                currentMovement.descripcion += ' ' + trimmedLine;
+            }
+        }
+    }
+
+    // No olvidar el último movimiento
+    if (currentMovement) {
+        movements.push(currentMovement);
+    }
+
+    // Limpiar descripciones y filtrar movimientos inválidos
+    const filteredMovements = movements
+        .filter(mov => {
+            // Filtrar descripciones vacías o muy cortas
+            if (!mov.descripcion || mov.descripcion.length < 3) {
+                return false;
+            }
+            // Filtrar líneas que no son movimientos reales
+            if (/^Total\b/i.test(mov.descripcion)) {
+                return false;
+            }
+            return true;
+        })
+        .map(mov => {
+            mov.descripcion = mov.descripcion
+                .replace(/\s+/g, ' ')
+                .trim();
+            return mov;
+        });
+
+    console.log('='.repeat(80));
+    console.log('Movimientos Macro encontrados:', filteredMovements.length);
+
+    return filteredMovements;
+}
+
 // Parsear extracto Santander usando posiciones de columnas
 // Estructura: Fecha | Comprobante | Movimiento | DÉBITO | CRÉDITO | Saldo
 // Determina débito/crédito por la posición X en el PDF
@@ -1404,6 +1614,40 @@ async function processBPNPDF(pdfFile) {
 
     } catch (err) {
         console.error('Error procesando PDF BPN:', err);
+        throw err;
+    }
+}
+
+async function processMacroPDF(pdfFile) {
+    try {
+        // Extraer texto CON POSICIONES para determinar columnas
+        const linesWithPositions = await extractTextWithPositions(pdfFile);
+        console.log('Líneas extraídas del PDF Macro:', linesWithPositions.length);
+
+        // Banco Macro no muestra saldo inicial explícitamente en el encabezado
+        // El saldo se obtiene de la primera fila de movimientos
+        state.saldoInicial = null;
+
+        // Parsear movimientos usando POSICIONES DE COLUMNAS
+        const movements = parseMacroWithPositions(linesWithPositions);
+
+        if (movements.length === 0) {
+            showError('No se encontraron movimientos en el PDF. Verifique que el archivo contenga movimientos con formato de fecha DD/MM/YYYY.');
+            return;
+        }
+
+        console.log('Movimientos Macro procesados:', movements.length);
+        if (movements.length > 0) {
+            console.log('Primer movimiento:', movements[0]);
+            console.log('Último movimiento:', movements[movements.length - 1]);
+        }
+
+        state.extractedData = movements;
+        showSuccess(`¡Archivo procesado exitosamente! ${movements.length} movimientos encontrados.`);
+        renderPreview();
+
+    } catch (err) {
+        console.error('Error procesando PDF Macro:', err);
         throw err;
     }
 }
