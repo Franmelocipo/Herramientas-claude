@@ -25,6 +25,45 @@ const state = {
 let clienteSeleccionadoId = null;
 let clienteSeleccionadoNombre = '';
 
+// ============================================
+// HELPER PARA PARSEAR CODIGOS DE IMPUESTO
+// ============================================
+/**
+ * Parsea el campo codigos_impuesto que puede venir como:
+ * - null/undefined → []
+ * - array → retorna el array tal cual
+ * - string JSON (ej: '["001","002"]') → parsea a array
+ * - string separado por comas (ej: "001,002") → split a array
+ * @param {any} valor - Valor del campo codigos_impuesto
+ * @returns {Array} Array de códigos de impuesto
+ */
+function parseCodigosImpuesto(valor) {
+    // Si es null, undefined o string vacío, retornar array vacío
+    if (!valor) return [];
+
+    // Si ya es un array, retornarlo tal cual
+    if (Array.isArray(valor)) return valor;
+
+    // Si es un string, intentar parsearlo
+    if (typeof valor === 'string') {
+        const trimmed = valor.trim();
+        if (!trimmed) return [];
+
+        // Intentar parsear como JSON primero
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) return parsed;
+            // Si el JSON parseado no es array, retornar vacío
+            return [];
+        } catch (e) {
+            // Si no es JSON válido, puede ser una lista separada por comas
+            return trimmed.split(',').map(s => s.trim()).filter(s => s);
+        }
+    }
+
+    return [];
+}
+
 function getSelectedClientId() {
     return clienteSeleccionadoId;
 }
@@ -217,17 +256,20 @@ async function cargarPlanCuentasCliente(clienteId) {
         }
 
         // Guardar las cuentas para usar en los selectores
+        // Usar parseCodigosImpuesto para manejar correctamente valores NULL, strings JSON o arrays
         state.planCuentas = cuentas.map(c => ({
             codigo: c.codigo,
             nombre: c.cuenta,  // Usar 'nombre' para consistencia con el resto del código
-            codigos_impuesto: c.codigos_impuesto || []
+            codigos_impuesto: parseCodigosImpuesto(c.codigos_impuesto)
         }));
 
         // Construir mapeo de códigos de impuesto a cuentas
         state.mapeoImpuestos = {};
         cuentas.forEach(cuenta => {
-            if (cuenta.codigos_impuesto && cuenta.codigos_impuesto.length > 0) {
-                cuenta.codigos_impuesto.forEach(codImpuesto => {
+            // Usar parseCodigosImpuesto para manejar correctamente el campo text/JSON
+            const codigosImpuesto = parseCodigosImpuesto(cuenta.codigos_impuesto);
+            if (codigosImpuesto.length > 0) {
+                codigosImpuesto.forEach(codImpuesto => {
                     state.mapeoImpuestos[codImpuesto] = {
                         codigo: cuenta.codigo,
                         nombre: cuenta.cuenta
@@ -248,7 +290,13 @@ async function cargarPlanCuentasCliente(clienteId) {
 
     } catch (error) {
         console.error('❌ Error cargando plan de cuentas:', error);
-        mostrarInfoPlan('Error al cargar el plan de cuentas', 'error');
+        console.error('Detalles del error:', {
+            message: error.message,
+            name: error.name,
+            stack: error.stack,
+            fullError: JSON.stringify(error, Object.getOwnPropertyNames(error), 2)
+        });
+        mostrarInfoPlan(`Error al cargar el plan de cuentas: ${error.message || 'Error desconocido'}`, 'error');
         deshabilitarOpciones();
     }
 }
