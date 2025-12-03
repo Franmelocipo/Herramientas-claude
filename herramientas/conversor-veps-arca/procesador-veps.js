@@ -82,95 +82,92 @@ async function procesarVEP(archivo) {
 function extraerDatosVEP(texto, nroVEP) {
     const registros = [];
 
+    console.log('=== Procesando VEP:', nroVEP, '===');
+
     // Extraer fecha de pago
     const matchFecha = texto.match(/Fecha de Pago:\s*(\d{4})-(\d{2})-(\d{2})/);
     const fecha = matchFecha ? `${matchFecha[3]}/${matchFecha[2]}/${matchFecha[1]}` : '';
 
     // Extraer período
     const matchPeriodo = texto.match(/Período:\s*(\d{4})-(\d{2})/);
-    const periodo = matchPeriodo ? matchPeriodo[0].replace('Período: ', '').replace('-', '/') : '';
+    const periodo = matchPeriodo ? `${matchPeriodo[2]}/${matchPeriodo[1]}` : '';
 
-    // Extraer tipo de pago para determinar impuesto
-    const esIVA = texto.includes('IVA - Saldo DJ') || texto.includes('IVA DJ');
-    const esSICOSS = texto.includes('Empleadores SICOSS');
-    const esGanancias = texto.includes('GANANCIAS SOCIEDADES');
-
-    let codImpuesto, impuesto;
-    if (esIVA) {
-        codImpuesto = '30';
-        impuesto = 'IVA';
-    } else if (esSICOSS) {
-        codImpuesto = '30';
-        impuesto = 'GANANCIAS SOCIEDADES';
-    } else if (esGanancias) {
-        codImpuesto = '30';
-        impuesto = 'GANANCIAS SOCIEDADES';
-    }
-
-    // Extraer concepto
+    // Extraer concepto (se repite para todas las líneas)
     const matchConcepto = texto.match(/Concepto:\s*(\d+)\s+([A-ZÁÉÍÓÚ\s\/]+)/);
-    const codConcepto = matchConcepto ? matchConcepto[1] : '19';
-    const concepto = matchConcepto ? matchConcepto[2].trim() : 'DECLARACIÓN JURADA';
+    const codConcepto = matchConcepto ? matchConcepto[1].trim() : '19';
+    const concepto = matchConcepto ? matchConcepto[2].trim() : 'OBLIGACION MENSUAL/ANUAL';
 
-    // Extraer subconcepto
+    // Extraer subconcepto (se repite para todas las líneas)
     const matchSubconcepto = texto.match(/Subconcepto:\s*(\d+)\s+([A-ZÁÉÍÓÚ\s\/]+)/);
-    const codSubconcepto = matchSubconcepto ? matchSubconcepto[1] : '19';
-    const subconcepto = matchSubconcepto ? matchSubconcepto[2].trim() : 'DECLARACIÓN JURADA';
+    const codSubconcepto = matchSubconcepto ? matchSubconcepto[1].trim() : '19';
+    const subconcepto = matchSubconcepto ? matchSubconcepto[2].trim() : 'OBLIGACION MENSUAL/ANUAL';
 
     // Extraer entidad de pago
-    const matchEntidad = texto.match(/Debito en cuenta del Banco:\s*([A-Z\s\.]+)/);
+    const matchEntidad = texto.match(/Debito en cuenta del Banco:\s*([A-ZÁÉÍÓÚ\s\.]+?)(?:\n|Nro\.)/);
     const entidadPago = matchEntidad ? matchEntidad[1].trim() : '';
 
-    // Extraer líneas de detalle con importes
-    const lineasDetalle = [];
+    console.log('Datos base:', { fecha, periodo, codConcepto, concepto, codSubconcepto, subconcepto, entidadPago });
 
-    // Para IVA (simple, un solo importe)
-    if (esIVA) {
-        const matchImporte = texto.match(/IVA\s*\(\d+\)\s*\$?([\d\.,]+)/);
-        if (matchImporte) {
-            const importe = parseFloat(matchImporte[1].replace(/\./g, '').replace(',', '.'));
-            lineasDetalle.push({
-                descripcion: 'IVA',
+    // Extraer todos los impuestos con sus códigos e importes
+    const impuestos = [];
+
+    // Regex para capturar: DESCRIPCION (CODIGO) $IMPORTE
+    const regexImpuesto = /([A-ZÁÉÍÓÚ\s\.\-\/]+?)\s*\((\d+)\)\s*\$?([\d\.,]+)/g;
+
+    let match;
+    while ((match = regexImpuesto.exec(texto)) !== null) {
+        const descripcion = match[1].trim();
+        const codigo = match[2];
+        const importeStr = match[3];
+        const importe = parseFloat(importeStr.replace(/\./g, '').replace(',', '.'));
+
+        // Filtrar solo los impuestos válidos (excluir "IMPORTE PAGADO" y similares)
+        if (!descripcion.includes('IMPORTE PAGADO') &&
+            !descripcion.includes('Datos del') &&
+            importe > 0) {
+
+            impuestos.push({
+                descripcion: descripcion,
+                codigo: codigo,
                 importe: importe
+            });
+
+            console.log('Impuesto encontrado:', { descripcion, codigo, importe });
+        }
+    }
+
+    console.log('Total impuestos encontrados:', impuestos.length);
+
+    // Si no se encontraron impuestos con el regex, buscar IVA específicamente
+    if (impuestos.length === 0 && texto.includes('IVA')) {
+        const matchIVA = texto.match(/IVA\s*\((\d+)\)\s*\$?([\d\.,]+)/);
+        if (matchIVA) {
+            impuestos.push({
+                descripcion: 'IVA',
+                codigo: matchIVA[1],
+                importe: parseFloat(matchIVA[2].replace(/\./g, '').replace(',', '.'))
             });
         }
     }
 
-    // Para SICOSS (múltiples líneas)
-    if (esSICOSS) {
-        const regexLineas = /([A-ZÁÉÍÓÚ\s\.]+)\s*\((\d+)\)\s*\$?([\d\.,]+)/g;
-        let match;
-        while ((match = regexLineas.exec(texto)) !== null) {
-            const descripcion = match[1].trim();
-            const codigo = match[2];
-            const importe = parseFloat(match[3].replace(/\./g, '').replace(',', '.'));
-
-            if (importe > 0 && !descripcion.includes('IMPORTE PAGADO')) {
-                lineasDetalle.push({
-                    descripcion: descripcion,
-                    codigo: codigo,
-                    importe: importe
-                });
-            }
-        }
-    }
-
-    // Crear un registro por cada línea de detalle
-    lineasDetalle.forEach(linea => {
+    // Crear una línea por cada impuesto
+    impuestos.forEach(impuesto => {
         registros.push({
             NRO_VEP: nroVEP,
             FECHA: fecha,
             PERIODO: periodo,
-            COD_IMPUESTO: codImpuesto,
-            IMPUESTO: impuesto,
-            COD_CONCEPTO: codConcepto,
-            CONCEPTO: concepto,
-            COD_SUBCONCEPTO: codSubconcepto,
-            SUBCONCEPTO: subconcepto,
-            IMPORTE: linea.importe,
+            COD_IMPUESTO: impuesto.codigo,          // Código del impuesto
+            IMPUESTO: impuesto.descripcion,         // Nombre del impuesto
+            COD_CONCEPTO: codConcepto,              // Se repite en todas
+            CONCEPTO: concepto,                     // Se repite en todas
+            COD_SUBCONCEPTO: codSubconcepto,        // Se repite en todas
+            SUBCONCEPTO: subconcepto,               // Se repite en todas
+            IMPORTE: impuesto.importe,
             ENTIDAD_PAGO: entidadPago
         });
     });
+
+    console.log('Registros generados:', registros.length);
 
     return registros;
 }
