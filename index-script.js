@@ -7,9 +7,10 @@ const IMPUESTOS_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
 /**
  * Obtener impuestos desde Supabase (con cache)
- * Soporta ambos formatos de nombres de columnas:
- * - Formato largo: codigo_impuesto, descripcion_impuesto, codigo_concepto, etc.
- * - Formato corto: cod_imp, desc_imp, cod_conc, etc.
+ * Usa la tabla impuestos_base con las columnas:
+ * - codigo_impuesto, descripcion_impuesto
+ * - codigo_concepto, descripcion_concepto
+ * - codigo_subconcepto, descripcion_subconcepto
  */
 async function obtenerImpuestosBase() {
     // Usar cache si está disponible y no ha expirado
@@ -24,26 +25,13 @@ async function obtenerImpuestosBase() {
             return [];
         }
 
-        // Intentar primero con la tabla 'impuestos' (nombres cortos según el usuario)
-        let { data, error } = await supabase
-            .from('impuestos')
+        // Consultar la tabla impuestos_base con los nombres de columnas correctos
+        const { data, error } = await supabase
+            .from('impuestos_base')
             .select('*')
-            .order('cod_imp')
-            .order('cod_conc')
-            .order('cod_sub');
-
-        // Si la tabla 'impuestos' no existe, intentar con 'impuestos_base'
-        if (error && error.code === '42P01') {
-            console.log('Tabla impuestos no encontrada, intentando con impuestos_base...');
-            const result = await supabase
-                .from('impuestos_base')
-                .select('*')
-                .order('codigo_impuesto')
-                .order('codigo_concepto')
-                .order('codigo_subconcepto');
-            data = result.data;
-            error = result.error;
-        }
+            .order('codigo_impuesto')
+            .order('codigo_concepto')
+            .order('codigo_subconcepto');
 
         if (error) {
             console.error('Error obteniendo impuestos:', error);
@@ -52,13 +40,13 @@ async function obtenerImpuestosBase() {
 
         // Normalizar los datos para usar nombres consistentes
         const impuestosNormalizados = (data || []).map(imp => {
-            // Detectar formato de columnas y normalizar
-            const codImp = imp.cod_imp || imp.codigo_impuesto || '';
-            const descImp = imp.desc_imp || imp.descripcion_impuesto || '';
-            const codConc = imp.cod_conc || imp.codigo_concepto || '';
-            const descConc = imp.desc_conc || imp.descripcion_concepto || '';
-            const codSub = imp.cod_sub || imp.codigo_subconcepto || '';
-            const descSub = imp.desc_sub || imp.descripcion_subconcepto || '';
+            // Usar los nombres de columnas correctos de impuestos_base
+            const codImp = imp.codigo_impuesto || '';
+            const descImp = imp.descripcion_impuesto || '';
+            const codConc = imp.codigo_concepto || '';
+            const descConc = imp.descripcion_concepto || '';
+            const codSub = imp.codigo_subconcepto || '';
+            const descSub = imp.descripcion_subconcepto || '';
 
             // Crear código compuesto único
             const codigoCompuesto = `${codImp}-${codConc}-${codSub}`;
