@@ -1249,13 +1249,22 @@ async function renderPlanCuentasList(forceReload = false) {
             </thead>
             <tbody>
                 ${cuentasFiltradas.map(cuenta => {
-                    const codigosImpuesto = cuenta.codigos_impuesto && cuenta.codigos_impuesto.length > 0
-                        ? cuenta.codigos_impuesto
-                        : [];
-                    const codigosImpuestoDisplay = codigosImpuesto.length > 0
-                        ? `<span style="background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: monospace;">${codigosImpuesto.join(', ')}</span>`
+                    // Manejar codigos_impuesto que puede ser null, string o array
+                    const codigosImpuestoRaw = cuenta.codigos_impuesto;
+                    let codigosImpuestoTexto = '';
+                    if (codigosImpuestoRaw) {
+                        codigosImpuestoTexto = Array.isArray(codigosImpuestoRaw)
+                            ? codigosImpuestoRaw.join(', ')
+                            : codigosImpuestoRaw;
+                    }
+                    const codigosImpuestoDisplay = codigosImpuestoTexto
+                        ? `<span style="background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: monospace;">${codigosImpuestoTexto}</span>`
                         : '<span style="color: #94a3b8;">-</span>';
-                    const codigosImpuestoJson = JSON.stringify(codigosImpuesto).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    // Para el JSON, convertir a array si es string
+                    const codigosImpuestoArray = codigosImpuestoRaw
+                        ? (Array.isArray(codigosImpuestoRaw) ? codigosImpuestoRaw : codigosImpuestoRaw.split(',').map(c => c.trim()).filter(c => c))
+                        : [];
+                    const codigosImpuestoJson = JSON.stringify(codigosImpuestoArray).replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
                     // Resaltar términos de búsqueda
                     let codigoDisplay = cuenta.codigo;
