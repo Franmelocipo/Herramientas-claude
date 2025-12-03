@@ -483,6 +483,16 @@ function selectSourceType(type) {
         elements.templateButtonText.textContent = templateNames[type] || 'Descargar Plantilla';
     }
 
+    // Mostrar/ocultar info box para VEPs
+    const vepsInfoBox = document.getElementById('vepsInfoBox');
+    if (vepsInfoBox) {
+        if (type === 'veps') {
+            vepsInfoBox.classList.remove('hidden');
+        } else {
+            vepsInfoBox.classList.add('hidden');
+        }
+    }
+
     goToStep(1);
 }
 
@@ -2420,8 +2430,16 @@ function generateFinalExcel() {
                 const nroVep = item['NRO_VEP'] || item['Nro_VEP'] || '';
                 const impuesto = item['IMPUESTO'] || item['Impuesto'] || '';
                 const concepto = item['CONCEPTO'] || item['Concepto'] || '';
+                const subconcepto = item['SUBCONCEPTO'] || item['Subconcepto'] || '';
                 const periodo = item['PERIODO'] || item['Periodo'] || '';
-                descripcion = `${impuesto} - ${concepto} / ${periodo} / VEP ${nroVep}`;
+                const entidadPago = item['ENTIDAD_PAGO'] || item['Entidad_Pago'] || '';
+                // Usar subconcepto si está disponible, sino concepto
+                const conceptoDetalle = subconcepto || concepto;
+                descripcion = `${impuesto} - ${conceptoDetalle} / ${periodo} / VEP ${nroVep}`;
+                // Agregar entidad de pago si está disponible
+                if (entidadPago) {
+                    descripcion = `${descripcion} / ${entidadPago}`;
+                }
                 importe = parseAmount(item['IMPORTE']);
                 // VEPs son pagos (negativos - sale del banco)
                 importe = -importe;
@@ -3020,26 +3038,33 @@ function downloadTemplateSpecific() {
 
         case 'veps':
             datos = [
-                ['NRO_VEP', 'FECHA', 'PERIODO', 'IMPUESTO', 'CONCEPTO', 'COD_SUBCONCEPTO', 'SUBCONCEPTO', 'IMPORTE'],
-                ['12345678', '15/01/2025', '12/2024', 'IVA', 'DECLARACIÓN JURADA', '19', 'IMPUESTO DETERMINADO', 50000],
-                ['12345678', '15/01/2025', '12/2024', 'IVA', 'DECLARACIÓN JURADA', '51', 'INTERESES RESARCITORIOS', 1500],
-                ['87654321', '20/01/2025', '12/2024', 'GANANCIAS', 'ANTICIPO', '19', 'IMPUESTO DETERMINADO', 25000]
+                ['NRO_VEP', 'FECHA', 'PERIODO', 'COD_IMPUESTO', 'IMPUESTO', 'COD_CONCEPTO', 'CONCEPTO', 'COD_SUBCONCEPTO', 'SUBCONCEPTO', 'IMPORTE', 'ENTIDAD_PAGO'],
+                ['12345678', '15/01/2025', '2024/12', '30', 'IVA', '19', 'DECLARACIÓN JURADA', '19', 'IMPUESTO DETERMINADO', 50000, 'BANCO NACIÓN'],
+                ['12345678', '15/01/2025', '2024/12', '30', 'IVA', '19', 'DECLARACIÓN JURADA', '51', 'INTERESES RESARCITORIOS', 1500, 'BANCO NACIÓN'],
+                ['87654321', '20/01/2025', '2024/12', '30', 'GANANCIAS SOCIEDADES', '19', 'ANTICIPO', '19', 'IMPUESTO DETERMINADO', 25000, 'BANCO GALICIA']
             ];
             fileName = 'plantilla_veps_arca.xlsx';
             instrucciones = [
-                ['PLANTILLA VEPs ARCA'],
+                ['PLANTILLA VEPs ARCA - Formato del Conversor de VEPs'],
                 [''],
-                ['Columnas requeridas:'],
+                ['FLUJO RECOMENDADO:'],
+                ['1. Usar el Conversor de VEPs ARCA para convertir PDFs a Excel'],
+                ['2. Usar ese Excel aquí para generar los asientos contables'],
+                [''],
+                ['Columnas del formato (generadas automáticamente por el conversor):'],
                 ['- NRO_VEP: Número de VEP'],
-                ['- FECHA: Fecha de pago'],
-                ['- PERIODO: Período fiscal (MM/YYYY)'],
+                ['- FECHA: Fecha de pago (DD/MM/YYYY)'],
+                ['- PERIODO: Período fiscal (YYYY/MM)'],
+                ['- COD_IMPUESTO: Código del impuesto'],
                 ['- IMPUESTO: Nombre del impuesto'],
+                ['- COD_CONCEPTO: Código del concepto'],
                 ['- CONCEPTO: Concepto de pago'],
-                ['- COD_SUBCONCEPTO: Código de subconcepto (51 = intereses)'],
+                ['- COD_SUBCONCEPTO: Código de subconcepto'],
                 ['- SUBCONCEPTO: Descripción del subconcepto'],
                 ['- IMPORTE: Monto a pagar'],
+                ['- ENTIDAD_PAGO: Banco o entidad de pago'],
                 [''],
-                ['Los VEPs se agrupan por impuesto y se separan intereses']
+                ['Los VEPs se agrupan por impuesto y concepto']
             ];
             break;
 

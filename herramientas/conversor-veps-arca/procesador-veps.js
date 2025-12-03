@@ -256,3 +256,21 @@ function exportarExcel() {
     const fecha = new Date().toISOString().split('T')[0];
     XLSX.writeFile(wb, `veps_arca_${fecha}.xlsx`);
 }
+
+function nuevaConversion() {
+    // Limpiar datos
+    datosExtraidos = [];
+
+    // Resetear input de archivos
+    document.getElementById('fileInput').value = '';
+
+    // Ocultar secciones
+    document.getElementById('progressSection').style.display = 'none';
+    document.getElementById('resultsSection').style.display = 'none';
+
+    // Mostrar área de carga
+    document.getElementById('uploadArea').style.display = 'block';
+
+    // Scroll al inicio
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}

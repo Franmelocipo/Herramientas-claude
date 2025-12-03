@@ -43,9 +43,17 @@
             <div id="resultsSection" style="display: none;">
                 <h3>Archivos procesados</h3>
                 <div id="resultsList"></div>
-                <button onclick="exportarExcel()" class="btn-success">
-                    📥 Descargar Excel
-                </button>
+                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                    <button onclick="exportarExcel()" class="btn-success">
+                        📥 Descargar Excel
+                    </button>
+                    <button onclick="nuevaConversion()" class="btn-secondary">
+                        🔄 Nueva Conversión
+                    </button>
+                    <a href="../../index.html" class="btn-secondary">
+                        🏠 Volver al Inicio
+                    </a>
+                </div>
             </div>
         </main>
     </div>
