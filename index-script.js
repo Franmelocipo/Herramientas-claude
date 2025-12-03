@@ -1141,12 +1141,18 @@ function hidePlanCuentasModal() {
     planCuentasCache = [];
     planCuentasSearchTerm = '';
     planCuentasTipoFiltro = '';
+    // Resetear estado de filtros renderizados
+    filtrosPlanCuentasRenderizados = false;
 }
 
-async function renderPlanCuentasList(forceReload = false) {
+// Variable para controlar si los filtros ya fueron renderizados
+let filtrosPlanCuentasRenderizados = false;
+
+async function renderPlanCuentasList(forceReload = false, soloActualizarResultados = false) {
     console.log('🔄 [renderPlanCuentasList] ========== INICIO RENDER ==========');
     console.log('   - currentClienteIdPlan:', currentClienteIdPlan);
     console.log('   - forceReload:', forceReload);
+    console.log('   - soloActualizarResultados:', soloActualizarResultados);
     console.log('   - planCuentasCache.length:', planCuentasCache.length);
 
     if (!currentClienteIdPlan) {
@@ -1253,39 +1259,58 @@ async function renderPlanCuentasList(forceReload = false) {
         }
     }
 
-    // Renderizar búsqueda y filtros
-    const searchFilterHtml = `
-        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
-            <div style="flex: 1; min-width: 250px;">
-                <div style="position: relative;">
-                    <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 16px;">🔍</span>
-                    <input type="text"
-                           id="planCuentasSearch"
-                           placeholder="Buscar por código o nombre de cuenta..."
-                           value="${planCuentasSearchTerm}"
-                           style="width: 100%; padding: 10px 12px 10px 40px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s, box-shadow 0.2s;"
-                           onfocus="this.style.borderColor='#3b82f6'; this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.1)';"
-                           onblur="this.style.borderColor='#e2e8f0'; this.style.boxShadow='none';"
-                           oninput="filtrarPlanCuentas()">
+    // Renderizar búsqueda y filtros solo si no están renderizados o si es una recarga completa
+    let filtrosContainer = document.getElementById('planCuentasFiltrosContainer');
+    let resultadosContainer = document.getElementById('planCuentasResultadosContainer');
+
+    // Si no existen los contenedores, crearlos
+    if (!filtrosContainer || !resultadosContainer || forceReload) {
+        filtrosPlanCuentasRenderizados = false;
+        listElement.innerHTML = `
+            <div id="planCuentasFiltrosContainer"></div>
+            <div id="planCuentasResultadosContainer"></div>
+        `;
+        filtrosContainer = document.getElementById('planCuentasFiltrosContainer');
+        resultadosContainer = document.getElementById('planCuentasResultadosContainer');
+    }
+
+    // Renderizar filtros solo una vez (evita pérdida de foco)
+    if (!filtrosPlanCuentasRenderizados && !soloActualizarResultados) {
+        const searchFilterHtml = `
+            <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 250px;">
+                    <div style="position: relative;">
+                        <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 16px;">🔍</span>
+                        <input type="text"
+                               id="planCuentasSearch"
+                               placeholder="Buscar por código o nombre de cuenta..."
+                               value="${planCuentasSearchTerm}"
+                               style="width: 100%; padding: 10px 12px 10px 40px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s, box-shadow 0.2s;"
+                               onfocus="this.style.borderColor='#3b82f6'; this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.1)';"
+                               onblur="this.style.borderColor='#e2e8f0'; this.style.boxShadow='none';"
+                               oninput="filtrarPlanCuentas()">
+                    </div>
+                </div>
+                <div style="min-width: 180px;">
+                    <select id="planCuentasTipoFilter"
+                            style="width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: white; cursor: pointer; transition: border-color 0.2s;"
+                            onchange="filtrarPlanCuentas()">
+                        <option value="">Todos los tipos</option>
+                        <option value="Activo" ${planCuentasTipoFiltro === 'Activo' ? 'selected' : ''}>Activo</option>
+                        <option value="Pasivo" ${planCuentasTipoFiltro === 'Pasivo' ? 'selected' : ''}>Pasivo</option>
+                        <option value="Patrimonio Neto" ${planCuentasTipoFiltro === 'Patrimonio Neto' ? 'selected' : ''}>Patrimonio Neto</option>
+                        <option value="Ingreso" ${planCuentasTipoFiltro === 'Ingreso' ? 'selected' : ''}>Ingreso</option>
+                        <option value="Egreso" ${planCuentasTipoFiltro === 'Egreso' ? 'selected' : ''}>Egreso</option>
+                    </select>
                 </div>
             </div>
-            <div style="min-width: 180px;">
-                <select id="planCuentasTipoFilter"
-                        style="width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: white; cursor: pointer; transition: border-color 0.2s;"
-                        onchange="filtrarPlanCuentas()">
-                    <option value="">Todos los tipos</option>
-                    <option value="Activo" ${planCuentasTipoFiltro === 'Activo' ? 'selected' : ''}>Activo</option>
-                    <option value="Pasivo" ${planCuentasTipoFiltro === 'Pasivo' ? 'selected' : ''}>Pasivo</option>
-                    <option value="Patrimonio Neto" ${planCuentasTipoFiltro === 'Patrimonio Neto' ? 'selected' : ''}>Patrimonio Neto</option>
-                    <option value="Ingreso" ${planCuentasTipoFiltro === 'Ingreso' ? 'selected' : ''}>Ingreso</option>
-                    <option value="Egreso" ${planCuentasTipoFiltro === 'Egreso' ? 'selected' : ''}>Egreso</option>
-                </select>
-            </div>
-        </div>
-    `;
+        `;
+        filtrosContainer.innerHTML = searchFilterHtml;
+        filtrosPlanCuentasRenderizados = true;
+    }
 
     if (todasLasCuentas.length === 0) {
-        listElement.innerHTML = `
+        resultadosContainer.innerHTML = `
             <div style="text-align: center; padding: 40px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px;">
                 <span style="font-size: 48px; display: block; margin-bottom: 16px;">📋</span>
                 <h3 style="color: #0369a1; margin: 0 0 12px;">Plan de cuentas vacío</h3>
@@ -1343,7 +1368,7 @@ async function renderPlanCuentasList(forceReload = false) {
 
     // Mensaje si no hay resultados después del filtro
     if (cuentasFiltradas.length === 0) {
-        listElement.innerHTML = searchFilterHtml + `
+        resultadosContainer.innerHTML = `
             <div class="empty-state" style="background: #fef3c7; border: 1px solid #f59e0b; padding: 20px; border-radius: 8px; text-align: center;">
                 <span style="font-size: 24px;">🔍</span>
                 <p style="margin: 12px 0 0; color: #92400e;">No se encontraron cuentas con los filtros aplicados.</p>
@@ -1419,7 +1444,7 @@ async function renderPlanCuentasList(forceReload = false) {
         </table>
     `;
 
-    listElement.innerHTML = searchFilterHtml + tableHtml;
+    resultadosContainer.innerHTML = tableHtml;
     console.log('🔄 [renderPlanCuentasList] ========== FIN (EXITOSO) ==========');
 }
 
@@ -1439,7 +1464,8 @@ function filtrarPlanCuentas() {
     console.log('   - Tipo:', planCuentasTipoFiltro);
 
     // NO forzar recarga, usar la cache existente
-    renderPlanCuentasList(false);
+    // soloActualizarResultados=true para mantener el foco en el input de búsqueda
+    renderPlanCuentasList(false, true);
 }
 
 /**
@@ -1580,9 +1606,13 @@ function cerrarPopupAlClickFuera(event) {
 // FUNCIONES PARA SELECTOR DE IMPUESTOS
 // ============================================
 
+// Estado global para los selectores de impuestos (por containerId)
+const impuestosAsignadosState = {};
+
 /**
- * Renderiza los checkboxes de impuestos en un contenedor
- * Carga datos desde Supabase con formato: COD_IMP-COD_CONC-COD_SUB: DESC_IMP / DESC_CONC / DESC_SUB
+ * Renderiza el selector de impuestos con diseño de chips/tags
+ * Sección superior: chips de impuestos asignados con botón X
+ * Sección inferior: buscador + lista de impuestos disponibles (sin los asignados)
  * @param {string} containerId - ID del contenedor
  * @param {Array} seleccionados - Array de códigos de impuesto ya seleccionados (formato: "10-108-51")
  */
@@ -1603,7 +1633,7 @@ async function renderizarSelectorImpuestos(containerId, seleccionados = []) {
     container.innerHTML = `
         <div style="text-align: center; color: #64748b; padding: 12px;">
             <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-            <div style="margin-top: 8px;">Cargando impuestos desde Supabase...</div>
+            <div style="margin-top: 8px;">Cargando impuestos...</div>
         </div>
         <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
     `;
@@ -1621,121 +1651,187 @@ async function renderizarSelectorImpuestos(containerId, seleccionados = []) {
         return;
     }
 
-    // Generar ID único para este selector
-    const selectorId = containerId + '_selector';
-    const searchId = containerId + '_search';
+    // Inicializar estado de impuestos asignados para este contenedor
+    impuestosAsignadosState[containerId] = new Set(seleccionados.map(s => String(s).trim()));
 
-    // Crear set de seleccionados (normalizar los códigos)
-    const seleccionadosSet = new Set(seleccionados.map(s => String(s).trim()));
+    // Crear mapa de código -> datos del impuesto
+    const mapaImpuestos = {};
+    impuestos.forEach(imp => {
+        mapaImpuestos[imp.codigoCompuesto] = imp;
+    });
 
-    // Log para depuración: verificar qué impuestos coinciden
+    // Log para depuración
     if (seleccionados.length > 0) {
-        const coincidencias = impuestos.filter(imp => seleccionadosSet.has(imp.codigoCompuesto));
-        console.log('   - Impuestos que coinciden para pre-selección:', coincidencias.length, 'de', seleccionados.length);
+        const coincidencias = seleccionados.filter(s => mapaImpuestos[String(s).trim()]);
+        console.log('   - Impuestos que coinciden:', coincidencias.length, 'de', seleccionados.length);
         if (coincidencias.length !== seleccionados.length) {
-            console.warn('   - Códigos no encontrados:', seleccionados.filter(s => !impuestos.some(imp => imp.codigoCompuesto === String(s).trim())));
+            console.warn('   - Códigos no encontrados:', seleccionados.filter(s => !mapaImpuestos[String(s).trim()]));
         }
     }
 
-    // Renderizar el selector completo con búsqueda
-    const renderCheckboxes = (impuestosFiltrados) => {
-        return impuestosFiltrados.map(imp => {
-            const isChecked = seleccionadosSet.has(imp.codigoCompuesto) ? 'checked' : '';
+    // IDs de elementos
+    const chipsContainerId = containerId + '_chips';
+    const searchId = containerId + '_search';
+    const listContainerId = containerId + '_list';
+
+    // Función para renderizar chips de impuestos asignados
+    const renderChips = () => {
+        const asignados = Array.from(impuestosAsignadosState[containerId]);
+        if (asignados.length === 0) {
+            return `<div style="color: #94a3b8; font-style: italic; padding: 8px 0;">Sin impuestos asignados</div>`;
+        }
+        return asignados.map(codigo => {
+            const imp = mapaImpuestos[codigo];
+            const descripcion = imp ? imp.descripcionCompleta : 'Impuesto no encontrado';
+            // Truncar descripción si es muy larga
+            const descCorta = descripcion.length > 60 ? descripcion.substring(0, 57) + '...' : descripcion;
             return `
-                <label class="impuesto-item" style="display: flex; align-items: flex-start; padding: 8px 10px; cursor: pointer; border-radius: 6px; transition: background 0.2s; margin-bottom: 4px; border: 1px solid transparent;"
-                       onmouseover="this.style.background='#e0f2fe'; this.style.borderColor='#93c5fd';"
-                       onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-                    <input type="checkbox"
-                           class="impuesto-checkbox"
-                           value="${imp.codigoCompuesto}"
-                           ${isChecked}
-                           style="width: 18px; height: 18px; margin-right: 10px; margin-top: 2px; cursor: pointer; accent-color: #2563eb; flex-shrink: 0;">
+                <div class="impuesto-chip" data-codigo="${codigo}" style="display: flex; align-items: center; gap: 8px; background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px;">
                     <div style="flex: 1; min-width: 0;">
-                        <div style="font-family: monospace; font-weight: 700; color: #1e40af; font-size: 13px;">
-                            ${imp.codigoCompuesto}
-                        </div>
-                        <div style="color: #475569; font-size: 12px; margin-top: 2px; line-height: 1.3; word-wrap: break-word;">
-                            ${imp.descripcionCompleta || 'Sin descripción'}
-                        </div>
+                        <div style="font-family: monospace; font-weight: 600; color: #0369a1; font-size: 12px;">${codigo}</div>
+                        <div style="color: #0c4a6e; font-size: 11px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${descripcion}">${descCorta}</div>
                     </div>
-                </label>
+                    <button type="button" onclick="quitarImpuestoAsignado('${containerId}', '${codigo}')"
+                            style="background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; border-radius: 4px; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; transition: all 0.2s; flex-shrink: 0;"
+                            onmouseover="this.style.background='#fecaca'; this.style.borderColor='#f87171';"
+                            onmouseout="this.style.background='#fee2e2'; this.style.borderColor='#fecaca';"
+                            title="Quitar impuesto">
+                        ✕
+                    </button>
+                </div>
             `;
         }).join('');
     };
 
-    // HTML completo del selector
-    container.innerHTML = `
-        <div style="margin-bottom: 10px;">
-            <input type="text"
-                   id="${searchId}"
-                   placeholder="Buscar por código o descripción..."
-                   style="width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box;"
-                   autocomplete="off">
-            <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: #64748b;">
-                <span>${impuestos.length} impuestos disponibles</span>
-                <span id="${containerId}_count">0 seleccionados</span>
-            </div>
-        </div>
-        <div id="${selectorId}" style="max-height: 250px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; background: white;">
-            ${renderCheckboxes(impuestos)}
-        </div>
-    `;
+    // Función para renderizar lista de impuestos disponibles (sin los asignados)
+    const renderListaDisponibles = (termino = '') => {
+        // Filtrar impuestos que NO están asignados
+        let disponibles = impuestos.filter(imp => !impuestosAsignadosState[containerId].has(imp.codigoCompuesto));
 
-    // Actualizar contador de seleccionados
-    const actualizarContador = () => {
-        const checkboxes = container.querySelectorAll('.impuesto-checkbox:checked');
-        const countEl = document.getElementById(`${containerId}_count`);
-        if (countEl) {
-            countEl.textContent = `${checkboxes.length} seleccionados`;
+        // Aplicar filtro de búsqueda
+        if (termino.trim()) {
+            disponibles = filtrarImpuestos(disponibles, termino);
+        }
+
+        if (disponibles.length === 0) {
+            if (termino.trim()) {
+                return `<div style="text-align: center; color: #64748b; padding: 16px;">No se encontraron impuestos para "${termino}"</div>`;
+            }
+            return `<div style="text-align: center; color: #64748b; padding: 16px;">Todos los impuestos han sido asignados</div>`;
+        }
+
+        return disponibles.map(imp => `
+            <label class="impuesto-disponible-item" style="display: flex; align-items: flex-start; padding: 8px 10px; cursor: pointer; border-radius: 6px; transition: background 0.2s; margin-bottom: 2px; border: 1px solid transparent;"
+                   onmouseover="this.style.background='#f0fdf4'; this.style.borderColor='#86efac';"
+                   onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
+                <input type="checkbox"
+                       class="impuesto-agregar-checkbox"
+                       value="${imp.codigoCompuesto}"
+                       onchange="agregarImpuestoDesdeCheckbox('${containerId}', '${imp.codigoCompuesto}', this)"
+                       style="width: 18px; height: 18px; margin-right: 10px; margin-top: 2px; cursor: pointer; accent-color: #22c55e; flex-shrink: 0;">
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-family: monospace; font-weight: 600; color: #166534; font-size: 12px;">
+                        ${imp.codigoCompuesto}
+                    </div>
+                    <div style="color: #475569; font-size: 11px; margin-top: 2px; line-height: 1.3;">
+                        ${imp.descripcionCompleta || 'Sin descripción'}
+                    </div>
+                </div>
+            </label>
+        `).join('');
+    };
+
+    // Función para actualizar la UI
+    const actualizarUI = (termino = '') => {
+        const chipsContainer = document.getElementById(chipsContainerId);
+        const listContainer = document.getElementById(listContainerId);
+
+        if (chipsContainer) {
+            chipsContainer.innerHTML = renderChips();
+        }
+        if (listContainer) {
+            listContainer.innerHTML = renderListaDisponibles(termino);
         }
     };
+
+    // Guardar función de actualización en el estado para acceso global
+    impuestosAsignadosState[containerId + '_updateUI'] = actualizarUI;
+    impuestosAsignadosState[containerId + '_searchTerm'] = '';
+
+    // Renderizar estructura completa
+    container.innerHTML = `
+        <!-- Sección de impuestos asignados -->
+        <div style="margin-bottom: 12px;">
+            <div style="font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 14px;">📋</span> Impuestos ARCA asignados:
+            </div>
+            <div id="${chipsContainerId}" style="max-height: 150px; overflow-y: auto; padding: 4px 0;">
+                ${renderChips()}
+            </div>
+        </div>
+
+        <!-- Separador -->
+        <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
+
+        <!-- Sección para agregar impuestos -->
+        <div>
+            <div style="font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 14px;">➕</span> Agregar impuesto:
+            </div>
+            <div style="position: relative; margin-bottom: 8px;">
+                <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 14px;">🔍</span>
+                <input type="text"
+                       id="${searchId}"
+                       placeholder="Buscar impuesto por código o descripción..."
+                       style="width: 100%; padding: 8px 12px 8px 32px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; box-sizing: border-box;"
+                       autocomplete="off">
+            </div>
+            <div id="${listContainerId}" style="max-height: 180px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px; background: #fafafa;">
+                ${renderListaDisponibles()}
+            </div>
+        </div>
+    `;
 
     // Evento de búsqueda
     const searchInput = document.getElementById(searchId);
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
             const termino = e.target.value;
-            const impuestosFiltrados = filtrarImpuestos(impuestos, termino);
-            const checkboxContainer = document.getElementById(selectorId);
-            if (checkboxContainer) {
-                // Guardar estado de los checkboxes antes de re-renderizar
-                const checkedValues = new Set(
-                    Array.from(container.querySelectorAll('.impuesto-checkbox:checked'))
-                        .map(cb => cb.value)
-                );
-
-                checkboxContainer.innerHTML = renderCheckboxes(impuestosFiltrados);
-
-                // Restaurar estado de los checkboxes
-                checkboxContainer.querySelectorAll('.impuesto-checkbox').forEach(cb => {
-                    if (checkedValues.has(cb.value)) {
-                        cb.checked = true;
-                    }
-                });
-
-                // Mostrar mensaje si no hay resultados
-                if (impuestosFiltrados.length === 0) {
-                    checkboxContainer.innerHTML = `
-                        <div style="text-align: center; color: #64748b; padding: 20px;">
-                            No se encontraron impuestos para "${termino}"
-                        </div>
-                    `;
-                }
-
-                actualizarContador();
+            impuestosAsignadosState[containerId + '_searchTerm'] = termino;
+            const listContainer = document.getElementById(listContainerId);
+            if (listContainer) {
+                listContainer.innerHTML = renderListaDisponibles(termino);
             }
         });
     }
+}
 
-    // Evento para actualizar contador cuando cambian los checkboxes
-    container.addEventListener('change', (e) => {
-        if (e.target.classList.contains('impuesto-checkbox')) {
-            actualizarContador();
+/**
+ * Quitar un impuesto de los asignados (al hacer clic en X del chip)
+ */
+function quitarImpuestoAsignado(containerId, codigo) {
+    if (impuestosAsignadosState[containerId]) {
+        impuestosAsignadosState[containerId].delete(codigo);
+        const updateUI = impuestosAsignadosState[containerId + '_updateUI'];
+        const searchTerm = impuestosAsignadosState[containerId + '_searchTerm'] || '';
+        if (updateUI) {
+            updateUI(searchTerm);
         }
-    });
+    }
+}
 
-    // Actualizar contador inicial
-    actualizarContador();
+/**
+ * Agregar un impuesto desde checkbox (al marcar un checkbox de la lista)
+ */
+function agregarImpuestoDesdeCheckbox(containerId, codigo, checkbox) {
+    if (impuestosAsignadosState[containerId]) {
+        impuestosAsignadosState[containerId].add(codigo);
+        const updateUI = impuestosAsignadosState[containerId + '_updateUI'];
+        const searchTerm = impuestosAsignadosState[containerId + '_searchTerm'] || '';
+        if (updateUI) {
+            updateUI(searchTerm);
+        }
+    }
 }
 
 /**
@@ -1744,11 +1840,11 @@ async function renderizarSelectorImpuestos(containerId, seleccionados = []) {
  * @returns {Array} Array de códigos seleccionados
  */
 function obtenerImpuestosSeleccionados(containerId) {
-    const container = document.getElementById(containerId);
-    if (!container) return [];
-
-    const checkboxes = container.querySelectorAll('.impuesto-checkbox:checked');
-    return Array.from(checkboxes).map(cb => cb.value);
+    // Usar el nuevo estado basado en chips
+    if (impuestosAsignadosState[containerId]) {
+        return Array.from(impuestosAsignadosState[containerId]);
+    }
+    return [];
 }
 
 async function showNuevaCuentaModal() {
