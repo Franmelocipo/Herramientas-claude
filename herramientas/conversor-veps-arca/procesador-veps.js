@@ -178,8 +178,15 @@ function extraerDatosVEP(texto, nroVEP) {
 function mostrarResultados() {
     const resultsSection = document.getElementById('resultsSection');
     const resultsList = document.getElementById('resultsList');
+    const actionBar = document.getElementById('actionBar');
 
     resultsSection.style.display = 'block';
+
+    // Mostrar barra de acciones superior
+    if (actionBar) {
+        actionBar.style.display = 'block';
+        document.getElementById('recordCount').textContent = `${datosExtraidos.length} registros`;
+    }
 
     let html = `
         <div class="summary">
@@ -267,6 +274,12 @@ function nuevaConversion() {
     // Ocultar secciones
     document.getElementById('progressSection').style.display = 'none';
     document.getElementById('resultsSection').style.display = 'none';
+
+    // Ocultar barra de acciones
+    const actionBar = document.getElementById('actionBar');
+    if (actionBar) {
+        actionBar.style.display = 'none';
+    }
 
     // Mostrar área de carga
     document.getElementById('uploadArea').style.display = 'block';
