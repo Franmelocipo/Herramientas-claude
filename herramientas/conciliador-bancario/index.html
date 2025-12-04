@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conciliador Bancario</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../supabase-config.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <script src="../../check-auth.js"></script>
+    <div class="nav-bar">
+        <a href="../../index.html" class="nav-btn" title="Volver al inicio">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-text">Inicio</span>
+        </a>
+        <a href="../../index.html" class="nav-btn" title="Menú principal">
+            <span class="nav-icon">←</span>
+            <span class="nav-text">Volver</span>
+        </a>
+    </div>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <h1>🔄 Conciliador Bancario</h1>
+                <p class="subtitle">Compara movimientos del Mayor Contable con Extractos Bancarios</p>
+            </div>
+
+            <!-- Paso 1: Selección de tipo de conciliación -->
+            <div class="step" id="step-tipo">
+                <h2 class="step-title">
+                    <span class="step-number">1</span>
+                    ¿Qué desea conciliar?
+                </h2>
+                <div class="type-grid">
+                    <button class="type-btn" data-tipo="creditos">
+                        <div class="type-btn-icon">💰</div>
+                        <div class="type-btn-title">Créditos</div>
+                        <div class="type-btn-subtitle">Entradas de dinero (Haber del Mayor = Crédito del Extracto)</div>
+                    </button>
+                    <button class="type-btn" data-tipo="debitos">
+                        <div class="type-btn-icon">💸</div>
+                        <div class="type-btn-title">Débitos</div>
+                        <div class="type-btn-subtitle">Salidas de dinero (Debe del Mayor = Débito del Extracto)</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Paso 2: Carga de archivos -->
+            <div class="step hidden" id="step-archivos">
+                <h2 class="step-title">
+                    <span class="step-number">2</span>
+                    Cargar archivos
+                </h2>
+
+                <!-- Mayor Contable -->
+                <div class="file-section">
+                    <div class="file-header">
+                        <h3>📒 Mayor Contable</h3>
+                        <button class="btn-template" id="btnPlantillaMayor">📥 Descargar Plantilla</button>
+                    </div>
+                    <div class="file-drop-zone" id="dropZoneMayor">
+                        <div class="upload-icon">📤</div>
+                        <div class="upload-text">Haz clic para seleccionar un archivo Excel</div>
+                        <div class="upload-subtext">o arrastra tu archivo aquí</div>
+                        <input type="file" id="fileMayor" accept=".xlsx,.xls" style="display: none;">
+                    </div>
+                    <div id="previewMayor" class="file-preview hidden">
+                        <span class="file-icon">✅</span>
+                        <span id="fileNameMayor"></span>
+                        <span class="record-count" id="recordCountMayor"></span>
+                        <button class="btn-remove" id="btnRemoveMayor">✕</button>
+                    </div>
+                </div>
+
+                <!-- Extracto Bancario -->
+                <div class="file-section">
+                    <div class="file-header">
+                        <h3>🏦 Extracto Bancario</h3>
+                        <button class="btn-template" id="btnPlantillaExtracto">📥 Descargar Plantilla</button>
+                    </div>
+                    <div class="file-drop-zone" id="dropZoneExtracto">
+                        <div class="upload-icon">📤</div>
+                        <div class="upload-text">Haz clic para seleccionar un archivo Excel</div>
+                        <div class="upload-subtext">o arrastra tu archivo aquí</div>
+                        <input type="file" id="fileExtracto" accept=".xlsx,.xls" style="display: none;">
+                    </div>
+                    <div id="previewExtracto" class="file-preview hidden">
+                        <span class="file-icon">✅</span>
+                        <span id="fileNameExtracto"></span>
+                        <span class="record-count" id="recordCountExtracto"></span>
+                        <button class="btn-remove" id="btnRemoveExtracto">✕</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paso 3: Configuración de tolerancias -->
+            <div class="step hidden" id="step-tolerancias">
+                <h2 class="step-title">
+                    <span class="step-number">3</span>
+                    Configuración de tolerancias
+                </h2>
+                <div class="tolerance-grid">
+                    <div class="tolerance-item">
+                        <label for="toleranciaFecha">Tolerancia de fechas (días)</label>
+                        <input type="number" id="toleranciaFecha" value="30" min="0" max="365" class="input-number">
+                        <span class="tolerance-hint">± días de diferencia permitida</span>
+                    </div>
+                    <div class="tolerance-item">
+                        <label for="toleranciaImporte">Tolerancia de importes ($)</label>
+                        <input type="number" id="toleranciaImporte" value="20000" min="0" step="1000" class="input-number">
+                        <span class="tolerance-hint">± diferencia permitida en pesos</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paso 4: Ejecutar conciliación -->
+            <div class="step hidden" id="step-ejecutar">
+                <h2 class="step-title">
+                    <span class="step-number">4</span>
+                    Ejecutar conciliación
+                </h2>
+                <button id="btnConciliar" class="btn-conciliar">
+                    🔍 Conciliar Movimientos
+                </button>
+            </div>
+
+            <!-- Mensajes de error y éxito -->
+            <div id="errorBox" class="message-box error-box hidden"></div>
+            <div id="successBox" class="message-box success-box hidden"></div>
+
+            <!-- Resultados -->
+            <div id="resultados" class="results-section hidden">
+                <h2 class="results-title">📊 Resultados de Conciliación</h2>
+
+                <!-- Resumen -->
+                <div class="results-summary">
+                    <div class="summary-card success">
+                        <div class="summary-icon">✅</div>
+                        <div class="summary-value" id="totalConciliados">0</div>
+                        <div class="summary-label">Movimientos conciliados</div>
+                    </div>
+                    <div class="summary-card warning">
+                        <div class="summary-icon">❌</div>
+                        <div class="summary-value" id="mayorNoConciliado">0</div>
+                        <div class="summary-label">Mayor sin conciliar</div>
+                    </div>
+                    <div class="summary-card warning">
+                        <div class="summary-icon">❌</div>
+                        <div class="summary-value" id="extractoNoConciliado">0</div>
+                        <div class="summary-label">Extracto sin conciliar</div>
+                    </div>
+                </div>
+
+                <!-- Totales -->
+                <div class="totals-box">
+                    <div class="total-row">
+                        <span class="total-label">Total Mayor:</span>
+                        <span class="total-value" id="totalMayor">$0,00</span>
+                    </div>
+                    <div class="total-row">
+                        <span class="total-label">Total Extracto:</span>
+                        <span class="total-value" id="totalExtracto">$0,00</span>
+                    </div>
+                    <div class="total-row diferencia">
+                        <span class="total-label">Diferencia:</span>
+                        <span class="total-value" id="diferencia">$0,00</span>
+                    </div>
+                </div>
+
+                <!-- Tabs para ver detalles -->
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="conciliados">Conciliados</button>
+                    <button class="tab-btn" data-tab="mayor-pendiente">Mayor Pendiente</button>
+                    <button class="tab-btn" data-tab="extracto-pendiente">Extracto Pendiente</button>
+                </div>
+
+                <!-- Tabla de conciliados -->
+                <div class="tab-content active" id="tab-conciliados">
+                    <div class="table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th colspan="4" class="header-group mayor">MAYOR CONTABLE</th>
+                                    <th class="separator"></th>
+                                    <th colspan="4" class="header-group extracto">EXTRACTO BANCARIO</th>
+                                    <th class="header-diff">Dif.</th>
+                                </tr>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Nº</th>
+                                    <th>Leyenda</th>
+                                    <th class="text-right">Importe</th>
+                                    <th class="separator"></th>
+                                    <th>Fecha</th>
+                                    <th>Descripción</th>
+                                    <th>Origen</th>
+                                    <th class="text-right">Importe</th>
+                                    <th class="text-right">$</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaConciliados"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tabla Mayor Pendiente -->
+                <div class="tab-content" id="tab-mayor-pendiente">
+                    <div class="table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Nº Asiento</th>
+                                    <th>C/E</th>
+                                    <th>Tipo</th>
+                                    <th>Leyenda</th>
+                                    <th class="text-right">Debe</th>
+                                    <th class="text-right">Haber</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaMayorPendiente"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tabla Extracto Pendiente -->
+                <div class="tab-content" id="tab-extracto-pendiente">
+                    <div class="table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Descripción</th>
+                                    <th>Origen</th>
+                                    <th class="text-right">Débito</th>
+                                    <th class="text-right">Crédito</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaExtractoPendiente"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Botón de descarga -->
+                <button id="btnDescargar" class="btn-download">
+                    📥 Descargar Reporte Excel
+                </button>
+            </div>
+
+            <!-- Botón Nueva Conciliación -->
+            <div id="btnNuevaContainer" class="hidden">
+                <button id="btnNuevaConciliacion" class="btn-secondary btn-full">
+                    🔄 Nueva Conciliación
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
