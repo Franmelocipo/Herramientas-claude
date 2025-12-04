@@ -39,6 +39,22 @@
                 </select>
             </div>
 
+            <!-- Selector de modo: Convertir PDF o Combinar Excel -->
+            <div class="mode-selector" id="modeSelector">
+                <button class="mode-btn active" data-mode="convertir" id="btnConvertir">
+                    <span class="mode-icon">📄</span>
+                    <span class="mode-text">Convertir PDF a Excel</span>
+                </button>
+                <button class="mode-btn" data-mode="combinar" id="btnCombinar">
+                    <span class="mode-icon">📑</span>
+                    <span class="mode-text">Combinar Extractos Excel</span>
+                </button>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- SECCIÓN: CONVERTIR PDF A EXCEL (actual) -->
+            <!-- ============================================ -->
+            <div id="seccionConvertir">
             <!-- Paso 1: Tipo de extracto -->
             <div class="step">
                 <h2 class="step-title">
@@ -126,6 +142,115 @@
                     Descargar Excel (<span id="rowCount">0</span> movimientos)
                 </button>
             </div>
+            </div><!-- Fin seccionConvertir -->
+
+            <!-- ============================================ -->
+            <!-- SECCIÓN: COMBINAR EXTRACTOS EXCEL (nuevo) -->
+            <!-- ============================================ -->
+            <div id="seccionCombinar" class="hidden">
+                <!-- Paso 1: Subir archivos Excel -->
+                <div class="step">
+                    <h2 class="step-title">
+                        <span class="step-number">1</span>
+                        Suba los archivos Excel a combinar
+                    </h2>
+                    <p class="combinar-description">
+                        Suba los archivos Excel generados por esta herramienta para combinarlos en un único archivo.
+                    </p>
+                    <div class="file-drop-zone multi-upload" id="dropZoneCombinar">
+                        <div class="upload-icon">📤</div>
+                        <div class="upload-text">Arrastre archivos aquí o haga clic para seleccionar</div>
+                        <div class="upload-subtext">Puede seleccionar múltiples archivos Excel (.xlsx)</div>
+                        <input type="file" id="fileInputCombinar" accept=".xlsx,.xls" multiple style="display: none;">
+                    </div>
+
+                    <!-- Lista de archivos cargados -->
+                    <div id="archivosCargados" class="archivos-cargados hidden">
+                        <h3>Archivos cargados: <span id="contadorArchivos">0</span></h3>
+                        <ul id="listaArchivos" class="lista-archivos"></ul>
+                    </div>
+                </div>
+
+                <!-- Paso 2: Vista previa y validación -->
+                <div class="step hidden" id="stepVistaPreviaCombinar">
+                    <h2 class="step-title">
+                        <span class="step-number">2</span>
+                        Vista previa y validación
+                    </h2>
+
+                    <div class="resumen-combinar">
+                        <div class="resumen-item">
+                            <span class="resumen-label">Período detectado:</span>
+                            <span id="periodoDetectado" class="resumen-valor">-</span>
+                        </div>
+                        <div class="resumen-item">
+                            <span class="resumen-label">Total de movimientos:</span>
+                            <span id="totalMovimientos" class="resumen-valor">-</span>
+                        </div>
+                    </div>
+
+                    <div class="archivos-procesados">
+                        <h4>Archivos procesados:</h4>
+                        <ul id="listaArchivosProcesados" class="lista-archivos-procesados"></ul>
+                    </div>
+
+                    <div id="advertenciasCombinar" class="advertencias-combinar hidden">
+                        <h4>⚠️ Advertencias:</h4>
+                        <ul id="listaAdvertencias" class="lista-advertencias"></ul>
+                    </div>
+                </div>
+
+                <!-- Paso 3: Opciones de combinación -->
+                <div class="step hidden" id="stepOpcionesCombinar">
+                    <h2 class="step-title">
+                        <span class="step-number">3</span>
+                        Opciones de combinación
+                    </h2>
+
+                    <div class="opciones-combinar">
+                        <div class="opcion-grupo">
+                            <label class="opcion-label">Ordenar por:</label>
+                            <div class="opcion-radios">
+                                <label class="radio-option">
+                                    <input type="radio" name="ordenFecha" value="asc" checked>
+                                    <span>Fecha (ascendente) - más antiguo primero</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="ordenFecha" value="desc">
+                                    <span>Fecha (descendente) - más reciente primero</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="opcion-grupo">
+                            <label class="checkbox-option">
+                                <input type="checkbox" id="chkEliminarDuplicados">
+                                <span>Eliminar duplicados automáticamente</span>
+                            </label>
+                            <label class="checkbox-option">
+                                <input type="checkbox" id="chkIncluirResumen" checked>
+                                <span>Incluir hoja de resumen por mes</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Paso 4: Descargar -->
+                <div class="step hidden" id="stepDescargarCombinado">
+                    <h2 class="step-title">
+                        <span class="step-number">4</span>
+                        Descargar archivo combinado
+                    </h2>
+                    <button id="btnDescargarCombinado" class="download-btn download-btn-large">
+                        <span>📥</span>
+                        Descargar Excel Combinado
+                    </button>
+                </div>
+
+                <!-- Mensajes de error y éxito para combinar -->
+                <div id="errorBoxCombinar" class="message-box error-box hidden"></div>
+                <div id="successBoxCombinar" class="message-box success-box hidden"></div>
+            </div><!-- Fin seccionCombinar -->
         </div>
     </div>
 
