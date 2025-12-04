@@ -857,6 +857,18 @@ function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
             continue;
         }
 
+        // BUG FIX: Ignorar líneas de separación (guiones, underscores, signos de igual)
+        // Estas líneas aparecen antes de "Saldo en $" y pueden agregarse a la descripción
+        // del último movimiento, causando que sea filtrado por tener > 100 caracteres
+        if (/^[_\-=]{10,}$/.test(trimmedLine)) {
+            continue;
+        }
+
+        // BUG FIX: Ignorar línea de "Saldo en $" que marca el fin de los movimientos
+        if (/^Saldo\s+en\s+\$/i.test(trimmedLine)) {
+            continue;
+        }
+
         // Verificar si la línea empieza con fecha
         const dateMatch = trimmedLine.match(dateRegex);
 
