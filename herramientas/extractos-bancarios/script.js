@@ -2291,3 +2291,827 @@ function hideMessages() {
     elements.errorBox.classList.add('hidden');
     elements.successBox.classList.add('hidden');
 }
+
+// ============================================
+// FUNCIONALIDAD: COMBINAR EXTRACTOS EXCEL
+// ============================================
+
+// Estado para combinar archivos
+const combinarState = {
+    archivos: [],           // Array de objetos { file, nombre, datos, movimientos, fechaMin, fechaMax }
+    todosLosMovimientos: [],// Array combinado de todos los movimientos
+    duplicadosDetectados: [],
+    duplicadosRemovidos: [],
+    advertencias: [],
+    bancoDetectado: ''
+};
+
+// Elementos DOM para combinar
+const combinarElements = {
+    seccionConvertir: null,
+    seccionCombinar: null,
+    btnConvertir: null,
+    btnCombinar: null,
+    dropZoneCombinar: null,
+    fileInputCombinar: null,
+    archivosCargados: null,
+    contadorArchivos: null,
+    listaArchivos: null,
+    stepVistaPreviaCombinar: null,
+    periodoDetectado: null,
+    totalMovimientos: null,
+    listaArchivosProcesados: null,
+    advertenciasCombinar: null,
+    listaAdvertencias: null,
+    stepOpcionesCombinar: null,
+    stepDescargarCombinado: null,
+    btnDescargarCombinado: null,
+    errorBoxCombinar: null,
+    successBoxCombinar: null
+};
+
+// Inicializar elementos de combinar cuando el DOM esté listo
+document.addEventListener('DOMContentLoaded', () => {
+    initCombinarElements();
+    attachCombinarEventListeners();
+});
+
+function initCombinarElements() {
+    combinarElements.seccionConvertir = document.getElementById('seccionConvertir');
+    combinarElements.seccionCombinar = document.getElementById('seccionCombinar');
+    combinarElements.btnConvertir = document.getElementById('btnConvertir');
+    combinarElements.btnCombinar = document.getElementById('btnCombinar');
+    combinarElements.dropZoneCombinar = document.getElementById('dropZoneCombinar');
+    combinarElements.fileInputCombinar = document.getElementById('fileInputCombinar');
+    combinarElements.archivosCargados = document.getElementById('archivosCargados');
+    combinarElements.contadorArchivos = document.getElementById('contadorArchivos');
+    combinarElements.listaArchivos = document.getElementById('listaArchivos');
+    combinarElements.stepVistaPreviaCombinar = document.getElementById('stepVistaPreviaCombinar');
+    combinarElements.periodoDetectado = document.getElementById('periodoDetectado');
+    combinarElements.totalMovimientos = document.getElementById('totalMovimientos');
+    combinarElements.listaArchivosProcesados = document.getElementById('listaArchivosProcesados');
+    combinarElements.advertenciasCombinar = document.getElementById('advertenciasCombinar');
+    combinarElements.listaAdvertencias = document.getElementById('listaAdvertencias');
+    combinarElements.stepOpcionesCombinar = document.getElementById('stepOpcionesCombinar');
+    combinarElements.stepDescargarCombinado = document.getElementById('stepDescargarCombinado');
+    combinarElements.btnDescargarCombinado = document.getElementById('btnDescargarCombinado');
+    combinarElements.errorBoxCombinar = document.getElementById('errorBoxCombinar');
+    combinarElements.successBoxCombinar = document.getElementById('successBoxCombinar');
+}
+
+function attachCombinarEventListeners() {
+    // Botones de modo
+    if (combinarElements.btnConvertir) {
+        combinarElements.btnConvertir.addEventListener('click', () => cambiarModo('convertir'));
+    }
+    if (combinarElements.btnCombinar) {
+        combinarElements.btnCombinar.addEventListener('click', () => cambiarModo('combinar'));
+    }
+
+    // Zona de arrastre para combinar
+    if (combinarElements.dropZoneCombinar) {
+        combinarElements.dropZoneCombinar.addEventListener('click', () => combinarElements.fileInputCombinar.click());
+        combinarElements.dropZoneCombinar.addEventListener('dragover', handleDragOverCombinar);
+        combinarElements.dropZoneCombinar.addEventListener('dragleave', handleDragLeaveCombinar);
+        combinarElements.dropZoneCombinar.addEventListener('drop', handleDropCombinar);
+    }
+
+    // Input de archivos para combinar
+    if (combinarElements.fileInputCombinar) {
+        combinarElements.fileInputCombinar.addEventListener('change', handleFileInputCombinar);
+    }
+
+    // Botón descargar combinado
+    if (combinarElements.btnDescargarCombinado) {
+        combinarElements.btnDescargarCombinado.addEventListener('click', handleDescargarCombinado);
+    }
+}
+
+function cambiarModo(modo) {
+    // Actualizar botones
+    combinarElements.btnConvertir.classList.toggle('active', modo === 'convertir');
+    combinarElements.btnCombinar.classList.toggle('active', modo === 'combinar');
+
+    // Mostrar/ocultar secciones
+    if (modo === 'convertir') {
+        combinarElements.seccionConvertir.classList.remove('hidden');
+        combinarElements.seccionCombinar.classList.add('hidden');
+    } else {
+        combinarElements.seccionConvertir.classList.add('hidden');
+        combinarElements.seccionCombinar.classList.remove('hidden');
+        // Resetear estado de combinar
+        resetearCombinar();
+    }
+}
+
+function resetearCombinar() {
+    combinarState.archivos = [];
+    combinarState.todosLosMovimientos = [];
+    combinarState.duplicadosDetectados = [];
+    combinarState.duplicadosRemovidos = [];
+    combinarState.advertencias = [];
+    combinarState.bancoDetectado = '';
+
+    // Ocultar pasos
+    combinarElements.archivosCargados.classList.add('hidden');
+    combinarElements.stepVistaPreviaCombinar.classList.add('hidden');
+    combinarElements.stepOpcionesCombinar.classList.add('hidden');
+    combinarElements.stepDescargarCombinado.classList.add('hidden');
+    combinarElements.advertenciasCombinar.classList.add('hidden');
+
+    // Limpiar listas
+    combinarElements.listaArchivos.innerHTML = '';
+    combinarElements.contadorArchivos.textContent = '0';
+
+    hideCombinarMessages();
+}
+
+function handleDragOverCombinar(e) {
+    e.preventDefault();
+    combinarElements.dropZoneCombinar.classList.add('dragover');
+}
+
+function handleDragLeaveCombinar(e) {
+    e.preventDefault();
+    combinarElements.dropZoneCombinar.classList.remove('dragover');
+}
+
+function handleDropCombinar(e) {
+    e.preventDefault();
+    combinarElements.dropZoneCombinar.classList.remove('dragover');
+
+    const files = Array.from(e.dataTransfer.files);
+    agregarArchivosCombinar(files);
+}
+
+function handleFileInputCombinar(e) {
+    const files = Array.from(e.target.files);
+    agregarArchivosCombinar(files);
+    // Limpiar input para poder seleccionar el mismo archivo de nuevo si es necesario
+    e.target.value = '';
+}
+
+async function agregarArchivosCombinar(files) {
+    hideCombinarMessages();
+
+    for (const file of files) {
+        // Validar extensión
+        const extension = file.name.split('.').pop().toLowerCase();
+        if (!['xlsx', 'xls'].includes(extension)) {
+            showCombinarError(`El archivo "${file.name}" no es un archivo Excel válido`);
+            continue;
+        }
+
+        // Verificar si el archivo ya está en la lista
+        if (combinarState.archivos.some(a => a.nombre === file.name)) {
+            showCombinarError(`El archivo "${file.name}" ya ha sido agregado`);
+            continue;
+        }
+
+        // Leer el archivo Excel
+        try {
+            const datos = await leerArchivoExcel(file);
+
+            if (datos.movimientos.length === 0) {
+                showCombinarError(`El archivo "${file.name}" no contiene movimientos válidos`);
+                continue;
+            }
+
+            combinarState.archivos.push({
+                file: file,
+                nombre: file.name,
+                datos: datos,
+                movimientos: datos.movimientos,
+                fechaMin: datos.fechaMin,
+                fechaMax: datos.fechaMax,
+                columnas: datos.columnas
+            });
+
+            actualizarListaArchivos();
+
+        } catch (error) {
+            console.error('Error leyendo archivo:', error);
+            showCombinarError(`Error al leer el archivo "${file.name}": ${error.message}`);
+        }
+    }
+
+    // Si hay al menos 1 archivo, procesar
+    if (combinarState.archivos.length >= 1) {
+        await procesarArchivosCombinar();
+    }
+}
+
+async function leerArchivoExcel(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+
+                // Obtener la primera hoja
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+
+                // Convertir a JSON
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                if (jsonData.length < 2) {
+                    reject(new Error('El archivo no contiene datos suficientes'));
+                    return;
+                }
+
+                // Detectar la fila de encabezados
+                let headerRowIndex = 0;
+                let columnas = {};
+
+                for (let i = 0; i < Math.min(5, jsonData.length); i++) {
+                    const row = jsonData[i];
+                    if (row && row.length >= 4) {
+                        const rowStr = row.map(c => String(c || '').toLowerCase()).join(' ');
+                        if (rowStr.includes('fecha') && (rowStr.includes('descripci') || rowStr.includes('concepto'))) {
+                            headerRowIndex = i;
+                            // Mapear columnas
+                            row.forEach((cell, idx) => {
+                                const cellStr = String(cell || '').toLowerCase();
+                                if (cellStr.includes('fecha')) columnas.fecha = idx;
+                                if (cellStr.includes('descripci') || cellStr.includes('concepto')) columnas.descripcion = idx;
+                                if (cellStr.includes('referencia') || cellStr.includes('origen')) columnas.referencia = idx;
+                                if (cellStr.includes('cr') || cellStr === 'credito' || cellStr === 'crédito') columnas.credito = idx;
+                                if (cellStr.includes('deb') || cellStr === 'debito' || cellStr === 'débito') columnas.debito = idx;
+                                if (cellStr.includes('saldo') && !cellStr.includes('inicial')) columnas.saldo = idx;
+                            });
+                            break;
+                        }
+                    }
+                }
+
+                // Verificar columnas mínimas requeridas
+                if (columnas.fecha === undefined || columnas.descripcion === undefined) {
+                    reject(new Error('No se encontraron las columnas requeridas (Fecha, Descripción)'));
+                    return;
+                }
+
+                // Extraer movimientos
+                const movimientos = [];
+                let fechaMin = null;
+                let fechaMax = null;
+
+                for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
+                    const row = jsonData[i];
+                    if (!row || row.length === 0) continue;
+
+                    const fecha = row[columnas.fecha];
+                    if (!fecha) continue;
+
+                    // Parsear fecha
+                    const fechaParseada = parsearFecha(fecha);
+                    if (!fechaParseada) continue;
+
+                    // Obtener valores
+                    const descripcion = row[columnas.descripcion] || '';
+                    const referencia = columnas.referencia !== undefined ? (row[columnas.referencia] || '') : '';
+                    const credito = columnas.credito !== undefined ? parseNumber(row[columnas.credito]) : 0;
+                    const debito = columnas.debito !== undefined ? parseNumber(row[columnas.debito]) : 0;
+                    const saldo = columnas.saldo !== undefined ? parseNumber(row[columnas.saldo]) : 0;
+
+                    // Ignorar filas sin movimiento
+                    if (credito === 0 && debito === 0 && !descripcion) continue;
+
+                    movimientos.push({
+                        fecha: formatearFecha(fechaParseada),
+                        fechaObj: fechaParseada,
+                        descripcion: String(descripcion).trim(),
+                        referencia: String(referencia).trim(),
+                        credito: credito,
+                        debito: debito,
+                        saldo: saldo,
+                        archivoOrigen: file.name
+                    });
+
+                    // Actualizar rango de fechas
+                    if (!fechaMin || fechaParseada < fechaMin) fechaMin = fechaParseada;
+                    if (!fechaMax || fechaParseada > fechaMax) fechaMax = fechaParseada;
+                }
+
+                resolve({
+                    movimientos: movimientos,
+                    fechaMin: fechaMin,
+                    fechaMax: fechaMax,
+                    columnas: columnas
+                });
+
+            } catch (error) {
+                reject(error);
+            }
+        };
+
+        reader.onerror = () => reject(new Error('Error al leer el archivo'));
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+function parsearFecha(valor) {
+    if (!valor) return null;
+
+    // Si es un número (fecha de Excel)
+    if (typeof valor === 'number') {
+        const date = XLSX.SSF.parse_date_code(valor);
+        if (date) {
+            return new Date(date.y, date.m - 1, date.d);
+        }
+    }
+
+    // Si es una cadena
+    const str = String(valor).trim();
+
+    // Formato DD/MM/YYYY o DD/MM/YY
+    const match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (match) {
+        let dia = parseInt(match[1], 10);
+        let mes = parseInt(match[2], 10) - 1;
+        let anio = parseInt(match[3], 10);
+
+        if (anio < 100) {
+            anio = anio < 50 ? 2000 + anio : 1900 + anio;
+        }
+
+        return new Date(anio, mes, dia);
+    }
+
+    // Intentar parseo directo
+    const parsed = new Date(valor);
+    if (!isNaN(parsed.getTime())) {
+        return parsed;
+    }
+
+    return null;
+}
+
+function formatearFecha(date) {
+    if (!date) return '';
+    const dia = String(date.getDate()).padStart(2, '0');
+    const mes = String(date.getMonth() + 1).padStart(2, '0');
+    const anio = date.getFullYear();
+    return `${dia}/${mes}/${anio}`;
+}
+
+function parseNumber(valor) {
+    if (!valor) return 0;
+    if (typeof valor === 'number') return valor;
+
+    const str = String(valor).trim();
+    // Detectar negativo
+    const isNegative = str.includes('-') || str.startsWith('(');
+    // Limpiar formato argentino/internacional
+    const cleaned = str.replace(/[^0-9.,]/g, '');
+
+    // Determinar separador decimal
+    let number = 0;
+    if (cleaned.includes(',') && cleaned.includes('.')) {
+        // Si tiene ambos, el último es el decimal
+        if (cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')) {
+            // Formato argentino: 1.234,56
+            number = parseFloat(cleaned.replace(/\./g, '').replace(',', '.'));
+        } else {
+            // Formato inglés: 1,234.56
+            number = parseFloat(cleaned.replace(/,/g, ''));
+        }
+    } else if (cleaned.includes(',')) {
+        // Solo coma - podría ser decimal o miles
+        const parts = cleaned.split(',');
+        if (parts.length === 2 && parts[1].length === 2) {
+            // Probablemente decimal
+            number = parseFloat(cleaned.replace(',', '.'));
+        } else {
+            number = parseFloat(cleaned.replace(/,/g, ''));
+        }
+    } else {
+        number = parseFloat(cleaned) || 0;
+    }
+
+    return isNegative ? -Math.abs(number) : number;
+}
+
+function actualizarListaArchivos() {
+    combinarElements.contadorArchivos.textContent = combinarState.archivos.length;
+    combinarElements.archivosCargados.classList.remove('hidden');
+
+    combinarElements.listaArchivos.innerHTML = combinarState.archivos.map((archivo, index) => `
+        <li>
+            <div class="archivo-info">
+                <span class="archivo-icon">📄</span>
+                <span class="archivo-nombre">${archivo.nombre}</span>
+            </div>
+            <button class="archivo-eliminar" onclick="eliminarArchivoCombinar(${index})" title="Eliminar">✕</button>
+        </li>
+    `).join('');
+}
+
+// Función global para eliminar archivo
+window.eliminarArchivoCombinar = function(index) {
+    combinarState.archivos.splice(index, 1);
+    actualizarListaArchivos();
+
+    if (combinarState.archivos.length >= 1) {
+        procesarArchivosCombinar();
+    } else {
+        // Ocultar pasos si no hay archivos
+        combinarElements.stepVistaPreviaCombinar.classList.add('hidden');
+        combinarElements.stepOpcionesCombinar.classList.add('hidden');
+        combinarElements.stepDescargarCombinado.classList.add('hidden');
+    }
+};
+
+async function procesarArchivosCombinar() {
+    combinarState.advertencias = [];
+    combinarState.duplicadosDetectados = [];
+
+    // Combinar todos los movimientos
+    let todosLosMovimientos = [];
+    for (const archivo of combinarState.archivos) {
+        todosLosMovimientos.push(...archivo.movimientos);
+    }
+
+    // Detectar duplicados
+    const duplicados = detectarDuplicados(todosLosMovimientos);
+    combinarState.duplicadosDetectados = duplicados;
+
+    if (duplicados.length > 0) {
+        combinarState.advertencias.push(`Posibles duplicados detectados: ${duplicados.length}`);
+    }
+
+    // Verificar fechas superpuestas entre archivos
+    const superpuestos = verificarFechasSuperpuestas();
+    if (superpuestos.length > 0) {
+        combinarState.advertencias.push(`Fechas superpuestas entre archivos: ${superpuestos.join(', ')}`);
+    }
+
+    // Verificar estructura de columnas
+    const estructurasDistintas = verificarEstructuraColumnas();
+    if (estructurasDistintas) {
+        combinarState.advertencias.push('Algunos archivos tienen estructura de columnas diferente');
+    }
+
+    combinarState.todosLosMovimientos = todosLosMovimientos;
+
+    // Mostrar vista previa
+    mostrarVistaPreviaCombinar();
+}
+
+function detectarDuplicados(movimientos) {
+    const duplicados = [];
+    const vistos = new Map();
+
+    movimientos.forEach((mov, index) => {
+        // Crear clave única: fecha + descripción + importe
+        const importe = mov.credito !== 0 ? mov.credito : mov.debito;
+        const clave = `${mov.fecha}|${mov.descripcion.toLowerCase()}|${importe}|${mov.referencia}`;
+
+        if (vistos.has(clave)) {
+            duplicados.push({
+                original: vistos.get(clave),
+                duplicado: index,
+                movimiento: mov
+            });
+        } else {
+            vistos.set(clave, index);
+        }
+    });
+
+    return duplicados;
+}
+
+function verificarFechasSuperpuestas() {
+    const superpuestos = [];
+
+    for (let i = 0; i < combinarState.archivos.length; i++) {
+        for (let j = i + 1; j < combinarState.archivos.length; j++) {
+            const a1 = combinarState.archivos[i];
+            const a2 = combinarState.archivos[j];
+
+            if (a1.fechaMin && a1.fechaMax && a2.fechaMin && a2.fechaMax) {
+                // Verificar superposición
+                if (a1.fechaMin <= a2.fechaMax && a2.fechaMin <= a1.fechaMax) {
+                    superpuestos.push(`${a1.nombre} y ${a2.nombre}`);
+                }
+            }
+        }
+    }
+
+    return superpuestos;
+}
+
+function verificarEstructuraColumnas() {
+    if (combinarState.archivos.length < 2) return false;
+
+    const primera = combinarState.archivos[0].columnas;
+    for (let i = 1; i < combinarState.archivos.length; i++) {
+        const actual = combinarState.archivos[i].columnas;
+        // Comparar columnas principales
+        if (actual.credito !== primera.credito || actual.debito !== primera.debito) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function mostrarVistaPreviaCombinar() {
+    // Calcular período total
+    let fechaMinGlobal = null;
+    let fechaMaxGlobal = null;
+
+    combinarState.archivos.forEach(archivo => {
+        if (archivo.fechaMin && (!fechaMinGlobal || archivo.fechaMin < fechaMinGlobal)) {
+            fechaMinGlobal = archivo.fechaMin;
+        }
+        if (archivo.fechaMax && (!fechaMaxGlobal || archivo.fechaMax > fechaMaxGlobal)) {
+            fechaMaxGlobal = archivo.fechaMax;
+        }
+    });
+
+    // Mostrar período
+    if (fechaMinGlobal && fechaMaxGlobal) {
+        combinarElements.periodoDetectado.textContent =
+            `${formatearFecha(fechaMinGlobal)} al ${formatearFecha(fechaMaxGlobal)}`;
+    } else {
+        combinarElements.periodoDetectado.textContent = 'No detectado';
+    }
+
+    // Mostrar total de movimientos
+    combinarElements.totalMovimientos.textContent =
+        combinarState.todosLosMovimientos.length.toLocaleString('es-AR');
+
+    // Mostrar lista de archivos procesados
+    combinarElements.listaArchivosProcesados.innerHTML = combinarState.archivos.map(archivo => {
+        const mesAnio = archivo.fechaMin ?
+            `${archivo.fechaMin.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}` :
+            'Fecha no detectada';
+        return `
+            <li>
+                <span class="archivo-status ok">✓</span>
+                <span>${mesAnio}: ${archivo.movimientos.length} movimientos</span>
+                <span class="archivo-detalle">(${archivo.nombre})</span>
+            </li>
+        `;
+    }).join('');
+
+    // Mostrar advertencias
+    if (combinarState.advertencias.length > 0) {
+        combinarElements.advertenciasCombinar.classList.remove('hidden');
+        combinarElements.listaAdvertencias.innerHTML = combinarState.advertencias.map(adv =>
+            `<li>${adv}</li>`
+        ).join('');
+    } else {
+        combinarElements.advertenciasCombinar.classList.add('hidden');
+    }
+
+    // Mostrar pasos
+    combinarElements.stepVistaPreviaCombinar.classList.remove('hidden');
+    combinarElements.stepOpcionesCombinar.classList.remove('hidden');
+    combinarElements.stepDescargarCombinado.classList.remove('hidden');
+}
+
+function handleDescargarCombinado() {
+    if (combinarState.todosLosMovimientos.length === 0) {
+        showCombinarError('No hay movimientos para combinar');
+        return;
+    }
+
+    // Obtener opciones
+    const ordenAsc = document.querySelector('input[name="ordenFecha"]:checked').value === 'asc';
+    const eliminarDuplicados = document.getElementById('chkEliminarDuplicados').checked;
+    const incluirResumen = document.getElementById('chkIncluirResumen').checked;
+
+    // Clonar movimientos para no modificar el original
+    let movimientos = [...combinarState.todosLosMovimientos];
+
+    // Eliminar duplicados si se seleccionó
+    combinarState.duplicadosRemovidos = [];
+    if (eliminarDuplicados && combinarState.duplicadosDetectados.length > 0) {
+        const indicesAEliminar = new Set(combinarState.duplicadosDetectados.map(d => d.duplicado));
+        combinarState.duplicadosRemovidos = movimientos.filter((_, idx) => indicesAEliminar.has(idx));
+        movimientos = movimientos.filter((_, idx) => !indicesAEliminar.has(idx));
+    }
+
+    // Ordenar por fecha
+    movimientos.sort((a, b) => {
+        const diff = a.fechaObj - b.fechaObj;
+        return ordenAsc ? diff : -diff;
+    });
+
+    // Recalcular saldos
+    recalcularSaldos(movimientos);
+
+    // Generar Excel
+    generarExcelCombinado(movimientos, incluirResumen);
+}
+
+function recalcularSaldos(movimientos) {
+    if (movimientos.length === 0) return;
+
+    // Tomar el saldo del primer movimiento como referencia inicial
+    // y recalcular desde ahí
+    let saldoActual = 0;
+
+    // Calcular saldo inicial basándose en el primer movimiento
+    const primerMov = movimientos[0];
+    saldoActual = primerMov.saldo - primerMov.credito + primerMov.debito;
+
+    // Recalcular todos los saldos
+    for (const mov of movimientos) {
+        saldoActual = saldoActual + mov.credito - mov.debito;
+        mov.saldoRecalculado = saldoActual;
+    }
+}
+
+function generarExcelCombinado(movimientos, incluirResumen) {
+    const workbook = XLSX.utils.book_new();
+
+    // Hoja 1: Movimientos
+    const datosMovimientos = [
+        ['Fecha', 'Descripción', 'Referencia', 'Crédito', 'Débito', 'Saldo'],
+        ...movimientos.map(mov => [
+            mov.fecha,
+            mov.descripcion,
+            mov.referencia,
+            mov.credito || 0,
+            mov.debito || 0,
+            mov.saldoRecalculado || mov.saldo || 0
+        ])
+    ];
+
+    const wsMovimientos = XLSX.utils.aoa_to_sheet(datosMovimientos);
+
+    // Formato numérico
+    const range = XLSX.utils.decode_range(wsMovimientos['!ref']);
+    for (let row = 1; row <= range.e.r; row++) {
+        for (let col = 3; col <= 5; col++) {
+            const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+            if (wsMovimientos[cellRef]) {
+                wsMovimientos[cellRef].t = 'n';
+                wsMovimientos[cellRef].z = '#,##0.00';
+            }
+        }
+    }
+
+    // Ancho de columnas
+    wsMovimientos['!cols'] = [
+        { wch: 12 },
+        { wch: 50 },
+        { wch: 20 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 18 }
+    ];
+
+    XLSX.utils.book_append_sheet(workbook, wsMovimientos, 'Movimientos');
+
+    // Hoja 2: Resumen por Mes (opcional)
+    if (incluirResumen) {
+        const resumenPorMes = generarResumenPorMes(movimientos);
+        const datosResumen = [
+            ['Mes', 'Cantidad Mov.', 'Total Débitos', 'Total Créditos', 'Saldo Final'],
+            ...resumenPorMes.meses.map(m => [
+                m.mes,
+                m.cantidad,
+                m.totalDebitos,
+                m.totalCreditos,
+                m.saldoFinal
+            ]),
+            ['TOTAL', resumenPorMes.totalCantidad, resumenPorMes.totalDebitos, resumenPorMes.totalCreditos, '']
+        ];
+
+        const wsResumen = XLSX.utils.aoa_to_sheet(datosResumen);
+
+        // Formato numérico para resumen
+        const rangeResumen = XLSX.utils.decode_range(wsResumen['!ref']);
+        for (let row = 1; row <= rangeResumen.e.r; row++) {
+            for (let col = 2; col <= 4; col++) {
+                const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+                if (wsResumen[cellRef] && typeof wsResumen[cellRef].v === 'number') {
+                    wsResumen[cellRef].t = 'n';
+                    wsResumen[cellRef].z = '#,##0.00';
+                }
+            }
+        }
+
+        wsResumen['!cols'] = [
+            { wch: 20 },
+            { wch: 15 },
+            { wch: 18 },
+            { wch: 18 },
+            { wch: 18 }
+        ];
+
+        XLSX.utils.book_append_sheet(workbook, wsResumen, 'Resumen por Mes');
+    }
+
+    // Hoja 3: Duplicados Removidos (si hay)
+    if (combinarState.duplicadosRemovidos.length > 0) {
+        const datosDuplicados = [
+            ['Fecha', 'Descripción', 'Referencia', 'Crédito', 'Débito', 'Archivo Origen'],
+            ...combinarState.duplicadosRemovidos.map(mov => [
+                mov.fecha,
+                mov.descripcion,
+                mov.referencia,
+                mov.credito || 0,
+                mov.debito || 0,
+                mov.archivoOrigen
+            ])
+        ];
+
+        const wsDuplicados = XLSX.utils.aoa_to_sheet(datosDuplicados);
+
+        wsDuplicados['!cols'] = [
+            { wch: 12 },
+            { wch: 50 },
+            { wch: 20 },
+            { wch: 15 },
+            { wch: 15 },
+            { wch: 30 }
+        ];
+
+        XLSX.utils.book_append_sheet(workbook, wsDuplicados, 'Duplicados Removidos');
+    }
+
+    // Generar nombre de archivo
+    let fechaInicio = '', fechaFin = '';
+    if (movimientos.length > 0) {
+        const ordenados = [...movimientos].sort((a, b) => a.fechaObj - b.fechaObj);
+        const primerFecha = ordenados[0].fechaObj;
+        const ultimaFecha = ordenados[ordenados.length - 1].fechaObj;
+
+        fechaInicio = `${primerFecha.getFullYear()}${String(primerFecha.getMonth() + 1).padStart(2, '0')}`;
+        fechaFin = `${ultimaFecha.getFullYear()}${String(ultimaFecha.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    const nombreArchivo = `Extracto_Combinado_${fechaInicio}_a_${fechaFin}.xlsx`;
+
+    // Descargar
+    XLSX.writeFile(workbook, nombreArchivo);
+
+    showCombinarSuccess(`Archivo combinado generado: ${movimientos.length} movimientos${combinarState.duplicadosRemovidos.length > 0 ? ` (${combinarState.duplicadosRemovidos.length} duplicados removidos)` : ''}`);
+}
+
+function generarResumenPorMes(movimientos) {
+    const mesesMap = new Map();
+
+    for (const mov of movimientos) {
+        const fecha = mov.fechaObj;
+        const mesKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
+        const mesNombre = fecha.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+
+        if (!mesesMap.has(mesKey)) {
+            mesesMap.set(mesKey, {
+                mes: mesNombre.charAt(0).toUpperCase() + mesNombre.slice(1),
+                cantidad: 0,
+                totalDebitos: 0,
+                totalCreditos: 0,
+                saldoFinal: 0
+            });
+        }
+
+        const mesData = mesesMap.get(mesKey);
+        mesData.cantidad++;
+        mesData.totalDebitos += mov.debito || 0;
+        mesData.totalCreditos += mov.credito || 0;
+        mesData.saldoFinal = mov.saldoRecalculado || mov.saldo || 0;
+    }
+
+    // Convertir a array y ordenar
+    const meses = Array.from(mesesMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([_, data]) => data);
+
+    // Calcular totales
+    const totalCantidad = meses.reduce((sum, m) => sum + m.cantidad, 0);
+    const totalDebitos = meses.reduce((sum, m) => sum + m.totalDebitos, 0);
+    const totalCreditos = meses.reduce((sum, m) => sum + m.totalCreditos, 0);
+
+    return {
+        meses,
+        totalCantidad,
+        totalDebitos,
+        totalCreditos
+    };
+}
+
+function showCombinarError(message) {
+    combinarElements.errorBoxCombinar.textContent = message;
+    combinarElements.errorBoxCombinar.classList.remove('hidden');
+    combinarElements.successBoxCombinar.classList.add('hidden');
+}
+
+function showCombinarSuccess(message) {
+    combinarElements.successBoxCombinar.textContent = message;
+    combinarElements.successBoxCombinar.classList.remove('hidden');
+    combinarElements.errorBoxCombinar.classList.add('hidden');
+}
+
+function hideCombinarMessages() {
+    combinarElements.errorBoxCombinar.classList.add('hidden');
+    combinarElements.successBoxCombinar.classList.add('hidden');
+}

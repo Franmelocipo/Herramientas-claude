@@ -490,6 +490,328 @@ tbody tr:hover {
     background: #047857;
 }
 
+/* ============================================ */
+/* SELECTOR DE MODO (Convertir / Combinar) */
+/* ============================================ */
+
+.mode-selector {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+    padding: 8px;
+    background: #f3f4f6;
+    border-radius: 12px;
+}
+
+.mode-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 16px 20px;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 15px;
+    font-weight: 600;
+    color: #6b7280;
+}
+
+.mode-btn:hover {
+    background: white;
+    color: #374151;
+}
+
+.mode-btn.active {
+    background: white;
+    border-color: #4f46e5;
+    color: #4f46e5;
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+}
+
+.mode-icon {
+    font-size: 20px;
+}
+
+.mode-text {
+    font-size: 14px;
+}
+
+/* ============================================ */
+/* SECCIÓN COMBINAR EXTRACTOS */
+/* ============================================ */
+
+.combinar-description {
+    color: #6b7280;
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+.multi-upload {
+    min-height: 150px;
+}
+
+/* Lista de archivos cargados */
+.archivos-cargados {
+    margin-top: 20px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 16px;
+}
+
+.archivos-cargados h3 {
+    font-size: 14px;
+    color: #374151;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.lista-archivos {
+    list-style: none;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.lista-archivos li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: all 0.2s;
+}
+
+.lista-archivos li:hover {
+    border-color: #4f46e5;
+}
+
+.lista-archivos li:last-child {
+    margin-bottom: 0;
+}
+
+.archivo-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.archivo-icon {
+    font-size: 18px;
+}
+
+.archivo-nombre {
+    font-size: 13px;
+    color: #374151;
+    font-weight: 500;
+}
+
+.archivo-eliminar {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    color: #9ca3af;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.archivo-eliminar:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+/* Resumen de combinación */
+.resumen-combinar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.resumen-item {
+    background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+    border: 1px solid #c7d2fe;
+    border-radius: 10px;
+    padding: 16px;
+}
+
+.resumen-label {
+    display: block;
+    font-size: 12px;
+    color: #6366f1;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.resumen-valor {
+    font-size: 18px;
+    color: #312e81;
+    font-weight: 700;
+}
+
+/* Archivos procesados */
+.archivos-procesados {
+    margin-bottom: 20px;
+}
+
+.archivos-procesados h4 {
+    font-size: 14px;
+    color: #374151;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.lista-archivos-procesados {
+    list-style: none;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.lista-archivos-procesados li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: 13px;
+    color: #374151;
+}
+
+.lista-archivos-procesados li:last-child {
+    border-bottom: none;
+}
+
+.archivo-status {
+    font-size: 14px;
+}
+
+.archivo-status.ok {
+    color: #059669;
+}
+
+.archivo-status.error {
+    color: #dc2626;
+}
+
+.archivo-detalle {
+    color: #6b7280;
+    font-size: 12px;
+}
+
+/* Advertencias */
+.advertencias-combinar {
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.advertencias-combinar h4 {
+    font-size: 14px;
+    color: #92400e;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.lista-advertencias {
+    list-style: none;
+}
+
+.lista-advertencias li {
+    font-size: 13px;
+    color: #78350f;
+    padding: 6px 0;
+    padding-left: 20px;
+    position: relative;
+}
+
+.lista-advertencias li::before {
+    content: "•";
+    position: absolute;
+    left: 6px;
+    color: #d97706;
+}
+
+/* Opciones de combinación */
+.opciones-combinar {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 20px;
+}
+
+.opcion-grupo {
+    margin-bottom: 20px;
+}
+
+.opcion-grupo:last-child {
+    margin-bottom: 0;
+}
+
+.opcion-label {
+    display: block;
+    font-size: 14px;
+    color: #374151;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.opcion-radios {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.radio-option,
+.checkbox-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    color: #4b5563;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.radio-option:hover,
+.checkbox-option:hover {
+    background: #f3f4f6;
+}
+
+.radio-option input,
+.checkbox-option input {
+    width: 18px;
+    height: 18px;
+    accent-color: #4f46e5;
+    cursor: pointer;
+}
+
+/* Botón descargar grande */
+.download-btn-large {
+    padding: 20px;
+    font-size: 18px;
+}
+
+.download-btn-large span {
+    font-size: 22px;
+}
+
 @media (max-width: 768px) {
     .card {
         padding: 24px;
@@ -501,6 +823,18 @@ tbody tr:hover {
 
     .type-grid,
     .bank-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mode-selector {
+        grid-template-columns: 1fr;
+    }
+
+    .mode-btn {
+        padding: 14px 16px;
+    }
+
+    .resumen-combinar {
         grid-template-columns: 1fr;
     }
 }
