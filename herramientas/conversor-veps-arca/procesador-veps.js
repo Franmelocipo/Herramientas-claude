@@ -284,3 +284,95 @@ function nuevaConversion() {
     // Scroll al inicio
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+// ============================================
+// INTEGRACIÓN CON CONVERSOR DE ASIENTOS
+// ============================================
+
+/**
+ * Envía los datos procesados directamente al Conversor de Asientos
+ * sin necesidad de descargar/importar Excel manualmente
+ */
+function enviarAConversorAsientos() {
+    if (datosExtraidos.length === 0) {
+        alert('No hay datos para enviar. Primero procesa algunos VEPs.');
+        return;
+    }
+
+    // Preparar datos para el conversor de asientos
+    const datosVEP = {
+        veps: datosExtraidos,  // Los mismos datos que irían al Excel
+        timestamp: Date.now(),
+        origen: 'conversor-veps',
+        cantidadRegistros: datosExtraidos.length,
+        cantidadVEPs: new Set(datosExtraidos.map(d => d.NRO_VEP)).size
+    };
+
+    // Guardar en localStorage
+    localStorage.setItem('veps_para_asientos', JSON.stringify(datosVEP));
+
+    // Mostrar feedback al usuario
+    const cantidadVEPs = datosVEP.cantidadVEPs;
+    const cantidadRegistros = datosVEP.cantidadRegistros;
+
+    // Crear notificación temporal
+    mostrarNotificacion(`Abriendo conversor de asientos con ${cantidadVEPs} VEP(s) y ${cantidadRegistros} registro(s)...`, 'info');
+
+    // Abrir el Conversor de Asientos en nueva pestaña con parámetro de origen
+    const urlConversor = '../conversor-asientos/?origen=veps';
+    window.open(urlConversor, '_blank');
+}
+
+/**
+ * Muestra una notificación temporal en pantalla
+ */
+function mostrarNotificacion(mensaje, tipo = 'info') {
+    // Remover notificación existente si hay
+    const existente = document.querySelector('.notificacion-vep');
+    if (existente) {
+        existente.remove();
+    }
+
+    // Crear elemento de notificación
+    const notificacion = document.createElement('div');
+    notificacion.className = 'notificacion-vep';
+    notificacion.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        background: ${tipo === 'info' ? '#667eea' : tipo === 'success' ? '#10b981' : '#ef4444'};
+        color: white;
+        font-weight: 500;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+    `;
+    notificacion.textContent = mensaje;
+
+    // Agregar estilos de animación si no existen
+    if (!document.getElementById('notificacion-styles')) {
+        const styles = document.createElement('style');
+        styles.id = 'notificacion-styles';
+        styles.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(styles);
+    }
+
+    document.body.appendChild(notificacion);
+
+    // Auto-remover después de 3 segundos
+    setTimeout(() => {
+        notificacion.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notificacion.remove(), 300);
+    }, 3000);
+}

@@ -375,6 +375,20 @@ function habilitarOpciones() {
         btn.style.opacity = '1';
         btn.style.cursor = 'pointer';
     });
+
+    // Si hay datos de VEPs pendientes de la integración, cargarlos automáticamente
+    if (window.datosVEPPendientes) {
+        quitarResaltadoSelectorCliente();
+
+        // Cerrar la notificación de integración
+        const notificacion = document.querySelector('.notificacion-integracion');
+        if (notificacion) {
+            notificacion.remove();
+        }
+
+        // Cargar los datos
+        cargarDatosDesdeConversorVEPs();
+    }
 }
 
 // ============================================
@@ -460,6 +474,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     console.log(`Base de impuestos: ${getTaxDatabase().length} registros`);
     console.log('======================');
+
+    // Verificar si viene de la integración con Conversor de VEPs
+    verificarIntegracionVEPs();
 });
 
 function attachEventListeners() {
@@ -582,7 +599,225 @@ function reset() {
     elements.fileInput.value = '';
     elements.bankAccountInput.value = '';
 
+    // Limpiar parámetros de URL al resetear
+    if (window.history.replaceState) {
+        const url = new URL(window.location);
+        url.searchParams.delete('origen');
+        window.history.replaceState({}, '', url);
+    }
+
     goToStep(0);
+}
+
+// ============================================
+// INTEGRACIÓN CON CONVERSOR DE VEPs
+// ============================================
+
+/**
+ * Verifica si la página fue abierta desde el Conversor de VEPs
+ * y carga los datos automáticamente si corresponde
+ */
+function verificarIntegracionVEPs() {
+    const urlParams = new URLSearchParams(window.location.search);
+
+    if (urlParams.get('origen') === 'veps') {
+        console.log('=== Detectada integración desde Conversor de VEPs ===');
+
+        try {
+            const datosVEPStr = localStorage.getItem('veps_para_asientos');
+
+            if (!datosVEPStr) {
+                mostrarNotificacionIntegracion('No se encontraron datos de VEPs. Por favor, vuelve al conversor de VEPs y procesa los archivos nuevamente.', 'error');
+                return;
+            }
+
+            const datosVEP = JSON.parse(datosVEPStr);
+
+            // Verificar que los datos no hayan expirado (5 minutos de validez)
+            const tiempoTranscurrido = Date.now() - datosVEP.timestamp;
+            const TIEMPO_MAXIMO = 5 * 60 * 1000; // 5 minutos en milisegundos
+
+            if (tiempoTranscurrido > TIEMPO_MAXIMO) {
+                localStorage.removeItem('veps_para_asientos');
+                mostrarNotificacionIntegracion('Los datos de VEPs expiraron. Por favor, vuelve al conversor de VEPs y procesa los archivos nuevamente.', 'error');
+                return;
+            }
+
+            // Verificar que hay datos válidos
+            if (!datosVEP.veps || datosVEP.veps.length === 0) {
+                localStorage.removeItem('veps_para_asientos');
+                mostrarNotificacionIntegracion('Los datos de VEPs están vacíos. Por favor, procesa los archivos nuevamente.', 'error');
+                return;
+            }
+
+            // Datos válidos - mostrar mensaje y esperar selección de cliente
+            const cantidadVEPs = datosVEP.cantidadVEPs || new Set(datosVEP.veps.map(d => d.NRO_VEP)).size;
+            const cantidadRegistros = datosVEP.cantidadRegistros || datosVEP.veps.length;
+
+            mostrarNotificacionIntegracion(
+                `Datos cargados desde Conversor de VEPs: ${cantidadVEPs} VEP(s), ${cantidadRegistros} registro(s). Selecciona un cliente para continuar.`,
+                'success'
+            );
+
+            // Guardar datos temporalmente para cargar después de seleccionar cliente
+            window.datosVEPPendientes = datosVEP;
+
+            // Resaltar selector de cliente
+            resaltarSelectorCliente();
+
+            console.log(`Datos de VEPs cargados: ${cantidadVEPs} VEPs, ${cantidadRegistros} registros`);
+
+        } catch (error) {
+            console.error('Error al cargar datos de VEPs:', error);
+            mostrarNotificacionIntegracion('Error al cargar los datos de VEPs. Por favor, intenta nuevamente.', 'error');
+        }
+    }
+}
+
+/**
+ * Carga los datos de VEPs desde la integración después de seleccionar cliente
+ */
+function cargarDatosDesdeConversorVEPs() {
+    if (!window.datosVEPPendientes) {
+        return false;
+    }
+
+    const datosVEP = window.datosVEPPendientes;
+
+    console.log('=== Cargando datos de VEPs en el conversor ===');
+
+    // Establecer tipo de origen como VEPs
+    state.sourceType = 'veps';
+    elements.sourceTypeName.textContent = sourceTypes['veps'].name;
+
+    // Cargar datos en el estado (misma estructura que si se hubiera importado Excel)
+    state.sourceData = datosVEP.veps;
+
+    // Agrupar los datos
+    groupSimilarEntries(state.sourceData);
+
+    // Limpiar datos pendientes y localStorage
+    delete window.datosVEPPendientes;
+    localStorage.removeItem('veps_para_asientos');
+
+    // Limpiar parámetro de URL
+    if (window.history.replaceState) {
+        const url = new URL(window.location);
+        url.searchParams.delete('origen');
+        window.history.replaceState({}, '', url);
+    }
+
+    // Ir directamente al paso 2 (asignación de cuentas)
+    goToStep(2);
+
+    return true;
+}
+
+/**
+ * Resalta visualmente el selector de cliente para guiar al usuario
+ */
+function resaltarSelectorCliente() {
+    const selectorContainer = document.querySelector('.selector-cliente-container');
+    if (selectorContainer) {
+        selectorContainer.style.border = '2px solid #667eea';
+        selectorContainer.style.boxShadow = '0 0 10px rgba(102, 126, 234, 0.3)';
+        selectorContainer.style.borderRadius = '8px';
+        selectorContainer.style.padding = '1rem';
+        selectorContainer.style.backgroundColor = '#f0f4ff';
+
+        // Hacer scroll al selector
+        selectorContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+/**
+ * Quita el resaltado del selector de cliente
+ */
+function quitarResaltadoSelectorCliente() {
+    const selectorContainer = document.querySelector('.selector-cliente-container');
+    if (selectorContainer) {
+        selectorContainer.style.border = '';
+        selectorContainer.style.boxShadow = '';
+        selectorContainer.style.padding = '';
+        selectorContainer.style.backgroundColor = '';
+    }
+}
+
+/**
+ * Muestra una notificación para la integración
+ */
+function mostrarNotificacionIntegracion(mensaje, tipo = 'info') {
+    // Remover notificación existente si hay
+    const existente = document.querySelector('.notificacion-integracion');
+    if (existente) {
+        existente.remove();
+    }
+
+    // Crear elemento de notificación
+    const notificacion = document.createElement('div');
+    notificacion.className = 'notificacion-integracion';
+
+    const colores = {
+        info: { bg: '#667eea', border: '#5a67d8' },
+        success: { bg: '#10b981', border: '#059669' },
+        error: { bg: '#ef4444', border: '#dc2626' }
+    };
+
+    const color = colores[tipo] || colores.info;
+
+    notificacion.style.cssText = `
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        background: ${color.bg};
+        border: 2px solid ${color.border};
+        color: white;
+        font-weight: 500;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        z-index: 9999;
+        max-width: 90%;
+        text-align: center;
+        animation: fadeInDown 0.3s ease;
+    `;
+    notificacion.innerHTML = `
+        <span>${mensaje}</span>
+        <button onclick="this.parentElement.remove()" style="
+            margin-left: 1rem;
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0 5px;
+        ">&times;</button>
+    `;
+
+    // Agregar estilos de animación si no existen
+    if (!document.getElementById('integracion-styles')) {
+        const styles = document.createElement('style');
+        styles.id = 'integracion-styles';
+        styles.textContent = `
+            @keyframes fadeInDown {
+                from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+                to { opacity: 1; transform: translateX(-50%) translateY(0); }
+            }
+        `;
+        document.head.appendChild(styles);
+    }
+
+    document.body.appendChild(notificacion);
+
+    // Auto-remover después de 10 segundos para mensajes de éxito
+    if (tipo === 'success') {
+        setTimeout(() => {
+            if (notificacion.parentElement) {
+                notificacion.remove();
+            }
+        }, 10000);
+    }
 }
 
 // ============================================
