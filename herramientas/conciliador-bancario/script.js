@@ -271,12 +271,35 @@ function parsearFecha(valor) {
 
     let fecha = null;
 
+    // LOG DE DIAGNÓSTICO - Descomentar para debug
+    // console.log('=== DIAGNÓSTICO FECHA ===');
+    // console.log('Valor original:', valor);
+    // console.log('Tipo:', typeof valor);
+
     // Si ya es un objeto Date
     if (valor instanceof Date) {
         fecha = new Date(valor.getTime());
+        // console.log('Es Date, año original:', fecha.getFullYear());
+    } else if (typeof valor === 'number') {
+        // Es un número serial de Excel
+        // Excel usa dos sistemas de fechas:
+        // - Windows: día 1 = 1 de enero de 1900
+        // - Mac: día 1 = 1 de enero de 1904
+        // La mayoría usa el sistema de 1900
+        // console.log('Es número serial de Excel:', valor);
+
+        // Convertir número serial de Excel a fecha
+        // 25569 es el número de días entre 1/1/1900 (Excel) y 1/1/1970 (Unix)
+        // Restamos 1 porque Excel cuenta desde 1 y no desde 0
+        // También hay que considerar el bug de Excel que cuenta 29/02/1900 (año no bisiesto)
+        if (valor > 0) {
+            fecha = new Date((valor - 25569) * 86400 * 1000);
+            // console.log('Fecha convertida desde serial:', fecha);
+        }
     } else {
         // Si es string
         const str = String(valor).trim();
+        // console.log('Es string:', str);
 
         // Formato DD/MM/YYYY o DD-MM-YYYY
         const match = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
@@ -284,6 +307,7 @@ function parsearFecha(valor) {
             const dia = parseInt(match[1]);
             const mes = parseInt(match[2]) - 1;
             let anio = parseInt(match[3]);
+            // Si el año tiene 2 dígitos, asumir 2000+
             if (anio < 100) anio += 2000;
             fecha = new Date(anio, mes, dia);
         } else {
@@ -299,14 +323,25 @@ function parsearFecha(valor) {
         }
     }
 
-    // Corregir años futuros incorrectos (problema con años de 2 dígitos mal parseados por Excel/SheetJS)
-    // Los extractos bancarios y movimientos contables no deberían tener fechas en el futuro
-    // Si el año es mayor al actual, restamos 100 años para corregir el error de interpretación
+    // Corregir años incorrectos (problema con años mal parseados por Excel/SheetJS)
+    // Los extractos bancarios y movimientos contables deberían tener fechas razonables
     if (fecha) {
         const anioActual = new Date().getFullYear();
         const anioFecha = fecha.getFullYear();
-        if (anioFecha > anioActual) {
+
+        // console.log('Año antes de corrección:', anioFecha);
+
+        // Corregir años muy antiguos (1920-1950): probablemente son 2020-2050 mal parseados
+        // Esto ocurre cuando Excel/SheetJS interpreta 24 como 1924 en lugar de 2024
+        if (anioFecha >= 1920 && anioFecha <= 1950) {
+            fecha.setFullYear(anioFecha + 100);
+            // console.log('Año corregido (muy antiguo):', fecha.getFullYear());
+        }
+        // Corregir años futuros: si el año es mayor al actual + 1, restar 100
+        // (permitimos año actual + 1 para fechas de fin de año)
+        else if (anioFecha > anioActual + 1) {
             fecha.setFullYear(anioFecha - 100);
+            // console.log('Año corregido (futuro):', fecha.getFullYear());
         }
     }
 
