@@ -269,33 +269,48 @@ function parsearExtracto(data) {
 function parsearFecha(valor) {
     if (!valor) return null;
 
+    let fecha = null;
+
     // Si ya es un objeto Date
     if (valor instanceof Date) {
-        return valor;
+        fecha = new Date(valor.getTime());
+    } else {
+        // Si es string
+        const str = String(valor).trim();
+
+        // Formato DD/MM/YYYY o DD-MM-YYYY
+        const match = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+        if (match) {
+            const dia = parseInt(match[1]);
+            const mes = parseInt(match[2]) - 1;
+            let anio = parseInt(match[3]);
+            if (anio < 100) anio += 2000;
+            fecha = new Date(anio, mes, dia);
+        } else {
+            // Formato YYYY-MM-DD
+            const matchISO = str.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/);
+            if (matchISO) {
+                fecha = new Date(parseInt(matchISO[1]), parseInt(matchISO[2]) - 1, parseInt(matchISO[3]));
+            } else {
+                // Intentar parsear directamente
+                const date = new Date(str);
+                fecha = isNaN(date.getTime()) ? null : date;
+            }
+        }
     }
 
-    // Si es string
-    const str = String(valor).trim();
-
-    // Formato DD/MM/YYYY o DD-MM-YYYY
-    const match = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-    if (match) {
-        const dia = parseInt(match[1]);
-        const mes = parseInt(match[2]) - 1;
-        let anio = parseInt(match[3]);
-        if (anio < 100) anio += 2000;
-        return new Date(anio, mes, dia);
+    // Corregir años futuros incorrectos (problema con años de 2 dígitos mal parseados por Excel/SheetJS)
+    // Los extractos bancarios y movimientos contables no deberían tener fechas en el futuro
+    // Si el año es mayor al actual, restamos 100 años para corregir el error de interpretación
+    if (fecha) {
+        const anioActual = new Date().getFullYear();
+        const anioFecha = fecha.getFullYear();
+        if (anioFecha > anioActual) {
+            fecha.setFullYear(anioFecha - 100);
+        }
     }
 
-    // Formato YYYY-MM-DD
-    const matchISO = str.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/);
-    if (matchISO) {
-        return new Date(parseInt(matchISO[1]), parseInt(matchISO[2]) - 1, parseInt(matchISO[3]));
-    }
-
-    // Intentar parsear directamente
-    const date = new Date(str);
-    return isNaN(date.getTime()) ? null : date;
+    return fecha;
 }
 
 function parsearImporte(valor) {
