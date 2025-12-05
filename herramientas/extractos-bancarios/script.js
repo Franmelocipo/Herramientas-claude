@@ -769,6 +769,32 @@ function parseBBVAExtract(text) {
     return movements;
 }
 
+// Limpiar descripción BPN cortando antes del texto del footer del PDF
+// El parser concatena el texto del pie de página al último movimiento
+function limpiarDescripcionBPN(descripcion) {
+    // Patrones que indican inicio del footer del PDF
+    const patronesFooter = [
+        'encuentra incluido el IVA',
+        'Se informa que para',
+        'Para reportar Fraudes',
+        'Personas Expuestas',
+        'Usted puede solicitar',
+        'Los depósitos en pesos',
+        'prevencion_fraudes@bpn.com.ar'
+    ];
+
+    for (const patron of patronesFooter) {
+        const index = descripcion.indexOf(patron);
+        if (index > 0) {
+            console.log('Limpiando footer de descripción BPN. Patrón encontrado:', patron);
+            descripcion = descripcion.substring(0, index).trim();
+            break;
+        }
+    }
+
+    return descripcion;
+}
+
 // Parsear extracto BPN (Banco Provincia del Neuquén) usando posiciones de columnas
 // Estructura: Fecha | Descripción | Comprobante | Débito | Crédito | Saldo
 function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
@@ -1010,7 +1036,10 @@ function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
     }
 
     // No olvidar el último movimiento
+    // BUG FIX: Limpiar la descripción del último movimiento para remover texto del footer
+    // que se concatena incorrectamente al parsear el PDF
     if (currentMovement) {
+        currentMovement.descripcion = limpiarDescripcionBPN(currentMovement.descripcion);
         console.log('Agregando último movimiento:', currentMovement.fecha, currentMovement.descripcion);
         movements.push(currentMovement);
     } else {
@@ -1022,12 +1051,6 @@ function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
     // Limpiar descripciones y filtrar movimientos con descripciones sospechosas
     const filteredMovements = movements
         .filter(mov => {
-            // BUG 1 FIX: Filtrar descripciones muy largas o que contengan texto legal
-            if (mov.descripcion.length > 100) {
-                console.log('FILTRADO por descripción > 100 chars:', mov.fecha, mov.descripcion.substring(0, 50) + '...');
-                return false;
-            }
-
             // Filtrar líneas de totales que puedan haber pasado el filtro inicial
             if (/^Total\b/i.test(mov.descripcion)) {
                 console.log('FILTRADO por empezar con Total:', mov.fecha, mov.descripcion);
