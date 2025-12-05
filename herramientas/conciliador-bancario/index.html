@@ -168,6 +168,14 @@
                         <span class="total-label">Diferencia:</span>
                         <span class="total-value" id="diferencia">$0,00</span>
                     </div>
+                    <div class="total-row eliminados-row hidden" id="eliminadosResumen">
+                        <span class="total-label">Eliminados del Mayor:</span>
+                        <span class="total-value eliminados-value" id="totalEliminados">0 movimientos ($0,00)</span>
+                    </div>
+                    <div class="total-row diferencia-ajustada hidden" id="diferenciaAjustadaRow">
+                        <span class="total-label">Diferencia ajustada:</span>
+                        <span class="total-value" id="diferenciaAjustada">$0,00</span>
+                    </div>
                 </div>
 
                 <!-- Tabs para ver detalles -->
@@ -175,6 +183,7 @@
                     <button class="tab-btn active" data-tab="conciliados">Conciliados</button>
                     <button class="tab-btn" data-tab="mayor-pendiente">Mayor Pendiente</button>
                     <button class="tab-btn" data-tab="extracto-pendiente">Extracto Pendiente</button>
+                    <button class="tab-btn" data-tab="eliminados">Eliminados <span id="countEliminados">(0)</span></button>
                 </div>
 
                 <!-- Tabla de conciliados -->
@@ -212,9 +221,14 @@
                 <div class="tab-content" id="tab-mayor-pendiente">
                     <div class="panel-header-pendiente">
                         <h3>Mayor Pendiente <span id="countMayorPendiente">(0)</span></h3>
-                        <button class="btn-filtros" id="btnFiltrosMayor" onclick="toggleFiltros('mayor')">
-                            🔍 Filtros ▼
-                        </button>
+                        <div class="header-actions">
+                            <button id="btnEliminarSeleccionados" class="btn-eliminar-seleccionados hidden" onclick="mostrarModalEliminar('seleccionados')">
+                                🗑️ Eliminar seleccionados (0)
+                            </button>
+                            <button class="btn-filtros" id="btnFiltrosMayor" onclick="toggleFiltros('mayor')">
+                                🔍 Filtros ▼
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Panel de filtros Mayor -->
@@ -305,9 +319,40 @@
                                     <th class="columna-ordenable text-right" data-columna="haber" onclick="ordenarPorColumna('mayor', 'haber')">
                                         Haber <span class="icono-orden">↕</span>
                                     </th>
+                                    <th class="header-action-eliminar">Acción</th>
                                 </tr>
                             </thead>
                             <tbody id="tablaMayorPendiente"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tabla Eliminados -->
+                <div class="tab-content" id="tab-eliminados">
+                    <div class="eliminados-header">
+                        <h3>Movimientos Eliminados <span id="countEliminadosTab">(0)</span></h3>
+                    </div>
+                    <div class="eliminados-info">
+                        <p>Estos movimientos fueron excluidos del proceso de conciliación.</p>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Nº Asiento</th>
+                                    <th>C/E</th>
+                                    <th>Tipo</th>
+                                    <th>Leyenda</th>
+                                    <th class="text-right">Importe</th>
+                                    <th>Fecha Eliminación</th>
+                                    <th>Motivo</th>
+                                    <th class="header-action">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaEliminados">
+                                <tr><td colspan="9" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos eliminados</td></tr>
+                            </tbody>
                         </table>
                     </div>
                 </div>
@@ -449,6 +494,36 @@
         <div id="mensaje-progreso" class="mensaje-progreso">Iniciando...</div>
         <div id="contador-progreso" class="contador-progreso"></div>
         <div id="conciliados-progreso" class="conciliados-progreso"></div>
+    </div>
+
+    <!-- Modal de eliminar -->
+    <div id="overlay-eliminar" class="overlay-eliminar"></div>
+    <div id="modal-eliminar" class="modal-eliminar">
+        <div class="modal-eliminar-header">
+            <h3>🗑️ Eliminar Movimiento</h3>
+            <button class="modal-close-btn" onclick="cerrarModalEliminar()">✕</button>
+        </div>
+        <div class="modal-eliminar-body">
+            <p class="modal-eliminar-pregunta">¿Está seguro de eliminar este movimiento del proceso de conciliación?</p>
+
+            <div id="eliminar-detalles" class="eliminar-detalles">
+                <!-- Contenido dinámico -->
+            </div>
+
+            <div class="eliminar-motivo-grupo">
+                <label for="eliminar-motivo">Motivo (opcional):</label>
+                <input type="text" id="eliminar-motivo" class="eliminar-motivo-input" placeholder="Ej: Pago registrado en cuenta incorrecta">
+            </div>
+
+            <div class="eliminar-aviso">
+                <span class="aviso-icono">⚠️</span>
+                <span>El movimiento podrá ser restaurado desde la pestaña "Eliminados"</span>
+            </div>
+        </div>
+        <div class="modal-eliminar-footer">
+            <button class="btn-cancelar" onclick="cerrarModalEliminar()">Cancelar</button>
+            <button class="btn-confirmar-eliminar" onclick="confirmarEliminar()">🗑️ Eliminar</button>
+        </div>
     </div>
 
     <script src="script.js"></script>

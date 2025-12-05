@@ -10,7 +10,8 @@ let state = {
     datosExtracto: [],
     toleranciaFecha: 30,
     toleranciaImporte: 20000,
-    resultados: null
+    resultados: null,
+    eliminados: [] // Movimientos del Mayor eliminados del proceso de conciliación
 };
 
 // Estado de selección para conciliación manual
@@ -144,6 +145,9 @@ const elements = {
     selectAllExtracto: document.getElementById('selectAllExtracto'),
     countMayorPendiente: document.getElementById('countMayorPendiente'),
     countExtractoPendiente: document.getElementById('countExtractoPendiente'),
+    countEliminados: document.getElementById('countEliminados'),
+    tablaEliminados: document.getElementById('tablaEliminados'),
+    btnEliminarSeleccionados: document.getElementById('btnEliminarSeleccionados'),
 
     // Modal de progreso
     overlayProgreso: document.getElementById('overlay-progreso'),
@@ -938,6 +942,7 @@ function mostrarResultados() {
     llenarTablaConciliados(res.conciliados);
     llenarTablaMayorPendiente(res.mayorNoConciliado);
     llenarTablaExtractoPendiente(res.extractoNoConciliado);
+    llenarTablaEliminados();
 
     // Poblar selector de tipos para el filtro de Mayor
     poblarSelectorTiposMayor();
@@ -1045,11 +1050,16 @@ function llenarTablaMayorPendiente(pendientes) {
                 <td title="${m.leyenda}">${truncar(m.leyenda, 40)}</td>
                 <td class="text-right">${m.debe > 0 ? formatearNumero(m.debe) : ''}</td>
                 <td class="text-right">${m.haber > 0 ? formatearNumero(m.haber) : ''}</td>
+                <td class="col-action-eliminar">
+                    <button class="btn-eliminar-mov" onclick="mostrarModalEliminar('${m.id}')" title="Eliminar del proceso de conciliación">
+                        🗑️
+                    </button>
+                </td>
             </tr>
         `;
     });
 
-    elements.tablaMayorPendiente.innerHTML = html || '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:20px;">Todos los movimientos del Mayor fueron conciliados</td></tr>';
+    elements.tablaMayorPendiente.innerHTML = html || '<tr><td colspan="9" class="text-muted" style="text-align:center;padding:20px;">Todos los movimientos del Mayor fueron conciliados</td></tr>';
 
     // Reset checkbox "seleccionar todos"
     if (elements.selectAllMayor) {
@@ -1349,6 +1359,9 @@ function actualizarBarraSeleccion() {
     } else {
         elements.selectionBar.classList.add('hidden');
     }
+
+    // Actualizar botón de eliminar seleccionados
+    actualizarBotonEliminarSeleccionados();
 }
 
 /**
@@ -1393,6 +1406,360 @@ function actualizarTotalesYContadores() {
     // Actualizar contadores en headers de pestañas pendientes
     elements.countMayorPendiente.textContent = `(${res.mayorNoConciliado.length})`;
     elements.countExtractoPendiente.textContent = `(${res.extractoNoConciliado.length})`;
+
+    // Actualizar contador de eliminados
+    if (elements.countEliminados) {
+        elements.countEliminados.textContent = `(${state.eliminados.length})`;
+    }
+
+    // Actualizar resumen de eliminados
+    actualizarResumenEliminados();
+}
+
+/**
+ * Actualizar la información de eliminados en el resumen
+ */
+function actualizarResumenEliminados() {
+    const eliminadosResumen = document.getElementById('eliminadosResumen');
+    const totalEliminadosSpan = document.getElementById('totalEliminados');
+    const diferenciaAjustadaRow = document.getElementById('diferenciaAjustadaRow');
+    const diferenciaAjustadaSpan = document.getElementById('diferenciaAjustada');
+
+    if (!eliminadosResumen || !totalEliminadosSpan) return;
+
+    const cantidadEliminados = state.eliminados.length;
+    const totalEliminados = state.eliminados.reduce((sum, m) => sum + (m.importe || m.debe || m.haber || 0), 0);
+
+    if (cantidadEliminados > 0) {
+        eliminadosResumen.classList.remove('hidden');
+        totalEliminadosSpan.textContent = `${cantidadEliminados} movimiento${cantidadEliminados !== 1 ? 's' : ''} (${formatearMoneda(totalEliminados)})`;
+
+        // Calcular y mostrar diferencia ajustada
+        if (state.resultados && diferenciaAjustadaRow && diferenciaAjustadaSpan) {
+            const totalMayorPendiente = state.resultados.mayorNoConciliado.reduce((sum, m) => sum + m.importe, 0);
+            const totalExtractoPendiente = state.resultados.extractoNoConciliado.reduce((sum, e) => sum + e.importe, 0);
+            const diferenciaOriginal = Math.abs(totalMayorPendiente - totalExtractoPendiente);
+            const diferenciaAjustada = Math.abs((totalMayorPendiente - totalEliminados) - totalExtractoPendiente);
+
+            diferenciaAjustadaRow.classList.remove('hidden');
+            diferenciaAjustadaSpan.textContent = formatearMoneda(diferenciaAjustada);
+
+            // Color según si la diferencia ajustada es menor que la original
+            if (diferenciaAjustada < diferenciaOriginal) {
+                diferenciaAjustadaSpan.style.color = '#059669';
+            } else {
+                diferenciaAjustadaSpan.style.color = '#dc2626';
+            }
+        }
+    } else {
+        eliminadosResumen.classList.add('hidden');
+        if (diferenciaAjustadaRow) {
+            diferenciaAjustadaRow.classList.add('hidden');
+        }
+    }
+}
+
+// ========== ELIMINACIÓN DE MOVIMIENTOS DEL MAYOR ==========
+
+/**
+ * Mostrar modal de confirmación para eliminar un movimiento
+ * @param {string} id - ID del movimiento a eliminar (puede ser un ID o 'seleccionados')
+ */
+function mostrarModalEliminar(id) {
+    if (!state.resultados) return;
+
+    const modal = document.getElementById('modal-eliminar');
+    const overlay = document.getElementById('overlay-eliminar');
+    const detalles = document.getElementById('eliminar-detalles');
+    const inputMotivo = document.getElementById('eliminar-motivo');
+
+    if (!modal || !overlay) return;
+
+    // Limpiar motivo previo
+    if (inputMotivo) inputMotivo.value = '';
+
+    if (id === 'seleccionados') {
+        // Eliminar múltiples seleccionados
+        const movimientos = state.resultados.mayorNoConciliado.filter(m => seleccion.mayor.includes(m.id));
+        if (movimientos.length === 0) {
+            alert('No hay movimientos seleccionados para eliminar');
+            return;
+        }
+
+        const totalImporte = movimientos.reduce((sum, m) => sum + (m.importe || m.debe || m.haber || 0), 0);
+
+        detalles.innerHTML = `
+            <p><strong>Se eliminarán ${movimientos.length} movimientos:</strong></p>
+            <p>Importe total: <strong>${formatearMoneda(totalImporte)}</strong></p>
+            <div class="eliminar-lista-preview">
+                ${movimientos.slice(0, 5).map(m => `
+                    <div class="eliminar-item-preview">
+                        <span>Asiento ${m.numeroAsiento}</span>
+                        <span>${formatearMoneda(m.importe || m.debe || m.haber)}</span>
+                    </div>
+                `).join('')}
+                ${movimientos.length > 5 ? `<div class="eliminar-item-preview text-muted">...y ${movimientos.length - 5} más</div>` : ''}
+            </div>
+        `;
+
+        modal.dataset.eliminarId = 'seleccionados';
+    } else {
+        // Eliminar un solo movimiento
+        const movimiento = state.resultados.mayorNoConciliado.find(m => m.id === id);
+        if (!movimiento) return;
+
+        const importe = movimiento.importe || movimiento.debe || movimiento.haber || 0;
+
+        detalles.innerHTML = `
+            <div class="eliminar-item-info">
+                <div class="eliminar-info-row">
+                    <span class="eliminar-label">Nº Asiento:</span>
+                    <span class="eliminar-value">${movimiento.numeroAsiento}</span>
+                </div>
+                <div class="eliminar-info-row">
+                    <span class="eliminar-label">Fecha:</span>
+                    <span class="eliminar-value">${formatearFecha(movimiento.fecha)}</span>
+                </div>
+                <div class="eliminar-info-row">
+                    <span class="eliminar-label">Leyenda:</span>
+                    <span class="eliminar-value" title="${movimiento.leyenda}">${truncar(movimiento.leyenda, 40)}</span>
+                </div>
+                <div class="eliminar-info-row">
+                    <span class="eliminar-label">Importe:</span>
+                    <span class="eliminar-value importe-destacado">${formatearMoneda(importe)}</span>
+                </div>
+            </div>
+        `;
+
+        modal.dataset.eliminarId = id;
+    }
+
+    // Mostrar modal
+    overlay.classList.add('visible');
+    modal.classList.add('visible');
+}
+
+/**
+ * Cerrar modal de eliminar
+ */
+function cerrarModalEliminar() {
+    const modal = document.getElementById('modal-eliminar');
+    const overlay = document.getElementById('overlay-eliminar');
+
+    if (modal) modal.classList.remove('visible');
+    if (overlay) overlay.classList.remove('visible');
+}
+
+/**
+ * Confirmar eliminación desde el modal
+ */
+function confirmarEliminar() {
+    const modal = document.getElementById('modal-eliminar');
+    const inputMotivo = document.getElementById('eliminar-motivo');
+
+    if (!modal) return;
+
+    const id = modal.dataset.eliminarId;
+    const motivo = inputMotivo ? inputMotivo.value.trim() : '';
+
+    if (id === 'seleccionados') {
+        eliminarMovimientosSeleccionados(motivo);
+    } else {
+        eliminarMovimiento(id, motivo);
+    }
+
+    cerrarModalEliminar();
+}
+
+/**
+ * Eliminar un movimiento del Mayor del proceso de conciliación
+ * @param {string} id - ID del movimiento a eliminar
+ * @param {string} motivo - Motivo de eliminación (opcional)
+ */
+function eliminarMovimiento(id, motivo = '') {
+    if (!state.resultados) return;
+
+    const movimiento = state.resultados.mayorNoConciliado.find(m => m.id === id);
+    if (!movimiento) return;
+
+    // Agregar a eliminados con metadata
+    state.eliminados.push({
+        ...movimiento,
+        fechaEliminacion: new Date().toISOString(),
+        motivo: motivo
+    });
+
+    // Quitar de mayorNoConciliado
+    state.resultados.mayorNoConciliado = state.resultados.mayorNoConciliado.filter(m => m.id !== id);
+
+    // Quitar de selección si estaba seleccionado
+    seleccion.mayor = seleccion.mayor.filter(i => i !== id);
+
+    // Actualizar vistas
+    actualizarVistasEliminacion();
+
+    mostrarMensaje('Movimiento eliminado del proceso de conciliación', 'success');
+}
+
+/**
+ * Eliminar múltiples movimientos seleccionados
+ * @param {string} motivo - Motivo de eliminación (opcional)
+ */
+function eliminarMovimientosSeleccionados(motivo = '') {
+    if (!state.resultados) return;
+
+    const idsAEliminar = [...seleccion.mayor];
+    if (idsAEliminar.length === 0) return;
+
+    const movimientos = state.resultados.mayorNoConciliado.filter(m => idsAEliminar.includes(m.id));
+
+    // Agregar a eliminados con metadata
+    movimientos.forEach(movimiento => {
+        state.eliminados.push({
+            ...movimiento,
+            fechaEliminacion: new Date().toISOString(),
+            motivo: motivo
+        });
+    });
+
+    // Quitar de mayorNoConciliado
+    state.resultados.mayorNoConciliado = state.resultados.mayorNoConciliado.filter(
+        m => !idsAEliminar.includes(m.id)
+    );
+
+    // Limpiar selección
+    seleccion.mayor = [];
+
+    // Actualizar vistas
+    actualizarVistasEliminacion();
+
+    mostrarMensaje(`${movimientos.length} movimiento(s) eliminado(s) del proceso de conciliación`, 'success');
+}
+
+/**
+ * Restaurar un movimiento eliminado
+ * @param {string} id - ID del movimiento a restaurar
+ */
+function restaurarMovimiento(id) {
+    const idx = state.eliminados.findIndex(m => m.id === id);
+    if (idx === -1) return;
+
+    const movimientoEliminado = state.eliminados[idx];
+
+    // Quitar campos de eliminación y restaurar el movimiento original
+    const { fechaEliminacion, motivo, ...movimientoOriginal } = movimientoEliminado;
+
+    // Agregar a mayorNoConciliado
+    if (state.resultados) {
+        state.resultados.mayorNoConciliado.push(movimientoOriginal);
+    }
+
+    // Quitar de eliminados
+    state.eliminados.splice(idx, 1);
+
+    // Actualizar vistas
+    actualizarVistasEliminacion();
+
+    mostrarMensaje('Movimiento restaurado al proceso de conciliación', 'success');
+}
+
+/**
+ * Actualizar todas las vistas después de eliminar/restaurar
+ */
+function actualizarVistasEliminacion() {
+    if (!state.resultados) return;
+
+    // Actualizar tabla Mayor Pendiente
+    if (hayFiltrosActivosMayor()) {
+        mayorPendienteFiltrado = filtrarMovimientosMayor(state.resultados.mayorNoConciliado);
+        renderizarMayorPendienteFiltrado();
+        mostrarResultadoFiltrosMayor(mayorPendienteFiltrado.length, state.resultados.mayorNoConciliado.length);
+    } else {
+        llenarTablaMayorPendiente(state.resultados.mayorNoConciliado);
+    }
+
+    // Actualizar tabla Eliminados
+    llenarTablaEliminados();
+
+    // Actualizar contadores y totales
+    actualizarTotalesYContadores();
+
+    // Actualizar barra de selección
+    actualizarBarraSeleccion();
+
+    // Actualizar botón de eliminar seleccionados
+    actualizarBotonEliminarSeleccionados();
+}
+
+/**
+ * Llenar la tabla de movimientos eliminados
+ */
+function llenarTablaEliminados() {
+    if (!elements.tablaEliminados) return;
+
+    let html = '';
+
+    // Actualizar contadores (en pestaña y en header)
+    if (elements.countEliminados) {
+        elements.countEliminados.textContent = `(${state.eliminados.length})`;
+    }
+    const countEliminadosTab = document.getElementById('countEliminadosTab');
+    if (countEliminadosTab) {
+        countEliminadosTab.textContent = `(${state.eliminados.length})`;
+    }
+
+    if (state.eliminados.length === 0) {
+        elements.tablaEliminados.innerHTML = '<tr><td colspan="9" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos eliminados</td></tr>';
+        return;
+    }
+
+    // Ordenar por fecha de eliminación (más reciente primero)
+    const eliminadosOrdenados = [...state.eliminados].sort((a, b) => {
+        return new Date(b.fechaEliminacion) - new Date(a.fechaEliminacion);
+    });
+
+    eliminadosOrdenados.forEach(m => {
+        const importe = m.importe || m.debe || m.haber || 0;
+        const fechaElim = new Date(m.fechaEliminacion);
+        const fechaEliminacionFormateada = formatearFecha(fechaElim) + ' ' +
+            fechaElim.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+        html += `
+            <tr data-id="${m.id}">
+                <td>${formatearFecha(m.fecha)}</td>
+                <td>${m.numeroAsiento}</td>
+                <td>${m.ce}</td>
+                <td>${m.tipoAsiento}</td>
+                <td title="${m.leyenda}">${truncar(m.leyenda, 35)}</td>
+                <td class="text-right">${formatearNumero(importe)}</td>
+                <td class="text-muted fecha-eliminacion">${fechaEliminacionFormateada}</td>
+                <td title="${m.motivo || ''}">${truncar(m.motivo || '-', 20)}</td>
+                <td class="col-action-restaurar">
+                    <button class="btn-restaurar" onclick="restaurarMovimiento('${m.id}')" title="Restaurar al proceso de conciliación">
+                        ↩️ Restaurar
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    elements.tablaEliminados.innerHTML = html;
+}
+
+/**
+ * Actualizar botón de eliminar seleccionados
+ */
+function actualizarBotonEliminarSeleccionados() {
+    if (!elements.btnEliminarSeleccionados) return;
+
+    const cantidad = seleccion.mayor.length;
+
+    if (cantidad > 0) {
+        elements.btnEliminarSeleccionados.classList.remove('hidden');
+        elements.btnEliminarSeleccionados.innerHTML = `🗑️ Eliminar seleccionados (${cantidad})`;
+    } else {
+        elements.btnEliminarSeleccionados.classList.add('hidden');
+    }
 }
 
 // ========== FILTROS DE BÚSQUEDA ==========
@@ -1547,11 +1914,16 @@ function renderizarMayorPendienteFiltrado() {
                 <td title="${m.leyenda}">${truncar(m.leyenda, 40)}</td>
                 <td class="text-right">${m.debe > 0 ? formatearNumero(m.debe) : ''}</td>
                 <td class="text-right">${m.haber > 0 ? formatearNumero(m.haber) : ''}</td>
+                <td class="col-action-eliminar">
+                    <button class="btn-eliminar-mov" onclick="mostrarModalEliminar('${m.id}')" title="Eliminar del proceso de conciliación">
+                        🗑️
+                    </button>
+                </td>
             </tr>
         `;
     });
 
-    elements.tablaMayorPendiente.innerHTML = html || '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos que coincidan con los filtros</td></tr>';
+    elements.tablaMayorPendiente.innerHTML = html || '<tr><td colspan="9" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos que coincidan con los filtros</td></tr>';
 
     // Actualizar indicadores de ordenamiento
     actualizarIndicadoresOrden('mayor');
@@ -2197,11 +2569,16 @@ function renderizarTablaMayorOrdenada() {
                 <td title="${m.leyenda}">${truncar(m.leyenda, 40)}</td>
                 <td class="text-right">${m.debe > 0 ? formatearNumero(m.debe) : ''}</td>
                 <td class="text-right">${m.haber > 0 ? formatearNumero(m.haber) : ''}</td>
+                <td class="col-action-eliminar">
+                    <button class="btn-eliminar-mov" onclick="mostrarModalEliminar('${m.id}')" title="Eliminar del proceso de conciliación">
+                        🗑️
+                    </button>
+                </td>
             </tr>
         `;
     });
 
-    elements.tablaMayorPendiente.innerHTML = html || '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos pendientes</td></tr>';
+    elements.tablaMayorPendiente.innerHTML = html || '<tr><td colspan="9" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos pendientes</td></tr>';
 
     // Actualizar indicadores visuales
     actualizarIndicadoresOrden('mayor');
@@ -2370,13 +2747,36 @@ function descargarReporte() {
     const wsExtracto = XLSX.utils.aoa_to_sheet(dataExtracto);
     XLSX.utils.book_append_sheet(wb, wsExtracto, 'Extracto No Conciliado');
 
-    // Hoja 4: Resumen
+    // Hoja 4: Eliminados
+    const dataEliminados = [];
+    dataEliminados.push(['Fecha Asiento', 'Nº Asiento', 'C/E', 'Tipo', 'Leyenda', 'Debe', 'Haber', 'Fecha Eliminación', 'Motivo']);
+
+    state.eliminados.forEach(m => {
+        const fechaElim = new Date(m.fechaEliminacion);
+        dataEliminados.push([
+            formatearFecha(m.fecha),
+            m.numeroAsiento,
+            m.ce,
+            m.tipoAsiento,
+            m.leyenda,
+            m.debe || '',
+            m.haber || '',
+            formatearFecha(fechaElim) + ' ' + fechaElim.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+            m.motivo || ''
+        ]);
+    });
+
+    const wsEliminados = XLSX.utils.aoa_to_sheet(dataEliminados);
+    XLSX.utils.book_append_sheet(wb, wsEliminados, 'Eliminados');
+
+    // Hoja 5: Resumen
     const totalConciliadoMayor = res.conciliados.reduce((sum, c) =>
         sum + c.mayor.reduce((s, m) => s + m.importe, 0), 0);
     const totalConciliadoExtracto = res.conciliados.reduce((sum, c) =>
         sum + c.extracto.reduce((s, e) => s + e.importe, 0), 0);
     const totalMayorPendiente = res.mayorNoConciliado.reduce((sum, m) => sum + m.importe, 0);
     const totalExtractoPendiente = res.extractoNoConciliado.reduce((sum, e) => sum + e.importe, 0);
+    const totalEliminados = state.eliminados.reduce((sum, m) => sum + (m.importe || m.debe || m.haber || 0), 0);
 
     const dataResumen = [
         ['RESUMEN DE CONCILIACIÓN'],
@@ -2389,14 +2789,20 @@ function descargarReporte() {
         ['Cantidad de grupos conciliados:', res.conciliados.length],
         ['Cantidad Mayor no conciliado:', res.mayorNoConciliado.length],
         ['Cantidad Extracto no conciliado:', res.extractoNoConciliado.length],
+        ['Cantidad eliminados del Mayor:', state.eliminados.length],
         [''],
         ['TOTALES'],
         ['Total Mayor conciliado:', totalConciliadoMayor],
         ['Total Extracto conciliado:', totalConciliadoExtracto],
         ['Total Mayor no conciliado:', totalMayorPendiente],
         ['Total Extracto no conciliado:', totalExtractoPendiente],
+        ['Total eliminados del Mayor:', totalEliminados],
         [''],
-        ['Diferencia en conciliados:', Math.abs(totalConciliadoMayor - totalConciliadoExtracto)]
+        ['Diferencia en conciliados:', Math.abs(totalConciliadoMayor - totalConciliadoExtracto)],
+        [''],
+        ['DIFERENCIA AJUSTADA (excluyendo eliminados)'],
+        ['Diferencia original:', Math.abs(totalMayorPendiente - totalExtractoPendiente)],
+        ['Diferencia ajustada:', Math.abs((totalMayorPendiente - totalEliminados) - totalExtractoPendiente)]
     ];
 
     const wsResumen = XLSX.utils.aoa_to_sheet(dataResumen);
@@ -2462,7 +2868,8 @@ function reiniciar() {
         datosExtracto: [],
         toleranciaFecha: 30,
         toleranciaImporte: 20000,
-        resultados: null
+        resultados: null,
+        eliminados: []
     };
 
     // Resetear selección y contador

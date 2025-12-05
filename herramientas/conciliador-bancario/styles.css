@@ -465,6 +465,38 @@ body {
     font-weight: 600;
 }
 
+.total-row.eliminados-row {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed #e5e7eb;
+    background: #fef3c7;
+    margin-left: -20px;
+    margin-right: -20px;
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-bottom: 8px;
+}
+
+.total-row.eliminados-row .eliminados-value {
+    color: #92400e;
+    font-weight: 600;
+}
+
+.total-row.diferencia-ajustada {
+    background: #fef3c7;
+    margin-left: -20px;
+    margin-right: -20px;
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-top: 8px;
+    padding-bottom: 12px;
+    font-weight: 600;
+}
+
+.total-row.hidden {
+    display: none;
+}
+
 .total-label {
     color: #475569;
 }
@@ -1460,5 +1492,376 @@ body {
     .columna-ordenable .icono-orden {
         font-size: 10px;
         margin-left: 3px;
+    }
+}
+
+/* ========== ELIMINACIÓN DE MOVIMIENTOS ========== */
+
+/* Header actions */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Botón eliminar seleccionados */
+.btn-eliminar-seleccionados {
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-eliminar-seleccionados:hover {
+    background: #fecaca;
+    border-color: #f87171;
+}
+
+.btn-eliminar-seleccionados.hidden {
+    display: none;
+}
+
+/* Columna de acción eliminar */
+.header-action-eliminar {
+    width: 70px;
+    text-align: center;
+    background: #f3f4f6;
+}
+
+.col-action-eliminar {
+    width: 70px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.btn-eliminar-mov {
+    background: transparent;
+    border: 1px solid #e5e7eb;
+    color: #9ca3af;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-eliminar-mov:hover {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #dc2626;
+}
+
+/* Pestaña Eliminados */
+.eliminados-header {
+    padding: 12px 0;
+    margin-bottom: 12px;
+}
+
+.eliminados-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #374151;
+    margin: 0;
+}
+
+.eliminados-info {
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+}
+
+.eliminados-info p {
+    color: #92400e;
+    font-size: 14px;
+    margin: 0;
+}
+
+/* Botón restaurar */
+.col-action-restaurar {
+    width: 120px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.btn-restaurar {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    color: #059669;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-restaurar:hover {
+    background: #d1fae5;
+    border-color: #6ee7b7;
+}
+
+.fecha-eliminacion {
+    font-size: 11px;
+}
+
+/* ========== MODAL DE ELIMINAR ========== */
+
+.overlay-eliminar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+.overlay-eliminar.visible {
+    display: block;
+}
+
+.modal-eliminar {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    width: 500px;
+    max-width: 90vw;
+    display: none;
+}
+
+.modal-eliminar.visible {
+    display: block;
+    animation: modalEntrada 0.3s ease-out;
+}
+
+.modal-eliminar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-eliminar-header h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0;
+}
+
+.modal-close-btn {
+    background: none;
+    border: none;
+    color: #9ca3af;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.modal-close-btn:hover {
+    color: #374151;
+}
+
+.modal-eliminar-body {
+    padding: 24px;
+}
+
+.modal-eliminar-pregunta {
+    font-size: 15px;
+    color: #374151;
+    margin: 0 0 20px 0;
+}
+
+.eliminar-detalles {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.eliminar-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.eliminar-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.eliminar-label {
+    font-size: 13px;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.eliminar-value {
+    font-size: 13px;
+    color: #1f2937;
+    text-align: right;
+    max-width: 60%;
+}
+
+.eliminar-value.importe-destacado {
+    font-size: 16px;
+    font-weight: 700;
+    color: #dc2626;
+    font-family: 'Courier New', monospace;
+}
+
+.eliminar-lista-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+}
+
+.eliminar-item-preview {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #4b5563;
+    padding: 4px 0;
+    border-bottom: 1px dashed #e5e7eb;
+}
+
+.eliminar-item-preview:last-child {
+    border-bottom: none;
+}
+
+.eliminar-motivo-grupo {
+    margin-bottom: 16px;
+}
+
+.eliminar-motivo-grupo label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 6px;
+}
+
+.eliminar-motivo-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #374151;
+    transition: all 0.2s;
+}
+
+.eliminar-motivo-input:focus {
+    outline: none;
+    border-color: #2c5282;
+    box-shadow: 0 0 0 3px rgba(44, 82, 130, 0.1);
+}
+
+.eliminar-motivo-input::placeholder {
+    color: #9ca3af;
+}
+
+.eliminar-aviso {
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #92400e;
+}
+
+.aviso-icono {
+    font-size: 16px;
+}
+
+.modal-eliminar-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 24px;
+    border-top: 1px solid #e5e7eb;
+    background: #f9fafb;
+    border-radius: 0 0 16px 16px;
+}
+
+.btn-cancelar {
+    background: white;
+    border: 1px solid #d1d5db;
+    color: #374151;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-cancelar:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+}
+
+.btn-confirmar-eliminar {
+    background: #dc2626;
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-confirmar-eliminar:hover {
+    background: #b91c1c;
+}
+
+/* Responsive modal eliminar */
+@media (max-width: 500px) {
+    .modal-eliminar {
+        width: 95%;
+    }
+
+    .modal-eliminar-header {
+        padding: 16px;
+    }
+
+    .modal-eliminar-body {
+        padding: 16px;
+    }
+
+    .modal-eliminar-footer {
+        padding: 12px 16px;
+        flex-direction: column-reverse;
+    }
+
+    .btn-cancelar,
+    .btn-confirmar-eliminar {
+        width: 100%;
     }
 }
