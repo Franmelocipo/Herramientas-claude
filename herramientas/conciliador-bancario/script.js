@@ -73,6 +73,15 @@ let progreso = {
     conciliados: 0
 };
 
+// Historial de procesamiento/reprocesos
+let historialProcesamiento = [];
+
+// Tolerancias originales de la primera conciliación
+let toleranciasIniciales = {
+    fecha: null,
+    importe: null
+};
+
 // Elementos del DOM
 const elements = {
     // Pasos
@@ -157,7 +166,24 @@ const elements = {
     pasoProgreso: document.getElementById('paso-progreso'),
     mensajeProgreso: document.getElementById('mensaje-progreso'),
     contadorProgreso: document.getElementById('contador-progreso'),
-    conciliadosProgreso: document.getElementById('conciliados-progreso')
+    conciliadosProgreso: document.getElementById('conciliados-progreso'),
+
+    // Panel de reprocesamiento
+    panelReproceso: document.getElementById('panel-reproceso'),
+    panelReprocesoBody: document.getElementById('panelReprocesoBody'),
+    btnToggleReproceso: document.getElementById('btnToggleReproceso'),
+    reprocesoPendientesMayor: document.getElementById('reprocesoPendientesMayor'),
+    reprocesoPendientesExtracto: document.getElementById('reprocesoPendientesExtracto'),
+    reprocesoToleranciaFecha: document.getElementById('reproceso-tolerancia-fecha'),
+    reprocesoToleranciaImporte: document.getElementById('reproceso-tolerancia-importe'),
+    btnReprocesar: document.getElementById('btnReprocesar'),
+
+    // Historial de procesamiento
+    historialProcesamiento: document.getElementById('historial-procesamiento'),
+    historialBody: document.getElementById('historialBody'),
+    historialLista: document.getElementById('historialLista'),
+    historialTotalConciliados: document.getElementById('historialTotalConciliados'),
+    btnToggleHistorial: document.getElementById('btnToggleHistorial')
 };
 
 // ========== INICIALIZACIÓN ==========
@@ -673,6 +699,12 @@ async function ejecutarConciliacion() {
         // Mostrar resultados
         mostrarResultados();
 
+        // Guardar el procesamiento inicial en el historial
+        guardarProcesamientoInicial(state.resultados.conciliados.length);
+
+        // Mostrar panel de reprocesamiento
+        actualizarPanelReproceso();
+
         // Completar progreso
         actualizarProgreso(100, '¡Conciliación completada!');
         await sleep(800);
@@ -1008,9 +1040,15 @@ function llenarTablaConciliados(conciliados) {
             // Botón de acción (solo en primera fila)
             if (isFirst) {
                 const manualBadge = match.manual ? '<span class="badge-manual">Manual</span>' : '';
+                // Badge de reproceso con tooltip que muestra los parámetros utilizados
+                let reprocesoBadge = '';
+                if (match.reproceso && match.parametrosReproceso) {
+                    const tooltipText = `Reproceso #${match.parametrosReproceso.numeroReproceso}: ${match.parametrosReproceso.toleranciaFecha} días, $${match.parametrosReproceso.toleranciaImporte.toLocaleString('es-AR')}`;
+                    reprocesoBadge = `<span class="badge-reproceso" title="${tooltipText}">🔄 Rep</span>`;
+                }
                 html += `
                     <td class="col-action">
-                        ${manualBadge}
+                        ${manualBadge}${reprocesoBadge}
                         <button class="btn-desconciliar" onclick="desconciliar('${match.id}')" title="Desconciliar">
                             ✕
                         </button>
@@ -2678,15 +2716,25 @@ function descargarReporte() {
     const res = state.resultados;
     const wb = XLSX.utils.book_new();
 
-    // Hoja 1: Conciliados
+    // Hoja 1: Conciliados (con información de pasada y tolerancias)
     const dataConciliados = [];
     dataConciliados.push([
         'Fecha Mayor', 'Nº Asiento', 'Leyenda Mayor', 'Importe Mayor', '',
-        'Fecha Extracto', 'Descripción Extracto', 'Origen', 'Importe Extracto', 'Diferencia', 'Tipo'
+        'Fecha Extracto', 'Descripción Extracto', 'Origen', 'Importe Extracto', 'Diferencia', 'Tipo', 'Pasada', 'Tolerancias'
     ]);
 
     res.conciliados.forEach(match => {
         const maxRows = Math.max(match.mayor.length, match.extracto.length);
+
+        // Determinar información de pasada
+        let pasada = 'Inicial';
+        let tolerancias = '';
+        if (match.reproceso && match.parametrosReproceso) {
+            pasada = `Reproceso ${match.parametrosReproceso.numeroReproceso}`;
+            tolerancias = `${match.parametrosReproceso.toleranciaFecha} días, $${match.parametrosReproceso.toleranciaImporte.toLocaleString('es-AR')}`;
+        } else if (toleranciasIniciales.fecha !== null) {
+            tolerancias = `${toleranciasIniciales.fecha} días, $${toleranciasIniciales.importe.toLocaleString('es-AR')}`;
+        }
 
         for (let i = 0; i < maxRows; i++) {
             const m = match.mayor[i];
@@ -2703,7 +2751,9 @@ function descargarReporte() {
                 e ? e.origen : '',
                 e ? e.importe : '',
                 i === 0 ? match.diferencia : '',
-                i === 0 ? (match.manual ? 'Manual' : 'Automático') : ''
+                i === 0 ? (match.manual ? 'Manual' : 'Automático') : '',
+                i === 0 ? pasada : '',
+                i === 0 ? tolerancias : ''
             ]);
         }
     });
@@ -2782,8 +2832,8 @@ function descargarReporte() {
         ['RESUMEN DE CONCILIACIÓN'],
         [''],
         ['Tipo de conciliación:', state.tipoConciliacion === 'creditos' ? 'Créditos' : 'Débitos'],
-        ['Tolerancia de fechas:', `${state.toleranciaFecha} días`],
-        ['Tolerancia de importes:', `$${state.toleranciaImporte.toLocaleString('es-AR')}`],
+        ['Tolerancia inicial de fechas:', toleranciasIniciales.fecha !== null ? `${toleranciasIniciales.fecha} días` : `${state.toleranciaFecha} días`],
+        ['Tolerancia inicial de importes:', toleranciasIniciales.importe !== null ? `$${toleranciasIniciales.importe.toLocaleString('es-AR')}` : `$${state.toleranciaImporte.toLocaleString('es-AR')}`],
         [''],
         ['RESULTADOS'],
         ['Cantidad de grupos conciliados:', res.conciliados.length],
@@ -2804,6 +2854,24 @@ function descargarReporte() {
         ['Diferencia original:', Math.abs(totalMayorPendiente - totalExtractoPendiente)],
         ['Diferencia ajustada:', Math.abs((totalMayorPendiente - totalEliminados) - totalExtractoPendiente)]
     ];
+
+    // Agregar historial de procesamiento si hay reprocesos
+    if (historialProcesamiento.length > 0) {
+        dataResumen.push(['']);
+        dataResumen.push(['HISTORIAL DE PROCESAMIENTO']);
+
+        let totalHistorialConciliados = 0;
+        historialProcesamiento.forEach((item, idx) => {
+            const prefijo = idx === 0 ? 'Procesamiento inicial' : `Reproceso ${idx}`;
+            const signo = idx === 0 ? '' : '+';
+            const toleranciasStr = `${item.toleranciaFecha} días, $${item.toleranciaImporte.toLocaleString('es-AR')}`;
+            dataResumen.push([`${idx + 1}. ${prefijo} (${toleranciasStr})`, `→ ${signo}${item.conciliados} conciliados`]);
+            totalHistorialConciliados += item.conciliados;
+        });
+
+        dataResumen.push(['']);
+        dataResumen.push(['Total conciliados (historial):', totalHistorialConciliados]);
+    }
 
     const wsResumen = XLSX.utils.aoa_to_sheet(dataResumen);
     XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
@@ -2907,4 +2975,372 @@ function reiniciar() {
 
     // Scroll arriba
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Resetear historial y tolerancias iniciales
+    historialProcesamiento = [];
+    toleranciasIniciales = { fecha: null, importe: null };
+
+    // Ocultar panel de reproceso e historial
+    if (elements.panelReproceso) {
+        elements.panelReproceso.classList.add('hidden');
+    }
+    if (elements.historialProcesamiento) {
+        elements.historialProcesamiento.classList.add('hidden');
+    }
+}
+
+// ========== REPROCESAMIENTO DE PENDIENTES ==========
+
+/**
+ * Alterna la visibilidad del cuerpo del panel de reprocesamiento
+ */
+function togglePanelReproceso() {
+    const body = elements.panelReprocesoBody;
+    const btn = elements.btnToggleReproceso;
+
+    if (body.classList.contains('collapsed')) {
+        body.classList.remove('collapsed');
+        btn.textContent = '▼';
+    } else {
+        body.classList.add('collapsed');
+        btn.textContent = '▶';
+    }
+}
+
+/**
+ * Alterna la visibilidad del historial de procesamiento
+ */
+function toggleHistorial() {
+    const body = elements.historialBody;
+    const btn = elements.btnToggleHistorial;
+
+    if (body.classList.contains('hidden')) {
+        body.classList.remove('hidden');
+        btn.textContent = 'Ocultar';
+    } else {
+        body.classList.add('hidden');
+        btn.textContent = 'Mostrar';
+    }
+}
+
+/**
+ * Actualiza el panel de reprocesamiento con los datos actuales
+ */
+function actualizarPanelReproceso() {
+    if (!state.resultados) return;
+
+    const mayorPendiente = state.resultados.mayorNoConciliado.length;
+    const extractoPendiente = state.resultados.extractoNoConciliado.length;
+
+    // Actualizar contadores
+    elements.reprocesoPendientesMayor.textContent = mayorPendiente;
+    elements.reprocesoPendientesExtracto.textContent = extractoPendiente;
+
+    // Habilitar/deshabilitar botón según si hay pendientes
+    const hayPendientes = mayorPendiente > 0 && extractoPendiente > 0;
+    elements.btnReprocesar.disabled = !hayPendientes;
+
+    if (!hayPendientes) {
+        elements.btnReprocesar.title = 'No hay movimientos pendientes para reprocesar';
+    } else {
+        elements.btnReprocesar.title = '';
+    }
+
+    // Mostrar panel si hay resultados
+    elements.panelReproceso.classList.remove('hidden');
+}
+
+/**
+ * Actualiza el historial de procesamiento en la UI
+ */
+function actualizarHistorial() {
+    if (historialProcesamiento.length === 0) {
+        elements.historialProcesamiento.classList.add('hidden');
+        return;
+    }
+
+    elements.historialProcesamiento.classList.remove('hidden');
+
+    let html = '';
+    let totalConciliados = 0;
+
+    historialProcesamiento.forEach((item, idx) => {
+        totalConciliados += item.conciliados;
+        const prefijo = idx === 0 ? 'Procesamiento inicial' : `Reproceso ${idx}`;
+        const signo = idx === 0 ? '' : '+';
+
+        html += `
+            <div class="historial-item">
+                <span class="historial-numero">${idx + 1}.</span>
+                <span class="historial-descripcion">${prefijo} (${item.toleranciaFecha} días, $${item.toleranciaImporte.toLocaleString('es-AR')})</span>
+                <span class="historial-resultado">→ ${signo}${item.conciliados} conciliados</span>
+            </div>
+        `;
+    });
+
+    elements.historialLista.innerHTML = html;
+    elements.historialTotalConciliados.textContent = totalConciliados;
+}
+
+/**
+ * Guarda el procesamiento inicial en el historial
+ */
+function guardarProcesamientoInicial(cantidadConciliados) {
+    toleranciasIniciales = {
+        fecha: state.toleranciaFecha,
+        importe: state.toleranciaImporte
+    };
+
+    historialProcesamiento = [{
+        fecha: new Date().toISOString(),
+        toleranciaFecha: state.toleranciaFecha,
+        toleranciaImporte: state.toleranciaImporte,
+        conciliados: cantidadConciliados,
+        esInicial: true
+    }];
+
+    actualizarHistorial();
+}
+
+/**
+ * Reprocesa los movimientos pendientes con nuevos parámetros de tolerancia
+ */
+async function reprocesarPendientes() {
+    try {
+        // Obtener nuevos parámetros
+        const nuevaToleranciaFecha = parseInt(elements.reprocesoToleranciaFecha.value) || 10;
+        const nuevaToleranciaImporte = parseFloat(elements.reprocesoToleranciaImporte.value) || 1000;
+
+        // Validar que hay movimientos pendientes
+        if (state.resultados.mayorNoConciliado.length === 0 || state.resultados.extractoNoConciliado.length === 0) {
+            mostrarMensaje('No hay movimientos pendientes para reprocesar', 'error');
+            return;
+        }
+
+        // Verificar si los parámetros son iguales a la última ejecución
+        const ultimoProceso = historialProcesamiento[historialProcesamiento.length - 1];
+        if (ultimoProceso &&
+            ultimoProceso.toleranciaFecha === nuevaToleranciaFecha &&
+            ultimoProceso.toleranciaImporte === nuevaToleranciaImporte) {
+            if (!confirm('Los parámetros son iguales al último procesamiento. ¿Desea continuar de todos modos?')) {
+                return;
+            }
+        }
+
+        // Mostrar progreso
+        mostrarModalProgreso();
+        actualizarPaso(1, 'Iniciando reprocesamiento...');
+        actualizarProgreso(5);
+        await sleep(100);
+
+        // Guardar referencia a conciliados actuales (no se tocan)
+        const conciliadosPrevios = [...state.resultados.conciliados];
+        const eliminadosPrevios = [...state.eliminados];
+
+        // Crear copias de los pendientes para procesar
+        const mayorPendiente = state.resultados.mayorNoConciliado.map(m => ({...m, usado: false}));
+        const extractoPendiente = state.resultados.extractoNoConciliado.map(e => ({...e, usado: false}));
+
+        // Actualizar tolerancias temporalmente para el algoritmo
+        const toleranciaFechaOriginal = state.toleranciaFecha;
+        const toleranciaImporteOriginal = state.toleranciaImporte;
+        state.toleranciaFecha = nuevaToleranciaFecha;
+        state.toleranciaImporte = nuevaToleranciaImporte;
+
+        // Ejecutar conciliación SOLO con pendientes
+        actualizarPaso(2, 'Buscando nuevas coincidencias...');
+        actualizarProgreso(25);
+        await sleep(100);
+
+        const resultadosReproceso = await conciliarReproceso(mayorPendiente, extractoPendiente);
+
+        // Restaurar tolerancias originales
+        state.toleranciaFecha = toleranciaFechaOriginal;
+        state.toleranciaImporte = toleranciaImporteOriginal;
+
+        actualizarPaso(3, 'Actualizando resultados...');
+        actualizarProgreso(75);
+        await sleep(100);
+
+        // Marcar nuevas conciliaciones como resultado de reproceso
+        const nuevosConciliados = resultadosReproceso.conciliados.map(c => ({
+            ...c,
+            reproceso: true,
+            parametrosReproceso: {
+                toleranciaFecha: nuevaToleranciaFecha,
+                toleranciaImporte: nuevaToleranciaImporte,
+                numeroReproceso: historialProcesamiento.length
+            }
+        }));
+
+        // Agregar nuevas conciliaciones a las existentes
+        state.resultados.conciliados = [
+            ...conciliadosPrevios,
+            ...nuevosConciliados
+        ];
+
+        // Actualizar pendientes (quitar los que conciliaron)
+        state.resultados.mayorNoConciliado = resultadosReproceso.mayorNoConciliado;
+        state.resultados.extractoNoConciliado = resultadosReproceso.extractoNoConciliado;
+
+        // Mantener eliminados
+        state.eliminados = eliminadosPrevios;
+
+        // Guardar en historial
+        historialProcesamiento.push({
+            fecha: new Date().toISOString(),
+            toleranciaFecha: nuevaToleranciaFecha,
+            toleranciaImporte: nuevaToleranciaImporte,
+            conciliados: nuevosConciliados.length,
+            esInicial: false
+        });
+
+        actualizarPaso(4, 'Finalizando...');
+        actualizarProgreso(95);
+        await sleep(100);
+
+        // Actualizar vistas
+        mostrarResultados();
+        actualizarHistorial();
+        actualizarPanelReproceso();
+
+        // Completar progreso
+        actualizarProgreso(100, '¡Reprocesamiento completado!');
+        await sleep(500);
+
+        cerrarModalProgreso();
+
+        // Mostrar resumen
+        mostrarResumenReproceso(nuevosConciliados.length);
+
+    } catch (error) {
+        cerrarModalProgreso();
+        mostrarMensaje(`Error en el reprocesamiento: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Versión simplificada de conciliar para reprocesamiento
+ * No actualiza la UI con tanta frecuencia ya que los conjuntos son más pequeños
+ */
+async function conciliarReproceso(mayor, extracto) {
+    const conciliados = [];
+    const mayorNoConciliado = [...mayor];
+    const extractoNoConciliado = [...extracto];
+
+    // Paso 1: Buscar coincidencias exactas (1 a 1)
+    for (let i = mayorNoConciliado.length - 1; i >= 0; i--) {
+        const movMayor = mayorNoConciliado[i];
+        const idxCoincidencia = buscarCoincidenciaExacta(movMayor, extractoNoConciliado);
+
+        if (idxCoincidencia !== -1) {
+            const movExtracto = extractoNoConciliado[idxCoincidencia];
+            const diferencia = Math.abs(movMayor.importe - movExtracto.importe);
+
+            conciliados.push({
+                id: 'conc_' + (++conciliacionIdCounter),
+                tipo: '1:1',
+                mayor: [movMayor],
+                extracto: [movExtracto],
+                diferencia,
+                manual: false
+            });
+
+            mayorNoConciliado.splice(i, 1);
+            extractoNoConciliado.splice(idxCoincidencia, 1);
+        }
+
+        // Yield para no bloquear UI
+        if (i % 20 === 0) await sleep(0);
+    }
+
+    // Paso 2: Buscar coincidencias 1 a muchos
+    for (let i = mayorNoConciliado.length - 1; i >= 0; i--) {
+        const movMayor = mayorNoConciliado[i];
+
+        const combinacion = buscarCombinacionQueSume(
+            movMayor.importe,
+            movMayor.fecha,
+            extractoNoConciliado,
+            5
+        );
+
+        if (combinacion) {
+            const sumaExtracto = combinacion.reduce((sum, m) => sum + m.importe, 0);
+            const diferencia = Math.abs(movMayor.importe - sumaExtracto);
+
+            conciliados.push({
+                id: 'conc_' + (++conciliacionIdCounter),
+                tipo: '1:N',
+                mayor: [movMayor],
+                extracto: combinacion,
+                diferencia,
+                manual: false
+            });
+
+            mayorNoConciliado.splice(i, 1);
+            combinacion.forEach(m => {
+                const idx = extractoNoConciliado.findIndex(e => e.id === m.id);
+                if (idx !== -1) extractoNoConciliado.splice(idx, 1);
+            });
+        }
+
+        if (i % 10 === 0) await sleep(0);
+    }
+
+    // Paso 3: Buscar coincidencias muchos a 1
+    for (let i = extractoNoConciliado.length - 1; i >= 0; i--) {
+        const movExtracto = extractoNoConciliado[i];
+
+        const combinacion = buscarCombinacionQueSume(
+            movExtracto.importe,
+            movExtracto.fecha,
+            mayorNoConciliado,
+            5
+        );
+
+        if (combinacion) {
+            const sumaMayor = combinacion.reduce((sum, m) => sum + m.importe, 0);
+            const diferencia = Math.abs(sumaMayor - movExtracto.importe);
+
+            conciliados.push({
+                id: 'conc_' + (++conciliacionIdCounter),
+                tipo: 'N:1',
+                mayor: combinacion,
+                extracto: [movExtracto],
+                diferencia,
+                manual: false
+            });
+
+            extractoNoConciliado.splice(i, 1);
+            combinacion.forEach(m => {
+                const idx = mayorNoConciliado.findIndex(e => e.id === m.id);
+                if (idx !== -1) mayorNoConciliado.splice(idx, 1);
+            });
+        }
+
+        if (i % 10 === 0) await sleep(0);
+    }
+
+    return {
+        conciliados,
+        mayorNoConciliado,
+        extractoNoConciliado
+    };
+}
+
+/**
+ * Muestra un mensaje de resumen después del reprocesamiento
+ */
+function mostrarResumenReproceso(nuevosConciliados) {
+    if (nuevosConciliados > 0) {
+        mostrarMensaje(`Se encontraron ${nuevosConciliados} nuevas conciliaciones`, 'success');
+    } else {
+        mostrarMensaje('No se encontraron nuevas conciliaciones con estos parámetros', 'error');
+    }
+
+    // Ocultar mensaje después de 5 segundos
+    setTimeout(() => {
+        mostrarMensaje('', 'clear');
+    }, 5000);
 }
