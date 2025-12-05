@@ -197,10 +197,12 @@ function leerExcel(file) {
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                const workbook = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+                // IMPORTANTE: No usar cellDates para evitar problemas de conversión
+                // Las fechas se manejan manualmente en parsearFecha()
+                const workbook = XLSX.read(e.target.result, { type: 'array' });
                 const sheetName = workbook.SheetNames[0];
                 const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
-                    raw: false,
+                    raw: true,  // Mantener valores crudos (números seriales para fechas)
                     defval: ''
                 });
                 resolve(data);
@@ -271,77 +273,112 @@ function parsearFecha(valor) {
 
     let fecha = null;
 
-    // LOG DE DIAGNÓSTICO - Descomentar para debug
-    // console.log('=== DIAGNÓSTICO FECHA ===');
-    // console.log('Valor original:', valor);
-    // console.log('Tipo:', typeof valor);
-
-    // Si ya es un objeto Date
+    // Si ya es un objeto Date (poco probable con raw: true, pero por seguridad)
     if (valor instanceof Date) {
-        fecha = new Date(valor.getTime());
-        // console.log('Es Date, año original:', fecha.getFullYear());
-    } else if (typeof valor === 'number') {
-        // Es un número serial de Excel
-        // Excel usa dos sistemas de fechas:
-        // - Windows: día 1 = 1 de enero de 1900
-        // - Mac: día 1 = 1 de enero de 1904
-        // La mayoría usa el sistema de 1900
-        // console.log('Es número serial de Excel:', valor);
-
-        // Convertir número serial de Excel a fecha
-        // 25569 es el número de días entre 1/1/1900 (Excel) y 1/1/1970 (Unix)
-        // Restamos 1 porque Excel cuenta desde 1 y no desde 0
-        // También hay que considerar el bug de Excel que cuenta 29/02/1900 (año no bisiesto)
-        if (valor > 0) {
-            fecha = new Date((valor - 25569) * 86400 * 1000);
-            // console.log('Fecha convertida desde serial:', fecha);
+        if (!isNaN(valor.getTime())) {
+            fecha = new Date(valor.getTime());
         }
-    } else {
-        // Si es string
+    }
+    // Si es un número serial de Excel
+    else if (typeof valor === 'number') {
+        // Excel usa número de días desde 1/1/1900
+        // 25569 = días entre 1/1/1900 y 1/1/1970 (época Unix)
+        // Valores típicos para fechas 2020-2030: ~44000-55000
+        if (valor > 1 && valor < 100000) {
+            // Usar UTC para evitar problemas de zona horaria
+            const diasDesdeEpoch = (valor - 25569);
+            fecha = new Date(Date.UTC(1970, 0, 1 + diasDesdeEpoch));
+            // Convertir a fecha local sin cambio de hora
+            fecha = new Date(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate());
+        }
+    }
+    // Si es string
+    else if (typeof valor === 'string' || valor) {
         const str = String(valor).trim();
-        // console.log('Es string:', str);
 
-        // Formato DD/MM/YYYY o DD-MM-YYYY
-        const match = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-        if (match) {
-            const dia = parseInt(match[1]);
-            const mes = parseInt(match[2]) - 1;
-            let anio = parseInt(match[3]);
+        // Formato DD/MM/YYYY o DD-MM-YYYY (formato argentino)
+        const matchDMY = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+        if (matchDMY) {
+            let num1 = parseInt(matchDMY[1], 10);
+            let num2 = parseInt(matchDMY[2], 10);
+            let anio = parseInt(matchDMY[3], 10);
+
             // Si el año tiene 2 dígitos, asumir 2000+
             if (anio < 100) anio += 2000;
-            fecha = new Date(anio, mes, dia);
-        } else {
-            // Formato YYYY-MM-DD
-            const matchISO = str.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/);
-            if (matchISO) {
-                fecha = new Date(parseInt(matchISO[1]), parseInt(matchISO[2]) - 1, parseInt(matchISO[3]));
+
+            // Determinar si es DD/MM o MM/DD
+            // Si num1 > 12, definitivamente es el día (formato DD/MM/YYYY)
+            // Si num2 > 12, definitivamente es el día (formato MM/DD/YYYY)
+            // Si ambos <= 12, asumimos DD/MM/YYYY (formato argentino)
+            let dia, mes;
+
+            if (num1 > 12 && num2 <= 12) {
+                // num1 es día (DD/MM/YYYY)
+                dia = num1;
+                mes = num2 - 1;
+            } else if (num2 > 12 && num1 <= 12) {
+                // num2 es día (MM/DD/YYYY) - formato americano
+                dia = num2;
+                mes = num1 - 1;
             } else {
-                // Intentar parsear directamente
-                const date = new Date(str);
-                fecha = isNaN(date.getTime()) ? null : date;
+                // Ambos <= 12, asumimos formato argentino DD/MM/YYYY
+                dia = num1;
+                mes = num2 - 1;
+            }
+
+            // Validar que la fecha sea válida
+            if (dia >= 1 && dia <= 31 && mes >= 0 && mes <= 11) {
+                fecha = new Date(anio, mes, dia);
+                // Verificar que la fecha creada coincida (evitar rollover de meses)
+                if (fecha.getDate() !== dia || fecha.getMonth() !== mes) {
+                    fecha = null; // Fecha inválida
+                }
+            }
+        }
+
+        // Si no matcheó o falló, intentar formato YYYY-MM-DD (ISO)
+        if (!fecha) {
+            const matchISO = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+            if (matchISO) {
+                const anio = parseInt(matchISO[1], 10);
+                const mes = parseInt(matchISO[2], 10) - 1;
+                const dia = parseInt(matchISO[3], 10);
+                if (dia >= 1 && dia <= 31 && mes >= 0 && mes <= 11) {
+                    fecha = new Date(anio, mes, dia);
+                }
+            }
+        }
+
+        // Último recurso: parseo nativo (NO recomendado, puede dar resultados inesperados)
+        if (!fecha && str.length > 0) {
+            const parsed = Date.parse(str);
+            if (!isNaN(parsed)) {
+                const tempDate = new Date(parsed);
+                // Solo aceptar si el año es razonable (1990-2099)
+                if (tempDate.getFullYear() >= 1990 && tempDate.getFullYear() <= 2099) {
+                    fecha = tempDate;
+                }
             }
         }
     }
 
-    // Corregir años incorrectos (problema con años mal parseados por Excel/SheetJS)
-    // Los extractos bancarios y movimientos contables deberían tener fechas razonables
+    // Corrección de años para datos financieros (rango razonable: 2010-2030)
     if (fecha) {
         const anioActual = new Date().getFullYear();
         const anioFecha = fecha.getFullYear();
 
-        // console.log('Año antes de corrección:', anioFecha);
-
-        // Corregir años muy antiguos (1920-1950): probablemente son 2020-2050 mal parseados
-        // Esto ocurre cuando Excel/SheetJS interpreta 24 como 1924 en lugar de 2024
+        // Corregir años muy antiguos (1920-1950) → probablemente son 2020-2050
         if (anioFecha >= 1920 && anioFecha <= 1950) {
             fecha.setFullYear(anioFecha + 100);
-            // console.log('Año corregido (muy antiguo):', fecha.getFullYear());
         }
-        // Corregir años futuros: si el año es mayor al actual + 1, restar 100
-        // (permitimos año actual + 1 para fechas de fin de año)
-        else if (anioFecha > anioActual + 1) {
+        // Corregir años en rango 100-199 → probablemente falta el "20" adelante
+        else if (anioFecha >= 100 && anioFecha <= 199) {
+            fecha.setFullYear(anioFecha + 1900);
+        }
+        // NO corregir años futuros cercanos (hasta 2030) - son válidos para proyecciones
+        // Solo corregir si es un año muy lejano (> 2050)
+        else if (anioFecha > 2050 && anioFecha <= 2150) {
             fecha.setFullYear(anioFecha - 100);
-            // console.log('Año corregido (futuro):', fecha.getFullYear());
         }
     }
 
