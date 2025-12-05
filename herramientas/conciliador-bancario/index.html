@@ -212,7 +212,73 @@
                 <div class="tab-content" id="tab-mayor-pendiente">
                     <div class="panel-header-pendiente">
                         <h3>Mayor Pendiente <span id="countMayorPendiente">(0)</span></h3>
+                        <button class="btn-filtros" id="btnFiltrosMayor" onclick="toggleFiltros('mayor')">
+                            🔍 Filtros ▼
+                        </button>
                     </div>
+
+                    <!-- Panel de filtros Mayor -->
+                    <div id="filtros-mayor" class="filtros-panel hidden">
+                        <div class="filtros-grid">
+                            <div class="filtro-grupo">
+                                <label>Fecha desde:</label>
+                                <input type="date" id="filtroMayorFechaDesde" class="filtro-input">
+                            </div>
+                            <div class="filtro-grupo">
+                                <label>Fecha hasta:</label>
+                                <input type="date" id="filtroMayorFechaHasta" class="filtro-input">
+                            </div>
+                            <div class="filtro-grupo filtro-importe">
+                                <label>Importe:</label>
+                                <div class="filtro-importe-wrapper">
+                                    <select id="filtroMayorImporteTipo" class="filtro-select" onchange="toggleSegundoImporte('mayor')">
+                                        <option value="">-- Seleccionar --</option>
+                                        <option value="mayor">Mayor que</option>
+                                        <option value="menor">Menor que</option>
+                                        <option value="igual">Igual a</option>
+                                        <option value="entre">Entre</option>
+                                    </select>
+                                    <input type="number" id="filtroMayorImporteValor" class="filtro-input filtro-numero" placeholder="Monto" step="0.01">
+                                    <input type="number" id="filtroMayorImporteValor2" class="filtro-input filtro-numero hidden" placeholder="Monto máx" step="0.01">
+                                </div>
+                            </div>
+                            <div class="filtro-grupo">
+                                <label>Nº Asiento:</label>
+                                <input type="text" id="filtroMayorNumeroAsiento" class="filtro-input" placeholder="Buscar...">
+                            </div>
+                            <div class="filtro-grupo filtro-ancho">
+                                <label>Leyenda:</label>
+                                <input type="text" id="filtroMayorLeyenda" class="filtro-input" placeholder="Buscar en leyenda...">
+                            </div>
+                            <div class="filtro-grupo">
+                                <label>C/E:</label>
+                                <select id="filtroMayorCE" class="filtro-select">
+                                    <option value="todos">Todos</option>
+                                    <option value="C">C</option>
+                                    <option value="E">E</option>
+                                </select>
+                            </div>
+                            <div class="filtro-grupo">
+                                <label>Tipo:</label>
+                                <select id="filtroMayorTipo" class="filtro-select">
+                                    <option value="todos">Todos</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="filtros-acciones">
+                            <button class="btn-aplicar-filtro" onclick="aplicarFiltrosMayor()">Aplicar Filtros</button>
+                            <button class="btn-limpiar-filtro" onclick="limpiarFiltrosMayor()">Limpiar</button>
+                        </div>
+                    </div>
+
+                    <!-- Contador de resultados filtrados -->
+                    <div id="filtrosMayorResultado" class="filtros-resultado hidden">
+                        Mostrando <span id="filtrosMayorMostrados">0</span> de <span id="filtrosMayorTotal">0</span> movimientos
+                    </div>
+
+                    <!-- Badges de filtros activos -->
+                    <div id="filtrosMayorActivos" class="filtros-activos hidden"></div>
+
                     <div class="table-wrapper">
                         <table class="results-table table-selectable">
                             <thead>
@@ -236,7 +302,59 @@
                 <div class="tab-content" id="tab-extracto-pendiente">
                     <div class="panel-header-pendiente">
                         <h3>Extracto Pendiente <span id="countExtractoPendiente">(0)</span></h3>
+                        <button class="btn-filtros" id="btnFiltrosExtracto" onclick="toggleFiltros('extracto')">
+                            🔍 Filtros ▼
+                        </button>
                     </div>
+
+                    <!-- Panel de filtros Extracto -->
+                    <div id="filtros-extracto" class="filtros-panel hidden">
+                        <div class="filtros-grid">
+                            <div class="filtro-grupo">
+                                <label>Fecha desde:</label>
+                                <input type="date" id="filtroExtractoFechaDesde" class="filtro-input">
+                            </div>
+                            <div class="filtro-grupo">
+                                <label>Fecha hasta:</label>
+                                <input type="date" id="filtroExtractoFechaHasta" class="filtro-input">
+                            </div>
+                            <div class="filtro-grupo filtro-importe">
+                                <label>Importe:</label>
+                                <div class="filtro-importe-wrapper">
+                                    <select id="filtroExtractoImporteTipo" class="filtro-select" onchange="toggleSegundoImporte('extracto')">
+                                        <option value="">-- Seleccionar --</option>
+                                        <option value="mayor">Mayor que</option>
+                                        <option value="menor">Menor que</option>
+                                        <option value="igual">Igual a</option>
+                                        <option value="entre">Entre</option>
+                                    </select>
+                                    <input type="number" id="filtroExtractoImporteValor" class="filtro-input filtro-numero" placeholder="Monto" step="0.01">
+                                    <input type="number" id="filtroExtractoImporteValor2" class="filtro-input filtro-numero hidden" placeholder="Monto máx" step="0.01">
+                                </div>
+                            </div>
+                            <div class="filtro-grupo">
+                                <label>Origen:</label>
+                                <input type="text" id="filtroExtractoOrigen" class="filtro-input" placeholder="Buscar...">
+                            </div>
+                            <div class="filtro-grupo filtro-ancho">
+                                <label>Descripción:</label>
+                                <input type="text" id="filtroExtractoDescripcion" class="filtro-input" placeholder="Buscar en descripción...">
+                            </div>
+                        </div>
+                        <div class="filtros-acciones">
+                            <button class="btn-aplicar-filtro" onclick="aplicarFiltrosExtracto()">Aplicar Filtros</button>
+                            <button class="btn-limpiar-filtro" onclick="limpiarFiltrosExtracto()">Limpiar</button>
+                        </div>
+                    </div>
+
+                    <!-- Contador de resultados filtrados -->
+                    <div id="filtrosExtractoResultado" class="filtros-resultado hidden">
+                        Mostrando <span id="filtrosExtractoMostrados">0</span> de <span id="filtrosExtractoTotal">0</span> movimientos
+                    </div>
+
+                    <!-- Badges de filtros activos -->
+                    <div id="filtrosExtractoActivos" class="filtros-activos hidden"></div>
+
                     <div class="table-wrapper">
                         <table class="results-table table-selectable">
                             <thead>

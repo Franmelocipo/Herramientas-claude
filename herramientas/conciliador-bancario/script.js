@@ -22,6 +22,34 @@ let seleccion = {
 // Contador para IDs únicos de conciliaciones
 let conciliacionIdCounter = 0;
 
+// Estado de filtros para Mayor Pendiente
+let filtrosMayor = {
+    fechaDesde: null,
+    fechaHasta: null,
+    importeTipo: '',
+    importeValor: null,
+    importeValor2: null,
+    numeroAsiento: '',
+    leyenda: '',
+    ce: 'todos',
+    tipo: 'todos'
+};
+
+// Estado de filtros para Extracto Pendiente
+let filtrosExtracto = {
+    fechaDesde: null,
+    fechaHasta: null,
+    importeTipo: '',
+    importeValor: null,
+    importeValor2: null,
+    descripcion: '',
+    origen: ''
+};
+
+// Datos filtrados (para mantener la lista original intacta)
+let mayorPendienteFiltrado = [];
+let extractoPendienteFiltrado = [];
+
 // Estado del progreso
 let progreso = {
     paso: 1,
@@ -899,6 +927,9 @@ function mostrarResultados() {
     llenarTablaMayorPendiente(res.mayorNoConciliado);
     llenarTablaExtractoPendiente(res.extractoNoConciliado);
 
+    // Poblar selector de tipos para el filtro de Mayor
+    poblarSelectorTiposMayor();
+
     // Mostrar sección de resultados
     elements.resultados.classList.remove('hidden');
     elements.btnNuevaContainer.classList.remove('hidden');
@@ -1340,6 +1371,663 @@ function actualizarTotalesYContadores() {
     elements.countExtractoPendiente.textContent = `(${res.extractoNoConciliado.length})`;
 }
 
+// ========== FILTROS DE BÚSQUEDA ==========
+
+/**
+ * Toggle para mostrar/ocultar panel de filtros
+ */
+function toggleFiltros(tipo) {
+    const panel = document.getElementById(`filtros-${tipo}`);
+    const btn = document.getElementById(`btnFiltros${tipo.charAt(0).toUpperCase() + tipo.slice(1)}`);
+
+    if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        btn.classList.add('active');
+        btn.innerHTML = '🔍 Filtros ▲';
+    } else {
+        panel.classList.add('hidden');
+        btn.classList.remove('active');
+        btn.innerHTML = '🔍 Filtros ▼';
+    }
+}
+
+/**
+ * Toggle para mostrar segundo campo de importe (cuando se selecciona "Entre")
+ */
+function toggleSegundoImporte(tipo) {
+    const selectTipo = document.getElementById(`filtro${tipo.charAt(0).toUpperCase() + tipo.slice(1)}ImporteTipo`);
+    const input2 = document.getElementById(`filtro${tipo.charAt(0).toUpperCase() + tipo.slice(1)}ImporteValor2`);
+
+    if (selectTipo.value === 'entre') {
+        input2.classList.remove('hidden');
+    } else {
+        input2.classList.add('hidden');
+        input2.value = '';
+    }
+}
+
+/**
+ * Aplicar filtros a Mayor Pendiente
+ */
+function aplicarFiltrosMayor() {
+    if (!state.resultados) return;
+
+    // Leer valores de los inputs
+    filtrosMayor.fechaDesde = document.getElementById('filtroMayorFechaDesde').value || null;
+    filtrosMayor.fechaHasta = document.getElementById('filtroMayorFechaHasta').value || null;
+    filtrosMayor.importeTipo = document.getElementById('filtroMayorImporteTipo').value || '';
+    filtrosMayor.importeValor = parseFloat(document.getElementById('filtroMayorImporteValor').value) || null;
+    filtrosMayor.importeValor2 = parseFloat(document.getElementById('filtroMayorImporteValor2').value) || null;
+    filtrosMayor.numeroAsiento = document.getElementById('filtroMayorNumeroAsiento').value.trim();
+    filtrosMayor.leyenda = document.getElementById('filtroMayorLeyenda').value.trim();
+    filtrosMayor.ce = document.getElementById('filtroMayorCE').value;
+    filtrosMayor.tipo = document.getElementById('filtroMayorTipo').value;
+
+    // Aplicar filtros
+    const original = state.resultados.mayorNoConciliado;
+    mayorPendienteFiltrado = filtrarMovimientosMayor(original);
+
+    // Actualizar UI
+    renderizarMayorPendienteFiltrado();
+    mostrarResultadoFiltrosMayor(mayorPendienteFiltrado.length, original.length);
+    mostrarBadgesFiltrosMayor();
+}
+
+/**
+ * Filtrar movimientos del Mayor según los filtros activos
+ */
+function filtrarMovimientosMayor(movimientos) {
+    return movimientos.filter(mov => {
+        // Filtro fecha desde
+        if (filtrosMayor.fechaDesde) {
+            const fechaDesde = new Date(filtrosMayor.fechaDesde);
+            if (mov.fecha < fechaDesde) return false;
+        }
+
+        // Filtro fecha hasta
+        if (filtrosMayor.fechaHasta) {
+            const fechaHasta = new Date(filtrosMayor.fechaHasta);
+            fechaHasta.setHours(23, 59, 59, 999);
+            if (mov.fecha > fechaHasta) return false;
+        }
+
+        // Filtro importe
+        const importe = mov.importe || mov.debe || mov.haber || 0;
+        if (filtrosMayor.importeTipo && filtrosMayor.importeValor !== null) {
+            switch (filtrosMayor.importeTipo) {
+                case 'mayor':
+                    if (importe <= filtrosMayor.importeValor) return false;
+                    break;
+                case 'menor':
+                    if (importe >= filtrosMayor.importeValor) return false;
+                    break;
+                case 'igual':
+                    if (Math.abs(importe - filtrosMayor.importeValor) > 0.01) return false;
+                    break;
+                case 'entre':
+                    if (filtrosMayor.importeValor2 !== null) {
+                        if (importe < filtrosMayor.importeValor || importe > filtrosMayor.importeValor2) return false;
+                    }
+                    break;
+            }
+        }
+
+        // Filtro número de asiento (búsqueda parcial)
+        if (filtrosMayor.numeroAsiento) {
+            if (!String(mov.numeroAsiento).toLowerCase().includes(filtrosMayor.numeroAsiento.toLowerCase())) {
+                return false;
+            }
+        }
+
+        // Filtro leyenda (búsqueda parcial, case insensitive)
+        if (filtrosMayor.leyenda) {
+            if (!mov.leyenda.toLowerCase().includes(filtrosMayor.leyenda.toLowerCase())) {
+                return false;
+            }
+        }
+
+        // Filtro C/E
+        if (filtrosMayor.ce !== 'todos') {
+            if (mov.ce !== filtrosMayor.ce) return false;
+        }
+
+        // Filtro Tipo
+        if (filtrosMayor.tipo !== 'todos') {
+            if (mov.tipoAsiento !== filtrosMayor.tipo) return false;
+        }
+
+        return true;
+    });
+}
+
+/**
+ * Renderizar tabla de Mayor Pendiente con datos filtrados
+ */
+function renderizarMayorPendienteFiltrado() {
+    let html = '';
+    const pendientes = mayorPendienteFiltrado;
+
+    pendientes.forEach(m => {
+        const checked = seleccion.mayor.includes(m.id) ? 'checked' : '';
+        html += `
+            <tr class="${checked ? 'row-selected' : ''}" data-id="${m.id}">
+                <td class="col-checkbox">
+                    <input type="checkbox" class="checkbox-mayor" data-id="${m.id}" ${checked} onchange="toggleSeleccionMayor('${m.id}', this.checked)">
+                </td>
+                <td>${formatearFecha(m.fecha)}</td>
+                <td>${m.numeroAsiento}</td>
+                <td>${m.ce}</td>
+                <td>${m.tipoAsiento}</td>
+                <td title="${m.leyenda}">${truncar(m.leyenda, 40)}</td>
+                <td class="text-right">${m.debe > 0 ? formatearNumero(m.debe) : ''}</td>
+                <td class="text-right">${m.haber > 0 ? formatearNumero(m.haber) : ''}</td>
+            </tr>
+        `;
+    });
+
+    elements.tablaMayorPendiente.innerHTML = html || '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos que coincidan con los filtros</td></tr>';
+}
+
+/**
+ * Mostrar contador de resultados filtrados Mayor
+ */
+function mostrarResultadoFiltrosMayor(mostrados, total) {
+    const resultado = document.getElementById('filtrosMayorResultado');
+    const spanMostrados = document.getElementById('filtrosMayorMostrados');
+    const spanTotal = document.getElementById('filtrosMayorTotal');
+
+    if (hayFiltrosActivosMayor()) {
+        spanMostrados.textContent = mostrados;
+        spanTotal.textContent = total;
+        resultado.classList.remove('hidden');
+    } else {
+        resultado.classList.add('hidden');
+    }
+}
+
+/**
+ * Verificar si hay filtros activos en Mayor
+ */
+function hayFiltrosActivosMayor() {
+    return filtrosMayor.fechaDesde ||
+           filtrosMayor.fechaHasta ||
+           (filtrosMayor.importeTipo && filtrosMayor.importeValor !== null) ||
+           filtrosMayor.numeroAsiento ||
+           filtrosMayor.leyenda ||
+           filtrosMayor.ce !== 'todos' ||
+           filtrosMayor.tipo !== 'todos';
+}
+
+/**
+ * Mostrar badges de filtros activos Mayor
+ */
+function mostrarBadgesFiltrosMayor() {
+    const container = document.getElementById('filtrosMayorActivos');
+    let badges = '';
+
+    if (filtrosMayor.fechaDesde) {
+        badges += crearBadgeFiltro('Desde: ' + filtrosMayor.fechaDesde, 'mayor', 'fechaDesde');
+    }
+    if (filtrosMayor.fechaHasta) {
+        badges += crearBadgeFiltro('Hasta: ' + filtrosMayor.fechaHasta, 'mayor', 'fechaHasta');
+    }
+    if (filtrosMayor.importeTipo && filtrosMayor.importeValor !== null) {
+        let textoImporte = '';
+        switch (filtrosMayor.importeTipo) {
+            case 'mayor': textoImporte = `> $${formatearNumero(filtrosMayor.importeValor)}`; break;
+            case 'menor': textoImporte = `< $${formatearNumero(filtrosMayor.importeValor)}`; break;
+            case 'igual': textoImporte = `= $${formatearNumero(filtrosMayor.importeValor)}`; break;
+            case 'entre': textoImporte = `$${formatearNumero(filtrosMayor.importeValor)} - $${formatearNumero(filtrosMayor.importeValor2 || 0)}`; break;
+        }
+        badges += crearBadgeFiltro('Importe: ' + textoImporte, 'mayor', 'importe');
+    }
+    if (filtrosMayor.numeroAsiento) {
+        badges += crearBadgeFiltro('Asiento: ' + filtrosMayor.numeroAsiento, 'mayor', 'numeroAsiento');
+    }
+    if (filtrosMayor.leyenda) {
+        badges += crearBadgeFiltro('Leyenda: ' + truncar(filtrosMayor.leyenda, 20), 'mayor', 'leyenda');
+    }
+    if (filtrosMayor.ce !== 'todos') {
+        badges += crearBadgeFiltro('C/E: ' + filtrosMayor.ce, 'mayor', 'ce');
+    }
+    if (filtrosMayor.tipo !== 'todos') {
+        badges += crearBadgeFiltro('Tipo: ' + filtrosMayor.tipo, 'mayor', 'tipo');
+    }
+
+    container.innerHTML = badges;
+    if (badges) {
+        container.classList.remove('hidden');
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
+/**
+ * Crear HTML de un badge de filtro
+ */
+function crearBadgeFiltro(texto, seccion, campo) {
+    return `
+        <span class="filtro-badge">
+            ${texto}
+            <button class="filtro-badge-remove" onclick="removerFiltro('${seccion}', '${campo}')" title="Quitar filtro">✕</button>
+        </span>
+    `;
+}
+
+/**
+ * Remover un filtro específico
+ */
+function removerFiltro(seccion, campo) {
+    if (seccion === 'mayor') {
+        switch (campo) {
+            case 'fechaDesde':
+                filtrosMayor.fechaDesde = null;
+                document.getElementById('filtroMayorFechaDesde').value = '';
+                break;
+            case 'fechaHasta':
+                filtrosMayor.fechaHasta = null;
+                document.getElementById('filtroMayorFechaHasta').value = '';
+                break;
+            case 'importe':
+                filtrosMayor.importeTipo = '';
+                filtrosMayor.importeValor = null;
+                filtrosMayor.importeValor2 = null;
+                document.getElementById('filtroMayorImporteTipo').value = '';
+                document.getElementById('filtroMayorImporteValor').value = '';
+                document.getElementById('filtroMayorImporteValor2').value = '';
+                document.getElementById('filtroMayorImporteValor2').classList.add('hidden');
+                break;
+            case 'numeroAsiento':
+                filtrosMayor.numeroAsiento = '';
+                document.getElementById('filtroMayorNumeroAsiento').value = '';
+                break;
+            case 'leyenda':
+                filtrosMayor.leyenda = '';
+                document.getElementById('filtroMayorLeyenda').value = '';
+                break;
+            case 'ce':
+                filtrosMayor.ce = 'todos';
+                document.getElementById('filtroMayorCE').value = 'todos';
+                break;
+            case 'tipo':
+                filtrosMayor.tipo = 'todos';
+                document.getElementById('filtroMayorTipo').value = 'todos';
+                break;
+        }
+        aplicarFiltrosMayor();
+    } else if (seccion === 'extracto') {
+        switch (campo) {
+            case 'fechaDesde':
+                filtrosExtracto.fechaDesde = null;
+                document.getElementById('filtroExtractoFechaDesde').value = '';
+                break;
+            case 'fechaHasta':
+                filtrosExtracto.fechaHasta = null;
+                document.getElementById('filtroExtractoFechaHasta').value = '';
+                break;
+            case 'importe':
+                filtrosExtracto.importeTipo = '';
+                filtrosExtracto.importeValor = null;
+                filtrosExtracto.importeValor2 = null;
+                document.getElementById('filtroExtractoImporteTipo').value = '';
+                document.getElementById('filtroExtractoImporteValor').value = '';
+                document.getElementById('filtroExtractoImporteValor2').value = '';
+                document.getElementById('filtroExtractoImporteValor2').classList.add('hidden');
+                break;
+            case 'descripcion':
+                filtrosExtracto.descripcion = '';
+                document.getElementById('filtroExtractoDescripcion').value = '';
+                break;
+            case 'origen':
+                filtrosExtracto.origen = '';
+                document.getElementById('filtroExtractoOrigen').value = '';
+                break;
+        }
+        aplicarFiltrosExtracto();
+    }
+}
+
+/**
+ * Limpiar todos los filtros de Mayor
+ */
+function limpiarFiltrosMayor() {
+    // Resetear estado
+    filtrosMayor = {
+        fechaDesde: null,
+        fechaHasta: null,
+        importeTipo: '',
+        importeValor: null,
+        importeValor2: null,
+        numeroAsiento: '',
+        leyenda: '',
+        ce: 'todos',
+        tipo: 'todos'
+    };
+
+    // Resetear inputs
+    document.getElementById('filtroMayorFechaDesde').value = '';
+    document.getElementById('filtroMayorFechaHasta').value = '';
+    document.getElementById('filtroMayorImporteTipo').value = '';
+    document.getElementById('filtroMayorImporteValor').value = '';
+    document.getElementById('filtroMayorImporteValor2').value = '';
+    document.getElementById('filtroMayorImporteValor2').classList.add('hidden');
+    document.getElementById('filtroMayorNumeroAsiento').value = '';
+    document.getElementById('filtroMayorLeyenda').value = '';
+    document.getElementById('filtroMayorCE').value = 'todos';
+    document.getElementById('filtroMayorTipo').value = 'todos';
+
+    // Ocultar resultados y badges
+    document.getElementById('filtrosMayorResultado').classList.add('hidden');
+    document.getElementById('filtrosMayorActivos').classList.add('hidden');
+    document.getElementById('filtrosMayorActivos').innerHTML = '';
+
+    // Re-renderizar con todos los datos
+    if (state.resultados) {
+        llenarTablaMayorPendiente(state.resultados.mayorNoConciliado);
+    }
+}
+
+/**
+ * Aplicar filtros a Extracto Pendiente
+ */
+function aplicarFiltrosExtracto() {
+    if (!state.resultados) return;
+
+    // Leer valores de los inputs
+    filtrosExtracto.fechaDesde = document.getElementById('filtroExtractoFechaDesde').value || null;
+    filtrosExtracto.fechaHasta = document.getElementById('filtroExtractoFechaHasta').value || null;
+    filtrosExtracto.importeTipo = document.getElementById('filtroExtractoImporteTipo').value || '';
+    filtrosExtracto.importeValor = parseFloat(document.getElementById('filtroExtractoImporteValor').value) || null;
+    filtrosExtracto.importeValor2 = parseFloat(document.getElementById('filtroExtractoImporteValor2').value) || null;
+    filtrosExtracto.descripcion = document.getElementById('filtroExtractoDescripcion').value.trim();
+    filtrosExtracto.origen = document.getElementById('filtroExtractoOrigen').value.trim();
+
+    // Aplicar filtros
+    const original = state.resultados.extractoNoConciliado;
+    extractoPendienteFiltrado = filtrarMovimientosExtracto(original);
+
+    // Actualizar UI
+    renderizarExtractoPendienteFiltrado();
+    mostrarResultadoFiltrosExtracto(extractoPendienteFiltrado.length, original.length);
+    mostrarBadgesFiltrosExtracto();
+}
+
+/**
+ * Filtrar movimientos del Extracto según los filtros activos
+ */
+function filtrarMovimientosExtracto(movimientos) {
+    return movimientos.filter(mov => {
+        // Filtro fecha desde
+        if (filtrosExtracto.fechaDesde) {
+            const fechaDesde = new Date(filtrosExtracto.fechaDesde);
+            if (mov.fecha < fechaDesde) return false;
+        }
+
+        // Filtro fecha hasta
+        if (filtrosExtracto.fechaHasta) {
+            const fechaHasta = new Date(filtrosExtracto.fechaHasta);
+            fechaHasta.setHours(23, 59, 59, 999);
+            if (mov.fecha > fechaHasta) return false;
+        }
+
+        // Filtro importe
+        const importe = mov.importe || mov.debito || mov.credito || 0;
+        if (filtrosExtracto.importeTipo && filtrosExtracto.importeValor !== null) {
+            switch (filtrosExtracto.importeTipo) {
+                case 'mayor':
+                    if (importe <= filtrosExtracto.importeValor) return false;
+                    break;
+                case 'menor':
+                    if (importe >= filtrosExtracto.importeValor) return false;
+                    break;
+                case 'igual':
+                    if (Math.abs(importe - filtrosExtracto.importeValor) > 0.01) return false;
+                    break;
+                case 'entre':
+                    if (filtrosExtracto.importeValor2 !== null) {
+                        if (importe < filtrosExtracto.importeValor || importe > filtrosExtracto.importeValor2) return false;
+                    }
+                    break;
+            }
+        }
+
+        // Filtro descripción (búsqueda parcial, case insensitive)
+        if (filtrosExtracto.descripcion) {
+            if (!mov.descripcion.toLowerCase().includes(filtrosExtracto.descripcion.toLowerCase())) {
+                return false;
+            }
+        }
+
+        // Filtro origen (búsqueda parcial)
+        if (filtrosExtracto.origen) {
+            if (!String(mov.origen).toLowerCase().includes(filtrosExtracto.origen.toLowerCase())) {
+                return false;
+            }
+        }
+
+        return true;
+    });
+}
+
+/**
+ * Renderizar tabla de Extracto Pendiente con datos filtrados
+ */
+function renderizarExtractoPendienteFiltrado() {
+    let html = '';
+    const pendientes = extractoPendienteFiltrado;
+
+    pendientes.forEach(e => {
+        const checked = seleccion.extracto.includes(e.id) ? 'checked' : '';
+        html += `
+            <tr class="${checked ? 'row-selected' : ''}" data-id="${e.id}">
+                <td class="col-checkbox">
+                    <input type="checkbox" class="checkbox-extracto" data-id="${e.id}" ${checked} onchange="toggleSeleccionExtracto('${e.id}', this.checked)">
+                </td>
+                <td>${formatearFecha(e.fecha)}</td>
+                <td title="${e.descripcion}">${truncar(e.descripcion, 50)}</td>
+                <td>${e.origen}</td>
+                <td class="text-right">${e.debito > 0 ? formatearNumero(e.debito) : ''}</td>
+                <td class="text-right">${e.credito > 0 ? formatearNumero(e.credito) : ''}</td>
+            </tr>
+        `;
+    });
+
+    elements.tablaExtractoPendiente.innerHTML = html || '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos que coincidan con los filtros</td></tr>';
+}
+
+/**
+ * Mostrar contador de resultados filtrados Extracto
+ */
+function mostrarResultadoFiltrosExtracto(mostrados, total) {
+    const resultado = document.getElementById('filtrosExtractoResultado');
+    const spanMostrados = document.getElementById('filtrosExtractoMostrados');
+    const spanTotal = document.getElementById('filtrosExtractoTotal');
+
+    if (hayFiltrosActivosExtracto()) {
+        spanMostrados.textContent = mostrados;
+        spanTotal.textContent = total;
+        resultado.classList.remove('hidden');
+    } else {
+        resultado.classList.add('hidden');
+    }
+}
+
+/**
+ * Verificar si hay filtros activos en Extracto
+ */
+function hayFiltrosActivosExtracto() {
+    return filtrosExtracto.fechaDesde ||
+           filtrosExtracto.fechaHasta ||
+           (filtrosExtracto.importeTipo && filtrosExtracto.importeValor !== null) ||
+           filtrosExtracto.descripcion ||
+           filtrosExtracto.origen;
+}
+
+/**
+ * Mostrar badges de filtros activos Extracto
+ */
+function mostrarBadgesFiltrosExtracto() {
+    const container = document.getElementById('filtrosExtractoActivos');
+    let badges = '';
+
+    if (filtrosExtracto.fechaDesde) {
+        badges += crearBadgeFiltro('Desde: ' + filtrosExtracto.fechaDesde, 'extracto', 'fechaDesde');
+    }
+    if (filtrosExtracto.fechaHasta) {
+        badges += crearBadgeFiltro('Hasta: ' + filtrosExtracto.fechaHasta, 'extracto', 'fechaHasta');
+    }
+    if (filtrosExtracto.importeTipo && filtrosExtracto.importeValor !== null) {
+        let textoImporte = '';
+        switch (filtrosExtracto.importeTipo) {
+            case 'mayor': textoImporte = `> $${formatearNumero(filtrosExtracto.importeValor)}`; break;
+            case 'menor': textoImporte = `< $${formatearNumero(filtrosExtracto.importeValor)}`; break;
+            case 'igual': textoImporte = `= $${formatearNumero(filtrosExtracto.importeValor)}`; break;
+            case 'entre': textoImporte = `$${formatearNumero(filtrosExtracto.importeValor)} - $${formatearNumero(filtrosExtracto.importeValor2 || 0)}`; break;
+        }
+        badges += crearBadgeFiltro('Importe: ' + textoImporte, 'extracto', 'importe');
+    }
+    if (filtrosExtracto.descripcion) {
+        badges += crearBadgeFiltro('Descripción: ' + truncar(filtrosExtracto.descripcion, 20), 'extracto', 'descripcion');
+    }
+    if (filtrosExtracto.origen) {
+        badges += crearBadgeFiltro('Origen: ' + filtrosExtracto.origen, 'extracto', 'origen');
+    }
+
+    container.innerHTML = badges;
+    if (badges) {
+        container.classList.remove('hidden');
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
+/**
+ * Limpiar todos los filtros de Extracto
+ */
+function limpiarFiltrosExtracto() {
+    // Resetear estado
+    filtrosExtracto = {
+        fechaDesde: null,
+        fechaHasta: null,
+        importeTipo: '',
+        importeValor: null,
+        importeValor2: null,
+        descripcion: '',
+        origen: ''
+    };
+
+    // Resetear inputs
+    document.getElementById('filtroExtractoFechaDesde').value = '';
+    document.getElementById('filtroExtractoFechaHasta').value = '';
+    document.getElementById('filtroExtractoImporteTipo').value = '';
+    document.getElementById('filtroExtractoImporteValor').value = '';
+    document.getElementById('filtroExtractoImporteValor2').value = '';
+    document.getElementById('filtroExtractoImporteValor2').classList.add('hidden');
+    document.getElementById('filtroExtractoDescripcion').value = '';
+    document.getElementById('filtroExtractoOrigen').value = '';
+
+    // Ocultar resultados y badges
+    document.getElementById('filtrosExtractoResultado').classList.add('hidden');
+    document.getElementById('filtrosExtractoActivos').classList.add('hidden');
+    document.getElementById('filtrosExtractoActivos').innerHTML = '';
+
+    // Re-renderizar con todos los datos
+    if (state.resultados) {
+        llenarTablaExtractoPendiente(state.resultados.extractoNoConciliado);
+    }
+}
+
+/**
+ * Poblar selector de tipos únicos para Mayor
+ */
+function poblarSelectorTiposMayor() {
+    if (!state.resultados) return;
+
+    const tipos = new Set();
+    state.resultados.mayorNoConciliado.forEach(m => {
+        if (m.tipoAsiento) tipos.add(m.tipoAsiento);
+    });
+
+    const select = document.getElementById('filtroMayorTipo');
+    // Mantener la opción "Todos"
+    select.innerHTML = '<option value="todos">Todos</option>';
+
+    // Agregar tipos únicos ordenados
+    [...tipos].sort().forEach(tipo => {
+        const option = document.createElement('option');
+        option.value = tipo;
+        option.textContent = tipo;
+        select.appendChild(option);
+    });
+}
+
+/**
+ * Resetear estado de filtros (llamado al reiniciar)
+ */
+function resetearFiltros() {
+    // Resetear estados
+    filtrosMayor = {
+        fechaDesde: null,
+        fechaHasta: null,
+        importeTipo: '',
+        importeValor: null,
+        importeValor2: null,
+        numeroAsiento: '',
+        leyenda: '',
+        ce: 'todos',
+        tipo: 'todos'
+    };
+
+    filtrosExtracto = {
+        fechaDesde: null,
+        fechaHasta: null,
+        importeTipo: '',
+        importeValor: null,
+        importeValor2: null,
+        descripcion: '',
+        origen: ''
+    };
+
+    mayorPendienteFiltrado = [];
+    extractoPendienteFiltrado = [];
+
+    // Ocultar paneles de filtros
+    const panelMayor = document.getElementById('filtros-mayor');
+    const panelExtracto = document.getElementById('filtros-extracto');
+    const btnMayor = document.getElementById('btnFiltrosMayor');
+    const btnExtracto = document.getElementById('btnFiltrosExtracto');
+
+    if (panelMayor) {
+        panelMayor.classList.add('hidden');
+        if (btnMayor) {
+            btnMayor.classList.remove('active');
+            btnMayor.innerHTML = '🔍 Filtros ▼';
+        }
+    }
+
+    if (panelExtracto) {
+        panelExtracto.classList.add('hidden');
+        if (btnExtracto) {
+            btnExtracto.classList.remove('active');
+            btnExtracto.innerHTML = '🔍 Filtros ▼';
+        }
+    }
+
+    // Ocultar resultados y badges
+    const elementos = [
+        'filtrosMayorResultado', 'filtrosMayorActivos',
+        'filtrosExtractoResultado', 'filtrosExtractoActivos'
+    ];
+
+    elementos.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.add('hidden');
+            if (id.includes('Activos')) el.innerHTML = '';
+        }
+    });
+}
+
 // ========== TABS ==========
 
 function cambiarTab(tabId) {
@@ -1525,6 +2213,9 @@ function reiniciar() {
     // Resetear selección y contador
     seleccion = { mayor: [], extracto: [] };
     conciliacionIdCounter = 0;
+
+    // Resetear filtros
+    resetearFiltros();
 
     // Resetear UI
     elements.tipoButtons.forEach(btn => btn.classList.remove('active'));
