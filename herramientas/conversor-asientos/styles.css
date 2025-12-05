@@ -6,7 +6,7 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%);
+    background: linear-gradient(135deg, #f7fafc 0%, #e2e8f0 100%);
     min-height: 100vh;
     padding: 32px 20px;
 }
@@ -92,7 +92,7 @@ body {
 }
 
 .client-name {
-    color: #6366f1;
+    color: #2c5282;
     font-size: 13px;
     font-weight: 600;
     margin-top: 4px;
@@ -117,12 +117,12 @@ body {
 }
 
 .btn-primary {
-    background: #6366f1;
+    background: #2c5282;
     color: white;
 }
 
 .btn-primary:hover {
-    background: #4f46e5;
+    background: #2a4a6d;
     transform: translateY(-1px);
 }
 
@@ -239,8 +239,8 @@ body {
 }
 
 .search-input:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: #4299e1;
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
 }
 
 .search-input::placeholder {
@@ -278,8 +278,8 @@ body {
 }
 
 .client-item-selected {
-    border-color: #6366f1;
-    background: #eef2ff;
+    border-color: #2c5282;
+    background: #f0f9ff;
 }
 
 .client-header {
@@ -389,7 +389,7 @@ body {
 
 .source-type-btn:hover {
     box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-    border-color: #6366f1;
+    border-color: #2c5282;
     transform: translateY(-2px);
 }
 
@@ -422,7 +422,7 @@ body {
 
 .upload-icon {
     font-size: 64px;
-    color: #6366f1;
+    color: #2c5282;
 }
 
 .upload-zone h3 {
@@ -471,7 +471,7 @@ body {
 
 .input-text:focus {
     outline: none;
-    border-color: #6366f1;
+    border-color: #4299e1;
 }
 
 .account-dropdown {
@@ -481,7 +481,7 @@ body {
     right: 0;
     margin-top: 4px;
     background: white;
-    border: 2px solid #6366f1;
+    border: 2px solid #2c5282;
     border-radius: 8px;
     box-shadow: 0 10px 40px rgba(0,0,0,0.2);
     z-index: 1000;
@@ -504,7 +504,7 @@ body {
 
 .dropdown-search input:focus {
     outline: none;
-    border-color: #6366f1;
+    border-color: #4299e1;
 }
 
 .dropdown-items {
@@ -520,7 +520,7 @@ body {
 }
 
 .dropdown-item:hover {
-    background: #eef2ff;
+    background: #f0f9ff;
 }
 
 .dropdown-item.activo {
@@ -582,9 +582,9 @@ body {
 
 .btn-group-control:hover {
     background: #f8fafc;
-    border-color: #6366f1;
+    border-color: #2c5282;
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+    box-shadow: 0 2px 8px rgba(44, 82, 130, 0.2);
 }
 
 .btn-group-control:active {
@@ -631,14 +631,14 @@ body {
     font-size: 16px;
     cursor: pointer;
     padding: 4px 8px;
-    color: #6366f1;
+    color: #2c5282;
     transition: all 0.2s;
     flex-shrink: 0;
     margin-top: 4px;
 }
 
 .group-expand-btn:hover {
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(44, 82, 130, 0.1);
     border-radius: 4px;
 }
 
@@ -822,7 +822,7 @@ body {
 
 .cuenta-col {
     font-family: 'Courier New', monospace;
-    color: #6366f1;
+    color: #2c5282;
     font-weight: 600;
 }
 
@@ -893,7 +893,7 @@ body {
 }
 
 .group-details-table tbody tr:hover {
-    background: #eef2ff;
+    background: #f0f9ff;
 }
 
 /* Group Actions (botones de reagrupación) */
@@ -942,9 +942,9 @@ body {
     margin-left: auto;
     font-size: 13px;
     font-weight: 600;
-    color: #6366f1;
+    color: #2c5282;
     padding: 6px 12px;
-    background: #eef2ff;
+    background: #f0f9ff;
     border-radius: 4px;
 }
 
@@ -972,7 +972,7 @@ body {
 
 .group-option:hover {
     background: #f8fafc;
-    border-color: #6366f1;
+    border-color: #2c5282;
 }
 
 /* Warning box for no client selected */
@@ -1116,9 +1116,9 @@ body {
 
 /* Grupo seleccionado */
 .group-item.group-selected {
-    border-color: #6366f1;
-    background: #eef2ff;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+    border-color: #2c5282;
+    background: #f0f9ff;
+    box-shadow: 0 4px 12px rgba(44, 82, 130, 0.2);
 }
 
 /* Controles de fusión de grupos */
@@ -1127,8 +1127,8 @@ body {
     flex-direction: column;
     gap: 12px;
     padding: 16px;
-    background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
-    border: 2px solid #6366f1;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 2px solid #2c5282;
     border-radius: 8px;
     margin-bottom: 20px;
 }
@@ -1142,11 +1142,11 @@ body {
 .selected-groups-count {
     font-size: 14px;
     font-weight: 600;
-    color: #4f46e5;
+    color: #2c5282;
     padding: 8px 16px;
     background: white;
     border-radius: 6px;
-    border: 1px solid #c7d2fe;
+    border: 1px solid #bae6fd;
 }
 
 .merge-buttons {
@@ -1164,14 +1164,14 @@ body {
     cursor: pointer;
     transition: all 0.2s;
     border: none;
-    background: #6366f1;
+    background: #2c5282;
     color: white;
 }
 
 .btn-merge:hover:not(:disabled) {
-    background: #4f46e5;
+    background: #2a4a6d;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 4px 12px rgba(44, 82, 130, 0.3);
 }
 
 .btn-merge:disabled {
