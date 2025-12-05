@@ -999,8 +999,11 @@ function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
             const isHeaderOrFooter = /^(Fecha|Descripción|Comprobante|D[eé]bito|Cr[eé]dito|Saldo|Total)/i.test(trimmedLine);
             const isSeparatorLine = /^[_\-=\s]+$/.test(trimmedLine) && /[_\-=]{3,}/.test(trimmedLine);
             const isSaldoLine = /Saldo\s+en\s+\$/i.test(trimmedLine);
+            // BUG FIX: No agregar líneas que son solo importes (números aislados)
+            // Formato: -1.234,56 o 1.234,56 (pueden quedar aislados en el PDF)
+            const isOnlyAmount = /^-?\s*[\d.]+,\d{2}\s*$/.test(trimmedLine);
 
-            if (!isHeaderOrFooter && !isSeparatorLine && !isSaldoLine) {
+            if (!isHeaderOrFooter && !isSeparatorLine && !isSaldoLine && !isOnlyAmount) {
                 currentMovement.descripcion += ' ' + trimmedLine;
             }
         }
@@ -1008,19 +1011,26 @@ function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
 
     // No olvidar el último movimiento
     if (currentMovement) {
+        console.log('Agregando último movimiento:', currentMovement.fecha, currentMovement.descripcion);
         movements.push(currentMovement);
+    } else {
+        console.log('ADVERTENCIA: currentMovement es null/undefined al final del loop');
     }
+
+    console.log('Movimientos BPN antes de filtrar:', movements.length);
 
     // Limpiar descripciones y filtrar movimientos con descripciones sospechosas
     const filteredMovements = movements
         .filter(mov => {
             // BUG 1 FIX: Filtrar descripciones muy largas o que contengan texto legal
             if (mov.descripcion.length > 100) {
+                console.log('FILTRADO por descripción > 100 chars:', mov.fecha, mov.descripcion.substring(0, 50) + '...');
                 return false;
             }
 
             // Filtrar líneas de totales que puedan haber pasado el filtro inicial
             if (/^Total\b/i.test(mov.descripcion)) {
+                console.log('FILTRADO por empezar con Total:', mov.fecha, mov.descripcion);
                 return false;
             }
 
