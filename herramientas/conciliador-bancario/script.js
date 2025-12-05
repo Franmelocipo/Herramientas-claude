@@ -951,10 +951,29 @@ function encontrarCombinacion(lista, objetivo, n) {
 function fechaDentroTolerancia(fecha1, fecha2) {
     if (!fecha1 || !fecha2) return false;
 
-    const diff = Math.abs(fecha1.getTime() - fecha2.getTime());
-    const dias = diff / (1000 * 60 * 60 * 24);
+    // Normalizar ambas fechas a medianoche para comparar solo días
+    const f1 = new Date(fecha1);
+    const f2 = new Date(fecha2);
+    f1.setHours(0, 0, 0, 0);
+    f2.setHours(0, 0, 0, 0);
 
-    return dias <= state.toleranciaFecha;
+    const diffMs = Math.abs(f1.getTime() - f2.getTime());
+    const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    // CRÍTICO: Si tolerancia es 0, las fechas deben ser exactamente iguales
+    // Usar comparación estricta para evitar coerción de tipos
+    if (state.toleranciaFecha === 0) {
+        const resultado = diffDias === 0;
+        // DEBUG: Descomentar para diagnosticar problemas de tolerancia 0
+        // console.log('=== COMPARACIÓN DE FECHAS (tolerancia 0) ===');
+        // console.log('Fecha 1:', f1.toLocaleDateString('es-AR'));
+        // console.log('Fecha 2:', f2.toLocaleDateString('es-AR'));
+        // console.log('Diferencia en días:', diffDias);
+        // console.log('¿Dentro de tolerancia?:', resultado);
+        return resultado;
+    }
+
+    return diffDias <= state.toleranciaFecha;
 }
 
 // ========== MOSTRAR RESULTADOS ==========
