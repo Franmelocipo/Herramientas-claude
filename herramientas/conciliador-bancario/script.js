@@ -13,6 +13,16 @@ let state = {
     resultados: null
 };
 
+// Estado del progreso
+let progreso = {
+    paso: 1,
+    totalPasos: 4,
+    porcentaje: 0,
+    procesados: 0,
+    total: 0,
+    conciliados: 0
+};
+
 // Elementos del DOM
 const elements = {
     // Pasos
@@ -70,7 +80,17 @@ const elements = {
 
     // Nueva conciliación
     btnNuevaContainer: document.getElementById('btnNuevaContainer'),
-    btnNuevaConciliacion: document.getElementById('btnNuevaConciliacion')
+    btnNuevaConciliacion: document.getElementById('btnNuevaConciliacion'),
+
+    // Modal de progreso
+    overlayProgreso: document.getElementById('overlay-progreso'),
+    modalProgreso: document.getElementById('modal-progreso'),
+    barraProgreso: document.getElementById('barra-progreso'),
+    porcentajeProgreso: document.getElementById('porcentaje-progreso'),
+    pasoProgreso: document.getElementById('paso-progreso'),
+    mensajeProgreso: document.getElementById('mensaje-progreso'),
+    contadorProgreso: document.getElementById('contador-progreso'),
+    conciliadosProgreso: document.getElementById('conciliados-progreso')
 };
 
 // ========== INICIALIZACIÓN ==========
@@ -458,6 +478,67 @@ function descargarPlantilla(tipo) {
     XLSX.writeFile(wb, filename);
 }
 
+// ========== MODAL DE PROGRESO ==========
+
+function mostrarModalProgreso() {
+    // Resetear estado de progreso
+    progreso = {
+        paso: 1,
+        totalPasos: 4,
+        porcentaje: 0,
+        procesados: 0,
+        total: 0,
+        conciliados: 0
+    };
+
+    // Resetear UI del modal
+    actualizarProgreso(0, 'Iniciando...');
+    actualizarPaso(1, 'Cargando y validando datos...');
+    elements.contadorProgreso.textContent = '';
+    elements.conciliadosProgreso.textContent = '';
+
+    // Mostrar modal
+    elements.overlayProgreso.classList.add('visible');
+    elements.modalProgreso.classList.add('visible');
+}
+
+function cerrarModalProgreso() {
+    elements.overlayProgreso.classList.remove('visible');
+    elements.modalProgreso.classList.remove('visible');
+}
+
+function actualizarProgreso(porcentaje, mensaje) {
+    progreso.porcentaje = porcentaje;
+    elements.barraProgreso.style.width = porcentaje + '%';
+    elements.porcentajeProgreso.textContent = Math.round(porcentaje) + '%';
+    if (mensaje) {
+        elements.mensajeProgreso.textContent = mensaje;
+    }
+}
+
+function actualizarPaso(paso, mensaje) {
+    progreso.paso = paso;
+    elements.pasoProgreso.textContent = `Paso ${paso} de ${progreso.totalPasos}`;
+    if (mensaje) {
+        elements.mensajeProgreso.textContent = mensaje;
+    }
+}
+
+function actualizarContador(procesados, total) {
+    progreso.procesados = procesados;
+    progreso.total = total;
+    elements.contadorProgreso.textContent = `Procesados: ${procesados} de ${total} movimientos`;
+}
+
+function actualizarConciliados(cantidad) {
+    progreso.conciliados = cantidad;
+    elements.conciliadosProgreso.textContent = `Conciliados hasta ahora: ${cantidad}`;
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // ========== CONCILIACIÓN ==========
 
 function actualizarBotonConciliar() {
@@ -472,9 +553,15 @@ function actualizarBotonConciliar() {
     }
 }
 
-function ejecutarConciliacion() {
+async function ejecutarConciliacion() {
     try {
         mostrarMensaje('', 'clear');
+        mostrarModalProgreso();
+
+        // Paso 1: Cargando y validando datos
+        actualizarPaso(1, 'Cargando y validando datos...');
+        actualizarProgreso(5);
+        await sleep(100); // Permitir render
 
         // Actualizar tolerancias
         state.toleranciaFecha = parseInt(elements.toleranciaFecha.value) || 30;
@@ -495,23 +582,47 @@ function ejecutarConciliacion() {
             extractoFiltrado = state.datosExtracto.filter(e => e.debito > 0).map(e => ({...e, importe: e.debito, usado: false}));
         }
 
-        // Ejecutar algoritmo de conciliación
-        state.resultados = conciliar(mayorFiltrado, extractoFiltrado);
+        actualizarProgreso(15, 'Datos validados correctamente');
+        await sleep(100);
+
+        // Ejecutar algoritmo de conciliación con progreso
+        state.resultados = await conciliar(mayorFiltrado, extractoFiltrado);
+
+        // Paso 4: Generando resultados
+        actualizarPaso(4, 'Generando resultados...');
+        actualizarProgreso(95);
+        await sleep(100);
 
         // Mostrar resultados
         mostrarResultados();
 
+        // Completar progreso
+        actualizarProgreso(100, '¡Conciliación completada!');
+        await sleep(800);
+
+        cerrarModalProgreso();
+
     } catch (error) {
+        cerrarModalProgreso();
         mostrarMensaje(`Error en la conciliación: ${error.message}`, 'error');
     }
 }
 
-function conciliar(mayor, extracto) {
+async function conciliar(mayor, extracto) {
     const conciliados = [];
     const mayorNoConciliado = [...mayor];
     const extractoNoConciliado = [...extracto];
 
-    // Paso 1: Buscar coincidencias exactas (1 a 1)
+    const totalMovimientos = mayor.length + extracto.length;
+    let procesados = 0;
+
+    // Paso 2: Buscar coincidencias exactas (1 a 1)
+    actualizarPaso(2, 'Buscando coincidencias exactas (1 a 1)...');
+    actualizarProgreso(20);
+    actualizarContador(0, totalMovimientos);
+    actualizarConciliados(0);
+    await sleep(50);
+
     for (let i = mayorNoConciliado.length - 1; i >= 0; i--) {
         const movMayor = mayorNoConciliado[i];
 
@@ -531,9 +642,25 @@ function conciliar(mayor, extracto) {
             mayorNoConciliado.splice(i, 1);
             extractoNoConciliado.splice(idxCoincidencia, 1);
         }
+
+        procesados++;
+
+        // Actualizar UI cada 10 movimientos para no bloquear
+        if (procesados % 10 === 0 || i === 0) {
+            const progresoActual = 20 + (procesados / totalMovimientos) * 25;
+            actualizarProgreso(progresoActual);
+            actualizarContador(procesados, totalMovimientos);
+            actualizarConciliados(conciliados.length);
+            await sleep(0);
+        }
     }
 
-    // Paso 2: Buscar coincidencias 1 a muchos (Mayor vs suma de Extracto)
+    // Paso 3: Buscar coincidencias 1 a muchos (Mayor vs suma de Extracto)
+    actualizarPaso(3, 'Buscando coincidencias múltiples (1 a N)...');
+    actualizarProgreso(50);
+    await sleep(50);
+
+    const mayorRestante = mayorNoConciliado.length;
     for (let i = mayorNoConciliado.length - 1; i >= 0; i--) {
         const movMayor = mayorNoConciliado[i];
 
@@ -561,9 +688,25 @@ function conciliar(mayor, extracto) {
                 if (idx !== -1) extractoNoConciliado.splice(idx, 1);
             });
         }
+
+        procesados++;
+
+        // Actualizar UI cada 5 movimientos (es más lento por las combinaciones)
+        if (procesados % 5 === 0 || i === 0) {
+            const progresoActual = 50 + ((mayorRestante - i) / mayorRestante) * 20;
+            actualizarProgreso(progresoActual);
+            actualizarContador(procesados, totalMovimientos);
+            actualizarConciliados(conciliados.length);
+            await sleep(0);
+        }
     }
 
-    // Paso 3: Buscar coincidencias muchos a 1 (suma de Mayor vs Extracto)
+    // Paso 3b: Buscar coincidencias muchos a 1 (suma de Mayor vs Extracto)
+    actualizarPaso(3, 'Buscando coincidencias múltiples (N a 1)...');
+    actualizarProgreso(70);
+    await sleep(50);
+
+    const extractoRestante = extractoNoConciliado.length;
     for (let i = extractoNoConciliado.length - 1; i >= 0; i--) {
         const movExtracto = extractoNoConciliado[i];
 
@@ -590,6 +733,17 @@ function conciliar(mayor, extracto) {
                 const idx = mayorNoConciliado.findIndex(e => e.id === m.id);
                 if (idx !== -1) mayorNoConciliado.splice(idx, 1);
             });
+        }
+
+        procesados++;
+
+        // Actualizar UI cada 5 movimientos
+        if (procesados % 5 === 0 || i === 0) {
+            const progresoActual = 70 + ((extractoRestante - i) / Math.max(extractoRestante, 1)) * 20;
+            actualizarProgreso(progresoActual);
+            actualizarContador(procesados, totalMovimientos);
+            actualizarConciliados(conciliados.length);
+            await sleep(0);
         }
     }
 
