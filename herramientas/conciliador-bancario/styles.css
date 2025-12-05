@@ -1110,3 +1110,285 @@ body {
         font-size: 24px;
     }
 }
+
+/* ========== FILTROS DE BÚSQUEDA ========== */
+
+/* Botón de filtros en header */
+.btn-filtros {
+    background: #e5e7eb;
+    border: 1px solid #d1d5db;
+    color: #374151;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-filtros:hover {
+    background: #d1d5db;
+    border-color: #9ca3af;
+}
+
+.btn-filtros.active {
+    background: #2c5282;
+    border-color: #2c5282;
+    color: white;
+}
+
+/* Panel de filtros */
+.filtros-panel {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+    animation: slideDown 0.2s ease-out;
+}
+
+.filtros-panel.hidden {
+    display: none;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Grid de filtros */
+.filtros-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.filtro-grupo {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.filtro-grupo label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.filtro-grupo.filtro-ancho {
+    grid-column: span 2;
+}
+
+.filtro-grupo.filtro-importe {
+    grid-column: span 2;
+}
+
+/* Inputs de filtros */
+.filtro-input {
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #374151;
+    background: white;
+    transition: all 0.2s;
+}
+
+.filtro-input:focus {
+    outline: none;
+    border-color: #2c5282;
+    box-shadow: 0 0 0 3px rgba(44, 82, 130, 0.1);
+}
+
+.filtro-input::placeholder {
+    color: #9ca3af;
+}
+
+.filtro-select {
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #374151;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.filtro-select:focus {
+    outline: none;
+    border-color: #2c5282;
+    box-shadow: 0 0 0 3px rgba(44, 82, 130, 0.1);
+}
+
+/* Wrapper para importe */
+.filtro-importe-wrapper {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.filtro-importe-wrapper .filtro-select {
+    min-width: 140px;
+}
+
+.filtro-importe-wrapper .filtro-numero {
+    flex: 1;
+    min-width: 100px;
+}
+
+.filtro-numero.hidden {
+    display: none;
+}
+
+/* Acciones de filtros */
+.filtros-acciones {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.btn-aplicar-filtro {
+    background: #2c5282;
+    border: none;
+    color: white;
+    padding: 10px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-aplicar-filtro:hover {
+    background: #1e3a5f;
+    transform: translateY(-1px);
+}
+
+.btn-limpiar-filtro {
+    background: white;
+    border: 1px solid #d1d5db;
+    color: #6b7280;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-limpiar-filtro:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+    color: #374151;
+}
+
+/* Resultado de filtros */
+.filtros-resultado {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e40af;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 12px;
+}
+
+.filtros-resultado.hidden {
+    display: none;
+}
+
+.filtros-resultado span {
+    font-weight: 700;
+}
+
+/* Badges de filtros activos */
+.filtros-activos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.filtros-activos.hidden {
+    display: none;
+}
+
+.filtro-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.filtro-badge-remove {
+    background: none;
+    border: none;
+    color: #3b82f6;
+    cursor: pointer;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.filtro-badge-remove:hover {
+    opacity: 1;
+}
+
+/* Responsive filtros */
+@media (max-width: 768px) {
+    .filtros-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .filtro-grupo.filtro-ancho,
+    .filtro-grupo.filtro-importe {
+        grid-column: span 1;
+    }
+
+    .filtro-importe-wrapper {
+        flex-direction: column;
+    }
+
+    .filtros-acciones {
+        flex-direction: column-reverse;
+    }
+
+    .btn-aplicar-filtro,
+    .btn-limpiar-filtro {
+        width: 100%;
+    }
+
+    .panel-header-pendiente {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .btn-filtros {
+        width: 100%;
+        justify-content: center;
+    }
+}
