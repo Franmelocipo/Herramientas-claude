@@ -552,12 +552,14 @@ body {
     border: 1px solid #e5e7eb;
     border-radius: 8px;
     margin-bottom: 16px;
+    position: relative;
 }
 
 .results-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
+    min-width: 1100px; /* Ancho mínimo para scroll horizontal */
 }
 
 .results-table thead {
@@ -731,17 +733,89 @@ body {
     accent-color: #2c5282;
 }
 
-/* Columna de acción */
-.col-action {
-    width: 100px;
-    text-align: center;
+/* ========== ESTILOS COLUMNAS TABLA CONCILIADOS ========== */
+
+/* Columnas compactas con anchos fijos */
+.col-fecha {
+    width: 85px;
+    min-width: 85px;
     white-space: nowrap;
 }
 
-.header-action {
+.col-numero {
+    width: 60px;
+    min-width: 60px;
+    white-space: nowrap;
+}
+
+.col-origen {
+    width: 70px;
+    min-width: 70px;
+    white-space: nowrap;
+}
+
+.col-importe {
     width: 100px;
+    min-width: 100px;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.col-diferencia {
+    width: 60px;
+    min-width: 60px;
+    white-space: nowrap;
+    text-align: right;
+}
+
+/* Columnas con ellipsis para textos largos */
+.col-leyenda,
+.col-descripcion {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Columna de acción - STICKY a la derecha */
+.col-action {
+    width: 110px;
+    min-width: 110px;
     text-align: center;
-    background: #f3f4f6;
+    white-space: nowrap;
+    position: sticky;
+    right: 0;
+    background: #ffffff;
+    box-shadow: -3px 0 6px rgba(0, 0, 0, 0.08);
+    z-index: 2;
+}
+
+.header-action {
+    width: 110px;
+    min-width: 110px;
+    text-align: center;
+    background: #f3f4f6 !important;
+    position: sticky;
+    right: 0;
+    box-shadow: -3px 0 6px rgba(0, 0, 0, 0.08);
+    z-index: 3;
+}
+
+/* Fondo correcto para filas hover con columna sticky */
+.results-table tbody tr:hover .col-action {
+    background: #f9fafb;
+}
+
+.results-table tbody tr.row-manual .col-action {
+    background: #f0f9ff;
+}
+
+.results-table tbody tr.row-manual:hover .col-action {
+    background: #e0f2fe;
+}
+
+.results-table tbody tr.sub-row .col-action {
+    background: #fafafa;
 }
 
 /* Botón desconciliar */

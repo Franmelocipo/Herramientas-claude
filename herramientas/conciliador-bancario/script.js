@@ -1005,13 +1005,13 @@ function llenarTablaConciliados(conciliados) {
             // Columnas Mayor
             if (m) {
                 html += `
-                    <td>${formatearFecha(m.fecha)}</td>
-                    <td>${m.numeroAsiento}</td>
-                    <td title="${m.leyenda}">${truncar(m.leyenda, 30)}</td>
-                    <td class="text-right">${formatearNumero(m.importe)}</td>
+                    <td class="col-fecha">${formatearFecha(m.fecha)}</td>
+                    <td class="col-numero">${m.numeroAsiento}</td>
+                    <td class="col-leyenda" title="${m.leyenda}">${truncar(m.leyenda, 30)}</td>
+                    <td class="col-importe">${formatearNumero(m.importe)}</td>
                 `;
             } else {
-                html += '<td></td><td></td><td></td><td></td>';
+                html += '<td class="col-fecha"></td><td class="col-numero"></td><td class="col-leyenda"></td><td class="col-importe"></td>';
             }
 
             // Separador
@@ -1020,21 +1020,21 @@ function llenarTablaConciliados(conciliados) {
             // Columnas Extracto
             if (e) {
                 html += `
-                    <td>${formatearFecha(e.fecha)}</td>
-                    <td title="${e.descripcion}">${truncar(e.descripcion, 25)}</td>
-                    <td>${e.origen}</td>
-                    <td class="text-right">${formatearNumero(e.importe)}</td>
+                    <td class="col-fecha">${formatearFecha(e.fecha)}</td>
+                    <td class="col-descripcion" title="${e.descripcion}">${truncar(e.descripcion, 25)}</td>
+                    <td class="col-origen">${e.origen}</td>
+                    <td class="col-importe">${formatearNumero(e.importe)}</td>
                 `;
             } else {
-                html += '<td></td><td></td><td></td><td></td>';
+                html += '<td class="col-fecha"></td><td class="col-descripcion"></td><td class="col-origen"></td><td class="col-importe"></td>';
             }
 
             // Diferencia (solo en primera fila)
             if (isFirst) {
                 const colorClass = match.diferencia > 0 ? 'text-red' : 'text-green';
-                html += `<td class="text-right ${colorClass}">${match.diferencia > 0 ? formatearNumero(match.diferencia) : '-'}</td>`;
+                html += `<td class="col-diferencia ${colorClass}">${match.diferencia > 0 ? formatearNumero(match.diferencia) : '-'}</td>`;
             } else {
-                html += '<td></td>';
+                html += '<td class="col-diferencia"></td>';
             }
 
             // Botón de acción (solo en primera fila)
@@ -1055,7 +1055,7 @@ function llenarTablaConciliados(conciliados) {
                     </td>
                 `;
             } else {
-                html += '<td></td>';
+                html += '<td class="col-action"></td>';
             }
 
             html += '</tr>';
