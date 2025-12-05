@@ -178,6 +178,62 @@
                     </div>
                 </div>
 
+                <!-- Panel de Reprocesamiento -->
+                <div id="panel-reproceso" class="panel-reproceso hidden">
+                    <div class="panel-reproceso-header">
+                        <h3>🔄 Reprocesar Movimientos Pendientes</h3>
+                        <button class="btn-toggle-reproceso" id="btnToggleReproceso" onclick="togglePanelReproceso()">▼</button>
+                    </div>
+                    <div class="panel-reproceso-body" id="panelReprocesoBody">
+                        <div class="reproceso-info">
+                            <span class="reproceso-pendientes">
+                                Movimientos pendientes: <strong>Mayor (<span id="reprocesoPendientesMayor">0</span>)</strong> | <strong>Extracto (<span id="reprocesoPendientesExtracto">0</span>)</strong>
+                            </span>
+                        </div>
+                        <div class="reproceso-tolerancias">
+                            <div class="reproceso-campo">
+                                <label for="reproceso-tolerancia-fecha">Tolerancia de fechas:</label>
+                                <div class="reproceso-input-wrapper">
+                                    <input type="number" id="reproceso-tolerancia-fecha" value="10" min="0" max="365" class="reproceso-input">
+                                    <span class="reproceso-unidad">días</span>
+                                </div>
+                            </div>
+                            <div class="reproceso-campo">
+                                <label for="reproceso-tolerancia-importe">Tolerancia de importes:</label>
+                                <div class="reproceso-input-wrapper">
+                                    <span class="reproceso-signo">$</span>
+                                    <input type="number" id="reproceso-tolerancia-importe" value="1000" min="0" step="100" class="reproceso-input">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="reproceso-advertencia">
+                            <span class="advertencia-icono">⚠️</span>
+                            <span>Solo se procesarán los movimientos NO conciliados. Los movimientos ya conciliados no serán afectados.</span>
+                        </div>
+                        <div class="reproceso-acciones">
+                            <button id="btnReprocesar" class="btn-reprocesar" onclick="reprocesarPendientes()">
+                                🔄 Reprocesar Pendientes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Historial de Procesamiento -->
+                <div id="historial-procesamiento" class="historial-procesamiento hidden">
+                    <div class="historial-header">
+                        <h4>📋 Historial de Procesamiento</h4>
+                        <button class="btn-toggle-historial" id="btnToggleHistorial" onclick="toggleHistorial()">Ocultar</button>
+                    </div>
+                    <div class="historial-body" id="historialBody">
+                        <div class="historial-lista" id="historialLista">
+                            <!-- Se llena dinámicamente -->
+                        </div>
+                        <div class="historial-total">
+                            Total conciliados: <strong id="historialTotalConciliados">0</strong>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Tabs para ver detalles -->
                 <div class="tabs">
                     <button class="tab-btn active" data-tab="conciliados">Conciliados</button>
