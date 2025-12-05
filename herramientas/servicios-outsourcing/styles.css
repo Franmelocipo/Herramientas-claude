@@ -13,11 +13,11 @@
 }
 
 :root {
-    /* Colores principales */
-    --primary-color: #667eea;
-    --primary-dark: #764ba2;
+    /* Colores principales - Paleta Fernández Sierra */
+    --primary-color: #2c5282;
+    --primary-dark: #1a3a5c;
     --secondary-color: #48bb78;
-    --danger-color: #f56565;
+    --danger-color: #e53e3e;
     --warning-color: #ed8936;
     --info-color: #4299e1;
 
@@ -30,7 +30,7 @@
     --bg-primary: #ffffff;
     --bg-secondary: #f7fafc;
     --bg-tertiary: #edf2f7;
-    --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --bg-gradient: linear-gradient(135deg, #1a3a5c 0%, #2c5282 100%);
 
     /* Bordes */
     --border-color: #e2e8f0;
@@ -453,7 +453,7 @@ body {
 .form-textarea:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    box-shadow: 0 0 0 3px rgba(44, 82, 130, 0.1);
 }
 
 .form-textarea {
@@ -503,12 +503,12 @@ body {
 
 .file-upload-area:hover {
     border-color: var(--primary-color);
-    background: rgba(102, 126, 234, 0.02);
+    background: rgba(44, 82, 130, 0.02);
 }
 
 .file-upload-area.dragging {
     border-color: var(--primary-color);
-    background: rgba(102, 126, 234, 0.05);
+    background: rgba(44, 82, 130, 0.05);
 }
 
 .file-upload-icon {

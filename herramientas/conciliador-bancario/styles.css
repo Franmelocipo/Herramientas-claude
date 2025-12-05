@@ -6,7 +6,7 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+    background: linear-gradient(135deg, #f7fafc 0%, #e2e8f0 100%);
     min-height: 100vh;
     padding: 40px 20px;
 }
@@ -95,7 +95,7 @@ body {
 }
 
 .step-number {
-    background: #4f46e5;
+    background: #2c5282;
     color: white;
     width: 32px;
     height: 32px;
@@ -125,13 +125,13 @@ body {
 }
 
 .type-btn:hover {
-    border-color: #4f46e5;
-    background: #eef2ff;
+    border-color: #2c5282;
+    background: #f0f9ff;
 }
 
 .type-btn.active {
-    border-color: #4f46e5;
-    background: #eef2ff;
+    border-color: #2c5282;
+    background: #f0f9ff;
 }
 
 .type-btn-icon {
@@ -196,13 +196,13 @@ body {
 }
 
 .file-drop-zone:hover {
-    border-color: #4f46e5;
-    background: #f5f3ff;
+    border-color: #4299e1;
+    background: #f0f9ff;
 }
 
 .file-drop-zone.dragover {
-    border-color: #4f46e5;
-    background: #eef2ff;
+    border-color: #2c5282;
+    background: #f0f9ff;
 }
 
 .upload-icon {
@@ -303,7 +303,7 @@ body {
 
 .input-number:focus {
     outline: none;
-    border-color: #4f46e5;
+    border-color: #4299e1;
 }
 
 .tolerance-hint {
@@ -318,7 +318,7 @@ body {
 .btn-conciliar {
     width: 100%;
     padding: 20px;
-    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+    background: #2c5282;
     color: white;
     border: none;
     border-radius: 12px;
@@ -330,7 +330,8 @@ body {
 
 .btn-conciliar:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.4);
+    background: #2a4a6d;
+    box-shadow: 0 8px 20px rgba(44, 82, 130, 0.4);
 }
 
 .btn-conciliar:disabled {
@@ -501,7 +502,7 @@ body {
 }
 
 .tab-btn.active {
-    background: #4f46e5;
+    background: #2c5282;
     color: white;
 }
 
