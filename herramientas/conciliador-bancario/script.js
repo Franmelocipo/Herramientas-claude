@@ -138,7 +138,6 @@ const elements = {
     btnDescargar: document.getElementById('btnDescargar'),
 
     // Nueva conciliación
-    btnNuevaContainer: document.getElementById('btnNuevaContainer'),
     btnNuevaConciliacion: document.getElementById('btnNuevaConciliacion'),
 
     // Selección manual
@@ -981,7 +980,6 @@ function mostrarResultados() {
 
     // Mostrar sección de resultados
     elements.resultados.classList.remove('hidden');
-    elements.btnNuevaContainer.classList.remove('hidden');
 
     // Scroll a resultados
     elements.resultados.scrollIntoView({ behavior: 'smooth' });
@@ -2956,7 +2954,6 @@ function reiniciar() {
     elements.stepTolerancias.classList.add('hidden');
     elements.stepEjecutar.classList.add('hidden');
     elements.resultados.classList.add('hidden');
-    elements.btnNuevaContainer.classList.add('hidden');
     elements.selectionBar.classList.add('hidden');
 
     // Resetear archivos

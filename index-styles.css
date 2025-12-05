@@ -286,45 +286,15 @@ body {
     color: #1e293b;
 }
 
-/* Botones */
-.btn-primary, .btn-secondary {
-    padding: 12px 24px;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
+/* Botones - Estilos complementarios al archivo buttons.css */
+/* Los estilos base están en css/buttons.css */
 
 .btn-primary {
-    background: #2c5282;
-    color: white;
     box-shadow: 0 4px 12px rgba(44, 82, 130, 0.3);
 }
 
 .btn-primary:hover {
-    transform: translateY(-2px);
-    background: #2a4a6d;
     box-shadow: 0 6px 16px rgba(44, 82, 130, 0.4);
-}
-
-.btn-secondary {
-    background: #f1f5f9;
-    color: #475569;
-}
-
-.btn-secondary:hover {
-    background: #e2e8f0;
-}
-
-.btn-danger {
-    background: #ef4444;
-    color: white;
-}
-
-.btn-danger:hover {
-    background: #dc2626;
 }
 
 .btn-group {

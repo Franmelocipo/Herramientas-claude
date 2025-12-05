@@ -388,12 +388,33 @@ body {
     display: none;
 }
 
+/* Results header with button */
+.results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
 .results-title {
     font-size: 24px;
     font-weight: 700;
     color: #1f2937;
-    margin-bottom: 24px;
-    text-align: center;
+    margin: 0;
+}
+
+/* Responsive results header */
+@media (max-width: 480px) {
+    .results-header {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .results-header .btn-primary {
+        width: 100%;
+    }
 }
 
 /* Summary cards */
