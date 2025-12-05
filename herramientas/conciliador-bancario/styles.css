@@ -960,3 +960,153 @@ body {
         display: none;
     }
 }
+
+/* Modal de progreso */
+.overlay-progreso {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+.modal-progreso {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 40px;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    min-width: 450px;
+    max-width: 90vw;
+    text-align: center;
+    display: none;
+}
+
+.modal-progreso h3 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 24px;
+}
+
+.barra-contenedor {
+    background: #e5e7eb;
+    border-radius: 12px;
+    height: 24px;
+    margin: 20px 0;
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.barra-progreso {
+    background: linear-gradient(90deg, #2c5282, #4299e1);
+    height: 100%;
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 12px;
+    position: relative;
+}
+
+.barra-progreso::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.3) 50%,
+        transparent 100%
+    );
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.porcentaje-progreso {
+    font-size: 28px;
+    font-weight: 700;
+    color: #2c5282;
+    margin-bottom: 12px;
+}
+
+.paso-progreso {
+    font-size: 14px;
+    font-weight: 600;
+    color: #4b5563;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mensaje-progreso {
+    font-size: 16px;
+    color: #374151;
+    margin-bottom: 16px;
+}
+
+.contador-progreso {
+    font-size: 14px;
+    color: #6b7280;
+    margin-bottom: 8px;
+}
+
+.conciliados-progreso {
+    font-size: 14px;
+    color: #059669;
+    font-weight: 600;
+}
+
+.modal-progreso.visible,
+.overlay-progreso.visible {
+    display: block;
+}
+
+/* Animación de entrada del modal */
+.modal-progreso.visible {
+    animation: modalEntrada 0.3s ease-out;
+}
+
+@keyframes modalEntrada {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+/* Responsive modal */
+@media (max-width: 500px) {
+    .modal-progreso {
+        min-width: auto;
+        width: 90%;
+        padding: 24px;
+    }
+
+    .modal-progreso h3 {
+        font-size: 18px;
+    }
+
+    .porcentaje-progreso {
+        font-size: 24px;
+    }
+}
