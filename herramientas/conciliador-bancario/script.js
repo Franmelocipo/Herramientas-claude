@@ -210,10 +210,14 @@ function init() {
 
     // Tolerancias
     elements.toleranciaFecha.addEventListener('change', () => {
-        state.toleranciaFecha = parseInt(elements.toleranciaFecha.value) || 30;
+        const valor = parseInt(elements.toleranciaFecha.value);
+        // IMPORTANTE: No usar || porque 0 es un valor válido (tolerancia exacta)
+        state.toleranciaFecha = isNaN(valor) ? 30 : valor;
     });
     elements.toleranciaImporte.addEventListener('change', () => {
-        state.toleranciaImporte = parseFloat(elements.toleranciaImporte.value) || 20000;
+        const valor = parseFloat(elements.toleranciaImporte.value);
+        // IMPORTANTE: No usar || porque 0 es un valor válido (importe exacto)
+        state.toleranciaImporte = isNaN(valor) ? 20000 : valor;
     });
 
     // Conciliar
@@ -667,8 +671,19 @@ async function ejecutarConciliacion() {
         seleccion = { mayor: [], extracto: [] };
 
         // Actualizar tolerancias
-        state.toleranciaFecha = parseInt(elements.toleranciaFecha.value) || 30;
-        state.toleranciaImporte = parseFloat(elements.toleranciaImporte.value) || 20000;
+        // IMPORTANTE: No usar || porque 0 es un valor válido (coincidencia exacta)
+        const valorFecha = parseInt(elements.toleranciaFecha.value);
+        const valorImporte = parseFloat(elements.toleranciaImporte.value);
+        state.toleranciaFecha = isNaN(valorFecha) ? 30 : valorFecha;
+        state.toleranciaImporte = isNaN(valorImporte) ? 20000 : valorImporte;
+
+        // DEBUG: Mostrar tolerancias configuradas
+        console.log('Tolerancias configuradas:', {
+            fecha: state.toleranciaFecha,
+            importe: state.toleranciaImporte,
+            valorFechaInput: elements.toleranciaFecha.value,
+            valorImporteInput: elements.toleranciaImporte.value
+        });
 
         // Filtrar datos según el tipo de conciliación
         let mayorFiltrado, extractoFiltrado;
@@ -875,6 +890,12 @@ function buscarCoincidenciaExacta(movMayor, listaExtracto) {
 
         // Verificar tolerancia de importe
         const difImporte = Math.abs(movMayor.importe - movExtracto.importe);
+
+        // DEBUG: Descomentar para ver comparaciones de importes
+        // console.log('Comparando importes:', movMayor.importe, movExtracto.importe,
+        //     'Diff:', difImporte, 'Tolerancia:', state.toleranciaImporte,
+        //     'Acepta:', difImporte <= state.toleranciaImporte);
+
         if (difImporte > state.toleranciaImporte) continue;
 
         // Verificar tolerancia de fecha
@@ -3108,8 +3129,11 @@ function guardarProcesamientoInicial(cantidadConciliados) {
 async function reprocesarPendientes() {
     try {
         // Obtener nuevos parámetros
-        const nuevaToleranciaFecha = parseInt(elements.reprocesoToleranciaFecha.value) || 10;
-        const nuevaToleranciaImporte = parseFloat(elements.reprocesoToleranciaImporte.value) || 1000;
+        // IMPORTANTE: No usar || porque 0 es un valor válido (coincidencia exacta)
+        const valorFecha = parseInt(elements.reprocesoToleranciaFecha.value);
+        const valorImporte = parseFloat(elements.reprocesoToleranciaImporte.value);
+        const nuevaToleranciaFecha = isNaN(valorFecha) ? 10 : valorFecha;
+        const nuevaToleranciaImporte = isNaN(valorImporte) ? 1000 : valorImporte;
 
         // Validar que hay movimientos pendientes
         if (state.resultados.mayorNoConciliado.length === 0 || state.resultados.extractoNoConciliado.length === 0) {
