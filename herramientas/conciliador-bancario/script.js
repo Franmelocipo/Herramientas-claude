@@ -13,6 +13,15 @@ let state = {
     resultados: null
 };
 
+// Estado de selección para conciliación manual
+let seleccion = {
+    mayor: [],      // IDs de movimientos del Mayor seleccionados
+    extracto: []    // IDs de movimientos del Extracto seleccionados
+};
+
+// Contador para IDs únicos de conciliaciones
+let conciliacionIdCounter = 0;
+
 // Elementos del DOM
 const elements = {
     // Pasos
@@ -70,7 +79,21 @@ const elements = {
 
     // Nueva conciliación
     btnNuevaContainer: document.getElementById('btnNuevaContainer'),
-    btnNuevaConciliacion: document.getElementById('btnNuevaConciliacion')
+    btnNuevaConciliacion: document.getElementById('btnNuevaConciliacion'),
+
+    // Selección manual
+    selectionBar: document.getElementById('selectionBar'),
+    selMayorCount: document.getElementById('selMayorCount'),
+    selMayorTotal: document.getElementById('selMayorTotal'),
+    selExtractoCount: document.getElementById('selExtractoCount'),
+    selExtractoTotal: document.getElementById('selExtractoTotal'),
+    selDiferencia: document.getElementById('selDiferencia'),
+    btnVincular: document.getElementById('btnVincular'),
+    btnLimpiarSeleccion: document.getElementById('btnLimpiarSeleccion'),
+    selectAllMayor: document.getElementById('selectAllMayor'),
+    selectAllExtracto: document.getElementById('selectAllExtracto'),
+    countMayorPendiente: document.getElementById('countMayorPendiente'),
+    countExtractoPendiente: document.getElementById('countExtractoPendiente')
 };
 
 // ========== INICIALIZACIÓN ==========
@@ -116,6 +139,12 @@ function init() {
 
     // Nueva conciliación
     elements.btnNuevaConciliacion.addEventListener('click', reiniciar);
+
+    // Conciliación manual
+    elements.btnVincular.addEventListener('click', vincularManualmente);
+    elements.btnLimpiarSeleccion.addEventListener('click', limpiarSeleccion);
+    elements.selectAllMayor.addEventListener('change', (e) => seleccionarTodosMayor(e.target.checked));
+    elements.selectAllExtracto.addEventListener('change', (e) => seleccionarTodosExtracto(e.target.checked));
 }
 
 // ========== SELECCIÓN DE TIPO ==========
@@ -476,6 +505,10 @@ function ejecutarConciliacion() {
     try {
         mostrarMensaje('', 'clear');
 
+        // Reiniciar contador de conciliaciones y selección
+        conciliacionIdCounter = 0;
+        seleccion = { mayor: [], extracto: [] };
+
         // Actualizar tolerancias
         state.toleranciaFecha = parseInt(elements.toleranciaFecha.value) || 30;
         state.toleranciaImporte = parseFloat(elements.toleranciaImporte.value) || 20000;
@@ -522,10 +555,12 @@ function conciliar(mayor, extracto) {
             const diferencia = Math.abs(movMayor.importe - movExtracto.importe);
 
             conciliados.push({
+                id: 'conc_' + (++conciliacionIdCounter),
                 tipo: '1:1',
                 mayor: [movMayor],
                 extracto: [movExtracto],
-                diferencia
+                diferencia,
+                manual: false
             });
 
             mayorNoConciliado.splice(i, 1);
@@ -549,10 +584,12 @@ function conciliar(mayor, extracto) {
             const diferencia = Math.abs(movMayor.importe - sumaExtracto);
 
             conciliados.push({
+                id: 'conc_' + (++conciliacionIdCounter),
                 tipo: '1:N',
                 mayor: [movMayor],
                 extracto: combinacion,
-                diferencia
+                diferencia,
+                manual: false
             });
 
             mayorNoConciliado.splice(i, 1);
@@ -579,10 +616,12 @@ function conciliar(mayor, extracto) {
             const diferencia = Math.abs(sumaMayor - movExtracto.importe);
 
             conciliados.push({
+                id: 'conc_' + (++conciliacionIdCounter),
                 tipo: 'N:1',
                 mayor: combinacion,
                 extracto: [movExtracto],
-                diferencia
+                diferencia,
+                manual: false
             });
 
             extractoNoConciliado.splice(i, 1);
@@ -725,8 +764,9 @@ function llenarTablaConciliados(conciliados) {
             const e = match.extracto[i];
             const isFirst = i === 0;
             const isSubRow = i > 0;
+            const manualClass = match.manual ? ' row-manual' : '';
 
-            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}">`;
+            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}">`;
 
             // Columnas Mayor
             if (m) {
@@ -763,19 +803,41 @@ function llenarTablaConciliados(conciliados) {
                 html += '<td></td>';
             }
 
+            // Botón de acción (solo en primera fila)
+            if (isFirst) {
+                const manualBadge = match.manual ? '<span class="badge-manual">Manual</span>' : '';
+                html += `
+                    <td class="col-action">
+                        ${manualBadge}
+                        <button class="btn-desconciliar" onclick="desconciliar('${match.id}')" title="Desconciliar">
+                            ✕
+                        </button>
+                    </td>
+                `;
+            } else {
+                html += '<td></td>';
+            }
+
             html += '</tr>';
         }
     });
 
-    elements.tablaConciliados.innerHTML = html || '<tr><td colspan="10" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos conciliados</td></tr>';
+    elements.tablaConciliados.innerHTML = html || '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos conciliados</td></tr>';
 }
 
 function llenarTablaMayorPendiente(pendientes) {
     let html = '';
 
+    // Actualizar contador en header
+    elements.countMayorPendiente.textContent = `(${pendientes.length})`;
+
     pendientes.forEach(m => {
+        const checked = seleccion.mayor.includes(m.id) ? 'checked' : '';
         html += `
-            <tr>
+            <tr class="${checked ? 'row-selected' : ''}" data-id="${m.id}">
+                <td class="col-checkbox">
+                    <input type="checkbox" class="checkbox-mayor" data-id="${m.id}" ${checked} onchange="toggleSeleccionMayor('${m.id}', this.checked)">
+                </td>
                 <td>${formatearFecha(m.fecha)}</td>
                 <td>${m.numeroAsiento}</td>
                 <td>${m.ce}</td>
@@ -787,15 +849,27 @@ function llenarTablaMayorPendiente(pendientes) {
         `;
     });
 
-    elements.tablaMayorPendiente.innerHTML = html || '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:20px;">Todos los movimientos del Mayor fueron conciliados</td></tr>';
+    elements.tablaMayorPendiente.innerHTML = html || '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:20px;">Todos los movimientos del Mayor fueron conciliados</td></tr>';
+
+    // Reset checkbox "seleccionar todos"
+    if (elements.selectAllMayor) {
+        elements.selectAllMayor.checked = false;
+    }
 }
 
 function llenarTablaExtractoPendiente(pendientes) {
     let html = '';
 
+    // Actualizar contador en header
+    elements.countExtractoPendiente.textContent = `(${pendientes.length})`;
+
     pendientes.forEach(e => {
+        const checked = seleccion.extracto.includes(e.id) ? 'checked' : '';
         html += `
-            <tr>
+            <tr class="${checked ? 'row-selected' : ''}" data-id="${e.id}">
+                <td class="col-checkbox">
+                    <input type="checkbox" class="checkbox-extracto" data-id="${e.id}" ${checked} onchange="toggleSeleccionExtracto('${e.id}', this.checked)">
+                </td>
                 <td>${formatearFecha(e.fecha)}</td>
                 <td title="${e.descripcion}">${truncar(e.descripcion, 50)}</td>
                 <td>${e.origen}</td>
@@ -805,7 +879,311 @@ function llenarTablaExtractoPendiente(pendientes) {
         `;
     });
 
-    elements.tablaExtractoPendiente.innerHTML = html || '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:20px;">Todos los movimientos del Extracto fueron conciliados</td></tr>';
+    elements.tablaExtractoPendiente.innerHTML = html || '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:20px;">Todos los movimientos del Extracto fueron conciliados</td></tr>';
+
+    // Reset checkbox "seleccionar todos"
+    if (elements.selectAllExtracto) {
+        elements.selectAllExtracto.checked = false;
+    }
+}
+
+// ========== CONCILIACIÓN MANUAL ==========
+
+/**
+ * Desconciliar un grupo de movimientos conciliados
+ */
+function desconciliar(idConciliacion) {
+    if (!state.resultados) return;
+
+    const grupo = state.resultados.conciliados.find(c => c.id === idConciliacion);
+    if (!grupo) {
+        console.warn('No se encontró la conciliación:', idConciliacion);
+        return;
+    }
+
+    // Mostrar confirmación
+    const cantMayor = grupo.mayor.length;
+    const cantExtracto = grupo.extracto.length;
+    const mensaje = `¿Desea desconciliar estos movimientos?\n\n` +
+                   `• ${cantMayor} movimiento(s) del Mayor\n` +
+                   `• ${cantExtracto} movimiento(s) del Extracto`;
+
+    if (!confirm(mensaje)) return;
+
+    // Mover movimientos a las listas de pendientes
+    state.resultados.mayorNoConciliado.push(...grupo.mayor);
+    state.resultados.extractoNoConciliado.push(...grupo.extracto);
+
+    // Eliminar de conciliados
+    state.resultados.conciliados = state.resultados.conciliados.filter(c => c.id !== idConciliacion);
+
+    // Actualizar vistas
+    llenarTablaConciliados(state.resultados.conciliados);
+    llenarTablaMayorPendiente(state.resultados.mayorNoConciliado);
+    llenarTablaExtractoPendiente(state.resultados.extractoNoConciliado);
+    actualizarTotalesYContadores();
+
+    mostrarMensaje('Movimientos desconciliados correctamente', 'success');
+}
+
+/**
+ * Vincular manualmente los movimientos seleccionados
+ */
+function vincularManualmente() {
+    if (!state.resultados) return;
+
+    // Obtener movimientos seleccionados
+    const movsMayor = state.resultados.mayorNoConciliado.filter(m => seleccion.mayor.includes(m.id));
+    const movsExtracto = state.resultados.extractoNoConciliado.filter(e => seleccion.extracto.includes(e.id));
+
+    if (movsMayor.length === 0 || movsExtracto.length === 0) {
+        alert('Debe seleccionar al menos un movimiento de cada lista (Mayor y Extracto)');
+        return;
+    }
+
+    // Calcular diferencia
+    const sumaMayor = movsMayor.reduce((sum, m) => sum + m.importe, 0);
+    const sumaExtracto = movsExtracto.reduce((sum, e) => sum + e.importe, 0);
+    const diferencia = Math.abs(sumaMayor - sumaExtracto);
+
+    // Validar tolerancia
+    if (diferencia > state.toleranciaImporte) {
+        const mensaje = `La diferencia (${formatearMoneda(diferencia)}) excede la tolerancia configurada (${formatearMoneda(state.toleranciaImporte)}).\n\n¿Desea vincular de todos modos?`;
+        if (!confirm(mensaje)) return;
+    }
+
+    // Crear nueva conciliación manual
+    const nuevaConciliacion = {
+        id: 'conc_' + (++conciliacionIdCounter),
+        tipo: movsMayor.length > 1 && movsExtracto.length > 1 ? 'N:N' :
+              movsMayor.length > 1 ? 'N:1' :
+              movsExtracto.length > 1 ? '1:N' : '1:1',
+        mayor: movsMayor,
+        extracto: movsExtracto,
+        diferencia: diferencia,
+        manual: true
+    };
+
+    // Agregar a conciliados
+    state.resultados.conciliados.push(nuevaConciliacion);
+
+    // Remover de pendientes
+    state.resultados.mayorNoConciliado = state.resultados.mayorNoConciliado.filter(
+        m => !seleccion.mayor.includes(m.id)
+    );
+    state.resultados.extractoNoConciliado = state.resultados.extractoNoConciliado.filter(
+        e => !seleccion.extracto.includes(e.id)
+    );
+
+    // Limpiar selección
+    limpiarSeleccion();
+
+    // Actualizar vistas
+    llenarTablaConciliados(state.resultados.conciliados);
+    llenarTablaMayorPendiente(state.resultados.mayorNoConciliado);
+    llenarTablaExtractoPendiente(state.resultados.extractoNoConciliado);
+    actualizarTotalesYContadores();
+
+    // Cambiar a pestaña de conciliados para ver el resultado
+    cambiarTab('conciliados');
+
+    mostrarMensaje('Movimientos vinculados manualmente como conciliados', 'success');
+}
+
+/**
+ * Toggle selección de un movimiento del Mayor
+ */
+function toggleSeleccionMayor(id, checked) {
+    if (checked) {
+        if (!seleccion.mayor.includes(id)) {
+            seleccion.mayor.push(id);
+        }
+    } else {
+        seleccion.mayor = seleccion.mayor.filter(i => i !== id);
+    }
+
+    // Actualizar clase visual en la fila
+    const row = document.querySelector(`#tablaMayorPendiente tr[data-id="${id}"]`);
+    if (row) {
+        row.classList.toggle('row-selected', checked);
+    }
+
+    actualizarBarraSeleccion();
+}
+
+/**
+ * Toggle selección de un movimiento del Extracto
+ */
+function toggleSeleccionExtracto(id, checked) {
+    if (checked) {
+        if (!seleccion.extracto.includes(id)) {
+            seleccion.extracto.push(id);
+        }
+    } else {
+        seleccion.extracto = seleccion.extracto.filter(i => i !== id);
+    }
+
+    // Actualizar clase visual en la fila
+    const row = document.querySelector(`#tablaExtractoPendiente tr[data-id="${id}"]`);
+    if (row) {
+        row.classList.toggle('row-selected', checked);
+    }
+
+    actualizarBarraSeleccion();
+}
+
+/**
+ * Seleccionar/deseleccionar todos los movimientos del Mayor pendiente
+ */
+function seleccionarTodosMayor(checked) {
+    if (!state.resultados) return;
+
+    if (checked) {
+        seleccion.mayor = state.resultados.mayorNoConciliado.map(m => m.id);
+    } else {
+        seleccion.mayor = [];
+    }
+
+    // Actualizar checkboxes y clases visuales
+    document.querySelectorAll('.checkbox-mayor').forEach(cb => {
+        cb.checked = checked;
+        const row = cb.closest('tr');
+        if (row) row.classList.toggle('row-selected', checked);
+    });
+
+    actualizarBarraSeleccion();
+}
+
+/**
+ * Seleccionar/deseleccionar todos los movimientos del Extracto pendiente
+ */
+function seleccionarTodosExtracto(checked) {
+    if (!state.resultados) return;
+
+    if (checked) {
+        seleccion.extracto = state.resultados.extractoNoConciliado.map(e => e.id);
+    } else {
+        seleccion.extracto = [];
+    }
+
+    // Actualizar checkboxes y clases visuales
+    document.querySelectorAll('.checkbox-extracto').forEach(cb => {
+        cb.checked = checked;
+        const row = cb.closest('tr');
+        if (row) row.classList.toggle('row-selected', checked);
+    });
+
+    actualizarBarraSeleccion();
+}
+
+/**
+ * Limpiar toda la selección
+ */
+function limpiarSeleccion() {
+    seleccion.mayor = [];
+    seleccion.extracto = [];
+
+    // Desmarcar checkboxes
+    document.querySelectorAll('.checkbox-mayor, .checkbox-extracto').forEach(cb => {
+        cb.checked = false;
+        const row = cb.closest('tr');
+        if (row) row.classList.remove('row-selected');
+    });
+
+    // Reset checkboxes "seleccionar todos"
+    if (elements.selectAllMayor) elements.selectAllMayor.checked = false;
+    if (elements.selectAllExtracto) elements.selectAllExtracto.checked = false;
+
+    actualizarBarraSeleccion();
+}
+
+/**
+ * Actualizar la barra de selección flotante con los totales
+ */
+function actualizarBarraSeleccion() {
+    if (!state.resultados) return;
+
+    const cantMayor = seleccion.mayor.length;
+    const cantExtracto = seleccion.extracto.length;
+
+    // Calcular totales
+    const totalMayor = state.resultados.mayorNoConciliado
+        .filter(m => seleccion.mayor.includes(m.id))
+        .reduce((sum, m) => sum + m.importe, 0);
+
+    const totalExtracto = state.resultados.extractoNoConciliado
+        .filter(e => seleccion.extracto.includes(e.id))
+        .reduce((sum, e) => sum + e.importe, 0);
+
+    const diferencia = Math.abs(totalMayor - totalExtracto);
+
+    // Actualizar UI
+    elements.selMayorCount.textContent = cantMayor;
+    elements.selMayorTotal.textContent = formatearMoneda(totalMayor);
+    elements.selExtractoCount.textContent = cantExtracto;
+    elements.selExtractoTotal.textContent = formatearMoneda(totalExtracto);
+    elements.selDiferencia.textContent = formatearMoneda(diferencia);
+
+    // Color de diferencia
+    if (diferencia > state.toleranciaImporte) {
+        elements.selDiferencia.classList.add('diff-warning');
+    } else {
+        elements.selDiferencia.classList.remove('diff-warning');
+    }
+
+    // Habilitar/deshabilitar botón vincular
+    elements.btnVincular.disabled = cantMayor === 0 || cantExtracto === 0;
+
+    // Mostrar/ocultar barra
+    if (cantMayor > 0 || cantExtracto > 0) {
+        elements.selectionBar.classList.remove('hidden');
+    } else {
+        elements.selectionBar.classList.add('hidden');
+    }
+}
+
+/**
+ * Actualizar todos los totales y contadores después de cambios manuales
+ */
+function actualizarTotalesYContadores() {
+    if (!state.resultados) return;
+
+    const res = state.resultados;
+
+    // Calcular totales
+    const totalConciliadoMayor = res.conciliados.reduce((sum, c) =>
+        sum + c.mayor.reduce((s, m) => s + m.importe, 0), 0);
+    const totalConciliadoExtracto = res.conciliados.reduce((sum, c) =>
+        sum + c.extracto.reduce((s, e) => s + e.importe, 0), 0);
+    const totalMayorPendiente = res.mayorNoConciliado.reduce((sum, m) => sum + m.importe, 0);
+    const totalExtractoPendiente = res.extractoNoConciliado.reduce((sum, e) => sum + e.importe, 0);
+
+    const totalMayor = totalConciliadoMayor + totalMayorPendiente;
+    const totalExtracto = totalConciliadoExtracto + totalExtractoPendiente;
+
+    // Actualizar contadores en resumen
+    elements.totalConciliados.textContent = res.conciliados.length;
+    elements.mayorNoConciliado.textContent = res.mayorNoConciliado.length;
+    elements.extractoNoConciliado.textContent = res.extractoNoConciliado.length;
+
+    // Actualizar totales
+    elements.totalMayor.textContent = formatearMoneda(totalMayor);
+    elements.totalExtracto.textContent = formatearMoneda(totalExtracto);
+    elements.diferencia.textContent = formatearMoneda(Math.abs(totalMayor - totalExtracto));
+
+    // Color de diferencia
+    const difElement = document.querySelector('.total-row.diferencia .total-value');
+    if (difElement) {
+        if (Math.abs(totalMayor - totalExtracto) > 0) {
+            difElement.style.color = '#dc2626';
+        } else {
+            difElement.style.color = '#059669';
+        }
+    }
+
+    // Actualizar contadores en headers de pestañas pendientes
+    elements.countMayorPendiente.textContent = `(${res.mayorNoConciliado.length})`;
+    elements.countExtractoPendiente.textContent = `(${res.extractoNoConciliado.length})`;
 }
 
 // ========== TABS ==========
@@ -830,7 +1208,7 @@ function descargarReporte() {
     const dataConciliados = [];
     dataConciliados.push([
         'Fecha Mayor', 'Nº Asiento', 'Leyenda Mayor', 'Importe Mayor', '',
-        'Fecha Extracto', 'Descripción Extracto', 'Origen', 'Importe Extracto', 'Diferencia'
+        'Fecha Extracto', 'Descripción Extracto', 'Origen', 'Importe Extracto', 'Diferencia', 'Tipo'
     ]);
 
     res.conciliados.forEach(match => {
@@ -850,7 +1228,8 @@ function descargarReporte() {
                 e ? e.descripcion : '',
                 e ? e.origen : '',
                 e ? e.importe : '',
-                i === 0 ? match.diferencia : ''
+                i === 0 ? match.diferencia : '',
+                i === 0 ? (match.manual ? 'Manual' : 'Automático') : ''
             ]);
         }
     });
@@ -989,6 +1368,10 @@ function reiniciar() {
         resultados: null
     };
 
+    // Resetear selección y contador
+    seleccion = { mayor: [], extracto: [] };
+    conciliacionIdCounter = 0;
+
     // Resetear UI
     elements.tipoButtons.forEach(btn => btn.classList.remove('active'));
     elements.stepArchivos.classList.add('hidden');
@@ -996,6 +1379,7 @@ function reiniciar() {
     elements.stepEjecutar.classList.add('hidden');
     elements.resultados.classList.add('hidden');
     elements.btnNuevaContainer.classList.add('hidden');
+    elements.selectionBar.classList.add('hidden');
 
     // Resetear archivos
     eliminarArchivo('mayor');

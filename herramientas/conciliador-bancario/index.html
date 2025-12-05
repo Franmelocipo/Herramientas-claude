@@ -187,6 +187,7 @@
                                     <th class="separator"></th>
                                     <th colspan="4" class="header-group extracto">EXTRACTO BANCARIO</th>
                                     <th class="header-diff">Dif.</th>
+                                    <th class="header-action">Acción</th>
                                 </tr>
                                 <tr>
                                     <th>Fecha</th>
@@ -199,6 +200,7 @@
                                     <th>Origen</th>
                                     <th class="text-right">Importe</th>
                                     <th class="text-right">$</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody id="tablaConciliados"></tbody>
@@ -208,10 +210,14 @@
 
                 <!-- Tabla Mayor Pendiente -->
                 <div class="tab-content" id="tab-mayor-pendiente">
+                    <div class="panel-header-pendiente">
+                        <h3>Mayor Pendiente <span id="countMayorPendiente">(0)</span></h3>
+                    </div>
                     <div class="table-wrapper">
-                        <table class="results-table">
+                        <table class="results-table table-selectable">
                             <thead>
                                 <tr>
+                                    <th class="col-checkbox"><input type="checkbox" id="selectAllMayor" title="Seleccionar todos"></th>
                                     <th>Fecha</th>
                                     <th>Nº Asiento</th>
                                     <th>C/E</th>
@@ -228,10 +234,14 @@
 
                 <!-- Tabla Extracto Pendiente -->
                 <div class="tab-content" id="tab-extracto-pendiente">
+                    <div class="panel-header-pendiente">
+                        <h3>Extracto Pendiente <span id="countExtractoPendiente">(0)</span></h3>
+                    </div>
                     <div class="table-wrapper">
-                        <table class="results-table">
+                        <table class="results-table table-selectable">
                             <thead>
                                 <tr>
+                                    <th class="col-checkbox"><input type="checkbox" id="selectAllExtracto" title="Seleccionar todos"></th>
                                     <th>Fecha</th>
                                     <th>Descripción</th>
                                     <th>Origen</th>
@@ -241,6 +251,32 @@
                             </thead>
                             <tbody id="tablaExtractoPendiente"></tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- Barra de selección flotante para conciliación manual -->
+                <div id="selectionBar" class="selection-bar hidden">
+                    <div class="selection-summary">
+                        <div class="selection-group">
+                            <span class="selection-label">Mayor:</span>
+                            <span id="selMayorCount" class="selection-count">0</span>
+                            <span class="selection-amount">(<span id="selMayorTotal">$0,00</span>)</span>
+                        </div>
+                        <div class="selection-separator">|</div>
+                        <div class="selection-group">
+                            <span class="selection-label">Extracto:</span>
+                            <span id="selExtractoCount" class="selection-count">0</span>
+                            <span class="selection-amount">(<span id="selExtractoTotal">$0,00</span>)</span>
+                        </div>
+                        <div class="selection-separator">|</div>
+                        <div class="selection-group selection-diff">
+                            <span class="selection-label">Diferencia:</span>
+                            <span id="selDiferencia" class="selection-diff-value">$0,00</span>
+                        </div>
+                    </div>
+                    <div class="selection-actions">
+                        <button id="btnLimpiarSeleccion" class="btn-selection-clear" title="Limpiar selección">✕ Limpiar</button>
+                        <button id="btnVincular" class="btn-vincular" disabled>🔗 Vincular como Conciliados</button>
                     </div>
                 </div>
 
