@@ -484,12 +484,14 @@ function ejecutarConciliacion() {
         let mayorFiltrado, extractoFiltrado;
 
         if (state.tipoConciliacion === 'creditos') {
-            // Créditos: Haber del Mayor = Crédito del Extracto
-            mayorFiltrado = state.datosMayor.filter(m => m.haber > 0).map(m => ({...m, importe: m.haber, usado: false}));
+            // Créditos (entradas de dinero): Debe del Mayor = Crédito del Extracto
+            // La cuenta Banco es un ACTIVO: cuando entra dinero, el activo AUMENTA → se registra en DEBE
+            mayorFiltrado = state.datosMayor.filter(m => m.debe > 0).map(m => ({...m, importe: m.debe, usado: false}));
             extractoFiltrado = state.datosExtracto.filter(e => e.credito > 0).map(e => ({...e, importe: e.credito, usado: false}));
         } else {
-            // Débitos: Debe del Mayor = Débito del Extracto
-            mayorFiltrado = state.datosMayor.filter(m => m.debe > 0).map(m => ({...m, importe: m.debe, usado: false}));
+            // Débitos (salidas de dinero): Haber del Mayor = Débito del Extracto
+            // La cuenta Banco es un ACTIVO: cuando sale dinero, el activo DISMINUYE → se registra en HABER
+            mayorFiltrado = state.datosMayor.filter(m => m.haber > 0).map(m => ({...m, importe: m.haber, usado: false}));
             extractoFiltrado = state.datosExtracto.filter(e => e.debito > 0).map(e => ({...e, importe: e.debito, usado: false}));
         }
 
