@@ -284,13 +284,27 @@
                             <thead>
                                 <tr>
                                     <th class="col-checkbox"><input type="checkbox" id="selectAllMayor" title="Seleccionar todos"></th>
-                                    <th>Fecha</th>
-                                    <th>Nº Asiento</th>
-                                    <th>C/E</th>
-                                    <th>Tipo</th>
-                                    <th>Leyenda</th>
-                                    <th class="text-right">Debe</th>
-                                    <th class="text-right">Haber</th>
+                                    <th class="columna-ordenable" data-columna="fecha" onclick="ordenarPorColumna('mayor', 'fecha')">
+                                        Fecha <span class="icono-orden">▼</span>
+                                    </th>
+                                    <th class="columna-ordenable" data-columna="numeroAsiento" onclick="ordenarPorColumna('mayor', 'numeroAsiento')">
+                                        Nº Asiento <span class="icono-orden">↕</span>
+                                    </th>
+                                    <th class="columna-ordenable" data-columna="ce" onclick="ordenarPorColumna('mayor', 'ce')">
+                                        C/E <span class="icono-orden">↕</span>
+                                    </th>
+                                    <th class="columna-ordenable" data-columna="tipo" onclick="ordenarPorColumna('mayor', 'tipo')">
+                                        Tipo <span class="icono-orden">↕</span>
+                                    </th>
+                                    <th class="columna-ordenable" data-columna="leyenda" onclick="ordenarPorColumna('mayor', 'leyenda')">
+                                        Leyenda <span class="icono-orden">↕</span>
+                                    </th>
+                                    <th class="columna-ordenable text-right" data-columna="debe" onclick="ordenarPorColumna('mayor', 'debe')">
+                                        Debe <span class="icono-orden">↕</span>
+                                    </th>
+                                    <th class="columna-ordenable text-right" data-columna="haber" onclick="ordenarPorColumna('mayor', 'haber')">
+                                        Haber <span class="icono-orden">↕</span>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody id="tablaMayorPendiente"></tbody>
@@ -360,11 +374,21 @@
                             <thead>
                                 <tr>
                                     <th class="col-checkbox"><input type="checkbox" id="selectAllExtracto" title="Seleccionar todos"></th>
-                                    <th>Fecha</th>
-                                    <th>Descripción</th>
-                                    <th>Origen</th>
-                                    <th class="text-right">Débito</th>
-                                    <th class="text-right">Crédito</th>
+                                    <th class="columna-ordenable" data-columna="fecha" onclick="ordenarPorColumna('extracto', 'fecha')">
+                                        Fecha <span class="icono-orden">▼</span>
+                                    </th>
+                                    <th class="columna-ordenable" data-columna="descripcion" onclick="ordenarPorColumna('extracto', 'descripcion')">
+                                        Descripción <span class="icono-orden">↕</span>
+                                    </th>
+                                    <th class="columna-ordenable" data-columna="origen" onclick="ordenarPorColumna('extracto', 'origen')">
+                                        Origen <span class="icono-orden">↕</span>
+                                    </th>
+                                    <th class="columna-ordenable text-right" data-columna="debito" onclick="ordenarPorColumna('extracto', 'debito')">
+                                        Débito <span class="icono-orden">↕</span>
+                                    </th>
+                                    <th class="columna-ordenable text-right" data-columna="credito" onclick="ordenarPorColumna('extracto', 'credito')">
+                                        Crédito <span class="icono-orden">↕</span>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody id="tablaExtractoPendiente"></tbody>

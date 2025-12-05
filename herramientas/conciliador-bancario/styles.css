@@ -1392,3 +1392,73 @@ body {
         justify-content: center;
     }
 }
+
+/* ========== ORDENAMIENTO DE COLUMNAS ========== */
+
+/* Columnas ordenables */
+.columna-ordenable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    transition: background-color 0.2s ease;
+    position: relative;
+}
+
+.columna-ordenable:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Icono de orden */
+.columna-ordenable .icono-orden {
+    margin-left: 5px;
+    opacity: 0.3;
+    font-size: 11px;
+    display: inline-block;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* Columna activa (la que está ordenando) */
+.columna-ordenable.activa {
+    background-color: rgba(44, 82, 130, 0.08);
+}
+
+.columna-ordenable.activa .icono-orden {
+    opacity: 1;
+    color: #2c5282;
+}
+
+/* Estados de orden */
+.columna-ordenable.asc .icono-orden {
+    color: #059669;
+}
+
+.columna-ordenable.desc .icono-orden {
+    color: #2c5282;
+}
+
+/* Hover sobre columna activa */
+.columna-ordenable.activa:hover {
+    background-color: rgba(44, 82, 130, 0.12);
+}
+
+/* Animación del icono al hacer hover */
+.columna-ordenable:hover .icono-orden {
+    opacity: 0.7;
+}
+
+/* Asegurar que el icono no afecte la alineación del texto en columnas numéricas */
+.columna-ordenable.text-right {
+    text-align: right;
+}
+
+.columna-ordenable.text-right .icono-orden {
+    margin-left: 4px;
+}
+
+/* Responsive - en móvil los iconos son más pequeños */
+@media (max-width: 768px) {
+    .columna-ordenable .icono-orden {
+        font-size: 10px;
+        margin-left: 3px;
+    }
+}

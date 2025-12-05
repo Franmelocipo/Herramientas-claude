@@ -50,6 +50,18 @@ let filtrosExtracto = {
 let mayorPendienteFiltrado = [];
 let extractoPendienteFiltrado = [];
 
+// Estado de ordenamiento para Mayor Pendiente
+let ordenMayor = {
+    columna: 'fecha',  // columna activa por defecto
+    direccion: 'desc'  // 'asc' o 'desc'
+};
+
+// Estado de ordenamiento para Extracto Pendiente
+let ordenExtracto = {
+    columna: 'fecha',
+    direccion: 'desc'
+};
+
 // Estado del progreso
 let progreso = {
     paso: 1,
@@ -1016,7 +1028,10 @@ function llenarTablaMayorPendiente(pendientes) {
     // Actualizar contador en header
     elements.countMayorPendiente.textContent = `(${pendientes.length})`;
 
-    pendientes.forEach(m => {
+    // Aplicar ordenamiento
+    const pendientesOrdenados = aplicarOrdenamiento(pendientes, 'mayor');
+
+    pendientesOrdenados.forEach(m => {
         const checked = seleccion.mayor.includes(m.id) ? 'checked' : '';
         html += `
             <tr class="${checked ? 'row-selected' : ''}" data-id="${m.id}">
@@ -1040,6 +1055,9 @@ function llenarTablaMayorPendiente(pendientes) {
     if (elements.selectAllMayor) {
         elements.selectAllMayor.checked = false;
     }
+
+    // Actualizar indicadores de ordenamiento
+    actualizarIndicadoresOrden('mayor');
 }
 
 function llenarTablaExtractoPendiente(pendientes) {
@@ -1048,7 +1066,10 @@ function llenarTablaExtractoPendiente(pendientes) {
     // Actualizar contador en header
     elements.countExtractoPendiente.textContent = `(${pendientes.length})`;
 
-    pendientes.forEach(e => {
+    // Aplicar ordenamiento
+    const pendientesOrdenados = aplicarOrdenamiento(pendientes, 'extracto');
+
+    pendientesOrdenados.forEach(e => {
         const checked = seleccion.extracto.includes(e.id) ? 'checked' : '';
         html += `
             <tr class="${checked ? 'row-selected' : ''}" data-id="${e.id}">
@@ -1070,6 +1091,9 @@ function llenarTablaExtractoPendiente(pendientes) {
     if (elements.selectAllExtracto) {
         elements.selectAllExtracto.checked = false;
     }
+
+    // Actualizar indicadores de ordenamiento
+    actualizarIndicadoresOrden('extracto');
 }
 
 // ========== CONCILIACIÓN MANUAL ==========
@@ -1505,7 +1529,9 @@ function filtrarMovimientosMayor(movimientos) {
  */
 function renderizarMayorPendienteFiltrado() {
     let html = '';
-    const pendientes = mayorPendienteFiltrado;
+
+    // Aplicar ordenamiento a los datos filtrados
+    const pendientes = aplicarOrdenamiento(mayorPendienteFiltrado, 'mayor');
 
     pendientes.forEach(m => {
         const checked = seleccion.mayor.includes(m.id) ? 'checked' : '';
@@ -1526,6 +1552,9 @@ function renderizarMayorPendienteFiltrado() {
     });
 
     elements.tablaMayorPendiente.innerHTML = html || '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos que coincidan con los filtros</td></tr>';
+
+    // Actualizar indicadores de ordenamiento
+    actualizarIndicadoresOrden('mayor');
 }
 
 /**
@@ -1814,7 +1843,9 @@ function filtrarMovimientosExtracto(movimientos) {
  */
 function renderizarExtractoPendienteFiltrado() {
     let html = '';
-    const pendientes = extractoPendienteFiltrado;
+
+    // Aplicar ordenamiento a los datos filtrados
+    const pendientes = aplicarOrdenamiento(extractoPendienteFiltrado, 'extracto');
 
     pendientes.forEach(e => {
         const checked = seleccion.extracto.includes(e.id) ? 'checked' : '';
@@ -1833,6 +1864,9 @@ function renderizarExtractoPendienteFiltrado() {
     });
 
     elements.tablaExtractoPendiente.innerHTML = html || '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos que coincidan con los filtros</td></tr>';
+
+    // Actualizar indicadores de ordenamiento
+    actualizarIndicadoresOrden('extracto');
 }
 
 /**
@@ -2028,6 +2062,227 @@ function resetearFiltros() {
     });
 }
 
+// ========== ORDENAMIENTO DE TABLAS ==========
+
+/**
+ * Ordenar tabla por columna
+ * @param {string} tipo - 'mayor' o 'extracto'
+ * @param {string} columna - nombre de la columna
+ */
+function ordenarPorColumna(tipo, columna) {
+    const estado = tipo === 'mayor' ? ordenMayor : ordenExtracto;
+
+    // Si es la misma columna, invertir dirección
+    if (estado.columna === columna) {
+        estado.direccion = estado.direccion === 'asc' ? 'desc' : 'asc';
+    } else {
+        // Nueva columna, empezar descendente
+        estado.columna = columna;
+        estado.direccion = 'desc';
+    }
+
+    // Renderizar tabla con ordenamiento
+    if (tipo === 'mayor') {
+        renderizarTablaMayorOrdenada();
+    } else {
+        renderizarTablaExtractoOrdenada();
+    }
+}
+
+/**
+ * Aplicar ordenamiento a un array de movimientos
+ * @param {Array} movimientos - array de movimientos
+ * @param {string} tipo - 'mayor' o 'extracto'
+ * @returns {Array} - array ordenado
+ */
+function aplicarOrdenamiento(movimientos, tipo) {
+    const estado = tipo === 'mayor' ? ordenMayor : ordenExtracto;
+    const { columna, direccion } = estado;
+
+    return [...movimientos].sort((a, b) => {
+        let valorA = obtenerValorColumna(a, columna, tipo);
+        let valorB = obtenerValorColumna(b, columna, tipo);
+
+        // Manejar valores nulos/vacíos (siempre al final)
+        const esVacioA = valorA === null || valorA === '' || valorA === undefined;
+        const esVacioB = valorB === null || valorB === '' || valorB === undefined;
+
+        if (esVacioA && !esVacioB) return 1;
+        if (!esVacioA && esVacioB) return -1;
+        if (esVacioA && esVacioB) return 0;
+
+        let comparacion = 0;
+
+        // Comparar según tipo de dato
+        if (columna === 'fecha') {
+            // Ordenamiento por fecha
+            const fechaA = valorA instanceof Date ? valorA.getTime() : new Date(valorA).getTime();
+            const fechaB = valorB instanceof Date ? valorB.getTime() : new Date(valorB).getTime();
+            comparacion = fechaA - fechaB;
+        } else if (['debe', 'haber', 'debito', 'credito', 'numeroAsiento', 'importe', 'origen'].includes(columna)) {
+            // Ordenamiento numérico
+            const numA = parseFloat(valorA) || 0;
+            const numB = parseFloat(valorB) || 0;
+            // Para valores numéricos vacíos (0), mantenerlos al final si el original era vacío
+            if (numA === 0 && numB !== 0) return 1;
+            if (numA !== 0 && numB === 0) return -1;
+            comparacion = numA - numB;
+        } else {
+            // Ordenamiento alfabético
+            comparacion = String(valorA).localeCompare(String(valorB), 'es', { sensitivity: 'base' });
+        }
+
+        // Invertir si es descendente
+        return direccion === 'asc' ? comparacion : -comparacion;
+    });
+}
+
+/**
+ * Obtener valor de una columna de un movimiento
+ * @param {Object} movimiento - objeto de movimiento
+ * @param {string} columna - nombre de la columna
+ * @param {string} tipo - 'mayor' o 'extracto'
+ * @returns {any} - valor de la columna
+ */
+function obtenerValorColumna(movimiento, columna, tipo) {
+    const mapeoMayor = {
+        'fecha': mov => mov.fecha,
+        'numeroAsiento': mov => mov.numeroAsiento,
+        'ce': mov => mov.ce,
+        'tipo': mov => mov.tipoAsiento,
+        'leyenda': mov => mov.leyenda,
+        'debe': mov => mov.debe || 0,
+        'haber': mov => mov.haber || 0
+    };
+
+    const mapeoExtracto = {
+        'fecha': mov => mov.fecha,
+        'descripcion': mov => mov.descripcion,
+        'origen': mov => mov.origen,
+        'debito': mov => mov.debito || 0,
+        'credito': mov => mov.credito || 0
+    };
+
+    const mapeo = tipo === 'mayor' ? mapeoMayor : mapeoExtracto;
+    return mapeo[columna] ? mapeo[columna](movimiento) : '';
+}
+
+/**
+ * Renderizar tabla Mayor Pendiente con ordenamiento aplicado
+ */
+function renderizarTablaMayorOrdenada() {
+    if (!state.resultados) return;
+
+    // Obtener datos: filtrados si hay filtros activos, o todos
+    let movimientos = hayFiltrosActivosMayor()
+        ? mayorPendienteFiltrado
+        : state.resultados.mayorNoConciliado;
+
+    // Aplicar ordenamiento
+    movimientos = aplicarOrdenamiento(movimientos, 'mayor');
+
+    // Renderizar filas
+    let html = '';
+    movimientos.forEach(m => {
+        const checked = seleccion.mayor.includes(m.id) ? 'checked' : '';
+        html += `
+            <tr class="${checked ? 'row-selected' : ''}" data-id="${m.id}">
+                <td class="col-checkbox">
+                    <input type="checkbox" class="checkbox-mayor" data-id="${m.id}" ${checked} onchange="toggleSeleccionMayor('${m.id}', this.checked)">
+                </td>
+                <td>${formatearFecha(m.fecha)}</td>
+                <td>${m.numeroAsiento}</td>
+                <td>${m.ce}</td>
+                <td>${m.tipoAsiento}</td>
+                <td title="${m.leyenda}">${truncar(m.leyenda, 40)}</td>
+                <td class="text-right">${m.debe > 0 ? formatearNumero(m.debe) : ''}</td>
+                <td class="text-right">${m.haber > 0 ? formatearNumero(m.haber) : ''}</td>
+            </tr>
+        `;
+    });
+
+    elements.tablaMayorPendiente.innerHTML = html || '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos pendientes</td></tr>';
+
+    // Actualizar indicadores visuales
+    actualizarIndicadoresOrden('mayor');
+}
+
+/**
+ * Renderizar tabla Extracto Pendiente con ordenamiento aplicado
+ */
+function renderizarTablaExtractoOrdenada() {
+    if (!state.resultados) return;
+
+    // Obtener datos: filtrados si hay filtros activos, o todos
+    let movimientos = hayFiltrosActivosExtracto()
+        ? extractoPendienteFiltrado
+        : state.resultados.extractoNoConciliado;
+
+    // Aplicar ordenamiento
+    movimientos = aplicarOrdenamiento(movimientos, 'extracto');
+
+    // Renderizar filas
+    let html = '';
+    movimientos.forEach(e => {
+        const checked = seleccion.extracto.includes(e.id) ? 'checked' : '';
+        html += `
+            <tr class="${checked ? 'row-selected' : ''}" data-id="${e.id}">
+                <td class="col-checkbox">
+                    <input type="checkbox" class="checkbox-extracto" data-id="${e.id}" ${checked} onchange="toggleSeleccionExtracto('${e.id}', this.checked)">
+                </td>
+                <td>${formatearFecha(e.fecha)}</td>
+                <td title="${e.descripcion}">${truncar(e.descripcion, 50)}</td>
+                <td>${e.origen}</td>
+                <td class="text-right">${e.debito > 0 ? formatearNumero(e.debito) : ''}</td>
+                <td class="text-right">${e.credito > 0 ? formatearNumero(e.credito) : ''}</td>
+            </tr>
+        `;
+    });
+
+    elements.tablaExtractoPendiente.innerHTML = html || '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos pendientes</td></tr>';
+
+    // Actualizar indicadores visuales
+    actualizarIndicadoresOrden('extracto');
+}
+
+/**
+ * Actualizar indicadores visuales de orden en los encabezados
+ * @param {string} tipo - 'mayor' o 'extracto'
+ */
+function actualizarIndicadoresOrden(tipo) {
+    const estado = tipo === 'mayor' ? ordenMayor : ordenExtracto;
+    const contenedor = tipo === 'mayor' ? '#tab-mayor-pendiente' : '#tab-extracto-pendiente';
+
+    // Quitar clase activa de todas las columnas
+    document.querySelectorAll(`${contenedor} .columna-ordenable`).forEach(th => {
+        th.classList.remove('activa', 'asc', 'desc');
+        const icono = th.querySelector('.icono-orden');
+        if (icono) icono.textContent = '↕';
+    });
+
+    // Agregar clase activa a la columna actual
+    const columnaActiva = document.querySelector(`${contenedor} .columna-ordenable[data-columna="${estado.columna}"]`);
+    if (columnaActiva) {
+        columnaActiva.classList.add('activa', estado.direccion);
+        const icono = columnaActiva.querySelector('.icono-orden');
+        if (icono) icono.textContent = estado.direccion === 'asc' ? '▲' : '▼';
+    }
+}
+
+/**
+ * Resetear estado de ordenamiento
+ */
+function resetearOrdenamiento() {
+    ordenMayor = {
+        columna: 'fecha',
+        direccion: 'desc'
+    };
+    ordenExtracto = {
+        columna: 'fecha',
+        direccion: 'desc'
+    };
+}
+
 // ========== TABS ==========
 
 function cambiarTab(tabId) {
@@ -2216,6 +2471,9 @@ function reiniciar() {
 
     // Resetear filtros
     resetearFiltros();
+
+    // Resetear ordenamiento
+    resetearOrdenamiento();
 
     // Resetear UI
     elements.tipoButtons.forEach(btn => btn.classList.remove('active'));
