@@ -7,6 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../../supabase-config.js"></script>
+    <link rel="stylesheet" href="../../css/buttons.css">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -133,7 +134,12 @@
 
             <!-- Resultados -->
             <div id="resultados" class="results-section hidden">
-                <h2 class="results-title">📊 Resultados de Conciliación</h2>
+                <div class="results-header">
+                    <h2 class="results-title">📊 Resultados de Conciliación</h2>
+                    <button id="btnNuevaConciliacion" class="btn-primary">
+                        🔄 Nueva Conciliación
+                    </button>
+                </div>
 
                 <!-- Resumen -->
                 <div class="results-summary">
@@ -529,12 +535,6 @@
                 </button>
             </div>
 
-            <!-- Botón Nueva Conciliación -->
-            <div id="btnNuevaContainer" class="hidden">
-                <button id="btnNuevaConciliacion" class="btn-secondary btn-full">
-                    🔄 Nueva Conciliación
-                </button>
-            </div>
         </div>
     </div>
 
