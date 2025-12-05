@@ -860,7 +860,8 @@ function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
         // BUG FIX: Ignorar líneas de separación (guiones, underscores, signos de igual)
         // Estas líneas aparecen antes de "Saldo en $" y pueden agregarse a la descripción
         // del último movimiento, causando que sea filtrado por tener > 100 caracteres
-        if (/^[_\-=]{10,}$/.test(trimmedLine)) {
+        // El regex permite espacios mezclados y variaciones como "__ __ __" o "----  ----"
+        if (/^[_\-=\s]+$/.test(trimmedLine) && /[_\-=]{3,}/.test(trimmedLine)) {
             continue;
         }
 
@@ -993,7 +994,13 @@ function parseBPNWithPositions(linesWithPositions, saldoInicial = null) {
 
         } else if (currentMovement) {
             // Es continuación de la descripción
-            if (!/^(Fecha|Descripción|Comprobante|D[eé]bito|Cr[eé]dito|Saldo|Total)/i.test(trimmedLine)) {
+            // BUG FIX: Verificación adicional para no agregar líneas de separación o de cierre
+            // que pudieron escapar los filtros anteriores
+            const isHeaderOrFooter = /^(Fecha|Descripción|Comprobante|D[eé]bito|Cr[eé]dito|Saldo|Total)/i.test(trimmedLine);
+            const isSeparatorLine = /^[_\-=\s]+$/.test(trimmedLine) && /[_\-=]{3,}/.test(trimmedLine);
+            const isSaldoLine = /Saldo\s+en\s+\$/i.test(trimmedLine);
+
+            if (!isHeaderOrFooter && !isSeparatorLine && !isSaldoLine) {
                 currentMovement.descripcion += ' ' + trimmedLine;
             }
         }
