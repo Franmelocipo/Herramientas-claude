@@ -339,11 +339,12 @@ function extractGroupPattern(leyenda) {
     // - Espacios múltiples
     normalized = normalized.replace(/\s+/g, ' ').trim();
 
-    // Extraer las primeras palabras significativas (hasta 5)
+    // Extraer las primeras 2 palabras significativas para agrupar
+    // Lógica: si dos asientos tienen la misma combinación de 2 palabras, se agrupan
     const words = normalized.split(' ')
         .filter(w => w.length > 2)
         .filter(w => !['del', 'de', 'la', 'el', 'los', 'las', 'por', 'para', 'con', 'sin', 'que'].includes(w.toLowerCase()))
-        .slice(0, 5);
+        .slice(0, 2);
 
     if (words.length === 0) {
         // Si no hay palabras significativas, usar las primeras 30 caracteres
