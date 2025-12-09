@@ -1,8 +1,10 @@
 # Environment variables
 .env
+.env.*
 .env.local
 .env.production
 .env.development
+.env.vercel
 
 # Generated files (created during build)
 # supabase-config.js - NOTA: Ya no se genera, tiene valores por defecto commiteados
@@ -30,3 +32,4 @@ Thumbs.db
 dist/
 build/
 .netlify/
+.vercel/
