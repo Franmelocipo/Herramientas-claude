@@ -168,8 +168,16 @@ async function cargarClientesEnSelector() {
     if (!select) return;
 
     try {
+        // Esperar a que Supabase esté disponible
+        const supabaseClient = await waitForSupabase();
+        if (!supabaseClient) {
+            console.error('❌ No se pudo conectar con Supabase');
+            renderizarOpcionesClientes([]);
+            return;
+        }
+
         // Obtener clientes desde Supabase
-        const { data: clientes, error } = await supabase
+        const { data: clientes, error } = await supabaseClient
             .from('clientes')
             .select('id, razon_social')
             .order('razon_social');
@@ -259,6 +267,14 @@ async function cargarPlanCuentasCliente(clienteId) {
 
     try {
         console.log('Cargando plan de cuentas para cliente:', clienteId);
+
+        // Usar la variable global supabase
+        if (!supabase) {
+            console.error('❌ Supabase no está disponible');
+            mostrarInfoPlan('Error de conexión con la base de datos', 'error');
+            deshabilitarOpciones();
+            return;
+        }
 
         let { data: cuentas, error } = await supabase
             .from('plan_cuentas')

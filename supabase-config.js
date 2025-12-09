@@ -22,21 +22,38 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // Inicializar el cliente de Supabase
 let supabase = null
 
-// Esperar a que se cargue la librería de Supabase desde el CDN
-if (typeof window !== 'undefined') {
+// Función para inicializar Supabase
+function initSupabase() {
+  if (supabase) return supabase
+
   if (window.supabase && window.supabase.createClient) {
-    // La librería ya está cargada
     supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey)
     console.log('✅ Supabase client initialized')
-  } else {
-    // Esperar a que se cargue
+    return supabase
+  }
+  return null
+}
+
+// Función para esperar a que Supabase esté listo (útil para otros scripts)
+async function waitForSupabase(maxAttempts = 50, delay = 100) {
+  for (let i = 0; i < maxAttempts; i++) {
+    if (supabase) return supabase
+    const client = initSupabase()
+    if (client) return client
+    await new Promise(resolve => setTimeout(resolve, delay))
+  }
+  console.error('❌ Supabase library not loaded after waiting')
+  return null
+}
+
+// Intentar inicializar inmediatamente
+if (typeof window !== 'undefined') {
+  initSupabase()
+
+  // Si no se pudo inicializar, intentar en DOMContentLoaded
+  if (!supabase) {
     window.addEventListener('DOMContentLoaded', () => {
-      if (window.supabase && window.supabase.createClient) {
-        supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey)
-        console.log('✅ Supabase client initialized (after DOMContentLoaded)')
-      } else {
-        console.error('❌ Supabase library not loaded from CDN')
-      }
+      initSupabase()
     })
   }
 }
