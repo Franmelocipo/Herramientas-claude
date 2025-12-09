@@ -112,12 +112,25 @@ function handleFileSelect(e) {
 // PROCESAMIENTO DE ARCHIVOS
 // ============================================
 async function processFiles(files) {
-    for (const file of files) {
-        // Verificar si el archivo ya está cargado
-        if (state.files.some(f => f.name === file.name && f.size === file.size)) {
-            console.log(`Archivo ${file.name} ya está cargado, omitiendo...`);
-            continue;
-        }
+    const filesToProcess = files.filter(file =>
+        !state.files.some(f => f.name === file.name && f.size === file.size)
+    );
+
+    if (filesToProcess.length === 0) {
+        return;
+    }
+
+    showProgress('Cargando archivos Excel', `0 de ${filesToProcess.length} archivos`);
+
+    for (let i = 0; i < filesToProcess.length; i++) {
+        const file = filesToProcess[i];
+        const progress = ((i) / filesToProcess.length) * 100;
+
+        updateProgress(progress, `Archivo ${i + 1} de ${filesToProcess.length}`);
+        updateProgressText('Cargando archivos Excel', file.name);
+
+        // Pequeña pausa para permitir que la UI se actualice
+        await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
             const data = await readExcelFile(file);
@@ -131,9 +144,19 @@ async function processFiles(files) {
             }
         } catch (error) {
             console.error(`Error al procesar ${file.name}:`, error);
+            hideProgress();
             alert(`Error al procesar ${file.name}: ${error.message}`);
+            updateFilesUI();
+            return;
         }
     }
+
+    updateProgress(100, `${filesToProcess.length} archivos cargados`);
+    updateProgressText('¡Listo!', 'Archivos cargados correctamente');
+
+    // Pequeña pausa para mostrar el 100% antes de ocultar
+    await new Promise(resolve => setTimeout(resolve, 500));
+    hideProgress();
 
     updateFilesUI();
 }
@@ -252,29 +275,47 @@ function clearAllFiles() {
 // ============================================
 // COMBINACIÓN DE ARCHIVOS
 // ============================================
-function combineFiles() {
+async function combineFiles() {
     if (state.files.length < 2) {
         alert('Debes cargar al menos 2 archivos para combinar');
         return;
     }
+
+    showProgress('Combinando archivos', 'Preparando datos...');
+    updateProgress(10);
+
+    // Pequeña pausa para que se muestre el modal
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     const numeracionContinua = document.querySelector('input[name="numeracion"]:checked').value === 'continua';
     const ordenarPorFecha = elements.orderByDate.checked;
 
     // Combinar todos los datos agregando el nombre del archivo origen
     let combined = [];
+    const totalFiles = state.files.length;
 
-    state.files.forEach((file) => {
+    for (let i = 0; i < state.files.length; i++) {
+        const file = state.files[i];
+        const progress = 10 + ((i / totalFiles) * 40);
+        updateProgress(progress, `Procesando: ${file.name}`);
+        updateProgressText('Combinando archivos', `Archivo ${i + 1} de ${totalFiles}`);
+
+        await new Promise(resolve => setTimeout(resolve, 30));
+
         file.data.forEach(row => {
             combined.push({
                 ...row,
                 _archivoOrigen: file.name
             });
         });
-    });
+    }
 
     // Ordenar por fecha si está habilitado
     if (ordenarPorFecha) {
+        updateProgress(60, 'Ordenando por fecha...');
+        updateProgressText('Ordenando datos', 'Organizando cronológicamente...');
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         combined.sort((a, b) => {
             const dateA = parseDate(a.Fecha);
             const dateB = parseDate(b.Fecha);
@@ -287,10 +328,20 @@ function combineFiles() {
 
     // Renumerar asientos si está habilitado
     if (numeracionContinua) {
+        updateProgress(80, 'Renumerando asientos...');
+        updateProgressText('Procesando', 'Renumerando asientos...');
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         combined = renumerarAsientos(combined);
     }
 
     state.combinedData = combined;
+
+    updateProgress(100, `${combined.length} filas combinadas`);
+    updateProgressText('¡Listo!', 'Combinación completada');
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+    hideProgress();
 
     // Mostrar vista previa
     showStep(2);
@@ -512,4 +563,52 @@ function formatNumber(num) {
 function truncateText(text, maxLength) {
     if (!text || text.length <= maxLength) return text;
     return text.substring(0, maxLength) + '...';
+}
+
+// ============================================
+// BARRA DE PROGRESO
+// ============================================
+const progressElements = {};
+
+function initProgressElements() {
+    progressElements.overlay = document.getElementById('progressOverlay');
+    progressElements.title = document.getElementById('progressTitle');
+    progressElements.subtitle = document.getElementById('progressSubtitle');
+    progressElements.bar = document.getElementById('progressBar');
+    progressElements.percentage = document.getElementById('progressPercentage');
+    progressElements.fileInfo = document.getElementById('progressFileInfo');
+}
+
+function showProgress(title = 'Procesando...', subtitle = 'Por favor espera') {
+    if (!progressElements.overlay) initProgressElements();
+
+    progressElements.title.textContent = title;
+    progressElements.subtitle.textContent = subtitle;
+    progressElements.bar.style.width = '0%';
+    progressElements.percentage.textContent = '0%';
+    progressElements.fileInfo.textContent = '';
+    progressElements.overlay.classList.remove('hidden');
+}
+
+function updateProgress(percent, fileInfo = '') {
+    if (!progressElements.overlay) return;
+
+    const clampedPercent = Math.min(100, Math.max(0, percent));
+    progressElements.bar.style.width = `${clampedPercent}%`;
+    progressElements.percentage.textContent = `${Math.round(clampedPercent)}%`;
+    if (fileInfo) {
+        progressElements.fileInfo.textContent = fileInfo;
+    }
+}
+
+function updateProgressText(title, subtitle) {
+    if (!progressElements.overlay) return;
+
+    if (title) progressElements.title.textContent = title;
+    if (subtitle) progressElements.subtitle.textContent = subtitle;
+}
+
+function hideProgress() {
+    if (!progressElements.overlay) return;
+    progressElements.overlay.classList.add('hidden');
 }

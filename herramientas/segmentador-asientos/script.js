@@ -142,9 +142,23 @@ function handleFileSelect(e) {
 // PROCESAMIENTO DEL ARCHIVO
 // ============================================
 async function processFile(file) {
+    showProgress('Cargando archivo Excel', file.name);
+    updateProgress(10, formatFileSize(file.size));
+
+    // Pequeña pausa para que se muestre el modal
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     try {
+        updateProgressText('Leyendo archivo', 'Analizando contenido...');
+        updateProgress(20);
+
         const data = await readExcelFile(file);
+
         if (data && data.length > 0) {
+            updateProgress(40, `${data.length} filas encontradas`);
+            updateProgressText('Procesando datos', 'Validando estructura...');
+            await new Promise(resolve => setTimeout(resolve, 100));
+
             state.file = {
                 name: file.name,
                 size: file.size,
@@ -153,17 +167,33 @@ async function processFile(file) {
             state.rawData = data;
 
             // Procesar y agrupar datos
+            updateProgress(60, 'Agrupando asientos...');
+            updateProgressText('Analizando asientos', 'Detectando grupos...');
+            await new Promise(resolve => setTimeout(resolve, 100));
+
             processData();
+
+            updateProgress(80, `${state.groups.length} tipos detectados`);
+            updateProgressText('Finalizando', 'Preparando vista...');
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             // Mostrar info del archivo y pasar al paso 2
             updateFileInfo();
-            showStep(2);
             renderGroups();
             updateSummary();
             populateYears();
+
+            updateProgress(100, '¡Archivo procesado!');
+            updateProgressText('¡Listo!', 'Archivo cargado correctamente');
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+            hideProgress();
+
+            showStep(2);
         }
     } catch (error) {
         console.error('Error al procesar archivo:', error);
+        hideProgress();
         alert(`Error al procesar el archivo: ${error.message}`);
     }
 }
@@ -759,4 +789,52 @@ function formatNumber(num) {
 function truncateText(text, maxLength) {
     if (!text || text.length <= maxLength) return text;
     return text.substring(0, maxLength) + '...';
+}
+
+// ============================================
+// BARRA DE PROGRESO
+// ============================================
+const progressElements = {};
+
+function initProgressElements() {
+    progressElements.overlay = document.getElementById('progressOverlay');
+    progressElements.title = document.getElementById('progressTitle');
+    progressElements.subtitle = document.getElementById('progressSubtitle');
+    progressElements.bar = document.getElementById('progressBar');
+    progressElements.percentage = document.getElementById('progressPercentage');
+    progressElements.fileInfo = document.getElementById('progressFileInfo');
+}
+
+function showProgress(title = 'Procesando...', subtitle = 'Por favor espera') {
+    if (!progressElements.overlay) initProgressElements();
+
+    progressElements.title.textContent = title;
+    progressElements.subtitle.textContent = subtitle;
+    progressElements.bar.style.width = '0%';
+    progressElements.percentage.textContent = '0%';
+    progressElements.fileInfo.textContent = '';
+    progressElements.overlay.classList.remove('hidden');
+}
+
+function updateProgress(percent, fileInfo = '') {
+    if (!progressElements.overlay) return;
+
+    const clampedPercent = Math.min(100, Math.max(0, percent));
+    progressElements.bar.style.width = `${clampedPercent}%`;
+    progressElements.percentage.textContent = `${Math.round(clampedPercent)}%`;
+    if (fileInfo) {
+        progressElements.fileInfo.textContent = fileInfo;
+    }
+}
+
+function updateProgressText(title, subtitle) {
+    if (!progressElements.overlay) return;
+
+    if (title) progressElements.title.textContent = title;
+    if (subtitle) progressElements.subtitle.textContent = subtitle;
+}
+
+function hideProgress() {
+    if (!progressElements.overlay) return;
+    progressElements.overlay.classList.add('hidden');
 }
