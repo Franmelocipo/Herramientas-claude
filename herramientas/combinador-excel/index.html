@@ -133,6 +133,26 @@
         </div>
     </div>
 
+    <!-- Modal de progreso -->
+    <div id="progressOverlay" class="progress-overlay hidden">
+        <div class="progress-modal">
+            <div class="progress-header">
+                <div class="progress-spinner"></div>
+                <div>
+                    <div class="progress-title" id="progressTitle">Procesando archivos...</div>
+                    <div class="progress-subtitle" id="progressSubtitle">Por favor espera</div>
+                </div>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="progress-details">
+                <span class="progress-percentage" id="progressPercentage">0%</span>
+                <span class="progress-file-info" id="progressFileInfo"></span>
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>

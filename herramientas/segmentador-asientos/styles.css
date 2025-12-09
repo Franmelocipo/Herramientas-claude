@@ -671,6 +671,107 @@ body {
     color: #64748b;
 }
 
+/* Progress Modal */
+.progress-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.progress-modal {
+    background: white;
+    border-radius: 16px;
+    padding: 32px;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: modalFadeIn 0.3s ease;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.progress-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.progress-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #e2e8f0;
+    border-top: 4px solid #2c5282;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.progress-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.progress-subtitle {
+    font-size: 14px;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+.progress-bar-container {
+    background: #e2e8f0;
+    border-radius: 8px;
+    height: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.progress-bar {
+    background: linear-gradient(90deg, #2c5282, #3b82f6);
+    height: 100%;
+    width: 0%;
+    border-radius: 8px;
+    transition: width 0.3s ease;
+}
+
+.progress-details {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.progress-percentage {
+    font-weight: 600;
+    color: #2c5282;
+}
+
+.progress-file-info {
+    text-align: right;
+}
+
 /* Responsive */
 @media (max-width: 900px) {
     .filters-container {
