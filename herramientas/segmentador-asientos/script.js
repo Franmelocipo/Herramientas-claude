@@ -278,7 +278,22 @@ function detectGroups() {
 function extractGroupPattern(leyenda) {
     if (!leyenda) return 'SIN_LEYENDA';
 
-    let normalized = String(leyenda).trim();
+    let normalized = String(leyenda).trim().toLowerCase();
+
+    // REGLA ESTRICTA: Si contiene "venta según" o "ventas según", agrupar todo junto
+    if (normalized.includes('venta según') || normalized.includes('ventas según') ||
+        normalized.includes('venta segun') || normalized.includes('ventas segun')) {
+        return 'VENTAS_SEGUN_COMPROBANTE';
+    }
+
+    // REGLA ESTRICTA: Si contiene "compra según" o "compras según", agrupar todo junto
+    if (normalized.includes('compra según') || normalized.includes('compras según') ||
+        normalized.includes('compra segun') || normalized.includes('compras segun')) {
+        return 'COMPRAS_SEGUN_COMPROBANTE';
+    }
+
+    // Para otros casos, usar normalización general
+    normalized = String(leyenda).trim();
 
     // Remover datos variables comunes
     // - Números de comprobante (ej: 00001-00012345)
@@ -313,6 +328,14 @@ function extractGroupPattern(leyenda) {
 // ============================================
 function getGroupDisplayName(key, originalLeyenda) {
     if (key === 'SIN_LEYENDA') return 'Sin leyenda';
+
+    // Keys unificados específicos
+    if (key === 'VENTAS_SEGUN_COMPROBANTE') {
+        return 'Ventas (según comprobante)';
+    }
+    if (key === 'COMPRAS_SEGUN_COMPROBANTE') {
+        return 'Compras (según comprobante)';
+    }
 
     // Buscar patrones comunes y dar nombres amigables
     const keyLower = key.toLowerCase();
@@ -685,12 +708,31 @@ function resetApp() {
 function parseDate(dateStr) {
     if (!dateStr) return null;
 
+    // Si es un número (fecha serial de Excel)
+    if (typeof dateStr === 'number') {
+        // Excel usa días desde 1/1/1900, pero tiene un bug: considera 1900 como año bisiesto
+        // Días desde 1/1/1900 en Excel = serial
+        // Convertir a JavaScript: restar 25569 días (diferencia entre epoch de Excel y Unix) y multiplicar por 86400000 ms
+        const excelEpoch = new Date(1899, 11, 30); // Excel epoch con corrección del bug
+        const date = new Date(excelEpoch.getTime() + dateStr * 86400000);
+        return isNaN(date.getTime()) ? null : date;
+    }
+
+    // Formato DD/MM/YYYY
     const match = String(dateStr).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (match) {
         const [, day, month, year] = match;
         return new Date(year, month - 1, day);
     }
 
+    // Formato DD-MM-YYYY
+    const matchDash = String(dateStr).match(/(\d{1,2})-(\d{1,2})-(\d{4})/);
+    if (matchDash) {
+        const [, day, month, year] = matchDash;
+        return new Date(year, month - 1, day);
+    }
+
+    // Intentar parseo directo como último recurso
     const date = new Date(dateStr);
     return isNaN(date.getTime()) ? null : date;
 }
