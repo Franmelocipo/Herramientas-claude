@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Combinador de Archivos Excel</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="../../css/buttons.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="nav-bar">
+        <a href="../../index.html" class="nav-btn" title="Volver al inicio">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-text">Inicio</span>
+        </a>
+        <a href="../../index.html" class="nav-btn" title="Menú principal">
+            <span class="nav-icon">←</span>
+            <span class="nav-text">Volver</span>
+        </a>
+    </div>
+    <div class="container">
+        <div class="card">
+            <!-- Header -->
+            <div class="header">
+                <div class="header-left">
+                    <div class="icon-title">📑</div>
+                    <div>
+                        <h1>Combinador de Archivos Excel</h1>
+                        <p class="subtitle">Combina múltiples archivos de asientos contables en uno solo</p>
+                    </div>
+                </div>
+                <div class="header-buttons">
+                    <button id="btnReset" class="btn-secondary hidden">Nueva combinación</button>
+                </div>
+            </div>
+
+            <!-- Info Box -->
+            <div class="info-box">
+                <p><strong>📌 Instrucciones:</strong> Carga 2 o más archivos Excel generados por el Conversor de Asientos (Libro Diario SOS Contador). Los asientos se combinarán y renumerarán automáticamente.</p>
+            </div>
+
+            <!-- Paso 1: Carga de archivos -->
+            <div id="step1" class="step">
+                <h3 class="step-title">Cargar archivos Excel</h3>
+
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-content">
+                        <div class="upload-icon">📤</div>
+                        <h3>Arrastra archivos aquí o haz clic para seleccionar</h3>
+                        <p class="upload-type">Formatos aceptados: <strong>.xlsx, .xls</strong></p>
+                        <input type="file" id="fileInput" accept=".xlsx,.xls" class="file-input hidden" multiple>
+                        <button id="btnSelectFiles" class="btn-primary">Seleccionar archivos Excel</button>
+                    </div>
+                </div>
+
+                <!-- Lista de archivos cargados -->
+                <div id="filesListContainer" class="files-list-container hidden">
+                    <h4 class="files-list-title">Archivos cargados (<span id="filesCount">0</span>)</h4>
+                    <div id="filesList" class="files-list"></div>
+                    <div class="files-actions">
+                        <button id="btnAddMore" class="btn-secondary">+ Agregar más archivos</button>
+                        <button id="btnClearAll" class="btn-danger">Eliminar todos</button>
+                    </div>
+                </div>
+
+                <!-- Opciones de combinación -->
+                <div id="optionsContainer" class="options-container hidden">
+                    <h4 class="options-title">Opciones de combinación</h4>
+                    <div class="option-group">
+                        <label class="option-label">
+                            <input type="radio" name="numeracion" value="continua" checked>
+                            <span>Numeración continua</span>
+                            <small>Los asientos se renumeran secuencialmente (1, 2, 3...)</small>
+                        </label>
+                        <label class="option-label">
+                            <input type="radio" name="numeracion" value="original">
+                            <span>Mantener numeración original</span>
+                            <small>Conserva los números de asiento de cada archivo</small>
+                        </label>
+                    </div>
+                    <div class="option-group">
+                        <label class="option-label">
+                            <input type="checkbox" id="orderByDate" checked>
+                            <span>Ordenar por fecha</span>
+                            <small>Ordena todos los asientos cronológicamente antes de combinar</small>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Botón para combinar -->
+                <div id="combineSection" class="combine-section hidden">
+                    <button id="btnCombine" class="btn-success flex-1">
+                        🔗 Combinar archivos
+                    </button>
+                </div>
+            </div>
+
+            <!-- Paso 2: Vista previa y descarga -->
+            <div id="step2" class="step hidden">
+                <h3 class="step-title">✅ Archivos combinados</h3>
+                <p class="step-subtitle" id="finalStats"></p>
+
+                <div class="preview-container">
+                    <div class="preview-header">
+                        <h4>Vista Previa (primeras 50 líneas)</h4>
+                    </div>
+                    <div class="preview-table-container">
+                        <table class="preview-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Nº</th>
+                                    <th>Cuenta</th>
+                                    <th class="text-right">Debe</th>
+                                    <th class="text-right">Haber</th>
+                                    <th>Leyenda</th>
+                                    <th>Archivo origen</th>
+                                </tr>
+                            </thead>
+                            <tbody id="previewTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="btn-group mt-4">
+                    <button id="btnBackToFiles" class="btn-secondary">← Volver</button>
+                    <button id="btnDownloadExcel" class="btn-success flex-1">
+                        ⬇️ Descargar Excel Combinado
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
