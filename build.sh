@@ -20,8 +20,8 @@ cat > supabase-config.js << EOF
  * CONFIGURACIÓN DE SUPABASE
  * Herramientas Contables - Claude Tools
  *
- * Este archivo es generado automáticamente durante el build de Netlify
- * Las credenciales provienen de las variables de entorno configuradas en Netlify
+ * Este archivo es generado automáticamente durante el build (Netlify/Vercel)
+ * Las credenciales provienen de las variables de entorno configuradas en la plataforma
  */
 
 // =====================================================
