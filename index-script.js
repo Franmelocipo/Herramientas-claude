@@ -171,32 +171,13 @@ async function syncWithSupabase() {
 
         console.log('🔄 Sincronizando con Supabase...');
 
-        // Obtener conteos desde Supabase
-        const [clientsCount, taxCount] = await Promise.all([
-            getSupabaseClientsCount(),
-            getSupabaseTaxDatabaseCount()
-        ]);
+        // Obtener conteo de impuestos desde Supabase
+        const taxCount = await getSupabaseTaxDatabaseCount();
 
-        console.log(`✅ Supabase: ${clientsCount} clientes, ${taxCount} registros de impuestos`);
+        console.log(`✅ Supabase: ${taxCount} registros de impuestos`);
         updateCounts();
     } catch (error) {
         console.error('Error sincronizando con Supabase:', error);
-    }
-}
-
-// Obtener cantidad de clientes desde Supabase
-async function getSupabaseClientsCount() {
-    try {
-        console.log('🔢 [getSupabaseClientsCount] Obteniendo conteo de clientes...');
-
-        const clientes = await obtenerClientes();
-        const count = clientes.length;
-
-        console.log(`✅ [getSupabaseClientsCount] Total: ${count || 0} clientes`);
-        return count || 0;
-    } catch (error) {
-        console.error('❌ [getSupabaseClientsCount] Error general:', error);
-        return 0;
     }
 }
 
@@ -222,12 +203,7 @@ async function updateCounts() {
     if (supabase) {
         // Si Supabase está disponible, usar datos de la nube
         try {
-            const [clientsCount, taxCount] = await Promise.all([
-                getSupabaseClientsCount(),
-                getSupabaseTaxDatabaseCount()
-            ]);
-
-            document.getElementById('clientCount').textContent = clientsCount;
+            const taxCount = await getSupabaseTaxDatabaseCount();
             document.getElementById('taxCount').textContent = taxCount;
         } catch (error) {
             console.error('Error actualizando contadores desde Supabase:', error);
@@ -241,12 +217,7 @@ async function updateCounts() {
 }
 
 async function updateCountsFromLocalStorage() {
-    // Obtener clientes desde localStorage via obtenerClientes()
-    const clientes = await obtenerClientes();
-    const clientCount = clientes.length;
     const taxCount = TaxManager.getAllTaxes().length;
-
-    document.getElementById('clientCount').textContent = clientCount;
     document.getElementById('taxCount').textContent = taxCount;
 }
 
