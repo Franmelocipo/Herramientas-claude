@@ -200,25 +200,13 @@ async function getSupabaseTaxDatabaseCount() {
 // ACTUALIZAR CONTADORES
 // ============================================
 async function updateCounts() {
-    if (supabase) {
-        // Si Supabase está disponible, usar datos de la nube
-        try {
-            const taxCount = await getSupabaseTaxDatabaseCount();
-            document.getElementById('taxCount').textContent = taxCount;
-        } catch (error) {
-            console.error('Error actualizando contadores desde Supabase:', error);
-            // Fallback a localStorage
-            await updateCountsFromLocalStorage();
-        }
-    } else {
-        // Usar localStorage como fallback
-        await updateCountsFromLocalStorage();
-    }
+    // Los contadores de impuestos ya no se muestran en el UI
+    // Esta función se mantiene por compatibilidad
 }
 
 async function updateCountsFromLocalStorage() {
-    const taxCount = TaxManager.getAllTaxes().length;
-    document.getElementById('taxCount').textContent = taxCount;
+    // Los contadores de impuestos ya no se muestran en el UI
+    // Esta función se mantiene por compatibilidad
 }
 
 // ============================================

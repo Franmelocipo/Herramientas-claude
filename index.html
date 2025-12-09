@@ -24,11 +24,19 @@
                     <span>👥</span>
                     <span>Clientes</span>
                 </button>
-                <button id="btnTaxes" class="data-btn">
-                    <span>📊</span>
-                    <span>Impuestos</span>
-                    <span class="data-count" id="taxCount">0</span>
-                </button>
+                <div class="data-dropdown">
+                    <button id="btnTablas" class="data-btn">
+                        <span>📋</span>
+                        <span>Tablas</span>
+                        <span class="dropdown-arrow">▼</span>
+                    </button>
+                    <div class="dropdown-menu" id="tablasDropdown">
+                        <button class="dropdown-item" id="btnTaxes">
+                            <span>📊</span>
+                            <span>Impuestos, conceptos y Subconceptos ARCA</span>
+                        </button>
+                    </div>
+                </div>
                 <button id="btnStorage" class="data-btn">
                     <span>💾</span>
                     <span>Almacenamiento</span>
