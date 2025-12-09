@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Segmentador de Asientos</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="../../css/buttons.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="nav-bar">
+        <a href="../../index.html" class="nav-btn" title="Volver al inicio">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-text">Inicio</span>
+        </a>
+        <a href="../../index.html" class="nav-btn" title="Menú principal">
+            <span class="nav-icon">←</span>
+            <span class="nav-text">Volver</span>
+        </a>
+    </div>
+    <div class="container">
+        <div class="card">
+            <!-- Header -->
+            <div class="header">
+                <div class="header-left">
+                    <div class="icon-title">✂️</div>
+                    <div>
+                        <h1>Segmentador de Asientos</h1>
+                        <p class="subtitle">Filtra y segmenta asientos contables por tipo y fecha para importación en Tango</p>
+                    </div>
+                </div>
+                <div class="header-buttons">
+                    <button id="btnReset" class="btn-secondary hidden">Nueva segmentación</button>
+                </div>
+            </div>
+
+            <!-- Info Box -->
+            <div class="info-box">
+                <p><strong>📌 Instrucciones:</strong> Carga el archivo Excel generado por el Combinador de Asientos. La herramienta detectará automáticamente los tipos de asientos según sus descripciones y te permitirá filtrar por tipo y mes para exportar archivos más pequeños.</p>
+            </div>
+
+            <!-- Paso 1: Carga de archivo -->
+            <div id="step1" class="step">
+                <h3 class="step-title">Cargar archivo de asientos</h3>
+
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-content">
+                        <div class="upload-icon">📤</div>
+                        <h3>Arrastra el archivo aquí o haz clic para seleccionar</h3>
+                        <p class="upload-type">Formato aceptado: <strong>.xlsx, .xls</strong></p>
+                        <input type="file" id="fileInput" accept=".xlsx,.xls" class="file-input hidden">
+                        <button id="btnSelectFile" class="btn-primary">Seleccionar archivo Excel</button>
+                    </div>
+                </div>
+
+                <!-- Info del archivo cargado -->
+                <div id="fileInfoContainer" class="file-info-container hidden">
+                    <div class="file-info-card">
+                        <div class="file-icon">📄</div>
+                        <div class="file-details">
+                            <span class="file-name" id="fileName"></span>
+                            <span class="file-stats" id="fileStats"></span>
+                        </div>
+                        <button id="btnRemoveFile" class="btn-icon btn-remove" title="Eliminar archivo">✕</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paso 2: Filtros y selección -->
+            <div id="step2" class="step hidden">
+                <h3 class="step-title">Filtrar asientos</h3>
+
+                <!-- Resumen de datos cargados -->
+                <div class="summary-box" id="summaryBox">
+                    <div class="summary-item">
+                        <span class="summary-value" id="totalAsientos">0</span>
+                        <span class="summary-label">Asientos totales</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-value" id="totalLineas">0</span>
+                        <span class="summary-label">Líneas</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-value" id="totalGrupos">0</span>
+                        <span class="summary-label">Tipos detectados</span>
+                    </div>
+                </div>
+
+                <!-- Filtros -->
+                <div class="filters-container">
+                    <div class="filter-section">
+                        <h4 class="filter-title">📋 Tipo de asiento</h4>
+                        <p class="filter-description">Selecciona el tipo de asiento que deseas exportar</p>
+                        <div id="groupsList" class="groups-list"></div>
+                    </div>
+
+                    <div class="filter-section">
+                        <h4 class="filter-title">📅 Período</h4>
+                        <p class="filter-description">Filtra por mes y año</p>
+                        <div class="date-filters">
+                            <div class="filter-group">
+                                <label for="filterMonth">Mes:</label>
+                                <select id="filterMonth" class="filter-select">
+                                    <option value="">Todos los meses</option>
+                                    <option value="1">Enero</option>
+                                    <option value="2">Febrero</option>
+                                    <option value="3">Marzo</option>
+                                    <option value="4">Abril</option>
+                                    <option value="5">Mayo</option>
+                                    <option value="6">Junio</option>
+                                    <option value="7">Julio</option>
+                                    <option value="8">Agosto</option>
+                                    <option value="9">Septiembre</option>
+                                    <option value="10">Octubre</option>
+                                    <option value="11">Noviembre</option>
+                                    <option value="12">Diciembre</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="filterYear">Año:</label>
+                                <select id="filterYear" class="filter-select">
+                                    <option value="">Todos los años</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resultado del filtro -->
+                <div id="filterResult" class="filter-result hidden">
+                    <div class="filter-result-icon">📊</div>
+                    <div class="filter-result-text">
+                        <span id="filteredCount">0</span> asientos (<span id="filteredLines">0</span> líneas) coinciden con los filtros
+                    </div>
+                </div>
+
+                <div class="btn-group mt-4">
+                    <button id="btnBackToUpload" class="btn-secondary">← Cargar otro archivo</button>
+                    <button id="btnPreview" class="btn-success flex-1" disabled>
+                        Ver vista previa →
+                    </button>
+                </div>
+            </div>
+
+            <!-- Paso 3: Vista previa y descarga -->
+            <div id="step3" class="step hidden">
+                <h3 class="step-title">✅ Asientos filtrados</h3>
+                <p class="step-subtitle" id="finalStats"></p>
+
+                <!-- Nombre del archivo -->
+                <div class="filename-section">
+                    <label for="outputFilename" class="filename-label">Nombre del archivo:</label>
+                    <div class="filename-input-container">
+                        <span class="filename-prefix">Template</span>
+                        <input type="text" id="outputFilename" class="filename-input" placeholder="ventas enero 2025">
+                        <span class="filename-extension">.xlsx</span>
+                    </div>
+                    <small class="filename-hint">El nombre siempre comenzará con "Template"</small>
+                </div>
+
+                <div class="preview-container">
+                    <div class="preview-header">
+                        <h4>Vista Previa (primeras 50 líneas)</h4>
+                    </div>
+                    <div class="preview-table-container">
+                        <table class="preview-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Nº</th>
+                                    <th>Cuenta</th>
+                                    <th class="text-right">Debe</th>
+                                    <th class="text-right">Haber</th>
+                                    <th>Leyenda</th>
+                                </tr>
+                            </thead>
+                            <tbody id="previewTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="btn-group mt-4">
+                    <button id="btnBackToFilters" class="btn-secondary">← Modificar filtros</button>
+                    <button id="btnDownloadExcel" class="btn-success flex-1">
+                        ⬇️ Descargar Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
