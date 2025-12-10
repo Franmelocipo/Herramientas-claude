@@ -54,6 +54,27 @@
                         <!-- Las opciones se cargarán desde Supabase -->
                     </select>
                     <p id="clientePlanInfo" class="cliente-plan-info hidden"></p>
+
+                    <!-- Importación de plan de cuentas del cliente -->
+                    <div id="importarPlanContainer" class="importar-plan-container hidden">
+                        <div class="importar-plan-header">
+                            <span class="importar-plan-icon">📋</span>
+                            <div>
+                                <strong>Plan de Cuentas del Cliente</strong>
+                                <p class="importar-plan-desc">Importe el plan de cuentas para hacer el mapeo con el sistema</p>
+                            </div>
+                        </div>
+                        <div class="importar-plan-actions">
+                            <input type="file" id="planClienteInput" accept=".xlsx,.xls" class="hidden">
+                            <button id="btnImportarPlan" class="btn-secondary btn-importar-plan">
+                                📥 Importar Plan del Cliente
+                            </button>
+                            <button id="btnDescargarPlantillaPlan" class="btn-text" title="Descargar plantilla">
+                                📄 Plantilla
+                            </button>
+                        </div>
+                        <div id="planClienteInfo" class="plan-cliente-info hidden"></div>
+                    </div>
                 </div>
 
                 <h3 class="step-title">Tipo de archivo origen</h3>

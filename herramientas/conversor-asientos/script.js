@@ -250,6 +250,8 @@ async function cargarClientesEnSelector() {
                 }
                 deshabilitarOpciones();
                 ocultarInfoPlan();
+                mostrarImportarPlanContainer(false);
+                ocultarInfoPlanCliente();
             }
         });
 
@@ -368,6 +370,10 @@ async function cargarPlanCuentasCliente(clienteId) {
 
         habilitarOpciones();
 
+        // Mostrar contenedor de importación del plan del cliente y cargar si existe
+        mostrarImportarPlanContainer(true);
+        cargarPlanCuentasClienteGuardado(clienteId);
+
     } catch (error) {
         console.error('❌ Error cargando plan de cuentas:', error);
         console.error('Detalles del error:', {
@@ -483,7 +489,14 @@ function initializeElements() {
         finalStats: document.getElementById('finalStats'),
         previewTableBody: document.getElementById('previewTableBody'),
         btnBackToAssignment: document.getElementById('btnBackToAssignment'),
-        btnDownloadExcel: document.getElementById('btnDownloadExcel')
+        btnDownloadExcel: document.getElementById('btnDownloadExcel'),
+
+        // Importación de plan de cuentas del cliente
+        importarPlanContainer: document.getElementById('importarPlanContainer'),
+        planClienteInput: document.getElementById('planClienteInput'),
+        btnImportarPlan: document.getElementById('btnImportarPlan'),
+        btnDescargarPlantillaPlan: document.getElementById('btnDescargarPlantillaPlan'),
+        planClienteInfo: document.getElementById('planClienteInfo')
     };
 
     // Log de elementos no encontrados para debugging
@@ -587,6 +600,21 @@ function attachEventListeners() {
             closeAllDropdowns();
         }
     });
+
+    // Importación de plan de cuentas del cliente
+    if (elements.btnImportarPlan) {
+        elements.btnImportarPlan.addEventListener('click', () => {
+            if (elements.planClienteInput) {
+                elements.planClienteInput.click();
+            }
+        });
+    }
+    if (elements.planClienteInput) {
+        elements.planClienteInput.addEventListener('change', handleImportarPlanCliente);
+    }
+    if (elements.btnDescargarPlantillaPlan) {
+        elements.btnDescargarPlantillaPlan.addEventListener('click', descargarPlantillaPlanCliente);
+    }
 }
 
 // ============================================
@@ -910,17 +938,129 @@ function selectSourceType(type) {
 }
 
 // ============================================
+// INDICADOR DE CARGA (LOADING)
+// ============================================
+function mostrarLoading(mensaje = 'Procesando archivo...') {
+    let overlay = document.getElementById('loadingOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'loadingOverlay';
+        overlay.innerHTML = `
+            <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">${mensaje}</div>
+                <div class="loading-progress">
+                    <div class="loading-progress-bar"></div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        // Agregar estilos si no existen
+        if (!document.getElementById('loading-styles')) {
+            const style = document.createElement('style');
+            style.id = 'loading-styles';
+            style.textContent = `
+                #loadingOverlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(255, 255, 255, 0.9);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 9999;
+                }
+                .loading-content {
+                    text-align: center;
+                    padding: 40px;
+                    background: white;
+                    border-radius: 12px;
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+                }
+                .loading-spinner {
+                    width: 50px;
+                    height: 50px;
+                    border: 4px solid #e0e0e0;
+                    border-top-color: #2196f3;
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                    margin: 0 auto 20px;
+                }
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+                .loading-text {
+                    font-size: 16px;
+                    color: #333;
+                    margin-bottom: 16px;
+                }
+                .loading-progress {
+                    width: 200px;
+                    height: 6px;
+                    background: #e0e0e0;
+                    border-radius: 3px;
+                    overflow: hidden;
+                    margin: 0 auto;
+                }
+                .loading-progress-bar {
+                    height: 100%;
+                    background: linear-gradient(90deg, #2196f3, #4caf50);
+                    animation: progress 1.5s ease-in-out infinite;
+                    width: 30%;
+                }
+                @keyframes progress {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(400%); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    } else {
+        overlay.querySelector('.loading-text').textContent = mensaje;
+        overlay.style.display = 'flex';
+    }
+}
+
+function ocultarLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
+function actualizarLoadingTexto(mensaje) {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        const textEl = overlay.querySelector('.loading-text');
+        if (textEl) {
+            textEl.textContent = mensaje;
+        }
+    }
+}
+
+// ============================================
 // CARGA DE ARCHIVO
 // ============================================
 async function handleFileUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
 
+    // Mostrar indicador de carga
+    mostrarLoading(`Procesando ${file.name}...`);
+
     try {
+        // Pequeño delay para que se muestre el loading antes de procesar
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        actualizarLoadingTexto('Leyendo archivo Excel...');
         const data = await file.arrayBuffer();
         const workbook = XLSX.read(data, { raw: true });
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
+        actualizarLoadingTexto('Parseando datos...');
         let jsonData;
 
         if (state.sourceType === 'compensaciones') {
@@ -933,6 +1073,7 @@ async function handleFileUpload(e) {
         }
 
         if (jsonData.length === 0) {
+            ocultarLoading();
             alert('El archivo está vacío');
             return;
         }
@@ -957,6 +1098,7 @@ async function handleFileUpload(e) {
                     errorMsg += `\n\n... y ${validationErrors.length - maxErrors} error(es) más.`;
                 }
                 errorMsg += '\n\nPor favor, corrija los errores y vuelva a cargar el archivo.';
+                ocultarLoading();
                 alert(errorMsg);
                 return;
             }
@@ -964,40 +1106,50 @@ async function handleFileUpload(e) {
 
         // Caso especial: SOS Contador tiene estructura jerárquica
         if (state.sourceType === 'soscontador') {
+            actualizarLoadingTexto('Procesando SOS Contador...');
             const parsedData = parseSOSContador(jsonData);
             if (parsedData.length === 0) {
+                ocultarLoading();
                 alert('No se encontraron asientos válidos en el archivo.\nVerifique que el archivo tenga el formato correcto de SOS Contador.');
                 return;
             }
             state.sourceData = parsedData;
             state.finalData = parsedData;
+            ocultarLoading();
             goToStep(3); // Saltar directo a descarga (no requiere asignación)
             return;
         }
 
         // Caso especial: Puente Web tiene estructura jerárquica (cabecera + movimientos)
         if (state.sourceType === 'puenteweb') {
+            actualizarLoadingTexto('Procesando Puente Web...');
             const parsedData = parsePuenteWeb(jsonData);
             if (parsedData.length === 0) {
+                ocultarLoading();
                 alert('No se encontraron movimientos válidos en el archivo.\nVerifique que el archivo tenga el formato correcto de Puente Web.');
                 return;
             }
+            actualizarLoadingTexto('Extrayendo cuentas únicas...');
             state.sourceData = parsedData;
             // Extraer cuentas únicas del archivo
             state.cuentasUnicasPW = extraerCuentasUnicasPW(parsedData);
             // Cargar mapeo guardado si existe
             state.mapeoCuentasPW = obtenerMapeoCuentasPW(clienteSeleccionadoId);
             // Agrupar por número de asiento
+            actualizarLoadingTexto('Agrupando asientos...');
             groupSimilarEntries(parsedData);
+            ocultarLoading();
             goToStep(2);
             return;
         }
 
         state.sourceData = rows;
         groupSimilarEntries(rows);
+        ocultarLoading();
         goToStep(2);
 
     } catch (error) {
+        ocultarLoading();
         alert('Error al leer el archivo: ' + error.message);
     }
 }
@@ -1697,6 +1849,283 @@ function aplicarDepuracionPW() {
 function generarAsientosPWFinal() {
     // Llamar a la función original de generación
     generateFinalExcel();
+}
+
+// ============================================
+// IMPORTACIÓN DE PLAN DE CUENTAS DEL CLIENTE
+// ============================================
+
+/**
+ * Muestra u oculta el contenedor de importación del plan de cuentas
+ * Solo se muestra cuando se selecciona Puente Web
+ */
+function mostrarImportarPlanContainer(mostrar) {
+    if (elements.importarPlanContainer) {
+        if (mostrar) {
+            elements.importarPlanContainer.classList.remove('hidden');
+        } else {
+            elements.importarPlanContainer.classList.add('hidden');
+        }
+    }
+}
+
+/**
+ * Maneja la importación del archivo Excel con el plan de cuentas del cliente
+ */
+async function handleImportarPlanCliente(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    mostrarLoading(`Importando ${file.name}...`);
+
+    try {
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        actualizarLoadingTexto('Leyendo archivo...');
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { raw: true });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+
+        actualizarLoadingTexto('Procesando plan de cuentas...');
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
+
+        if (jsonData.length < 2) {
+            ocultarLoading();
+            mostrarInfoPlanCliente('El archivo está vacío o no tiene datos', 'error');
+            return;
+        }
+
+        // Parsear el plan de cuentas del cliente
+        const headers = jsonData[0];
+        const cuentas = [];
+
+        // Buscar columnas (tolerante a variaciones)
+        const findCol = (names) => {
+            for (const name of names) {
+                const idx = headers.findIndex(h =>
+                    h && String(h).trim().toLowerCase() === name.toLowerCase()
+                );
+                if (idx !== -1) return idx;
+            }
+            return -1;
+        };
+
+        const colCodigo = findCol(['codigo', 'cod', 'código', 'cod_cuenta', 'codigo_cuenta']);
+        const colNombre = findCol(['cuenta', 'nombre', 'descripcion', 'descripción', 'nombre_cuenta']);
+
+        if (colCodigo === -1 || colNombre === -1) {
+            ocultarLoading();
+            mostrarInfoPlanCliente(
+                'No se encontraron las columnas requeridas (CODIGO, CUENTA).\n' +
+                'Asegúrese de que el archivo tenga las columnas correctas.',
+                'error'
+            );
+            return;
+        }
+
+        // Procesar filas
+        for (let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            const codigo = row[colCodigo] ? String(row[colCodigo]).trim() : '';
+            const nombre = row[colNombre] ? String(row[colNombre]).trim() : '';
+
+            if (codigo && nombre) {
+                cuentas.push({
+                    codigo: codigo,
+                    nombre: nombre
+                });
+            }
+        }
+
+        if (cuentas.length === 0) {
+            ocultarLoading();
+            mostrarInfoPlanCliente('No se encontraron cuentas válidas en el archivo', 'error');
+            return;
+        }
+
+        // Guardar el plan de cuentas del cliente en el state
+        state.planCuentasCliente = cuentas;
+
+        // Guardar en localStorage para persistencia
+        guardarPlanCuentasCliente(clienteSeleccionadoId, cuentas);
+
+        ocultarLoading();
+        mostrarInfoPlanCliente(
+            `✅ Plan importado correctamente: ${cuentas.length} cuentas`,
+            'success',
+            cuentas
+        );
+
+        console.log(`Plan de cuentas del cliente importado: ${cuentas.length} cuentas`);
+
+        // Limpiar input
+        e.target.value = '';
+
+    } catch (error) {
+        ocultarLoading();
+        mostrarInfoPlanCliente('Error al leer el archivo: ' + error.message, 'error');
+        console.error('Error importando plan de cuentas:', error);
+    }
+}
+
+/**
+ * Muestra información sobre el plan de cuentas del cliente importado
+ */
+function mostrarInfoPlanCliente(mensaje, tipo, cuentas = null) {
+    if (!elements.planClienteInfo) return;
+
+    let html = '';
+
+    if (tipo === 'success' && cuentas) {
+        // Calcular estadísticas
+        const ejemplos = cuentas.slice(0, 5);
+
+        html = `
+            <div style="color: #2e7d32;">
+                <strong>${mensaje}</strong>
+            </div>
+            <div class="plan-cliente-stats">
+                <div class="plan-cliente-stat">
+                    <strong>${cuentas.length}</strong>
+                    Cuentas totales
+                </div>
+            </div>
+            <div style="margin-top: 12px;">
+                <strong style="font-size: 12px; color: #666;">Ejemplos:</strong>
+                <div style="font-size: 12px; color: #333; margin-top: 4px;">
+                    ${ejemplos.map(c => `<div>• ${c.codigo} - ${c.nombre}</div>`).join('')}
+                    ${cuentas.length > 5 ? `<div style="color: #999;">...y ${cuentas.length - 5} más</div>` : ''}
+                </div>
+            </div>
+            <button onclick="limpiarPlanCuentasCliente()" class="btn-text" style="margin-top: 12px; color: #f44336;">
+                🗑️ Limpiar plan importado
+            </button>
+        `;
+    } else if (tipo === 'error') {
+        html = `<div style="color: #c62828;">${mensaje}</div>`;
+    } else {
+        html = `<div>${mensaje}</div>`;
+    }
+
+    elements.planClienteInfo.innerHTML = html;
+    elements.planClienteInfo.className = `plan-cliente-info ${tipo}`;
+    elements.planClienteInfo.classList.remove('hidden');
+}
+
+/**
+ * Oculta la info del plan de cuentas del cliente
+ */
+function ocultarInfoPlanCliente() {
+    if (elements.planClienteInfo) {
+        elements.planClienteInfo.classList.add('hidden');
+    }
+}
+
+/**
+ * Guarda el plan de cuentas del cliente en localStorage
+ */
+function guardarPlanCuentasCliente(clienteId, cuentas) {
+    try {
+        const key = `plan_cliente_${clienteId}`;
+        localStorage.setItem(key, JSON.stringify(cuentas));
+        console.log(`Plan de cuentas del cliente guardado: ${cuentas.length} cuentas`);
+    } catch (e) {
+        console.error('Error guardando plan de cuentas del cliente:', e);
+    }
+}
+
+/**
+ * Obtiene el plan de cuentas del cliente desde localStorage
+ */
+function obtenerPlanCuentasCliente(clienteId) {
+    try {
+        const key = `plan_cliente_${clienteId}`;
+        const stored = localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+        console.error('Error leyendo plan de cuentas del cliente:', e);
+        return null;
+    }
+}
+
+/**
+ * Limpia el plan de cuentas del cliente
+ */
+function limpiarPlanCuentasCliente() {
+    if (confirm('¿Está seguro de eliminar el plan de cuentas importado?')) {
+        try {
+            const key = `plan_cliente_${clienteSeleccionadoId}`;
+            localStorage.removeItem(key);
+            state.planCuentasCliente = null;
+            ocultarInfoPlanCliente();
+            console.log('Plan de cuentas del cliente eliminado');
+        } catch (e) {
+            console.error('Error limpiando plan de cuentas del cliente:', e);
+        }
+    }
+}
+
+/**
+ * Carga el plan de cuentas del cliente si existe
+ */
+function cargarPlanCuentasClienteGuardado(clienteId) {
+    const planGuardado = obtenerPlanCuentasCliente(clienteId);
+    if (planGuardado && planGuardado.length > 0) {
+        state.planCuentasCliente = planGuardado;
+        mostrarInfoPlanCliente(
+            `✅ Plan cargado: ${planGuardado.length} cuentas`,
+            'success',
+            planGuardado
+        );
+    } else {
+        state.planCuentasCliente = null;
+        ocultarInfoPlanCliente();
+    }
+}
+
+/**
+ * Descarga la plantilla de ejemplo para el plan de cuentas del cliente
+ */
+function descargarPlantillaPlanCliente() {
+    const wb = XLSX.utils.book_new();
+
+    const datos = [
+        ['CODIGO', 'CUENTA'],
+        ['1.1.1.01.01', 'Caja'],
+        ['1.1.1.02.01', 'Banco Nación'],
+        ['1.1.1.02.02', 'Banco Galicia'],
+        ['1.1.3.01.01', 'Deudores por Ventas'],
+        ['2.1.1.01.01', 'Proveedores'],
+        ['2.1.5.01.01', 'IVA Débito Fiscal'],
+        ['4.1.1.01.01', 'Ventas'],
+        ['5.1.1.01.01', 'Costo de Mercaderías Vendidas']
+    ];
+
+    const instrucciones = [
+        ['PLANTILLA PLAN DE CUENTAS DEL CLIENTE'],
+        [''],
+        ['Esta plantilla permite importar el plan de cuentas de su cliente'],
+        ['para hacer el mapeo entre sus cuentas y las del sistema.'],
+        [''],
+        ['COLUMNAS REQUERIDAS:'],
+        ['- CODIGO: Código de la cuenta (puede usar puntos o guiones)'],
+        ['- CUENTA: Nombre o descripción de la cuenta'],
+        [''],
+        ['IMPORTANTE:'],
+        ['- La primera fila debe contener los encabezados'],
+        ['- Cada fila siguiente es una cuenta del plan'],
+        ['- El código debe ser único para cada cuenta']
+    ];
+
+    const wsDatos = XLSX.utils.aoa_to_sheet(datos);
+    wsDatos['!cols'] = [{ wch: 20 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, wsDatos, 'Plan de Cuentas');
+
+    const wsInstrucciones = XLSX.utils.aoa_to_sheet(instrucciones);
+    wsInstrucciones['!cols'] = [{ wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, wsInstrucciones, 'Instrucciones');
+
+    XLSX.writeFile(wb, 'plantilla_plan_cuentas_cliente.xlsx');
 }
 
 // ============================================
