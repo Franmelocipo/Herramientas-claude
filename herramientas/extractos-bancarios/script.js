@@ -148,7 +148,8 @@ const banksBancarios = [
             { id: 'macro-extracto', name: 'Extracto Bancario', description: 'Detalle de Movimiento - columnas DEBITOS y CREDITOS separadas' }
         ]
     },
-    { id: 'nacion', name: 'Banco Nación', disabled: true }
+    { id: 'nacion', name: 'Banco Nación', disabled: true },
+    { id: 'lapampa', name: 'Banco de La Pampa' }
 ];
 
 const banksInversiones = [
@@ -419,6 +420,8 @@ async function handleConvert() {
             await processMacroPDF(state.file, state.selectedSubOption);
         } else if (state.selectedBank === 'galicia-inversiones') {
             await processGaliciaInversionesPDF(state.file);
+        } else if (state.selectedBank === 'lapampa') {
+            await processLaPampaPDF(state.file);
         }
     } catch (err) {
         console.error('Error procesando PDF:', err);
@@ -2151,6 +2154,625 @@ async function processGaliciaInversionesPDF(pdfFile) {
         renderPreview();
 
     } catch (err) {
+        throw err;
+    }
+}
+
+// ============================================
+// BANCO DE LA PAMPA - Parser y Procesador
+// ============================================
+
+// Mapeo de conceptos a secciones de detalle
+const LAPAMPA_CONCEPTO_SECCION = {
+    'DEBITO DIRECTO': 'DEBITOS_AUTOMATICOS',
+    'TC. DEB. AUT.': 'DEBITOS_AUTOMATICOS',
+    'E-BANKING TRF.': 'TRANSFERENCIAS_EMITIDAS',
+    'E-BANKING TRF SUELDO': 'TRANSFERENCIAS_EMITIDAS',
+    'TRF.POR CAJ.AUT./HB': 'TRANSFERENCIAS_RECIBIDAS',
+    'CR.DEBIN': 'TRANSFERENCIAS_RECIBIDAS',
+    'DATANET': 'TRANSFERENCIAS_RECIBIDAS'
+};
+
+// Conceptos que NO tienen detalle adicional
+const LAPAMPA_SIN_DETALLE = [
+    'COMER FISERV-VISA',
+    'COMER FS-MC/MA/MD',
+    'COMER CABAL',
+    'IMP. I.B SIRCREB',
+    'IMP.DEB/CRED P/CRED.',
+    'IMP.DEB/CRED P/DEB.',
+    'COM.TRANSF.EMIT.HB',
+    'COM.X REC. TRANSF.HB',
+    'IMP. LEY 25413',
+    'IMP. SELLOS',
+    'COM. MANTENIMIENTO',
+    'PERCEP. IIBB',
+    'RET.IMP.GANANCIAS'
+];
+
+// Parsear extracto La Pampa con posiciones
+function parseLaPampaWithPositions(linesWithPositions) {
+    const movements = [];
+    const detallesDebitosAuto = [];
+    const detallesTransfEmitidas = [];
+    const detallesTransfRecibidas = [];
+
+    let currentSection = 'MOVIMIENTOS';
+    let inMovimientosSection = false;
+    let foundSaldoFinal = false;
+
+    // Detectar posiciones de columnas del encabezado de movimientos
+    let fechaColumnX = null;
+    let conceptoColumnX = null;
+    let comprobanteColumnX = null;
+    let debitoColumnX = null;
+    let creditoColumnX = null;
+    let saldoColumnX = null;
+
+    // Regex para detectar fecha DD/MM/AA o DD/MM/AAAA
+    const dateRegex = /^(\d{2}\/\d{2}\/\d{2,4})\b/;
+    // Regex para importes argentinos (punto como separador de miles)
+    const amountRegex = /^-?\d{1,3}(?:\.\d{3})*(?:,\d{2})?$/;
+
+    console.log('='.repeat(80));
+    console.log('PROCESANDO EXTRACTO BANCO DE LA PAMPA');
+    console.log('='.repeat(80));
+
+    // Primera pasada: detectar secciones y columnas
+    for (let i = 0; i < linesWithPositions.length; i++) {
+        const lineData = linesWithPositions[i];
+        const text = lineData.text.trim();
+
+        // Detectar encabezado de columnas de movimientos
+        if (text.includes('Fecha') && text.includes('Concepto') && text.includes('Comprob')) {
+            console.log('Encabezado de movimientos encontrado:', text);
+            inMovimientosSection = true;
+
+            // Detectar posiciones de columnas
+            for (const item of lineData.items) {
+                const itemText = item.text.trim().toLowerCase();
+                if (itemText === 'fecha') fechaColumnX = item.x;
+                else if (itemText === 'concepto') conceptoColumnX = item.x;
+                else if (itemText.includes('comprob')) comprobanteColumnX = item.x;
+                else if (itemText.includes('débito') || itemText.includes('debito')) debitoColumnX = item.x;
+                else if (itemText.includes('crédito') || itemText.includes('credito')) creditoColumnX = item.x;
+                else if (itemText === 'saldos' || itemText === 'saldo') saldoColumnX = item.x;
+            }
+            console.log('Columnas detectadas - Fecha:', fechaColumnX, 'Concepto:', conceptoColumnX,
+                        'Comprob:', comprobanteColumnX, 'Débito:', debitoColumnX,
+                        'Crédito:', creditoColumnX, 'Saldo:', saldoColumnX);
+            continue;
+        }
+
+        // Detectar saldo final (marca el fin de la sección de movimientos)
+        if (/Saldo\s+final/i.test(text) || /SALDO\s+FINAL/i.test(text)) {
+            console.log('Saldo final encontrado - fin de movimientos principales');
+            foundSaldoFinal = true;
+            currentSection = 'POST_MOVIMIENTOS';
+            continue;
+        }
+
+        // Detectar secciones de detalle
+        if (/DEBITOS\s+AUTOMATICOS/i.test(text)) {
+            currentSection = 'DEBITOS_AUTOMATICOS';
+            console.log('Sección DEBITOS AUTOMATICOS detectada');
+            continue;
+        }
+        if (/TRANSFERENCIAS\s+EMITIDAS/i.test(text)) {
+            currentSection = 'TRANSFERENCIAS_EMITIDAS';
+            console.log('Sección TRANSFERENCIAS EMITIDAS detectada');
+            continue;
+        }
+        if (/TRANSFERENCIAS\s+RECIBIDAS/i.test(text)) {
+            currentSection = 'TRANSFERENCIAS_RECIBIDAS';
+            console.log('Sección TRANSFERENCIAS RECIBIDAS detectada');
+            continue;
+        }
+    }
+
+    // Si no detectamos columnas, usar valores por defecto
+    if (!debitoColumnX || !creditoColumnX) {
+        fechaColumnX = fechaColumnX || 30;
+        conceptoColumnX = conceptoColumnX || 80;
+        comprobanteColumnX = comprobanteColumnX || 280;
+        debitoColumnX = debitoColumnX || 350;
+        creditoColumnX = creditoColumnX || 430;
+        saldoColumnX = saldoColumnX || 510;
+        console.log('Usando posiciones de columnas por defecto');
+    }
+
+    // Calcular punto medio para clasificar débito/crédito
+    const midPoint = (debitoColumnX + creditoColumnX) / 2;
+
+    // Segunda pasada: parsear datos
+    currentSection = 'MOVIMIENTOS';
+    let currentMovement = null;
+
+    for (let i = 0; i < linesWithPositions.length; i++) {
+        const lineData = linesWithPositions[i];
+        const text = lineData.text.trim();
+
+        // Ignorar líneas vacías o de encabezado
+        if (!text ||
+            /^(Fecha|Fec\.Mov|Concepto|Comprob|D[eé]bito|Cr[eé]dito|Saldos?)$/i.test(text) ||
+            /Detalle de la Transacci[oó]n/i.test(text) ||
+            /Importe/i.test(text) ||
+            /Banco de La Pampa/i.test(text) ||
+            /P[aá]gina\s+\d+/i.test(text) ||
+            /^CUIT:/i.test(text)) {
+            continue;
+        }
+
+        // Actualizar sección según marcadores
+        if (/Saldo\s+final/i.test(text)) {
+            currentSection = 'POST_MOVIMIENTOS';
+            if (currentMovement) {
+                movements.push(currentMovement);
+                currentMovement = null;
+            }
+            continue;
+        }
+        if (/DEBITOS\s+AUTOMATICOS/i.test(text)) {
+            currentSection = 'DEBITOS_AUTOMATICOS';
+            continue;
+        }
+        if (/TRANSFERENCIAS\s+EMITIDAS/i.test(text)) {
+            currentSection = 'TRANSFERENCIAS_EMITIDAS';
+            continue;
+        }
+        if (/TRANSFERENCIAS\s+RECIBIDAS/i.test(text)) {
+            currentSection = 'TRANSFERENCIAS_RECIBIDAS';
+            continue;
+        }
+
+        // Procesar según sección actual
+        if (currentSection === 'MOVIMIENTOS') {
+            // Verificar si la línea empieza con fecha
+            const dateMatch = text.match(dateRegex);
+
+            if (dateMatch) {
+                // Guardar movimiento anterior si existe
+                if (currentMovement) {
+                    movements.push(currentMovement);
+                }
+
+                // Extraer fecha y convertir formato
+                let fecha = dateMatch[1];
+                if (fecha.length === 8) { // DD/MM/YY
+                    const parts = fecha.split('/');
+                    const year = parseInt(parts[2]);
+                    const fullYear = year < 50 ? `20${parts[2]}` : `19${parts[2]}`;
+                    fecha = `${parts[0]}/${parts[1]}/${fullYear}`;
+                }
+
+                // Buscar importes con sus posiciones
+                const amountsWithPositions = [];
+                for (const item of lineData.items) {
+                    const cleanText = item.text.trim().replace(/\./g, '');
+                    // Verificar si es un importe
+                    if (/^\d{1,3}(?:\d{3})*(?:,\d{2})?$/.test(item.text.trim().replace(/\./g, '').replace(',', '')) ||
+                        /^\d+,\d{2}$/.test(item.text.trim()) ||
+                        /^\d{1,3}(?:\.\d{3})*,\d{2}$/.test(item.text.trim())) {
+                        amountsWithPositions.push({
+                            value: item.text.trim(),
+                            x: item.x
+                        });
+                    }
+                }
+
+                // Ordenar por posición X
+                amountsWithPositions.sort((a, b) => a.x - b.x);
+
+                // Extraer comprobante - buscar número después del concepto
+                let comprobante = '';
+                let concepto = '';
+
+                // Buscar el concepto en la línea (entre fecha y números)
+                const textAfterDate = text.replace(dateRegex, '').trim();
+                const conceptoMatch = textAfterDate.match(/^([A-Z][A-Z\s.\-\/]+?)(?:\s+\d|$)/i);
+                if (conceptoMatch) {
+                    concepto = conceptoMatch[1].trim();
+                }
+
+                // Buscar número de comprobante (secuencia de dígitos)
+                const comprobMatch = textAfterDate.match(/(\d{6,})/);
+                if (comprobMatch) {
+                    comprobante = comprobMatch[1];
+                }
+
+                // Si no encontramos concepto, usar texto sin fecha ni números
+                if (!concepto) {
+                    concepto = textAfterDate
+                        .replace(/\d{1,3}(?:\.\d{3})*,\d{2}/g, '')
+                        .replace(/\d{6,}/g, '')
+                        .trim();
+                }
+
+                // Clasificar importes
+                let debito = '0';
+                let credito = '0';
+                let saldo = '0';
+
+                if (amountsWithPositions.length >= 1) {
+                    // El último siempre es saldo
+                    saldo = amountsWithPositions[amountsWithPositions.length - 1].value;
+                }
+
+                if (amountsWithPositions.length >= 2) {
+                    // El penúltimo es el movimiento
+                    const movAmount = amountsWithPositions[amountsWithPositions.length - 2];
+
+                    if (movAmount.x < midPoint) {
+                        debito = movAmount.value;
+                    } else {
+                        credito = movAmount.value;
+                    }
+                }
+
+                // Si hay 3+ importes, revisar
+                if (amountsWithPositions.length >= 3) {
+                    const first = amountsWithPositions[0];
+                    const second = amountsWithPositions[1];
+
+                    // Primer importe podría ser débito si no es el comprobante
+                    if (first.x >= debitoColumnX - 50 && first.x < midPoint) {
+                        debito = first.value;
+                    }
+                    if (second.x >= midPoint && second.x < saldoColumnX - 30) {
+                        credito = second.value;
+                    }
+                }
+
+                currentMovement = {
+                    fecha: fecha,
+                    descripcion: concepto,
+                    origen: comprobante,
+                    debito: debito,
+                    credito: credito,
+                    saldo: saldo,
+                    detalle: null
+                };
+
+            } else if (currentMovement) {
+                // Continuación de descripción
+                if (!/^(Fecha|Concepto|Comprob|Total|Saldo)/i.test(text)) {
+                    currentMovement.descripcion += ' ' + text;
+                }
+            }
+
+        } else if (currentSection === 'DEBITOS_AUTOMATICOS') {
+            // Parsear línea de débito automático
+            // Formato: DD/MM/AA EMPRESA REFERENCIA (TIPO) COMPROBANTE IMPORTE
+            const detMatch = text.match(/^(\d{2}\/\d{2}\/\d{2})\s+(.+?)\s+(\d{9,})\s+([\d.,]+)$/);
+            if (detMatch) {
+                const detalle = {
+                    fecha: detMatch[1],
+                    descripcionCompleta: detMatch[2].trim(),
+                    comprobante: detMatch[3],
+                    importe: detMatch[4],
+                    tipo: 'DEBITO_AUTOMATICO'
+                };
+
+                // Extraer empresa, referencia y categoría
+                const descMatch = detalle.descripcionCompleta.match(/^(.+?)\s+(\d+)\s*(?:\(([^)]+)\))?$/);
+                if (descMatch) {
+                    detalle.empresa = descMatch[1].trim();
+                    detalle.referencia = descMatch[2];
+                    detalle.categoria = descMatch[3] || null;
+                } else {
+                    // Intentar otro patrón
+                    const altMatch = detalle.descripcionCompleta.match(/^(.+?)\s*(?:\(([^)]+)\))?\s*$/);
+                    if (altMatch) {
+                        detalle.empresa = altMatch[1].trim();
+                        detalle.categoria = altMatch[2] || null;
+                    } else {
+                        detalle.empresa = detalle.descripcionCompleta;
+                    }
+                }
+
+                detallesDebitosAuto.push(detalle);
+                console.log('Débito automático:', detalle);
+            }
+
+        } else if (currentSection === 'TRANSFERENCIAS_EMITIDAS') {
+            // Formato: DD/MM/AA CUIT-RAZON_SOCIAL COMPROBANTE IMPORTE
+            const detMatch = text.match(/^(\d{2}\/\d{2}\/\d{2})\s+(\d{11})-(.+?)\s+(\d{9,})\s+([\d.,]+)$/);
+            if (detMatch) {
+                const detalle = {
+                    fecha: detMatch[1],
+                    cuit: detMatch[2],
+                    razonSocial: detMatch[3].trim(),
+                    comprobante: detMatch[4],
+                    importe: detMatch[5],
+                    tipo: 'TRANSFERENCIA_EMITIDA'
+                };
+                detallesTransfEmitidas.push(detalle);
+                console.log('Transferencia emitida:', detalle);
+            }
+
+        } else if (currentSection === 'TRANSFERENCIAS_RECIBIDAS') {
+            // Formato: DD/MM/AA CUIT-NOMBRE REFERENCIA COMPROBANTE IMPORTE
+            const detMatch = text.match(/^(\d{2}\/\d{2}\/\d{2})\s+(\d{11})-(.+?)\s+([A-Z0-9\-]+)\s+(\d{9,})\s+([\d.,]+)$/);
+            if (detMatch) {
+                const detalle = {
+                    fecha: detMatch[1],
+                    cuit: detMatch[2],
+                    nombre: detMatch[3].trim(),
+                    referenciaPago: detMatch[4],
+                    comprobante: detMatch[5],
+                    importe: detMatch[6],
+                    tipo: 'TRANSFERENCIA_RECIBIDA'
+                };
+                detallesTransfRecibidas.push(detalle);
+                console.log('Transferencia recibida:', detalle);
+            } else {
+                // Patrón alternativo sin referencia explícita
+                const altMatch = text.match(/^(\d{2}\/\d{2}\/\d{2})\s+(\d{11})-(.+?)\s+(\d{9,})\s+([\d.,]+)$/);
+                if (altMatch) {
+                    const detalle = {
+                        fecha: altMatch[1],
+                        cuit: altMatch[2],
+                        nombre: altMatch[3].trim(),
+                        referenciaPago: '',
+                        comprobante: altMatch[4],
+                        importe: altMatch[5],
+                        tipo: 'TRANSFERENCIA_RECIBIDA'
+                    };
+                    detallesTransfRecibidas.push(detalle);
+                    console.log('Transferencia recibida (alt):', detalle);
+                }
+            }
+        }
+    }
+
+    // No olvidar el último movimiento
+    if (currentMovement) {
+        movements.push(currentMovement);
+    }
+
+    console.log('='.repeat(80));
+    console.log('Movimientos principales encontrados:', movements.length);
+    console.log('Detalles débitos automáticos:', detallesDebitosAuto.length);
+    console.log('Detalles transferencias emitidas:', detallesTransfEmitidas.length);
+    console.log('Detalles transferencias recibidas:', detallesTransfRecibidas.length);
+    console.log('='.repeat(80));
+
+    // Enriquecer movimientos con detalles
+    const enrichedMovements = enrichLaPampaMovements(
+        movements,
+        detallesDebitosAuto,
+        detallesTransfEmitidas,
+        detallesTransfRecibidas
+    );
+
+    return enrichedMovements;
+}
+
+// Enriquecer movimientos con información de las secciones de detalle
+function enrichLaPampaMovements(movements, debitosAuto, transfEmitidas, transfRecibidas) {
+    const parseArgNumber = (str) => {
+        if (!str || str === '0') return 0;
+        return parseFloat(str.replace(/\./g, '').replace(',', '.'));
+    };
+
+    const formatDate = (dateStr) => {
+        // Normalizar fecha a DD/MM/YY para comparación
+        if (dateStr.length === 10) { // DD/MM/YYYY
+            return dateStr.substring(0, 6) + dateStr.substring(8);
+        }
+        return dateStr;
+    };
+
+    let enrichedCount = 0;
+
+    for (const mov of movements) {
+        const movDate = formatDate(mov.fecha);
+        const movComprobante = mov.origen;
+        const movDebito = parseArgNumber(mov.debito);
+        const movCredito = parseArgNumber(mov.credito);
+        const movAmount = movDebito > 0 ? movDebito : movCredito;
+
+        // Determinar en qué sección buscar según el concepto
+        let seccionBusqueda = null;
+        const conceptoUpper = mov.descripcion.toUpperCase().trim();
+
+        // Buscar coincidencia en el mapeo de conceptos
+        for (const [concepto, seccion] of Object.entries(LAPAMPA_CONCEPTO_SECCION)) {
+            if (conceptoUpper.includes(concepto.toUpperCase())) {
+                seccionBusqueda = seccion;
+                break;
+            }
+        }
+
+        // Si el concepto está en la lista de sin detalle, saltar
+        if (LAPAMPA_SIN_DETALLE.some(c => conceptoUpper.includes(c.toUpperCase()))) {
+            continue;
+        }
+
+        // Si no hay sección determinada pero tiene comprobante, intentar buscar
+        if (!seccionBusqueda && movComprobante) {
+            // Intentar en todas las secciones
+            seccionBusqueda = 'TODAS';
+        }
+
+        if (!seccionBusqueda) continue;
+
+        let detalleEncontrado = null;
+
+        // Buscar en la sección correspondiente
+        if (seccionBusqueda === 'DEBITOS_AUTOMATICOS' || seccionBusqueda === 'TODAS') {
+            for (const det of debitosAuto) {
+                const detDate = formatDate(det.fecha);
+                const detAmount = parseArgNumber(det.importe);
+
+                // Correlacionar por comprobante e importe
+                if (det.comprobante === movComprobante && Math.abs(detAmount - movAmount) < 0.01) {
+                    detalleEncontrado = {
+                        tipo: 'DEBITO_AUTOMATICO',
+                        empresa: det.empresa,
+                        referencia: det.referencia || '',
+                        categoria: det.categoria || ''
+                    };
+                    break;
+                }
+                // Si no hay comprobante, usar fecha e importe
+                if (!movComprobante && detDate === movDate && Math.abs(detAmount - movAmount) < 0.01) {
+                    detalleEncontrado = {
+                        tipo: 'DEBITO_AUTOMATICO',
+                        empresa: det.empresa,
+                        referencia: det.referencia || '',
+                        categoria: det.categoria || ''
+                    };
+                    break;
+                }
+            }
+        }
+
+        if (!detalleEncontrado && (seccionBusqueda === 'TRANSFERENCIAS_EMITIDAS' || seccionBusqueda === 'TODAS')) {
+            for (const det of transfEmitidas) {
+                const detDate = formatDate(det.fecha);
+                const detAmount = parseArgNumber(det.importe);
+
+                if (det.comprobante === movComprobante && Math.abs(detAmount - movAmount) < 0.01) {
+                    detalleEncontrado = {
+                        tipo: 'TRANSFERENCIA_EMITIDA',
+                        cuit: det.cuit,
+                        razonSocial: det.razonSocial
+                    };
+                    break;
+                }
+                if (!movComprobante && detDate === movDate && Math.abs(detAmount - movAmount) < 0.01) {
+                    detalleEncontrado = {
+                        tipo: 'TRANSFERENCIA_EMITIDA',
+                        cuit: det.cuit,
+                        razonSocial: det.razonSocial
+                    };
+                    break;
+                }
+            }
+        }
+
+        if (!detalleEncontrado && (seccionBusqueda === 'TRANSFERENCIAS_RECIBIDAS' || seccionBusqueda === 'TODAS')) {
+            for (const det of transfRecibidas) {
+                const detDate = formatDate(det.fecha);
+                const detAmount = parseArgNumber(det.importe);
+
+                if (det.comprobante === movComprobante && Math.abs(detAmount - movAmount) < 0.01) {
+                    detalleEncontrado = {
+                        tipo: 'TRANSFERENCIA_RECIBIDA',
+                        cuit: det.cuit,
+                        nombre: det.nombre,
+                        referenciaPago: det.referenciaPago || ''
+                    };
+                    break;
+                }
+                if (!movComprobante && detDate === movDate && Math.abs(detAmount - movAmount) < 0.01) {
+                    detalleEncontrado = {
+                        tipo: 'TRANSFERENCIA_RECIBIDA',
+                        cuit: det.cuit,
+                        nombre: det.nombre,
+                        referenciaPago: det.referenciaPago || ''
+                    };
+                    break;
+                }
+            }
+        }
+
+        if (detalleEncontrado) {
+            mov.detalle = detalleEncontrado;
+            enrichedCount++;
+
+            // Enriquecer la descripción con información del detalle
+            let descripcionEnriquecida = mov.descripcion;
+            if (detalleEncontrado.tipo === 'DEBITO_AUTOMATICO') {
+                descripcionEnriquecida += ` - ${detalleEncontrado.empresa}`;
+                if (detalleEncontrado.categoria) {
+                    descripcionEnriquecida += ` (${detalleEncontrado.categoria})`;
+                }
+            } else if (detalleEncontrado.tipo === 'TRANSFERENCIA_EMITIDA') {
+                descripcionEnriquecida += ` - ${detalleEncontrado.cuit} ${detalleEncontrado.razonSocial}`;
+            } else if (detalleEncontrado.tipo === 'TRANSFERENCIA_RECIBIDA') {
+                descripcionEnriquecida += ` - ${detalleEncontrado.cuit} ${detalleEncontrado.nombre}`;
+                if (detalleEncontrado.referenciaPago) {
+                    descripcionEnriquecida += ` (${detalleEncontrado.referenciaPago})`;
+                }
+            }
+            mov.descripcion = descripcionEnriquecida;
+        }
+    }
+
+    console.log('Movimientos enriquecidos con detalle:', enrichedCount);
+
+    return movements;
+}
+
+// Procesar PDF de Banco de La Pampa
+async function processLaPampaPDF(pdfFile) {
+    try {
+        // Extraer texto con posiciones para determinar columnas
+        const linesWithPositions = await extractTextWithPositions(pdfFile);
+        console.log('Líneas extraídas del PDF La Pampa:', linesWithPositions.length);
+
+        // Verificar que es un extracto de Banco de La Pampa
+        const fullText = linesWithPositions.map(l => l.text).join(' ');
+        if (!fullText.toLowerCase().includes('banco de la pampa') &&
+            !fullText.toLowerCase().includes('pampa') &&
+            !fullText.toLowerCase().includes('bdlp')) {
+            console.warn('Advertencia: El documento podría no ser del Banco de La Pampa');
+        }
+
+        // Buscar saldo inicial/anterior
+        state.saldoInicial = null;
+        for (const lineData of linesWithPositions) {
+            // Buscar línea con "Saldo anterior" o "Saldo inicial"
+            if (/Saldo\s+(anterior|inicial)/i.test(lineData.text)) {
+                const amounts = lineData.text.match(/\d{1,3}(?:\.\d{3})*,\d{2}/g);
+                if (amounts && amounts.length >= 1) {
+                    state.saldoInicial = amounts[amounts.length - 1];
+                }
+                break;
+            }
+        }
+
+        console.log('Saldo inicial La Pampa encontrado:', state.saldoInicial);
+
+        // Parsear movimientos con enriquecimiento
+        const movements = parseLaPampaWithPositions(linesWithPositions);
+
+        if (movements.length === 0) {
+            showError('No se encontraron movimientos en el PDF. Verifique que el archivo sea del Banco de La Pampa con formato correcto.');
+            return;
+        }
+
+        console.log('Movimientos La Pampa procesados:', movements.length);
+        if (movements.length > 0) {
+            console.log('Primer movimiento:', movements[0]);
+            console.log('Último movimiento:', movements[movements.length - 1]);
+        }
+
+        // Limpiar descripciones
+        const cleanedMovements = movements.map(mov => {
+            mov.descripcion = mov.descripcion
+                .replace(/\s+/g, ' ')
+                .trim();
+            // Eliminar el campo detalle del objeto para el export (ya está en la descripción)
+            const { detalle, ...movSinDetalle } = mov;
+            return movSinDetalle;
+        });
+
+        state.extractedData = cleanedMovements;
+
+        // Contar movimientos enriquecidos
+        const enrichedCount = movements.filter(m => m.detalle).length;
+        const mensaje = enrichedCount > 0
+            ? `¡Archivo procesado exitosamente! ${movements.length} movimientos encontrados (${enrichedCount} con detalle enriquecido).`
+            : `¡Archivo procesado exitosamente! ${movements.length} movimientos encontrados.`;
+
+        showSuccess(mensaje);
+        renderPreview();
+
+    } catch (err) {
+        console.error('Error procesando PDF Banco de La Pampa:', err);
         throw err;
     }
 }
