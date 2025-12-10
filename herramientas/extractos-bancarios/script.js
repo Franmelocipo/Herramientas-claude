@@ -2245,6 +2245,25 @@ function esLineaBasuraBDLP(linea) {
     const texto = linea.trim();
     if (!texto) return true;
 
+    // Filtrar líneas con número de página + guiones (ej: "792 ____...", "793 _____...")
+    // Esto viene de la línea "Pág.: 792" del encabezado o números de página sueltos
+    if (/^\d{1,4}\s*[_\-]+/.test(texto)) {
+        console.log('Línea de basura filtrada (número de página + guiones):', texto.substring(0, 50));
+        return true;
+    }
+
+    // Filtrar líneas que son solo guiones bajos
+    if (/^[_\-]+$/.test(texto)) {
+        console.log('Línea de basura filtrada (solo guiones):', texto.substring(0, 50));
+        return true;
+    }
+
+    // Filtrar números de página sueltos (solo 1-4 dígitos sin más contenido válido)
+    if (/^\d{1,4}$/.test(texto)) {
+        console.log('Línea de basura filtrada (número de página suelto):', texto);
+        return true;
+    }
+
     // Si contiene cualquiera de las frases de basura, descartar
     const esBasura = LAPAMPA_FRASES_BASURA.some(frase => texto.includes(frase));
     if (esBasura) {
@@ -2400,10 +2419,23 @@ function parseLaPampaWithPositions(linesWithPositions) {
     // Segunda pasada: parsear datos
     currentSection = 'MOVIMIENTOS';
     let currentMovement = null;
+    // Flag para controlar que solo procesamos movimientos DESPUÉS de encontrar SALDO ANTERIOR
+    // Esto evita que las líneas del encabezado de cada página (como "Fecha emisión: 02/09/24")
+    // sean confundidas con movimientos
+    let puedeProcesamoMovimientos = false;
 
     for (let i = 0; i < linesWithPositions.length; i++) {
         const lineData = linesWithPositions[i];
         const text = lineData.text.trim();
+
+        // Detectar encabezado de columnas de nueva página - resetear flag de procesamiento
+        // Esto asegura que cada página solo procese movimientos DESPUÉS de su SALDO ANTERIOR
+        if (text.includes('Fecha') && text.includes('Concepto') && text.includes('Comprob') &&
+            (text.includes('Débito') || text.includes('Debito') || text.includes('Crédito') || text.includes('Credito'))) {
+            console.log('Nueva página detectada (encabezado de columnas) - esperando SALDO ANTERIOR');
+            puedeProcesamoMovimientos = false;
+            continue;
+        }
 
         // Ignorar líneas vacías o de encabezado/pie de página
         if (!text ||
@@ -2443,7 +2475,12 @@ function parseLaPampaWithPositions(linesWithPositions) {
         }
 
         // Capturar saldo inicial/anterior para la validación de coherencia
+        // IMPORTANTE: SALDO ANTERIOR marca el inicio de los movimientos reales de esta página
         if (/SALDO\s+ANTERIOR/i.test(text) || /Saldo\s+inicial/i.test(text)) {
+            // Activar el flag - a partir de aquí podemos procesar movimientos
+            puedeProcesamoMovimientos = true;
+            console.log('SALDO ANTERIOR encontrado - habilitando procesamiento de movimientos');
+
             // Extraer el saldo de esta línea
             const saldoMatches = text.match(/\d+(?:,\d+)?\.\d{2}/g);
             if (saldoMatches && saldoMatches.length > 0) {
@@ -2495,6 +2532,14 @@ function parseLaPampaWithPositions(linesWithPositions) {
 
         // Procesar según sección actual
         if (currentSection === 'MOVIMIENTOS') {
+            // CRÍTICO: Solo procesar movimientos DESPUÉS de encontrar SALDO ANTERIOR
+            // Esto evita que las líneas del encabezado de página (como "Fecha emisión: 02/09/24")
+            // sean procesadas como movimientos
+            if (!puedeProcesamoMovimientos) {
+                console.log('Línea ignorada (antes de SALDO ANTERIOR):', text.substring(0, 60));
+                continue;
+            }
+
             // Verificar si la línea empieza con fecha
             const dateMatch = text.match(dateRegex);
 
