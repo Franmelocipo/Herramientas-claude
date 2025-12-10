@@ -2190,6 +2190,69 @@ const LAPAMPA_SIN_DETALLE = [
     'RET.IMP.GANANCIAS'
 ];
 
+// Frases que indican líneas de basura (pie de página, encabezados de página, etc.)
+// Si la línea contiene CUALQUIERA de estas frases, se descarta
+const LAPAMPA_FRASES_BASURA = [
+    // Pie de página legal - Defensa del Consumidor
+    'Defensa del Consumidor',
+    '0800-333-7148',
+    '0800-222-9042',
+    '0800-999-2727',
+    'Se presumirá conformidad',
+    'formulación de un reclamo',
+    'garantía de hasta',
+    '$25.000.000',
+    'Ley 24.485',
+    'Decreto 540/95',
+    'Com. "A" 2337',
+    'Com."A" 2337',
+    'tasas superiores a la de referencia',
+    'adquiridos por endoso',
+    'personas vinculadas a la entidad',
+    'provincia de La Pampa',
+    'Ley 1949',
+    'Carta Orgánica del Banco',
+    'operaciones financieras pasivas',
+    'Banco de La Pampa S.E.M',
+    'garantiza los depósitos',
+    'depósitos en pesos y en moneda extranjera',
+    'prorrateará entre sus titulares',
+    'número de cuentas y/o depósitos',
+    'captados a tasas superiores',
+    'límites establecidos por el Banco Central',
+    // Encabezados de página que se pegan con el pie
+    'Cuenta Número:',
+    'INSPECTOR GATICA',
+    '8300-NEUQUEN',
+    'SUCURSAL CIPOLLETTI',
+    'I.V.A.:',
+    'R. I.',
+    'Fecha emisión:',
+    'Pág.:',
+    'Hoja N',
+    'Titulares:',
+    'Cantidad de Titulares',
+    // Identificadores de cuenta/cliente
+    'CEDISA SRL',
+    'Cuenta Corriente Bancaria',
+    'Moneda: INSPECTOR GATICA',
+    'Moneda: Pesos'
+];
+
+// Función para detectar si una línea es basura (pie de página, encabezado, etc.)
+function esLineaBasuraBDLP(linea) {
+    if (!linea || typeof linea !== 'string') return true;
+    const texto = linea.trim();
+    if (!texto) return true;
+
+    // Si contiene cualquiera de las frases de basura, descartar
+    const esBasura = LAPAMPA_FRASES_BASURA.some(frase => texto.includes(frase));
+    if (esBasura) {
+        console.log('Línea de basura filtrada:', texto.substring(0, 80) + (texto.length > 80 ? '...' : ''));
+    }
+    return esBasura;
+}
+
 // Parsear extracto La Pampa con posiciones
 function parseLaPampaWithPositions(linesWithPositions) {
     const movements = [];
@@ -2373,7 +2436,9 @@ function parseLaPampaWithPositions(linesWithPositions) {
             /www\./i.test(text) ||
             /https?:\/\//i.test(text) ||
             /^\d{4}-\d{4}$/i.test(text) ||        // Número de teléfono
-            /^Tel[eé]fono/i.test(text)) {
+            /^Tel[eé]fono/i.test(text) ||
+            // Filtrar pie de página legal y encabezados de página
+            esLineaBasuraBDLP(text)) {
             continue;
         }
 
