@@ -1,6 +1,7 @@
 -- =====================================================
 -- TABLA DE PLAN DE CUENTAS POR CLIENTE
 -- Schema para gestionar los planes de cuentas de cada cliente
+-- (El plan de cuentas del sistema contable que usa el cliente)
 -- =====================================================
 
 -- Crear tabla de plan de cuentas del cliente
@@ -19,7 +20,7 @@ CREATE INDEX IF NOT EXISTS idx_plan_cuentas_cliente_cliente ON plan_cuentas_clie
 CREATE INDEX IF NOT EXISTS idx_plan_cuentas_cliente_codigo ON plan_cuentas_cliente (codigo);
 
 -- Comentarios
-COMMENT ON TABLE plan_cuentas_cliente IS 'Plan de cuentas de cada cliente para mapeo de conversiones';
+COMMENT ON TABLE plan_cuentas_cliente IS 'Plan de cuentas del sistema contable que usa cada cliente (ej: Puente Web, Tango, etc.)';
 COMMENT ON COLUMN plan_cuentas_cliente.cliente_id IS 'ID del cliente al que pertenece esta cuenta';
 COMMENT ON COLUMN plan_cuentas_cliente.codigo IS 'Código de la cuenta en el sistema del cliente';
 COMMENT ON COLUMN plan_cuentas_cliente.nombre IS 'Nombre o descripción de la cuenta';
@@ -84,7 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_mapeo_cuentas_cliente ON mapeo_cuentas_cliente (c
 CREATE INDEX IF NOT EXISTS idx_mapeo_cuentas_codigo ON mapeo_cuentas_cliente (cliente_id, codigo_cliente);
 
 -- Comentarios
-COMMENT ON TABLE mapeo_cuentas_cliente IS 'Mapeo entre cuentas del cliente y cuentas del sistema contable';
+COMMENT ON TABLE mapeo_cuentas_cliente IS 'Mapeo entre cuentas del sistema del cliente y cuentas de nuestro sistema contable';
 COMMENT ON COLUMN mapeo_cuentas_cliente.codigo_cliente IS 'Código de cuenta en el sistema del cliente';
 COMMENT ON COLUMN mapeo_cuentas_cliente.codigo_sistema IS 'Código de cuenta en nuestro sistema';
 COMMENT ON COLUMN mapeo_cuentas_cliente.nombre_sistema IS 'Nombre de la cuenta en nuestro sistema';
@@ -117,3 +118,16 @@ CREATE POLICY "Permitir actualización pública de mapeo_cuentas_cliente" ON map
 DROP POLICY IF EXISTS "Permitir eliminación pública de mapeo_cuentas_cliente" ON mapeo_cuentas_cliente;
 CREATE POLICY "Permitir eliminación pública de mapeo_cuentas_cliente" ON mapeo_cuentas_cliente
     FOR DELETE USING (true);
+
+-- =====================================================
+-- NOTAS DE USO
+-- =====================================================
+--
+-- plan_cuentas_cliente: Almacena el plan de cuentas del sistema que usa el cliente
+--   - Se importa desde un Excel con columnas CODIGO y CUENTA
+--   - Se usa para hacer el mapeo cuando se convierten asientos desde el sistema del cliente
+--
+-- mapeo_cuentas_cliente: Almacena el mapeo entre cuentas del cliente y nuestras cuentas
+--   - codigo_cliente: Código de la cuenta en el sistema del cliente
+--   - codigo_sistema: Código de la cuenta en nuestro sistema (plan_cuentas)
+--   - Se crea automáticamente cuando el usuario vincula cuentas en el conversor
