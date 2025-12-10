@@ -2209,6 +2209,21 @@ function parseLaPampaWithPositions(linesWithPositions) {
     let creditoColumnX = null;
     let saldoColumnX = null;
 
+    // Variable para trackear el saldo del movimiento anterior (validación de coherencia)
+    let saldoAnterior = null;
+
+    // Conceptos que típicamente son DÉBITOS (salidas de dinero)
+    const CONCEPTOS_DEBITO = [
+        'IMP.', 'DEBITO', 'PAGO', 'E-BANKING TRF', 'COM.', 'CHQ.PAG', 'TC. DEB',
+        'DEBITO DIRECTO', 'PERCEP.', 'RET.', 'TRANSF.', 'IVA', 'GANANCIAS'
+    ];
+
+    // Conceptos que típicamente son CRÉDITOS (entradas de dinero)
+    const CONCEPTOS_CREDITO = [
+        'TRF.POR CAJ.AUT./HB', 'CR.DEBIN', 'DEP.', 'DATANET', 'COMER FISERV',
+        'COMER FS-MC', 'COMER CABAL', 'ACRED.', 'CREDITO', 'DEPOSITO'
+    ];
+
     // Regex para detectar fecha DD/MM/AA o DD/MM/AAAA
     const dateRegex = /^(\d{2}\/\d{2}\/\d{2,4})\b/;
 
@@ -2327,22 +2342,63 @@ function parseLaPampaWithPositions(linesWithPositions) {
         const lineData = linesWithPositions[i];
         const text = lineData.text.trim();
 
-        // Ignorar líneas vacías o de encabezado
+        // Ignorar líneas vacías o de encabezado/pie de página
         if (!text ||
+            // Encabezados de columnas
             /^(Fecha|Fec\.Mov|Concepto|Comprob|D[eé]bito|Cr[eé]dito|Saldos?)$/i.test(text) ||
             /Detalle de la Transacci[oó]n/i.test(text) ||
-            /Importe/i.test(text) ||
+            /^Importe$/i.test(text) ||
+            // Encabezados del banco
             /Banco de La Pampa/i.test(text) ||
+            // Paginación
             /P[aá]gina\s+\d+/i.test(text) ||
-            /^CUIT:/i.test(text)) {
+            /^\d+\s+de\s+\d+$/i.test(text) ||  // "1 de 5"
+            /^-\s*\d+\s*-$/i.test(text) ||      // "- 1 -"
+            // Datos de cuenta/cliente
+            /^CUIT:/i.test(text) ||
+            /^CBU:/i.test(text) ||
+            /^Alias:/i.test(text) ||
+            /^Nro\.?\s+Cuenta/i.test(text) ||
+            /^Tipo\s+Cuenta/i.test(text) ||
+            /^Sucursal:/i.test(text) ||
+            // Encabezados de secciones informativas
+            /^CUENTA\s+CORRIENTE/i.test(text) ||
+            /^RESUMEN\s+DE\s+CUENTA/i.test(text) ||
+            /^EXTRACTO\s+BANCARIO/i.test(text) ||
+            /^PER[IÍ]ODO:/i.test(text) ||
+            /^Fecha\s+de\s+emisi[oó]n/i.test(text) ||
+            // Líneas que solo contienen números de referencia sin fecha
+            /^\d{1,3}$/i.test(text) ||            // Solo número corto (probablemente página)
+            // Pie de página común
+            /www\./i.test(text) ||
+            /https?:\/\//i.test(text) ||
+            /^\d{4}-\d{4}$/i.test(text) ||        // Número de teléfono
+            /^Tel[eé]fono/i.test(text)) {
+            continue;
+        }
+
+        // Capturar saldo inicial/anterior para la validación de coherencia
+        if (/SALDO\s+ANTERIOR/i.test(text) || /Saldo\s+inicial/i.test(text)) {
+            // Extraer el saldo de esta línea
+            const saldoMatches = text.match(/\d+(?:,\d+)?\.\d{2}/g);
+            if (saldoMatches && saldoMatches.length > 0) {
+                const saldoRaw = saldoMatches[saldoMatches.length - 1];
+                // Parsear saldo BDLP (coma = millones, punto = decimal)
+                let saldoNumerico;
+                if (saldoRaw.includes(',')) {
+                    saldoNumerico = parseFloat(saldoRaw.replace(/,/g, ''));
+                } else {
+                    saldoNumerico = parseFloat(saldoRaw);
+                }
+                saldoAnterior = saldoNumerico;
+                console.log('Saldo inicial/anterior detectado:', saldoAnterior);
+            }
             continue;
         }
 
         // Filtrar líneas que NO son movimientos (encabezados, totales, saldos informativos)
         if (/Titulares:/i.test(text) ||
             /Cantidad de Titulares/i.test(text) ||
-            /SALDO\s+ANTERIOR/i.test(text) ||
-            /Saldo\s+inicial/i.test(text) ||
             /Resumen\s+Consolidado/i.test(text) ||
             /Total\s+D[eé]bitos/i.test(text) ||
             /Total\s+Cr[eé]ditos/i.test(text)) {
@@ -2440,44 +2496,153 @@ function parseLaPampaWithPositions(linesWithPositions) {
                         .trim();
                 }
 
-                // Clasificar importes y convertir a formato argentino
+                // Clasificar importes usando VALIDACIÓN POR CONTEXTO
+                // Regla clave del BDLP:
+                // - SALDOS: pueden tener coma de millones (68,428615.16) - formato XX,XXXXXX.XX
+                // - DÉBITOS/CRÉDITOS: NUNCA tienen coma (27165.83)
                 let debito = '0';
                 let credito = '0';
                 let saldo = '0';
+                let saldoNumerico = 0;
+                let importeNumerico = 0;
 
-                if (amountsWithPositions.length >= 1) {
-                    // El último siempre es saldo - parsear y convertir a formato argentino
-                    const saldoRaw = amountsWithPositions[amountsWithPositions.length - 1].value;
-                    const saldoNumerico = parseSaldoBDLP(saldoRaw);
+                // Separar importes en candidatos a saldo vs candidatos a movimiento
+                // Un importe CON coma es definitivamente saldo
+                // Un importe SIN coma puede ser movimiento O saldo (si es menor a 1 millón)
+                const candidatosSaldo = amountsWithPositions.filter(a => a.esSaldo);
+                const candidatosMovimiento = amountsWithPositions.filter(a => !a.esSaldo);
+
+                // Si hay un importe con coma, ESE es el saldo seguro
+                if (candidatosSaldo.length >= 1) {
+                    // Tomar el que esté más a la derecha (mayor X) como saldo
+                    const saldoCandidate = candidatosSaldo.reduce((max, curr) => curr.x > max.x ? curr : max);
+                    saldoNumerico = parseSaldoBDLP(saldoCandidate.value);
                     saldo = formatoArgentino(saldoNumerico);
+
+                    // Los candidatos a movimiento son los que NO son el saldo
+                    // Si no hay candidatos sin coma, buscar otro importe con coma que no sea el saldo
+                    if (candidatosMovimiento.length === 0 && candidatosSaldo.length > 1) {
+                        // Varios saldos detectados, el que NO es el saldo principal es el movimiento
+                        for (const c of candidatosSaldo) {
+                            if (c !== saldoCandidate) {
+                                candidatosMovimiento.push(c);
+                            }
+                        }
+                    }
+                } else if (amountsWithPositions.length >= 1) {
+                    // No hay importes con coma - el último debería ser el saldo
+                    // Pero podría ser que el movimiento grande (sin coma) se confunda con saldo
+                    // Usar posición X como fallback: el más a la derecha es saldo
+                    const saldoCandidate = amountsWithPositions.reduce((max, curr) => curr.x > max.x ? curr : max);
+                    saldoNumerico = parseSaldoBDLP(saldoCandidate.value);
+                    saldo = formatoArgentino(saldoNumerico);
+
+                    // El resto son candidatos a movimiento
+                    for (const a of amountsWithPositions) {
+                        if (a !== saldoCandidate) {
+                            candidatosMovimiento.push(a);
+                        }
+                    }
                 }
 
-                if (amountsWithPositions.length >= 2) {
-                    // El penúltimo es el movimiento (débito o crédito)
-                    const movAmount = amountsWithPositions[amountsWithPositions.length - 2];
-                    const importeNumerico = parseImporteBDLP(movAmount.value);
+                // Clasificar el movimiento (débito o crédito)
+                if (candidatosMovimiento.length >= 1) {
+                    // Tomar el candidato a movimiento (si hay varios, el de mayor importe)
+                    let movCandidate = candidatosMovimiento[0];
+                    if (candidatosMovimiento.length > 1) {
+                        movCandidate = candidatosMovimiento.reduce((max, curr) => {
+                            const maxVal = parseImporteBDLP(max.value);
+                            const currVal = parseImporteBDLP(curr.value);
+                            return currVal > maxVal ? curr : max;
+                        });
+                    }
+
+                    importeNumerico = parseImporteBDLP(movCandidate.value);
                     const importeFormateado = formatoArgentino(importeNumerico);
 
-                    if (movAmount.x < midPoint) {
+                    // Determinar si es débito o crédito usando posición X como hint
+                    // pero preferir la validación por concepto
+                    const esDebito = movCandidate.x < midPoint;
+                    if (esDebito) {
                         debito = importeFormateado;
                     } else {
                         credito = importeFormateado;
                     }
                 }
 
-                // Si hay 3+ importes, revisar (puede haber débito Y crédito en la misma línea)
-                if (amountsWithPositions.length >= 3) {
-                    const first = amountsWithPositions[0];
-                    const second = amountsWithPositions[1];
+                // Validación adicional: si hay 2+ candidatos a movimiento,
+                // pueden ser débito Y crédito en la misma línea (raro pero posible)
+                if (candidatosMovimiento.length >= 2) {
+                    // Ordenar por posición X
+                    candidatosMovimiento.sort((a, b) => a.x - b.x);
+                    const first = candidatosMovimiento[0];
+                    const second = candidatosMovimiento[1];
 
-                    // Primer importe podría ser débito si no es el comprobante
-                    if (first.x >= debitoColumnX - 50 && first.x < midPoint) {
-                        const importeNumerico = parseImporteBDLP(first.value);
-                        debito = formatoArgentino(importeNumerico);
+                    // El de la izquierda es débito, el de la derecha es crédito
+                    if (first.x < midPoint) {
+                        debito = formatoArgentino(parseImporteBDLP(first.value));
                     }
-                    if (second.x >= midPoint && second.x < saldoColumnX - 30) {
-                        const importeNumerico = parseImporteBDLP(second.value);
-                        credito = formatoArgentino(importeNumerico);
+                    if (second.x >= midPoint) {
+                        credito = formatoArgentino(parseImporteBDLP(second.value));
+                    }
+                }
+
+                // VALIDACIÓN DE COHERENCIA DE SALDOS
+                // Si tenemos saldo anterior, validar que: saldoActual = saldoAnterior - débito + crédito
+                // Si no cuadra, corregir la clasificación débito/crédito
+                const parseArgNumber = (str) => {
+                    if (!str || str === '0') return 0;
+                    return parseFloat(str.replace(/\./g, '').replace(',', '.'));
+                };
+
+                if (saldoAnterior !== null && saldoNumerico > 0 && importeNumerico > 0) {
+                    const debitoNum = parseArgNumber(debito);
+                    const creditoNum = parseArgNumber(credito);
+                    const saldoEsperadoDebito = saldoAnterior - importeNumerico;
+                    const saldoEsperadoCred = saldoAnterior + importeNumerico;
+
+                    // Verificar coherencia
+                    const tolerancia = 0.02; // Tolerancia de 2 centavos por redondeo
+                    const esCoherenteComoDebito = Math.abs(saldoEsperadoDebito - saldoNumerico) < tolerancia;
+                    const esCoherenteComoCredito = Math.abs(saldoEsperadoCred - saldoNumerico) < tolerancia;
+
+                    if (debitoNum > 0 && !esCoherenteComoDebito && esCoherenteComoCredito) {
+                        // Clasificado como débito pero debería ser crédito
+                        console.log(`CORRECCIÓN: ${concepto} - moviendo ${debito} de DÉBITO a CRÉDITO (saldo coherente)`);
+                        credito = debito;
+                        debito = '0';
+                    } else if (creditoNum > 0 && !esCoherenteComoCredito && esCoherenteComoDebito) {
+                        // Clasificado como crédito pero debería ser débito
+                        console.log(`CORRECCIÓN: ${concepto} - moviendo ${credito} de CRÉDITO a DÉBITO (saldo coherente)`);
+                        debito = credito;
+                        credito = '0';
+                    } else if (debitoNum === 0 && creditoNum === 0 && importeNumerico > 0) {
+                        // No se clasificó, usar coherencia de saldos
+                        const importeFormateado = formatoArgentino(importeNumerico);
+                        if (esCoherenteComoDebito) {
+                            console.log(`CLASIFICACIÓN por coherencia: ${concepto} = DÉBITO ${importeFormateado}`);
+                            debito = importeFormateado;
+                        } else if (esCoherenteComoCredito) {
+                            console.log(`CLASIFICACIÓN por coherencia: ${concepto} = CRÉDITO ${importeFormateado}`);
+                            credito = importeFormateado;
+                        }
+                    }
+                }
+
+                // FALLBACK: Si aún no se clasificó, usar el concepto
+                if (debito === '0' && credito === '0' && importeNumerico > 0) {
+                    const importeFormateado = formatoArgentino(importeNumerico);
+                    const conceptoUpper = concepto.toUpperCase();
+
+                    const esConceptoDebito = CONCEPTOS_DEBITO.some(c => conceptoUpper.includes(c.toUpperCase()));
+                    const esConceptoCredito = CONCEPTOS_CREDITO.some(c => conceptoUpper.includes(c.toUpperCase()));
+
+                    if (esConceptoDebito && !esConceptoCredito) {
+                        console.log(`CLASIFICACIÓN por concepto: ${concepto} = DÉBITO ${importeFormateado}`);
+                        debito = importeFormateado;
+                    } else if (esConceptoCredito && !esConceptoDebito) {
+                        console.log(`CLASIFICACIÓN por concepto: ${concepto} = CRÉDITO ${importeFormateado}`);
+                        credito = importeFormateado;
                     }
                 }
 
@@ -2490,6 +2655,11 @@ function parseLaPampaWithPositions(linesWithPositions) {
                     saldo: saldo,
                     detalle: null
                 };
+
+                // Actualizar saldo anterior para el próximo movimiento
+                if (saldoNumerico > 0) {
+                    saldoAnterior = saldoNumerico;
+                }
 
             } else if (currentMovement) {
                 // Continuación de descripción
