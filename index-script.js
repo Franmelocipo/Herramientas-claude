@@ -424,7 +424,7 @@ async function renderClientsList(searchTerm = '') {
                 <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
                     <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569;">Razón Social</th>
                     <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569;">CUIT</th>
-                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #475569; width: 300px;">Acciones</th>
+                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #475569; width: 400px;">Acciones</th>
                 </tr>
             </thead>
             <tbody>
@@ -436,7 +436,8 @@ async function renderClientsList(searchTerm = '') {
                             </td>
                             <td style="padding: 12px; color: #64748b;">${client.cuit || '-'}</td>
                             <td style="padding: 12px; text-align: center;">
-                                <button onclick="abrirPlanCuentas('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="background: #8b5cf6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#7c3aed'" onmouseout="this.style.background='#8b5cf6'">📊 Plan</button>
+                                <button onclick="abrirPlanCuentas('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="background: #8b5cf6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#7c3aed'" onmouseout="this.style.background='#8b5cf6'" title="Plan de cuentas del sistema">📊 Plan</button>
+                                <button onclick="abrirPlanCuentasCliente('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="background: #f59e0b; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#d97706'" onmouseout="this.style.background='#f59e0b'" title="Plan de cuentas del sistema del cliente">📋 Plan Cliente</button>
                                 <button onclick="editarCliente('${client.id}')" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">✏️ Editar</button>
                                 <button onclick="eliminarClienteUI('${client.id}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">🗑️ Eliminar</button>
                             </td>
@@ -1984,6 +1985,326 @@ async function eliminarPlanCompletoUI() {
         alert('Error al eliminar el plan de cuentas: ' + error.message);
     }
 }
+
+// ============================================
+// PLAN DE CUENTAS DEL CLIENTE (SISTEMA EXTERNO)
+// ============================================
+
+let currentClienteIdPlanCliente = null;
+let currentClienteNombrePlanCliente = '';
+
+/**
+ * Abre el modal de plan de cuentas del cliente
+ */
+async function abrirPlanCuentasCliente(clienteId, clienteNombre) {
+    currentClienteIdPlanCliente = clienteId;
+    currentClienteNombrePlanCliente = clienteNombre;
+
+    document.getElementById('planCuentasClienteNombreExt').textContent = clienteNombre;
+    document.getElementById('modalPlanCuentasCliente').classList.remove('hidden');
+
+    // Cargar plan de cuentas del cliente
+    await cargarPlanCuentasCliente(clienteId);
+}
+
+/**
+ * Cierra el modal de plan de cuentas del cliente
+ */
+function cerrarModalPlanCuentasCliente() {
+    document.getElementById('modalPlanCuentasCliente').classList.add('hidden');
+    currentClienteIdPlanCliente = null;
+    currentClienteNombrePlanCliente = '';
+}
+
+/**
+ * Carga el plan de cuentas del cliente desde Supabase
+ */
+async function cargarPlanCuentasCliente(clienteId) {
+    const listElement = document.getElementById('planCuentasClienteList');
+    const statsElement = document.getElementById('planCuentasClienteStats');
+
+    try {
+        listElement.innerHTML = '<div style="text-align: center; padding: 20px; color: #64748b;">Cargando plan de cuentas...</div>';
+
+        const { data, error } = await supabase
+            .from('plan_cuentas_cliente')
+            .select('*')
+            .eq('cliente_id', clienteId)
+            .order('codigo');
+
+        if (error) {
+            // Si la tabla no existe, mostrar mensaje informativo
+            if (error.code === '42P01') {
+                listElement.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #64748b;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📋</div>
+                        <p style="margin-bottom: 12px;">La tabla de plan de cuentas del cliente no existe.</p>
+                        <p style="font-size: 13px;">Ejecute el script SQL para crear las tablas necesarias.</p>
+                    </div>
+                `;
+                statsElement.textContent = '';
+                return;
+            }
+            throw error;
+        }
+
+        if (!data || data.length === 0) {
+            listElement.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #64748b;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">📋</div>
+                    <p style="margin-bottom: 12px;">Este cliente no tiene plan de cuentas cargado.</p>
+                    <p style="font-size: 13px;">Use el botón "Importar Plan del Cliente" para cargar el plan de cuentas de su sistema.</p>
+                </div>
+            `;
+            statsElement.textContent = '';
+            return;
+        }
+
+        // Mostrar estadísticas
+        statsElement.innerHTML = `<span style="color: #059669;">✓ ${data.length} cuentas cargadas</span>`;
+        statsElement.classList.add('show');
+
+        // Renderizar lista de cuentas
+        listElement.innerHTML = `
+            <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden;">
+                <thead>
+                    <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                        <th style="padding: 10px; text-align: left; font-weight: 600; color: #475569; font-size: 13px;">Código</th>
+                        <th style="padding: 10px; text-align: left; font-weight: 600; color: #475569; font-size: 13px;">Cuenta</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.map(cuenta => `
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 8px 10px; font-family: monospace; color: #0369a1; font-size: 13px;">${cuenta.codigo}</td>
+                            <td style="padding: 8px 10px; color: #1e293b; font-size: 13px;">${cuenta.nombre}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+
+    } catch (error) {
+        console.error('Error cargando plan de cuentas del cliente:', error);
+        listElement.innerHTML = `<div style="text-align: center; padding: 20px; color: #ef4444;">Error al cargar: ${error.message}</div>`;
+        statsElement.textContent = '';
+    }
+}
+
+/**
+ * Importa el plan de cuentas del cliente desde un archivo Excel
+ */
+async function importarPlanCuentasCliente(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!currentClienteIdPlanCliente) {
+        alert('Error: No hay cliente seleccionado');
+        return;
+    }
+
+    const progressDiv = document.getElementById('importProgressCliente');
+    const progressText = document.getElementById('progressTextCliente');
+    const progressDetail = document.getElementById('progressDetailCliente');
+    const progressBar = document.getElementById('progressBarCliente');
+
+    try {
+        progressDiv.style.display = 'block';
+        progressText.textContent = 'Leyendo archivo...';
+        progressDetail.textContent = file.name;
+        progressBar.style.width = '10%';
+
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { raw: true });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
+
+        progressBar.style.width = '30%';
+        progressText.textContent = 'Procesando datos...';
+
+        if (jsonData.length < 2) {
+            throw new Error('El archivo está vacío o no tiene datos');
+        }
+
+        // Buscar columnas
+        const headers = jsonData[0];
+        const findCol = (names) => {
+            for (const name of names) {
+                const idx = headers.findIndex(h =>
+                    h && String(h).trim().toLowerCase() === name.toLowerCase()
+                );
+                if (idx !== -1) return idx;
+            }
+            return -1;
+        };
+
+        const colCodigo = findCol(['codigo', 'cod', 'código', 'cod_cuenta', 'codigo_cuenta']);
+        const colNombre = findCol(['cuenta', 'nombre', 'descripcion', 'descripción', 'nombre_cuenta']);
+
+        if (colCodigo === -1 || colNombre === -1) {
+            throw new Error('No se encontraron las columnas requeridas (CODIGO, CUENTA)');
+        }
+
+        // Procesar filas
+        const cuentas = [];
+        for (let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            const codigo = row[colCodigo] ? String(row[colCodigo]).trim() : '';
+            const nombre = row[colNombre] ? String(row[colNombre]).trim() : '';
+
+            if (codigo && nombre) {
+                cuentas.push({
+                    cliente_id: currentClienteIdPlanCliente,
+                    codigo: codigo,
+                    nombre: nombre
+                });
+            }
+        }
+
+        if (cuentas.length === 0) {
+            throw new Error('No se encontraron cuentas válidas en el archivo');
+        }
+
+        progressBar.style.width = '50%';
+        progressText.textContent = 'Guardando en base de datos...';
+        progressDetail.textContent = `${cuentas.length} cuentas a importar`;
+
+        // Eliminar plan existente
+        await supabase
+            .from('plan_cuentas_cliente')
+            .delete()
+            .eq('cliente_id', currentClienteIdPlanCliente);
+
+        // Insertar nuevas cuentas en lotes de 100
+        const batchSize = 100;
+        for (let i = 0; i < cuentas.length; i += batchSize) {
+            const batch = cuentas.slice(i, i + batchSize);
+            const { error } = await supabase
+                .from('plan_cuentas_cliente')
+                .insert(batch);
+
+            if (error) throw error;
+
+            const progress = 50 + ((i + batchSize) / cuentas.length) * 45;
+            progressBar.style.width = `${Math.min(progress, 95)}%`;
+            progressDetail.textContent = `Guardadas ${Math.min(i + batchSize, cuentas.length)} de ${cuentas.length} cuentas`;
+        }
+
+        progressBar.style.width = '100%';
+        progressText.textContent = '¡Importación completada!';
+        progressDetail.textContent = `${cuentas.length} cuentas importadas correctamente`;
+
+        // Recargar lista
+        setTimeout(async () => {
+            progressDiv.style.display = 'none';
+            await cargarPlanCuentasCliente(currentClienteIdPlanCliente);
+        }, 1500);
+
+    } catch (error) {
+        console.error('Error importando plan de cuentas del cliente:', error);
+        progressDiv.style.display = 'none';
+        alert('Error al importar: ' + error.message);
+    }
+
+    event.target.value = '';
+}
+
+/**
+ * Elimina todo el plan de cuentas del cliente
+ */
+async function eliminarPlanCuentasCliente() {
+    if (!currentClienteIdPlanCliente) return;
+
+    const confirmacion = confirm(
+        `¿Está seguro de eliminar todo el plan de cuentas de "${currentClienteNombrePlanCliente}"?\n\n` +
+        'Esta acción no se puede deshacer.'
+    );
+
+    if (!confirmacion) return;
+
+    try {
+        // También eliminar mapeos asociados
+        await supabase
+            .from('mapeo_cuentas_cliente')
+            .delete()
+            .eq('cliente_id', currentClienteIdPlanCliente);
+
+        const { error } = await supabase
+            .from('plan_cuentas_cliente')
+            .delete()
+            .eq('cliente_id', currentClienteIdPlanCliente);
+
+        if (error) throw error;
+
+        alert('Plan de cuentas del cliente eliminado correctamente');
+        await cargarPlanCuentasCliente(currentClienteIdPlanCliente);
+
+    } catch (error) {
+        console.error('Error eliminando plan de cuentas del cliente:', error);
+        alert('Error al eliminar: ' + error.message);
+    }
+}
+
+/**
+ * Descarga la plantilla para plan de cuentas del cliente
+ */
+function descargarPlantillaPlanCliente() {
+    const wb = XLSX.utils.book_new();
+
+    const datos = [
+        ['CODIGO', 'CUENTA'],
+        ['1.1.01.001', 'Caja en Pesos'],
+        ['1.1.01.002', 'Banco Nación Cta. Cte.'],
+        ['1.1.02.001', 'Deudores por Ventas'],
+        ['2.1.01.001', 'Proveedores'],
+        ['3.1.01.001', 'Capital Social'],
+        ['4.1.01.001', 'Ventas'],
+        ['5.1.01.001', 'Costo de Mercaderías Vendidas']
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(datos);
+    ws['!cols'] = [{ wch: 15 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Plan de Cuentas');
+
+    XLSX.writeFile(wb, 'plantilla_plan_cuentas_cliente.xlsx');
+}
+
+// Event listeners para el modal de plan de cuentas del cliente
+document.addEventListener('DOMContentLoaded', function() {
+    // Cerrar modal
+    const btnClose = document.getElementById('btnClosePlanCuentasCliente');
+    if (btnClose) {
+        btnClose.addEventListener('click', cerrarModalPlanCuentasCliente);
+    }
+
+    // Importar plan
+    const importInput = document.getElementById('importPlanClienteFile');
+    if (importInput) {
+        importInput.addEventListener('change', importarPlanCuentasCliente);
+    }
+
+    // Descargar plantilla
+    const btnPlantilla = document.getElementById('btnDescargarPlantillaPlanCliente');
+    if (btnPlantilla) {
+        btnPlantilla.addEventListener('click', descargarPlantillaPlanCliente);
+    }
+
+    // Eliminar plan completo
+    const btnEliminar = document.getElementById('btnEliminarPlanClienteCompleto');
+    if (btnEliminar) {
+        btnEliminar.addEventListener('click', eliminarPlanCuentasCliente);
+    }
+
+    // Cerrar modal al hacer clic fuera
+    const modal = document.getElementById('modalPlanCuentasCliente');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                cerrarModalPlanCuentasCliente();
+            }
+        });
+    }
+});
 
 // ============================================
 // FUNCIONES GLOBALES PARA OTRAS HERRAMIENTAS

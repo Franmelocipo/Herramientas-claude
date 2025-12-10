@@ -13,8 +13,10 @@ const state = {
     expandedGroups: {},     // Rastrear qué grupos están expandidos
     selectedItems: {},      // Rastrear items seleccionados para reagrupación {groupIdx: {itemIdx: true/false}}
     selectedGroups: {},     // Rastrear grupos seleccionados para fusión {groupIdx: true/false}
-    planCuentas: [],        // Plan de cuentas del cliente seleccionado
-    mapeoImpuestos: {}      // Mapeo de códigos de impuesto a cuentas contables
+    planCuentas: [],        // Plan de cuentas del sistema (desde Supabase)
+    mapeoImpuestos: {},     // Mapeo de códigos de impuesto a cuentas contables
+    planCuentasCliente: null,  // Plan de cuentas del cliente (desde Supabase)
+    mapeoCuentasCliente: {}    // Mapeo de cuentas del cliente -> sistema (desde Supabase)
 };
 
 // ============================================
@@ -250,8 +252,7 @@ async function cargarClientesEnSelector() {
                 }
                 deshabilitarOpciones();
                 ocultarInfoPlan();
-                mostrarImportarPlanContainer(false);
-                ocultarInfoPlanCliente();
+                ocultarPlanCuentasClienteInfo();
             }
         });
 
@@ -370,9 +371,8 @@ async function cargarPlanCuentasCliente(clienteId) {
 
         habilitarOpciones();
 
-        // Mostrar contenedor de importación del plan del cliente y cargar si existe
-        mostrarImportarPlanContainer(true);
-        cargarPlanCuentasClienteGuardado(clienteId);
+        // Cargar y mostrar información del plan de cuentas del cliente desde Supabase
+        await cargarPlanCuentasClienteDesdeSupabase(clienteId);
 
     } catch (error) {
         console.error('❌ Error cargando plan de cuentas:', error);
@@ -491,12 +491,9 @@ function initializeElements() {
         btnBackToAssignment: document.getElementById('btnBackToAssignment'),
         btnDownloadExcel: document.getElementById('btnDownloadExcel'),
 
-        // Importación de plan de cuentas del cliente
-        importarPlanContainer: document.getElementById('importarPlanContainer'),
-        planClienteInput: document.getElementById('planClienteInput'),
-        btnImportarPlan: document.getElementById('btnImportarPlan'),
-        btnDescargarPlantillaPlan: document.getElementById('btnDescargarPlantillaPlan'),
-        planClienteInfo: document.getElementById('planClienteInfo')
+        // Información del plan de cuentas del cliente (desde Supabase)
+        planCuentasClienteContainer: document.getElementById('planCuentasClienteContainer'),
+        planCuentasClienteInfo: document.getElementById('planCuentasClienteInfo')
     };
 
     // Log de elementos no encontrados para debugging
@@ -601,20 +598,6 @@ function attachEventListeners() {
         }
     });
 
-    // Importación de plan de cuentas del cliente
-    if (elements.btnImportarPlan) {
-        elements.btnImportarPlan.addEventListener('click', () => {
-            if (elements.planClienteInput) {
-                elements.planClienteInput.click();
-            }
-        });
-    }
-    if (elements.planClienteInput) {
-        elements.planClienteInput.addEventListener('change', handleImportarPlanCliente);
-    }
-    if (elements.btnDescargarPlantillaPlan) {
-        elements.btnDescargarPlantillaPlan.addEventListener('click', descargarPlantillaPlanCliente);
-    }
 }
 
 // ============================================
@@ -1370,6 +1353,21 @@ function extraerCuentasUnicasPW(data) {
  * @returns {Object} Mapeo {codigoPW: {codigoSistema, nombreSistema}}
  */
 function obtenerMapeoCuentasPW(clienteId) {
+    // Primero verificar si hay mapeos desde Supabase
+    if (state.mapeoCuentasCliente && Object.keys(state.mapeoCuentasCliente).length > 0) {
+        // Convertir formato de Supabase al formato esperado por el código existente
+        const mapeoConvertido = {};
+        Object.entries(state.mapeoCuentasCliente).forEach(([codigoCliente, datos]) => {
+            mapeoConvertido[codigoCliente] = {
+                codigoSistema: datos.codigo,
+                nombreSistema: datos.nombre
+            };
+        });
+        console.log(`Usando mapeo desde Supabase: ${Object.keys(mapeoConvertido).length} cuentas`);
+        return mapeoConvertido;
+    }
+
+    // Fallback a localStorage
     try {
         const key = `puenteweb_mapeo_${clienteId}`;
         const stored = localStorage.getItem(key);
@@ -1381,17 +1379,51 @@ function obtenerMapeoCuentasPW(clienteId) {
 }
 
 /**
- * Guarda el mapeo de cuentas Puente Web en localStorage
+ * Guarda el mapeo de cuentas Puente Web en localStorage y Supabase
  * @param {string} clienteId - ID del cliente
  * @param {Object} mapeo - Mapeo a guardar
  */
 function guardarMapeoCuentasPW(clienteId, mapeo) {
+    // Guardar en localStorage como backup
     try {
         const key = `puenteweb_mapeo_${clienteId}`;
         localStorage.setItem(key, JSON.stringify(mapeo));
-        console.log(`Mapeo de cuentas PW guardado para cliente ${clienteId}`);
+        console.log(`Mapeo de cuentas PW guardado en localStorage para cliente ${clienteId}`);
     } catch (e) {
-        console.error('Error al guardar mapeo de cuentas PW:', e);
+        console.error('Error al guardar mapeo de cuentas PW en localStorage:', e);
+    }
+
+    // Guardar en Supabase (asíncrono)
+    guardarMapeosPWEnSupabase(clienteId, mapeo);
+}
+
+/**
+ * Guarda los mapeos de cuentas en Supabase
+ * @param {string} clienteId - ID del cliente
+ * @param {Object} mapeo - Mapeo {codigoPW: {codigoSistema, nombreSistema}}
+ */
+async function guardarMapeosPWEnSupabase(clienteId, mapeo) {
+    if (!supabase) return;
+
+    try {
+        // Convertir el mapeo a formato de Supabase y hacer upsert
+        for (const [codigoCliente, datos] of Object.entries(mapeo)) {
+            if (datos.codigoSistema) {
+                await supabase
+                    .from('mapeo_cuentas_cliente')
+                    .upsert({
+                        cliente_id: clienteId,
+                        codigo_cliente: codigoCliente,
+                        codigo_sistema: datos.codigoSistema,
+                        nombre_sistema: datos.nombreSistema || ''
+                    }, {
+                        onConflict: 'cliente_id,codigo_cliente'
+                    });
+            }
+        }
+        console.log(`Mapeo de cuentas guardado en Supabase para cliente ${clienteId}`);
+    } catch (e) {
+        console.error('Error al guardar mapeo en Supabase:', e);
     }
 }
 
@@ -1403,7 +1435,7 @@ function limpiarMapeoCuentasPW(clienteId) {
     try {
         const key = `puenteweb_mapeo_${clienteId}`;
         localStorage.removeItem(key);
-        console.log(`Mapeo de cuentas PW eliminado para cliente ${clienteId}`);
+        console.log(`Mapeo de cuentas PW eliminado de localStorage para cliente ${clienteId}`);
     } catch (e) {
         console.error('Error al limpiar mapeo de cuentas PW:', e);
     }
@@ -1852,280 +1884,155 @@ function generarAsientosPWFinal() {
 }
 
 // ============================================
-// IMPORTACIÓN DE PLAN DE CUENTAS DEL CLIENTE
+// PLAN DE CUENTAS DEL CLIENTE (DESDE SUPABASE)
 // ============================================
 
 /**
- * Muestra u oculta el contenedor de importación del plan de cuentas
- * Solo se muestra cuando se selecciona Puente Web
+ * Carga el plan de cuentas del cliente desde Supabase
+ * Este plan es el que se configuró en la Gestión de Clientes
  */
-function mostrarImportarPlanContainer(mostrar) {
-    if (elements.importarPlanContainer) {
-        if (mostrar) {
-            elements.importarPlanContainer.classList.remove('hidden');
-        } else {
-            elements.importarPlanContainer.classList.add('hidden');
+async function cargarPlanCuentasClienteDesdeSupabase(clienteId) {
+    const container = elements.planCuentasClienteContainer;
+    const info = elements.planCuentasClienteInfo;
+
+    if (!container || !info) return;
+
+    try {
+        // Cargar plan de cuentas del cliente desde la tabla plan_cuentas_cliente
+        const { data: planCliente, error } = await supabase
+            .from('plan_cuentas_cliente')
+            .select('codigo, nombre')
+            .eq('cliente_id', clienteId)
+            .order('codigo');
+
+        if (error) {
+            console.warn('Error cargando plan de cuentas del cliente:', error);
+            // No mostrar error si la tabla no existe aún
+            container.classList.add('hidden');
+            state.planCuentasCliente = null;
+            return;
         }
+
+        if (planCliente && planCliente.length > 0) {
+            // Cliente tiene plan de cuentas configurado
+            state.planCuentasCliente = planCliente;
+
+            info.innerHTML = `
+                <span class="plan-icon">📋</span>
+                <div class="plan-datos">
+                    <strong>Plan de cuentas del cliente cargado</strong>
+                    <span>${planCliente.length} cuentas disponibles para mapeo</span>
+                </div>
+            `;
+            info.className = 'plan-cuentas-cliente-info con-plan';
+            container.classList.remove('hidden');
+
+            console.log(`Plan de cuentas del cliente cargado: ${planCliente.length} cuentas`);
+
+            // También cargar los mapeos existentes
+            await cargarMapeosClienteDesdeSupabase(clienteId);
+
+        } else {
+            // Cliente no tiene plan de cuentas
+            state.planCuentasCliente = null;
+
+            info.innerHTML = `
+                <span class="plan-icon">⚠️</span>
+                <div>
+                    Este cliente no tiene plan de cuentas configurado.
+                    <a href="../servicios-outsourcing/panel-clientes.html" target="_blank">
+                        Configurar en Gestión de Clientes
+                    </a>
+                </div>
+            `;
+            info.className = 'plan-cuentas-cliente-info sin-plan';
+            container.classList.remove('hidden');
+        }
+
+    } catch (err) {
+        console.error('Error cargando plan del cliente:', err);
+        container.classList.add('hidden');
+        state.planCuentasCliente = null;
     }
 }
 
 /**
- * Maneja la importación del archivo Excel con el plan de cuentas del cliente
+ * Carga los mapeos de cuentas del cliente desde Supabase
  */
-async function handleImportarPlanCliente(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    mostrarLoading(`Importando ${file.name}...`);
-
+async function cargarMapeosClienteDesdeSupabase(clienteId) {
     try {
-        await new Promise(resolve => setTimeout(resolve, 50));
+        const { data: mapeos, error } = await supabase
+            .from('mapeo_cuentas_cliente')
+            .select('codigo_cliente, codigo_sistema, nombre_sistema')
+            .eq('cliente_id', clienteId);
 
-        actualizarLoadingTexto('Leyendo archivo...');
-        const data = await file.arrayBuffer();
-        const workbook = XLSX.read(data, { raw: true });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-
-        actualizarLoadingTexto('Procesando plan de cuentas...');
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
-
-        if (jsonData.length < 2) {
-            ocultarLoading();
-            mostrarInfoPlanCliente('El archivo está vacío o no tiene datos', 'error');
+        if (error) {
+            console.warn('Error cargando mapeos:', error);
+            state.mapeoCuentasCliente = {};
             return;
         }
 
-        // Parsear el plan de cuentas del cliente
-        const headers = jsonData[0];
-        const cuentas = [];
+        // Crear diccionario de mapeos: codigo_cliente -> {codigo_sistema, nombre_sistema}
+        state.mapeoCuentasCliente = {};
+        if (mapeos) {
+            mapeos.forEach(m => {
+                state.mapeoCuentasCliente[m.codigo_cliente] = {
+                    codigo: m.codigo_sistema,
+                    nombre: m.nombre_sistema
+                };
+            });
+        }
 
-        // Buscar columnas (tolerante a variaciones)
-        const findCol = (names) => {
-            for (const name of names) {
-                const idx = headers.findIndex(h =>
-                    h && String(h).trim().toLowerCase() === name.toLowerCase()
-                );
-                if (idx !== -1) return idx;
-            }
-            return -1;
+        console.log(`Mapeos de cuentas del cliente cargados: ${Object.keys(state.mapeoCuentasCliente).length}`);
+
+    } catch (err) {
+        console.error('Error cargando mapeos:', err);
+        state.mapeoCuentasCliente = {};
+    }
+}
+
+/**
+ * Guarda un mapeo de cuenta del cliente en Supabase
+ */
+async function guardarMapeoClienteEnSupabase(clienteId, codigoCliente, codigoSistema, nombreSistema) {
+    try {
+        const { error } = await supabase
+            .from('mapeo_cuentas_cliente')
+            .upsert({
+                cliente_id: clienteId,
+                codigo_cliente: codigoCliente,
+                codigo_sistema: codigoSistema,
+                nombre_sistema: nombreSistema
+            }, {
+                onConflict: 'cliente_id,codigo_cliente'
+            });
+
+        if (error) {
+            console.error('Error guardando mapeo:', error);
+            return false;
+        }
+
+        // Actualizar estado local
+        state.mapeoCuentasCliente[codigoCliente] = {
+            codigo: codigoSistema,
+            nombre: nombreSistema
         };
 
-        const colCodigo = findCol(['codigo', 'cod', 'código', 'cod_cuenta', 'codigo_cuenta']);
-        const colNombre = findCol(['cuenta', 'nombre', 'descripcion', 'descripción', 'nombre_cuenta']);
+        return true;
 
-        if (colCodigo === -1 || colNombre === -1) {
-            ocultarLoading();
-            mostrarInfoPlanCliente(
-                'No se encontraron las columnas requeridas (CODIGO, CUENTA).\n' +
-                'Asegúrese de que el archivo tenga las columnas correctas.',
-                'error'
-            );
-            return;
-        }
-
-        // Procesar filas
-        for (let i = 1; i < jsonData.length; i++) {
-            const row = jsonData[i];
-            const codigo = row[colCodigo] ? String(row[colCodigo]).trim() : '';
-            const nombre = row[colNombre] ? String(row[colNombre]).trim() : '';
-
-            if (codigo && nombre) {
-                cuentas.push({
-                    codigo: codigo,
-                    nombre: nombre
-                });
-            }
-        }
-
-        if (cuentas.length === 0) {
-            ocultarLoading();
-            mostrarInfoPlanCliente('No se encontraron cuentas válidas en el archivo', 'error');
-            return;
-        }
-
-        // Guardar el plan de cuentas del cliente en el state
-        state.planCuentasCliente = cuentas;
-
-        // Guardar en localStorage para persistencia
-        guardarPlanCuentasCliente(clienteSeleccionadoId, cuentas);
-
-        ocultarLoading();
-        mostrarInfoPlanCliente(
-            `✅ Plan importado correctamente: ${cuentas.length} cuentas`,
-            'success',
-            cuentas
-        );
-
-        console.log(`Plan de cuentas del cliente importado: ${cuentas.length} cuentas`);
-
-        // Limpiar input
-        e.target.value = '';
-
-    } catch (error) {
-        ocultarLoading();
-        mostrarInfoPlanCliente('Error al leer el archivo: ' + error.message, 'error');
-        console.error('Error importando plan de cuentas:', error);
+    } catch (err) {
+        console.error('Error guardando mapeo:', err);
+        return false;
     }
 }
 
 /**
- * Muestra información sobre el plan de cuentas del cliente importado
+ * Oculta el contenedor de información del plan de cuentas del cliente
  */
-function mostrarInfoPlanCliente(mensaje, tipo, cuentas = null) {
-    if (!elements.planClienteInfo) return;
-
-    let html = '';
-
-    if (tipo === 'success' && cuentas) {
-        // Calcular estadísticas
-        const ejemplos = cuentas.slice(0, 5);
-
-        html = `
-            <div style="color: #2e7d32;">
-                <strong>${mensaje}</strong>
-            </div>
-            <div class="plan-cliente-stats">
-                <div class="plan-cliente-stat">
-                    <strong>${cuentas.length}</strong>
-                    Cuentas totales
-                </div>
-            </div>
-            <div style="margin-top: 12px;">
-                <strong style="font-size: 12px; color: #666;">Ejemplos:</strong>
-                <div style="font-size: 12px; color: #333; margin-top: 4px;">
-                    ${ejemplos.map(c => `<div>• ${c.codigo} - ${c.nombre}</div>`).join('')}
-                    ${cuentas.length > 5 ? `<div style="color: #999;">...y ${cuentas.length - 5} más</div>` : ''}
-                </div>
-            </div>
-            <button onclick="limpiarPlanCuentasCliente()" class="btn-text" style="margin-top: 12px; color: #f44336;">
-                🗑️ Limpiar plan importado
-            </button>
-        `;
-    } else if (tipo === 'error') {
-        html = `<div style="color: #c62828;">${mensaje}</div>`;
-    } else {
-        html = `<div>${mensaje}</div>`;
+function ocultarPlanCuentasClienteInfo() {
+    if (elements.planCuentasClienteContainer) {
+        elements.planCuentasClienteContainer.classList.add('hidden');
     }
-
-    elements.planClienteInfo.innerHTML = html;
-    elements.planClienteInfo.className = `plan-cliente-info ${tipo}`;
-    elements.planClienteInfo.classList.remove('hidden');
-}
-
-/**
- * Oculta la info del plan de cuentas del cliente
- */
-function ocultarInfoPlanCliente() {
-    if (elements.planClienteInfo) {
-        elements.planClienteInfo.classList.add('hidden');
-    }
-}
-
-/**
- * Guarda el plan de cuentas del cliente en localStorage
- */
-function guardarPlanCuentasCliente(clienteId, cuentas) {
-    try {
-        const key = `plan_cliente_${clienteId}`;
-        localStorage.setItem(key, JSON.stringify(cuentas));
-        console.log(`Plan de cuentas del cliente guardado: ${cuentas.length} cuentas`);
-    } catch (e) {
-        console.error('Error guardando plan de cuentas del cliente:', e);
-    }
-}
-
-/**
- * Obtiene el plan de cuentas del cliente desde localStorage
- */
-function obtenerPlanCuentasCliente(clienteId) {
-    try {
-        const key = `plan_cliente_${clienteId}`;
-        const stored = localStorage.getItem(key);
-        return stored ? JSON.parse(stored) : null;
-    } catch (e) {
-        console.error('Error leyendo plan de cuentas del cliente:', e);
-        return null;
-    }
-}
-
-/**
- * Limpia el plan de cuentas del cliente
- */
-function limpiarPlanCuentasCliente() {
-    if (confirm('¿Está seguro de eliminar el plan de cuentas importado?')) {
-        try {
-            const key = `plan_cliente_${clienteSeleccionadoId}`;
-            localStorage.removeItem(key);
-            state.planCuentasCliente = null;
-            ocultarInfoPlanCliente();
-            console.log('Plan de cuentas del cliente eliminado');
-        } catch (e) {
-            console.error('Error limpiando plan de cuentas del cliente:', e);
-        }
-    }
-}
-
-/**
- * Carga el plan de cuentas del cliente si existe
- */
-function cargarPlanCuentasClienteGuardado(clienteId) {
-    const planGuardado = obtenerPlanCuentasCliente(clienteId);
-    if (planGuardado && planGuardado.length > 0) {
-        state.planCuentasCliente = planGuardado;
-        mostrarInfoPlanCliente(
-            `✅ Plan cargado: ${planGuardado.length} cuentas`,
-            'success',
-            planGuardado
-        );
-    } else {
-        state.planCuentasCliente = null;
-        ocultarInfoPlanCliente();
-    }
-}
-
-/**
- * Descarga la plantilla de ejemplo para el plan de cuentas del cliente
- */
-function descargarPlantillaPlanCliente() {
-    const wb = XLSX.utils.book_new();
-
-    const datos = [
-        ['CODIGO', 'CUENTA'],
-        ['1.1.1.01.01', 'Caja'],
-        ['1.1.1.02.01', 'Banco Nación'],
-        ['1.1.1.02.02', 'Banco Galicia'],
-        ['1.1.3.01.01', 'Deudores por Ventas'],
-        ['2.1.1.01.01', 'Proveedores'],
-        ['2.1.5.01.01', 'IVA Débito Fiscal'],
-        ['4.1.1.01.01', 'Ventas'],
-        ['5.1.1.01.01', 'Costo de Mercaderías Vendidas']
-    ];
-
-    const instrucciones = [
-        ['PLANTILLA PLAN DE CUENTAS DEL CLIENTE'],
-        [''],
-        ['Esta plantilla permite importar el plan de cuentas de su cliente'],
-        ['para hacer el mapeo entre sus cuentas y las del sistema.'],
-        [''],
-        ['COLUMNAS REQUERIDAS:'],
-        ['- CODIGO: Código de la cuenta (puede usar puntos o guiones)'],
-        ['- CUENTA: Nombre o descripción de la cuenta'],
-        [''],
-        ['IMPORTANTE:'],
-        ['- La primera fila debe contener los encabezados'],
-        ['- Cada fila siguiente es una cuenta del plan'],
-        ['- El código debe ser único para cada cuenta']
-    ];
-
-    const wsDatos = XLSX.utils.aoa_to_sheet(datos);
-    wsDatos['!cols'] = [{ wch: 20 }, { wch: 40 }];
-    XLSX.utils.book_append_sheet(wb, wsDatos, 'Plan de Cuentas');
-
-    const wsInstrucciones = XLSX.utils.aoa_to_sheet(instrucciones);
-    wsInstrucciones['!cols'] = [{ wch: 60 }];
-    XLSX.utils.book_append_sheet(wb, wsInstrucciones, 'Instrucciones');
-
-    XLSX.writeFile(wb, 'plantilla_plan_cuentas_cliente.xlsx');
 }
 
 // ============================================

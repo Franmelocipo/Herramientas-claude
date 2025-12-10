@@ -385,6 +385,55 @@
         </div>
     </div>
 
+    <!-- Modal Plan de Cuentas del Cliente (Sistema externo del cliente) -->
+    <div id="modalPlanCuentasCliente" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📋 Plan de Cuentas del Cliente - <span id="planCuentasClienteNombreExt"></span></h2>
+                <button class="close-btn" id="btnClosePlanCuentasCliente">✕</button>
+            </div>
+
+            <div class="info-box" style="font-size: 13px; padding: 12px; margin-bottom: 16px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 4px solid #f59e0b;">
+                <strong>Plan de Cuentas del Sistema del Cliente</strong><br>
+                Este es el plan de cuentas que usa el cliente en su propio sistema contable (ej: Puente Web, Tango, etc.).<br>
+                Se utiliza para hacer el mapeo entre sus cuentas y las de nuestro sistema.
+            </div>
+
+            <div class="btn-group mb-4">
+                <button id="btnDescargarPlantillaPlanCliente" class="btn-secondary flex-1">📥 Descargar Plantilla</button>
+                <label class="btn-primary flex-1" style="cursor: pointer; text-align: center;">
+                    📤 Importar Plan del Cliente
+                    <input type="file" id="importPlanClienteFile" accept=".xlsx,.xls" style="display: none;">
+                </label>
+                <button id="btnEliminarPlanClienteCompleto" class="btn-danger flex-1">🗑️ Eliminar Plan</button>
+            </div>
+
+            <div class="info-box" style="font-size: 12px; padding: 10px; margin-bottom: 16px;">
+                <strong>Formato Excel:</strong> CODIGO | CUENTA (o NOMBRE)<br>
+                <strong>Ejemplo:</strong> 1.1.01.001 | Caja en Pesos
+            </div>
+
+            <!-- Indicador de progreso -->
+            <div id="importProgressCliente" style="display: none; margin-bottom: 1rem;">
+                <div style="background: #e3f2fd; padding: 1rem; border-radius: 8px; border-left: 4px solid #2196f3;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div class="spinner"></div>
+                        <div style="flex: 1;">
+                            <strong id="progressTextCliente">Procesando archivo...</strong>
+                            <div id="progressDetailCliente" style="font-size: 0.9rem; color: #666; margin-top: 0.5rem;"></div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 1rem; background: #fff; border-radius: 4px; overflow: hidden; height: 8px;">
+                        <div id="progressBarCliente" style="background: #2196f3; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="planCuentasClienteStats" class="clients-stats"></div>
+            <div id="planCuentasClienteList" style="max-height: 400px; overflow-y: auto;"></div>
+        </div>
+    </div>
+
     <!-- Configuración de Supabase -->
     <script src="supabase-config.js"></script>
     <script src="clientes-simple.js"></script>
