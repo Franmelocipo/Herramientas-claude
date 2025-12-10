@@ -4460,6 +4460,16 @@ function selectAccount(code) {
 function navegarDropdown(direccion) {
     if (!dropdownState.filteredAccounts || dropdownState.filteredAccounts.length === 0) return;
 
+    // Obtener el dropdown activo
+    let dropdown;
+    if (dropdownState.fieldId === 'bank') {
+        dropdown = elements.bankAccountDropdown;
+    } else {
+        dropdown = document.getElementById(`dropdown-${dropdownState.fieldId}`);
+    }
+
+    if (!dropdown) return;
+
     const maxIndex = dropdownState.filteredAccounts.length - 1;
 
     if (direccion === 'down') {
@@ -4468,8 +4478,9 @@ function navegarDropdown(direccion) {
         dropdownState.currentIndex = Math.max(dropdownState.currentIndex - 1, 0);
     }
 
-    // Actualizar visual
-    document.querySelectorAll('.dropdown-item').forEach((item, idx) => {
+    // Actualizar visual solo dentro del dropdown activo
+    const items = dropdown.querySelectorAll('.dropdown-item');
+    items.forEach((item, idx) => {
         if (idx === dropdownState.currentIndex) {
             item.classList.add('activo');
             item.scrollIntoView({ block: 'nearest' });
