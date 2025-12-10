@@ -94,51 +94,7 @@ main {
     margin-bottom: 1rem;
 }
 
-.btn-primary {
-    background: #2c5282;
-    color: white;
-    border: none;
-    padding: 0.75rem 2rem;
-    border-radius: 8px;
-    font-size: 1rem;
-    cursor: pointer;
-    margin-top: 1rem;
-}
-
-.btn-primary:hover {
-    background: #2a4a6d;
-}
-
-.btn-success {
-    background: #4caf50;
-    color: white;
-    border: none;
-    padding: 0.75rem 2rem;
-    border-radius: 8px;
-    font-size: 1rem;
-    cursor: pointer;
-    margin-top: 1rem;
-}
-
-.btn-success:hover {
-    background: #45a049;
-}
-
-.btn-secondary {
-    background: #6c757d;
-    color: white;
-    border: none;
-    padding: 0.75rem 2rem;
-    border-radius: 8px;
-    font-size: 1rem;
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-block;
-}
-
-.btn-secondary:hover {
-    background: #5a6268;
-}
+/* Los estilos de botones se heredan de ../../css/buttons.css */
 
 .progress-bar {
     width: 100%;
