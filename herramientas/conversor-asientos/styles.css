@@ -1337,47 +1337,67 @@ body {
    IMPORTACIÓN DE PLAN DE CUENTAS DEL CLIENTE
    ============================================ */
 
-.importar-plan-container {
+/* Contenedor de información del plan de cuentas del cliente */
+.plan-cuentas-cliente-container {
     margin-top: 16px;
-    padding: 16px;
-    background: linear-gradient(135deg, #f0f9ff 0%, #e8f5e9 100%);
-    border: 1px solid #b3e5fc;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 1px solid #7dd3fc;
     border-radius: 8px;
 }
 
-.importar-plan-header {
+.plan-cuentas-cliente-info {
+    font-size: 13px;
+}
+
+.plan-cuentas-cliente-info.con-plan {
     display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 12px;
-}
-
-.importar-plan-icon {
-    font-size: 28px;
-    line-height: 1;
-}
-
-.importar-plan-header strong {
-    color: #1565c0;
-    font-size: 14px;
-}
-
-.importar-plan-desc {
-    font-size: 12px;
-    color: #666;
-    margin: 4px 0 0 0;
-}
-
-.importar-plan-actions {
-    display: flex;
-    gap: 8px;
     align-items: center;
-    flex-wrap: wrap;
+    gap: 12px;
 }
 
-.btn-importar-plan {
-    font-size: 13px !important;
-    padding: 8px 16px !important;
+.plan-cuentas-cliente-info .plan-icon {
+    font-size: 24px;
+}
+
+.plan-cuentas-cliente-info .plan-datos {
+    flex: 1;
+}
+
+.plan-cuentas-cliente-info .plan-datos strong {
+    color: #0369a1;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.plan-cuentas-cliente-info .plan-datos span {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.plan-cuentas-cliente-info.sin-plan {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #b45309;
+    background: #fef3c7;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid #fcd34d;
+}
+
+.plan-cuentas-cliente-info.sin-plan .plan-icon {
+    font-size: 20px;
+}
+
+.plan-cuentas-cliente-info a {
+    color: #0369a1;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.plan-cuentas-cliente-info a:hover {
+    color: #0284c7;
 }
 
 .btn-text {
@@ -1392,29 +1412,6 @@ body {
 
 .btn-text:hover {
     color: #0d47a1;
-}
-
-.plan-cliente-info {
-    margin-top: 12px;
-    padding: 12px;
-    background: white;
-    border-radius: 6px;
-    font-size: 13px;
-}
-
-.plan-cliente-info.success {
-    border-left: 4px solid #4caf50;
-}
-
-.plan-cliente-info.error {
-    border-left: 4px solid #f44336;
-}
-
-.plan-cliente-stats {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-top: 8px;
 }
 
 .plan-cliente-stat {
