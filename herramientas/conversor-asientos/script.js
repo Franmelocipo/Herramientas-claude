@@ -441,7 +441,8 @@ const sourceTypes = {
     veps: { name: 'VEPs ARCA', icon: '🧾' },
     compensaciones: { name: 'Compensaciones ARCA', icon: '🔄' },
     tabla: { name: 'Tabla de Datos', icon: '📊' },
-    soscontador: { name: 'Libro Diario SOS Contador', icon: '📒' }
+    soscontador: { name: 'Libro Diario SOS Contador', icon: '📒' },
+    puenteweb: { name: 'Libro Diario Puente Web', icon: '🌐' }
 };
 
 // ============================================
@@ -880,7 +881,8 @@ function selectSourceType(type) {
         veps: 'Descargar Plantilla VEPs',
         compensaciones: 'Descargar Plantilla Compensaciones',
         tabla: 'Descargar Plantilla Tabla de Datos',
-        soscontador: 'Descargar Plantilla SOS Contador'
+        soscontador: 'Descargar Plantilla SOS Contador',
+        puenteweb: 'Descargar Plantilla Puente Web'
     };
 
     if (elements.templateButtonText) {
@@ -966,6 +968,24 @@ async function handleFileUpload(e) {
             return;
         }
 
+        // Caso especial: Puente Web tiene estructura jerárquica (cabecera + movimientos)
+        if (state.sourceType === 'puenteweb') {
+            const parsedData = parsePuenteWeb(jsonData);
+            if (parsedData.length === 0) {
+                alert('No se encontraron movimientos válidos en el archivo.\nVerifique que el archivo tenga el formato correcto de Puente Web.');
+                return;
+            }
+            state.sourceData = parsedData;
+            // Extraer cuentas únicas del archivo
+            state.cuentasUnicasPW = extraerCuentasUnicasPW(parsedData);
+            // Cargar mapeo guardado si existe
+            state.mapeoCuentasPW = obtenerMapeoCuentasPW(clienteSeleccionadoId);
+            // Agrupar por número de asiento
+            groupSimilarEntries(parsedData);
+            goToStep(2);
+            return;
+        }
+
         state.sourceData = rows;
         groupSimilarEntries(rows);
         goToStep(2);
@@ -1046,6 +1066,188 @@ function parseSOSContador(jsonData) {
     }
 
     return result;
+}
+
+// ============================================
+// PARSEO ESPECIAL PARA PUENTE WEB
+// ============================================
+/**
+ * Parsea un archivo Excel de Puente Web con formato de libro diario.
+ * Estructura del Excel:
+ * - Fila de cabecera de asiento: tiene valor en "Nº" y "Fecha" (+ Descripcion = leyenda)
+ * - Filas de movimientos: no tienen "Nº", tienen "Cuenta" y montos en Debe/Haber
+ *
+ * @param {Array} jsonData - Datos del Excel como array de arrays
+ * @returns {Array} Array de objetos con los movimientos parseados
+ */
+function parsePuenteWeb(jsonData) {
+    const result = [];
+    let currentNroAsiento = '';
+    let currentFecha = '';
+    let currentLeyenda = '';
+
+    // La primera fila son los headers
+    // Nº | Fecha | Cuenta | Descripcion | Debe | Haber | Modificado
+    const headers = jsonData[0];
+
+    // Encontrar índices de columnas (tolerante a variaciones)
+    const findCol = (names) => {
+        for (const name of names) {
+            const idx = headers.findIndex(h =>
+                h && String(h).trim().toLowerCase() === name.toLowerCase()
+            );
+            if (idx !== -1) return idx;
+        }
+        return -1;
+    };
+
+    const colNro = findCol(['Nº', 'N°', 'NRO', 'Nro', 'NUMERO', 'Numero']);
+    const colFecha = findCol(['Fecha', 'FECHA']);
+    const colCuenta = findCol(['Cuenta', 'CUENTA', 'COD_CUENTA', 'Cod_Cuenta']);
+    const colDescripcion = findCol(['Descripcion', 'DESCRIPCION', 'Descripción', 'DESCRIPCIÓN']);
+    const colDebe = findCol(['Debe', 'DEBE']);
+    const colHaber = findCol(['Haber', 'HABER']);
+
+    console.log('Puente Web - Columnas encontradas:', { colNro, colFecha, colCuenta, colDescripcion, colDebe, colHaber });
+
+    // Procesar filas (empezando desde la fila 1, después del header)
+    for (let i = 1; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (!row || row.length === 0) continue;
+
+        const nroVal = colNro >= 0 ? row[colNro] : null;
+        const fechaVal = colFecha >= 0 ? row[colFecha] : null;
+        const cuentaVal = colCuenta >= 0 ? String(row[colCuenta] || '').trim() : '';
+        const descripcionVal = colDescripcion >= 0 ? String(row[colDescripcion] || '').trim() : '';
+        const debeVal = colDebe >= 0 ? row[colDebe] : null;
+        const haberVal = colHaber >= 0 ? row[colHaber] : null;
+
+        // Detectar si es fila de cabecera de asiento (tiene Nº y Fecha)
+        if (nroVal !== null && nroVal !== undefined && nroVal !== '' && fechaVal) {
+            currentNroAsiento = String(nroVal).trim();
+            currentFecha = fechaVal;
+            currentLeyenda = descripcionVal;
+            continue; // Las filas de cabecera no tienen movimientos
+        }
+
+        // Detectar si es fila de movimiento (tiene código de cuenta)
+        if (cuentaVal && cuentaVal.length > 0) {
+            // Parsear importes (formato argentino: 68.240,38)
+            const debe = parseImporteArgentinoPW(debeVal);
+            const haber = parseImporteArgentinoPW(haberVal);
+
+            // Solo agregar si tiene algún monto
+            if (debe > 0 || haber > 0) {
+                result.push({
+                    NRO_ASIENTO: currentNroAsiento,
+                    FECHA: currentFecha,
+                    LEYENDA: currentLeyenda,
+                    COD_CUENTA_PW: cuentaVal,           // Código cuenta Puente Web
+                    DESC_CUENTA_PW: descripcionVal,     // Descripción cuenta Puente Web
+                    DEBE: debe,
+                    HABER: haber
+                });
+            }
+        }
+    }
+
+    console.log(`Puente Web - ${result.length} movimientos parseados`);
+    return result;
+}
+
+/**
+ * Parsea un importe en formato argentino (usado por Puente Web)
+ * Entrada: "68.240,38" → Salida: 68240.38
+ * Entrada: "-" o vacío → Salida: 0
+ */
+function parseImporteArgentinoPW(valor) {
+    if (!valor || valor === '-' || String(valor).trim() === '-' || String(valor).trim() === '') {
+        return 0;
+    }
+    // Si ya es número, retornarlo
+    if (typeof valor === 'number') {
+        return valor;
+    }
+    // Remover puntos de miles, reemplazar coma decimal por punto
+    const str = String(valor).trim().replace(/\./g, '').replace(',', '.');
+    const num = parseFloat(str);
+    return isNaN(num) ? 0 : num;
+}
+
+/**
+ * Extrae las cuentas únicas del archivo Puente Web
+ * @param {Array} data - Array de movimientos parseados
+ * @returns {Array} Array de cuentas únicas con código, descripción y estadísticas
+ */
+function extraerCuentasUnicasPW(data) {
+    const cuentasMap = {};
+
+    data.forEach(mov => {
+        const codigo = mov.COD_CUENTA_PW;
+        const descripcion = mov.DESC_CUENTA_PW;
+
+        if (!cuentasMap[codigo]) {
+            cuentasMap[codigo] = {
+                codigo: codigo,
+                descripcion: descripcion,
+                count: 0,
+                totalDebe: 0,
+                totalHaber: 0
+            };
+        }
+
+        cuentasMap[codigo].count++;
+        cuentasMap[codigo].totalDebe += mov.DEBE || 0;
+        cuentasMap[codigo].totalHaber += mov.HABER || 0;
+    });
+
+    // Convertir a array y ordenar por código
+    return Object.values(cuentasMap).sort((a, b) => a.codigo.localeCompare(b.codigo));
+}
+
+/**
+ * Obtiene el mapeo de cuentas Puente Web guardado en localStorage
+ * @param {string} clienteId - ID del cliente
+ * @returns {Object} Mapeo {codigoPW: {codigoSistema, nombreSistema}}
+ */
+function obtenerMapeoCuentasPW(clienteId) {
+    try {
+        const key = `puenteweb_mapeo_${clienteId}`;
+        const stored = localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : {};
+    } catch (e) {
+        console.error('Error al leer mapeo de cuentas PW:', e);
+        return {};
+    }
+}
+
+/**
+ * Guarda el mapeo de cuentas Puente Web en localStorage
+ * @param {string} clienteId - ID del cliente
+ * @param {Object} mapeo - Mapeo a guardar
+ */
+function guardarMapeoCuentasPW(clienteId, mapeo) {
+    try {
+        const key = `puenteweb_mapeo_${clienteId}`;
+        localStorage.setItem(key, JSON.stringify(mapeo));
+        console.log(`Mapeo de cuentas PW guardado para cliente ${clienteId}`);
+    } catch (e) {
+        console.error('Error al guardar mapeo de cuentas PW:', e);
+    }
+}
+
+/**
+ * Limpia el mapeo de cuentas Puente Web del localStorage
+ * @param {string} clienteId - ID del cliente
+ */
+function limpiarMapeoCuentasPW(clienteId) {
+    try {
+        const key = `puenteweb_mapeo_${clienteId}`;
+        localStorage.removeItem(key);
+        console.log(`Mapeo de cuentas PW eliminado para cliente ${clienteId}`);
+    } catch (e) {
+        console.error('Error al limpiar mapeo de cuentas PW:', e);
+    }
 }
 
 // ============================================
@@ -1326,6 +1528,39 @@ function groupSimilarEntries(data) {
                 _calculatedDebe: debeVal,
                 _calculatedHaber: haberVal
             });
+        });
+
+    } else if (state.sourceType === 'puenteweb') {
+        // Puente Web - Agrupar por número de asiento
+        // Todos los movimientos con el mismo NRO_ASIENTO forman UN asiento
+        data.forEach((row) => {
+            const nroAsiento = String(row['NRO_ASIENTO'] || '').trim();
+            if (!nroAsiento) return;
+
+            const fecha = row['FECHA'] || '';
+            const leyenda = row['LEYENDA'] || '';
+            const debeVal = row['DEBE'] || 0;
+            const haberVal = row['HABER'] || 0;
+
+            const key = nroAsiento;
+
+            if (!groups[key]) {
+                groups[key] = {
+                    concepto: `Asiento ${nroAsiento}`,
+                    ejemploCompleto: leyenda,
+                    count: 0,
+                    totalDebe: 0,
+                    totalHaber: 0,
+                    items: [],
+                    nroAsiento: nroAsiento,
+                    fecha: fecha
+                };
+            }
+
+            groups[key].count++;
+            groups[key].totalDebe += debeVal;
+            groups[key].totalHaber += haberVal;
+            groups[key].items.push(row);
         });
 
     } else {
@@ -2064,6 +2299,12 @@ function renderGroupsList() {
         return;
     }
 
+    // PARA PUENTE WEB: Renderizar interfaz de vinculación de cuentas
+    if (state.sourceType === 'puenteweb') {
+        renderVinculacionCuentasPW();
+        return;
+    }
+
     // PARA OTROS TIPOS: Renderizar interfaz estándar de grupos
     elements.groupStats.textContent = `${state.groupedData.length} grupos | ${state.sourceData.length} movimientos`;
 
@@ -2477,6 +2718,296 @@ function handleDescripcionAccountInputKeydown(e, idx, descripcion) {
     if (items[currentIndex]) {
         items[currentIndex].classList.add('active');
         items[currentIndex].scrollIntoView({ block: 'nearest' });
+    }
+}
+
+// ============================================
+// RENDERIZADO DE VINCULACIÓN DE CUENTAS PUENTE WEB
+// ============================================
+function renderVinculacionCuentasPW() {
+    const numAsientos = state.groupedData.length;
+    const numCuentas = state.cuentasUnicasPW ? state.cuentasUnicasPW.length : 0;
+    const numMovimientos = state.sourceData.length;
+
+    elements.groupStats.textContent = `${numAsientos} asientos | ${numMovimientos} movimientos | ${numCuentas} cuentas únicas`;
+
+    // Ocultar sección de cuenta de contrapartida global (no se usa para puenteweb)
+    elements.bankAccountSection.classList.add('hidden');
+    elements.compensacionesInfo.classList.add('hidden');
+
+    // Inicializar mapeoCuentasPW si no existe
+    if (!state.mapeoCuentasPW) {
+        state.mapeoCuentasPW = {};
+    }
+
+    // Información explicativa
+    let html = `
+        <div class="puenteweb-info-box" style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4caf50;">
+            <h3 style="margin: 0 0 8px 0; color: #2e7d32;">🌐 Vinculación de Cuentas Puente Web</h3>
+            <p style="margin: 0 0 12px 0; color: #333;">
+                Se encontraron <strong>${numCuentas} cuentas únicas</strong> en el archivo de Puente Web.
+                Vincule cada cuenta con su equivalente en el plan de cuentas del sistema.
+            </p>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button onclick="limpiarTodoMapeoPW()" class="btn-secondary" style="font-size: 13px; padding: 6px 12px;">
+                    🗑️ Limpiar mapeo guardado
+                </button>
+                <span style="font-size: 12px; color: #666; align-self: center;">
+                    ${Object.keys(state.mapeoCuentasPW).length > 0 ? `(${Object.keys(state.mapeoCuentasPW).length} cuentas con mapeo guardado)` : '(Sin mapeo guardado)'}
+                </span>
+            </div>
+        </div>
+    `;
+
+    // Renderizar cada cuenta única de Puente Web
+    if (state.cuentasUnicasPW && state.cuentasUnicasPW.length > 0) {
+        html += `<div class="puenteweb-cuentas-list">`;
+
+        html += state.cuentasUnicasPW.map((cuenta, idx) => {
+            // Verificar si ya hay un mapeo guardado para esta cuenta
+            const mapeoGuardado = state.mapeoCuentasPW[cuenta.codigo];
+            let valorInput = '';
+            let estiloInput = '';
+
+            if (mapeoGuardado && mapeoGuardado.codigoSistema) {
+                valorInput = mapeoGuardado.nombreSistema
+                    ? `${mapeoGuardado.codigoSistema} - ${mapeoGuardado.nombreSistema}`
+                    : mapeoGuardado.codigoSistema;
+                estiloInput = 'border-color: #4caf50; background: #e8f5e9;';
+            }
+
+            const totalImporte = cuenta.totalDebe + cuenta.totalHaber;
+
+            return `
+                <div class="puenteweb-cuenta-item" style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+                    <div style="display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+                                <strong style="color: #1565c0; font-size: 16px; font-family: monospace;">${cuenta.codigo}</strong>
+                                <span class="badge" style="background: #2196f3; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
+                                    ${cuenta.count} mov.
+                                </span>
+                            </div>
+                            <div style="color: #333; font-size: 14px; margin-bottom: 4px;">
+                                ${cuenta.descripcion || '<em style="color: #999;">Sin descripción</em>'}
+                            </div>
+                            <div style="color: #666; font-size: 13px;">
+                                Total: $${totalImporte.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                                <span style="color: #999; margin-left: 8px;">(D: $${cuenta.totalDebe.toLocaleString('es-AR', { minimumFractionDigits: 2 })} / H: $${cuenta.totalHaber.toLocaleString('es-AR', { minimumFractionDigits: 2 })})</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; color: #666; font-size: 20px; padding: 0 8px;">
+                            →
+                        </div>
+                        <div style="min-width: 350px; flex: 1;">
+                            <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Cuenta del Sistema</label>
+                            <div class="input-with-dropdown">
+                                <input
+                                    type="text"
+                                    class="input-text puenteweb-cuenta-input"
+                                    data-codigo-pw="${cuenta.codigo}"
+                                    data-pw-idx="${idx}"
+                                    value="${valorInput}"
+                                    placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta por código o nombre...' : 'Código de cuenta'}"
+                                    style="width: 100%; padding: 0.75rem; font-size: 0.95rem; ${estiloInput}"
+                                >
+                                <div class="account-dropdown hidden" id="dropdown-pw-${idx}"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        html += `</div>`;
+    } else {
+        html += `
+            <div style="padding: 40px; text-align: center; color: #999;">
+                <p>No se encontraron cuentas en el archivo.</p>
+            </div>
+        `;
+    }
+
+    elements.groupsList.innerHTML = html;
+
+    // Attach event listeners a los inputs de cuenta Puente Web
+    document.querySelectorAll('.puenteweb-cuenta-input').forEach(input => {
+        const codigoPW = input.dataset.codigoPw;
+        const idx = parseInt(input.dataset.pwIdx);
+
+        // Filtrado en tiempo real
+        input.addEventListener('input', (e) => {
+            if (getSelectedClientId()) {
+                handlePWCuentaInputChange(idx, codigoPW);
+            }
+        });
+
+        // Mostrar dropdown al enfocar
+        input.addEventListener('focus', () => {
+            if (getSelectedClientId()) {
+                state.activeSearchField = `pw-${idx}`;
+                showPWCuentaDropdown(idx, codigoPW);
+            }
+        });
+
+        // Navegación por teclado
+        input.addEventListener('keydown', (e) => {
+            handlePWCuentaInputKeydown(e, idx, codigoPW);
+        });
+    });
+}
+
+// ============================================
+// FUNCIONES DE BÚSQUEDA PARA CUENTAS PUENTE WEB
+// ============================================
+function handlePWCuentaInputChange(idx, codigoPW) {
+    const input = document.querySelector(`input[data-pw-idx="${idx}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-pw-${idx}`);
+
+    if (!dropdown) return;
+
+    if (searchTerm.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+
+    // Filtrar plan de cuentas
+    const filteredAccounts = state.planCuentas.filter(account => {
+        const codigo = String(account.codigo || '').toUpperCase();
+        const nombre = String(account.nombre || '').toUpperCase();
+        return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+    }).slice(0, 50);
+
+    if (filteredAccounts.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = filteredAccounts.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectPWCuenta('${codigoPW}', ${idx}, '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function showPWCuentaDropdown(idx, codigoPW) {
+    const input = document.querySelector(`input[data-pw-idx="${idx}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-pw-${idx}`);
+
+    if (!dropdown) return;
+
+    if (state.planCuentas.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No hay plan de cuentas cargado</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    let accountsToShow = state.planCuentas;
+    if (searchTerm.length > 0) {
+        accountsToShow = accountsToShow.filter(account => {
+            const codigo = String(account.codigo || '').toUpperCase();
+            const nombre = String(account.nombre || '').toUpperCase();
+            return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+        });
+    }
+
+    accountsToShow = accountsToShow.slice(0, 50);
+
+    if (accountsToShow.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = accountsToShow.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectPWCuenta('${codigoPW}', ${idx}, '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function selectPWCuenta(codigoPW, idx, codigoSistema, nombreSistema) {
+    // Guardar en el mapeo
+    state.mapeoCuentasPW[codigoPW] = {
+        codigoSistema: codigoSistema,
+        nombreSistema: nombreSistema
+    };
+
+    // Guardar en localStorage para persistencia
+    guardarMapeoCuentasPW(clienteSeleccionadoId, state.mapeoCuentasPW);
+
+    // Actualizar el input
+    const input = document.querySelector(`input[data-pw-idx="${idx}"]`);
+    if (input) {
+        input.value = `${codigoSistema} - ${nombreSistema}`;
+        input.style.borderColor = '#4caf50';
+        input.style.background = '#e8f5e9';
+    }
+
+    // Ocultar dropdown
+    const dropdown = document.getElementById(`dropdown-pw-${idx}`);
+    if (dropdown) {
+        dropdown.classList.add('hidden');
+    }
+
+    console.log(`Puente Web: ${codigoPW} → Sistema: ${codigoSistema} - ${nombreSistema}`);
+}
+
+function handlePWCuentaInputKeydown(e, idx, codigoPW) {
+    const dropdown = document.getElementById(`dropdown-pw-${idx}`);
+    if (!dropdown || dropdown.classList.contains('hidden')) return;
+
+    const items = dropdown.querySelectorAll('.dropdown-item');
+    if (items.length === 0) return;
+
+    const currentActive = dropdown.querySelector('.dropdown-item.active');
+    let currentIndex = currentActive ? parseInt(currentActive.dataset.index) : -1;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        currentIndex = Math.min(currentIndex + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        currentIndex = Math.max(currentIndex - 1, 0);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentIndex >= 0 && items[currentIndex]) {
+            items[currentIndex].click();
+        }
+        return;
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        dropdown.classList.add('hidden');
+        return;
+    } else {
+        return;
+    }
+
+    // Actualizar clase active
+    items.forEach(item => item.classList.remove('active'));
+    if (items[currentIndex]) {
+        items[currentIndex].classList.add('active');
+        items[currentIndex].scrollIntoView({ block: 'nearest' });
+    }
+}
+
+/**
+ * Limpia todo el mapeo de cuentas Puente Web guardado
+ */
+function limpiarTodoMapeoPW() {
+    if (confirm('¿Está seguro de que desea limpiar todo el mapeo de cuentas guardado?\n\nEsta acción no se puede deshacer.')) {
+        limpiarMapeoCuentasPW(clienteSeleccionadoId);
+        state.mapeoCuentasPW = {};
+        renderVinculacionCuentasPW();
     }
 }
 
@@ -3284,6 +3815,17 @@ function generateFinalExcel() {
                 }
             });
         }
+    } else if (state.sourceType === 'puenteweb') {
+        // VALIDACIÓN ESPECÍFICA PARA PUENTE WEB
+        // Validar que todas las cuentas Puente Web tengan mapeo a cuenta del sistema
+        if (state.cuentasUnicasPW && state.cuentasUnicasPW.length > 0) {
+            state.cuentasUnicasPW.forEach(cuenta => {
+                const mapeo = state.mapeoCuentasPW?.[cuenta.codigo];
+                if (!mapeo || !mapeo.codigoSistema || mapeo.codigoSistema.trim() === '') {
+                    errors.push(`Cuenta PW "${cuenta.codigo}" (${cuenta.descripcion || 'sin desc.'}): falta vincular cuenta del sistema`);
+                }
+            });
+        }
     } else {
         // VALIDACIÓN PARA OTROS TIPOS DE ORIGEN
         // Validar cuenta de contrapartida global (obligatoria para todos)
@@ -3497,6 +4039,55 @@ function generateFinalExcel() {
                 Importe: parseFloat((-totalVep).toFixed(2)),
                 Leyenda: leyendaUniforme,
                 ExtraContable: 's'
+            });
+
+            numeroAsiento++;
+            return; // No continuar con la lógica genérica
+        }
+
+        // LÓGICA ESPECÍFICA PARA PUENTE WEB: Un asiento por grupo (NRO_ASIENTO)
+        // Cada movimiento usa la cuenta del sistema mapeada desde la cuenta Puente Web
+        if (state.sourceType === 'puenteweb') {
+            if (g.items.length === 0) return;
+
+            const primeraLinea = g.items[0];
+            const fecha = g.fecha || primeraLinea['FECHA'] || '';
+            const leyenda = g.ejemploCompleto || primeraLinea['LEYENDA'] || '';
+
+            // Procesar cada movimiento del asiento
+            g.items.forEach(item => {
+                const codigoPW = item['COD_CUENTA_PW'] || '';
+                const descripcionPW = item['DESC_CUENTA_PW'] || '';
+                const debe = item['DEBE'] || 0;
+                const haber = item['HABER'] || 0;
+
+                // Obtener la cuenta del sistema desde el mapeo
+                const mapeo = state.mapeoCuentasPW?.[codigoPW];
+                const cuentaSistema = mapeo?.codigoSistema || '';
+                const nombreSistema = mapeo?.nombreSistema || '';
+
+                if (!cuentaSistema) {
+                    console.warn(`Puente Web: Sin mapeo para cuenta ${codigoPW}`);
+                }
+
+                // Solo agregar si tiene importe
+                if (debe > 0 || haber > 0) {
+                    const importeNeto = parseFloat((debe - haber).toFixed(2));
+
+                    allData.push({
+                        Fecha: fecha,
+                        Numero: numeroAsiento,
+                        Cuenta: cuentaSistema,
+                        'Descripción Cuenta': nombreSistema,
+                        Debe: parseFloat(debe.toFixed(2)),
+                        Haber: parseFloat(haber.toFixed(2)),
+                        'Tipo de auxiliar': 1,
+                        Auxiliar: 1,
+                        Importe: importeNeto,
+                        Leyenda: leyenda,
+                        ExtraContable: 's'
+                    });
+                }
             });
 
             numeroAsiento++;
@@ -4277,6 +4868,66 @@ function downloadTemplateSpecific() {
                 ['- No requiere asignación de cuentas porque ya vienen los códigos'],
                 ['- La fecha se extrae del encabezado de cada asiento'],
                 ['- La descripción de la operación se usa como leyenda']
+            ];
+            break;
+
+        case 'puenteweb':
+            datos = [
+                ['Nº', 'Fecha', 'Cuenta', 'Descripcion', 'Debe', 'Haber', 'Modificado'],
+                [4, '01/08/2024', '', 'Dominguez, Marcos Agustin () Recibo Nº0003-00009644', '', '', 'NO'],
+                ['', '', '1.1.1.02.03', 'Banco Mercado Pago', '68.240,38', '-', ''],
+                ['', '', '1.1.3.01.01', 'a Deudores Locales', '-', '68.240,38', ''],
+                [5, '01/08/2024', '', 'MAZA, SANTIAGO () Recibo Nº0003-00009645', '', '', 'NO'],
+                ['', '', '1.1.1.02.03', 'Banco Mercado Pago', '97.000,00', '-', ''],
+                ['', '', '1.1.3.01.01', 'a Deudores Locales', '-', '97.000,00', ''],
+                [6, '02/08/2024', '', 'Venta según Factura A-0001-00000123', '', '', 'NO'],
+                ['', '', '1.1.3.01.01', 'Deudores Locales', '121.000,00', '-', ''],
+                ['', '', '4.1.1.01.01', 'a Ventas', '-', '100.000,00', ''],
+                ['', '', '2.1.5.01.01', 'a IVA Débito Fiscal', '-', '21.000,00', '']
+            ];
+            fileName = 'plantilla_puente_web.xlsx';
+            instrucciones = [
+                ['PLANTILLA LIBRO DIARIO PUENTE WEB'],
+                [''],
+                ['Este formato es específico para exportaciones de Puente Web.'],
+                [''],
+                ['ESTRUCTURA DEL ARCHIVO:'],
+                [''],
+                ['• Fila 1: Headers de columnas'],
+                ['  - Nº: Número de asiento'],
+                ['  - Fecha: Fecha del asiento'],
+                ['  - Cuenta: Código de cuenta (vacío en cabecera)'],
+                ['  - Descripcion: Leyenda del asiento / nombre de cuenta'],
+                ['  - Debe: Importe al debe (formato argentino: 68.240,38)'],
+                ['  - Haber: Importe al haber (formato argentino o "-" para cero)'],
+                ['  - Modificado: Indicador de modificación (se ignora)'],
+                [''],
+                ['ESTRUCTURA DE CADA ASIENTO:'],
+                [''],
+                ['1. CABECERA DEL ASIENTO:'],
+                ['   - Columna Nº: Número del asiento'],
+                ['   - Columna Fecha: Fecha del asiento'],
+                ['   - Columna Descripcion: Leyenda del asiento'],
+                ['   - Las demás columnas vacías'],
+                [''],
+                ['2. LÍNEAS DE MOVIMIENTO:'],
+                ['   - Columna Nº: Vacía'],
+                ['   - Columna Cuenta: Código de cuenta Puente Web'],
+                ['   - Columna Descripcion: Nombre de la cuenta'],
+                ['   - Columna Debe: Importe al debe (formato: 68.240,38)'],
+                ['   - Columna Haber: Importe al haber (formato: 68.240,38 o "-")'],
+                [''],
+                ['PROCESO DE CONVERSIÓN:'],
+                [''],
+                ['1. Cargar archivo Excel de Puente Web'],
+                ['2. El sistema detecta automáticamente las cuentas únicas'],
+                ['3. Vincular cada cuenta Puente Web con una cuenta del sistema'],
+                ['4. Generar archivo con las cuentas del sistema'],
+                [''],
+                ['IMPORTANTE:'],
+                ['- Los importes están en formato argentino (punto = miles, coma = decimal)'],
+                ['- "-" en Debe/Haber significa cero'],
+                ['- El mapeo de cuentas se guarda en el navegador para reutilizarlo']
             ];
             break;
 
