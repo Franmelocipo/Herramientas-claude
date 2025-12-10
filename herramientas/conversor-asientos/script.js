@@ -563,7 +563,14 @@ function attachEventListeners() {
         elements.btnBackToUpload.addEventListener('click', () => goToStep(1));
     }
     if (elements.btnGenerateFinal) {
-        elements.btnGenerateFinal.addEventListener('click', () => generateFinalExcel());
+        elements.btnGenerateFinal.addEventListener('click', () => {
+            // Para Puente Web, mostrar modal de depuración de reversiones primero
+            if (state.sourceType === 'puenteweb') {
+                mostrarModalReversionesPW();
+            } else {
+                generateFinalExcel();
+            }
+        });
     }
 
     // Step 3: Download
@@ -1248,6 +1255,448 @@ function limpiarMapeoCuentasPW(clienteId) {
     } catch (e) {
         console.error('Error al limpiar mapeo de cuentas PW:', e);
     }
+}
+
+// ============================================
+// DETECCIÓN Y DEPURACIÓN DE REVERSIONES (PUENTE WEB)
+// ============================================
+
+/**
+ * Detecta asientos de reversión en los datos de Puente Web.
+ * Las reversiones tienen "Reversión" en la leyenda seguido de los datos del asiento original.
+ *
+ * @returns {Array} Array de grupos de reversión, cada uno con:
+ *   - original: asiento original (o null si no se encontró)
+ *   - reversion: asiento de reversión
+ *   - nuevo: asiento nuevo/corregido (o null si no se encontró)
+ *   - leyendaBase: la leyenda sin "Reversión"
+ */
+function detectarReversionesPW() {
+    if (state.sourceType !== 'puenteweb' || !state.groupedData) {
+        return [];
+    }
+
+    const reversiones = [];
+    const asientosPorLeyenda = {};
+
+    // Primero, indexar todos los asientos por su leyenda normalizada
+    state.groupedData.forEach((grupo, idx) => {
+        const leyenda = grupo.ejemploCompleto || '';
+        const leyendaNormalizada = normalizarLeyendaPW(leyenda);
+
+        if (!asientosPorLeyenda[leyendaNormalizada]) {
+            asientosPorLeyenda[leyendaNormalizada] = [];
+        }
+        asientosPorLeyenda[leyendaNormalizada].push({
+            idx: idx,
+            grupo: grupo,
+            leyendaOriginal: leyenda,
+            esReversion: leyenda.toLowerCase().includes('reversión') || leyenda.toLowerCase().includes('reversion')
+        });
+    });
+
+    // Buscar grupos con reversiones
+    Object.entries(asientosPorLeyenda).forEach(([leyendaNorm, asientos]) => {
+        const tieneReversion = asientos.some(a => a.esReversion);
+
+        if (tieneReversion && asientos.length >= 2) {
+            // Separar por tipo
+            const reversionAsientos = asientos.filter(a => a.esReversion);
+            const otrosAsientos = asientos.filter(a => !a.esReversion);
+
+            // Para cada reversión, intentar encontrar el original y el nuevo
+            reversionAsientos.forEach(rev => {
+                // Ordenar los otros asientos por número de asiento
+                const otrosOrdenados = [...otrosAsientos].sort((a, b) => {
+                    const nroA = parseInt(a.grupo.nroAsiento) || 0;
+                    const nroB = parseInt(b.grupo.nroAsiento) || 0;
+                    return nroA - nroB;
+                });
+
+                const nroReversion = parseInt(rev.grupo.nroAsiento) || 0;
+
+                // El original es el que tiene número menor a la reversión
+                const original = otrosOrdenados.find(a => {
+                    const nro = parseInt(a.grupo.nroAsiento) || 0;
+                    return nro < nroReversion;
+                });
+
+                // El nuevo es el que tiene número mayor a la reversión
+                const nuevo = otrosOrdenados.find(a => {
+                    const nro = parseInt(a.grupo.nroAsiento) || 0;
+                    return nro > nroReversion;
+                });
+
+                reversiones.push({
+                    original: original || null,
+                    reversion: rev,
+                    nuevo: nuevo || null,
+                    leyendaBase: leyendaNorm,
+                    // Por defecto, marcar original y reversión para eliminar
+                    eliminarOriginal: original ? true : false,
+                    eliminarReversion: true,
+                    eliminarNuevo: false
+                });
+            });
+        }
+    });
+
+    console.log(`Puente Web: ${reversiones.length} reversiones detectadas`);
+    return reversiones;
+}
+
+/**
+ * Normaliza una leyenda para comparación (quita "Reversión" y espacios extras)
+ */
+function normalizarLeyendaPW(leyenda) {
+    if (!leyenda) return '';
+    return leyenda
+        .toLowerCase()
+        .replace(/reversión/gi, '')
+        .replace(/reversion/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+/**
+ * Muestra el modal de depuración de reversiones
+ */
+function mostrarModalReversionesPW() {
+    const reversiones = detectarReversionesPW();
+
+    if (reversiones.length === 0) {
+        // No hay reversiones, continuar con la exportación normal
+        generarAsientosPWFinal();
+        return;
+    }
+
+    // Guardar reversiones en el state para usarlas después
+    state.reversionesPW = reversiones;
+
+    // Crear modal si no existe
+    let modal = document.getElementById('modalReversionesPW');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modalReversionesPW';
+        modal.className = 'modal-reversiones';
+        document.body.appendChild(modal);
+    }
+
+    // Generar contenido del modal
+    let html = `
+        <div class="modal-reversiones-content">
+            <h3 style="color: #ff9800; margin-bottom: 1rem;">
+                ⚠️ Reversiones Detectadas (${reversiones.length})
+            </h3>
+            <p style="margin-bottom: 1.5rem; color: #666;">
+                Se encontraron asientos de reversión. Seleccione los asientos a <strong>eliminar</strong>
+                antes de exportar. Típicamente se eliminan el asiento original y su reversión,
+                dejando solo el asiento corregido.
+            </p>
+
+            <div class="reversiones-lista" style="max-height: 500px; overflow-y: auto; margin-bottom: 1.5rem;">
+    `;
+
+    reversiones.forEach((rev, revIdx) => {
+        html += `
+            <div class="reversion-grupo" style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                <div style="font-weight: bold; color: #1976d2; margin-bottom: 12px; font-size: 14px;">
+                    📋 ${rev.leyendaBase || 'Sin leyenda'}
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+        `;
+
+        // Asiento Original
+        if (rev.original) {
+            const og = rev.original.grupo;
+            html += `
+                <div class="asiento-item" style="display: flex; align-items: center; gap: 12px; padding: 10px; background: #e3f2fd; border-radius: 6px;">
+                    <input type="checkbox"
+                           id="rev-${revIdx}-original"
+                           class="reversion-checkbox"
+                           data-rev-idx="${revIdx}"
+                           data-tipo="original"
+                           ${rev.eliminarOriginal ? 'checked' : ''}>
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="background: #2196f3; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">ORIGINAL</span>
+                            <strong>Asiento #${og.nroAsiento}</strong>
+                            <span style="color: #666; font-size: 13px;">${formatearFechaPW(og.fecha)}</span>
+                        </div>
+                        <div style="font-size: 13px; color: #333; margin-top: 4px;">${og.ejemploCompleto}</div>
+                        <div style="font-size: 12px; color: #666; margin-top: 2px;">
+                            Debe: $${og.totalDebe?.toLocaleString('es-AR', {minimumFractionDigits: 2}) || '0,00'} |
+                            Haber: $${og.totalHaber?.toLocaleString('es-AR', {minimumFractionDigits: 2}) || '0,00'}
+                        </div>
+                    </div>
+                    <span style="color: ${rev.eliminarOriginal ? '#f44336' : '#4caf50'}; font-size: 20px;">
+                        ${rev.eliminarOriginal ? '🗑️' : '✓'}
+                    </span>
+                </div>
+            `;
+        }
+
+        // Asiento de Reversión
+        const revAsiento = rev.reversion.grupo;
+        html += `
+            <div class="asiento-item" style="display: flex; align-items: center; gap: 12px; padding: 10px; background: #fff3e0; border-radius: 6px;">
+                <input type="checkbox"
+                       id="rev-${revIdx}-reversion"
+                       class="reversion-checkbox"
+                       data-rev-idx="${revIdx}"
+                       data-tipo="reversion"
+                       ${rev.eliminarReversion ? 'checked' : ''}>
+                <div style="flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="background: #ff9800; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">REVERSIÓN</span>
+                        <strong>Asiento #${revAsiento.nroAsiento}</strong>
+                        <span style="color: #666; font-size: 13px;">${formatearFechaPW(revAsiento.fecha)}</span>
+                    </div>
+                    <div style="font-size: 13px; color: #333; margin-top: 4px;">${revAsiento.ejemploCompleto}</div>
+                    <div style="font-size: 12px; color: #666; margin-top: 2px;">
+                        Debe: $${revAsiento.totalDebe?.toLocaleString('es-AR', {minimumFractionDigits: 2}) || '0,00'} |
+                        Haber: $${revAsiento.totalHaber?.toLocaleString('es-AR', {minimumFractionDigits: 2}) || '0,00'}
+                    </div>
+                </div>
+                <span style="color: ${rev.eliminarReversion ? '#f44336' : '#4caf50'}; font-size: 20px;">
+                    ${rev.eliminarReversion ? '🗑️' : '✓'}
+                </span>
+            </div>
+        `;
+
+        // Asiento Nuevo
+        if (rev.nuevo) {
+            const nv = rev.nuevo.grupo;
+            html += `
+                <div class="asiento-item" style="display: flex; align-items: center; gap: 12px; padding: 10px; background: #e8f5e9; border-radius: 6px;">
+                    <input type="checkbox"
+                           id="rev-${revIdx}-nuevo"
+                           class="reversion-checkbox"
+                           data-rev-idx="${revIdx}"
+                           data-tipo="nuevo"
+                           ${rev.eliminarNuevo ? 'checked' : ''}>
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="background: #4caf50; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">NUEVO</span>
+                            <strong>Asiento #${nv.nroAsiento}</strong>
+                            <span style="color: #666; font-size: 13px;">${formatearFechaPW(nv.fecha)}</span>
+                        </div>
+                        <div style="font-size: 13px; color: #333; margin-top: 4px;">${nv.ejemploCompleto}</div>
+                        <div style="font-size: 12px; color: #666; margin-top: 2px;">
+                            Debe: $${nv.totalDebe?.toLocaleString('es-AR', {minimumFractionDigits: 2}) || '0,00'} |
+                            Haber: $${nv.totalHaber?.toLocaleString('es-AR', {minimumFractionDigits: 2}) || '0,00'}
+                        </div>
+                    </div>
+                    <span style="color: ${rev.eliminarNuevo ? '#f44336' : '#4caf50'}; font-size: 20px;">
+                        ${rev.eliminarNuevo ? '🗑️' : '✓'}
+                    </span>
+                </div>
+            `;
+        }
+
+        html += `
+                </div>
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+
+            <div style="background: #f5f5f5; padding: 12px; border-radius: 6px; margin-bottom: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #666;">
+                        <strong id="contadorEliminados">0</strong> asientos marcados para eliminar
+                    </span>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="marcarTodosReversionesPW(true)" class="btn-secondary" style="font-size: 12px; padding: 4px 8px;">
+                            Marcar todos (orig + rev)
+                        </button>
+                        <button onclick="marcarTodosReversionesPW(false)" class="btn-secondary" style="font-size: 12px; padding: 4px 8px;">
+                            Desmarcar todos
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-buttons" style="display: flex; gap: 1rem; justify-content: flex-end;">
+                <button onclick="cerrarModalReversionesPW()" class="btn-secondary">Cancelar</button>
+                <button onclick="ignorarReversionesPW()" class="btn-secondary">
+                    Ignorar y exportar todo
+                </button>
+                <button onclick="aplicarDepuracionPW()" class="btn-primary">
+                    ✓ Aplicar y continuar
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.innerHTML = html;
+    modal.style.display = 'flex';
+
+    // Agregar event listeners a los checkboxes
+    document.querySelectorAll('.reversion-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const revIdx = parseInt(e.target.dataset.revIdx);
+            const tipo = e.target.dataset.tipo;
+
+            if (tipo === 'original') {
+                state.reversionesPW[revIdx].eliminarOriginal = e.target.checked;
+            } else if (tipo === 'reversion') {
+                state.reversionesPW[revIdx].eliminarReversion = e.target.checked;
+            } else if (tipo === 'nuevo') {
+                state.reversionesPW[revIdx].eliminarNuevo = e.target.checked;
+            }
+
+            actualizarContadorEliminados();
+            actualizarIconosReversion(revIdx);
+        });
+    });
+
+    actualizarContadorEliminados();
+}
+
+/**
+ * Formatea una fecha para mostrar en el modal
+ */
+function formatearFechaPW(fecha) {
+    if (!fecha) return '';
+    if (typeof fecha === 'number') {
+        // Excel serial date
+        const date = new Date((fecha - 25569) * 86400 * 1000);
+        return date.toLocaleDateString('es-AR');
+    }
+    return String(fecha);
+}
+
+/**
+ * Actualiza el contador de asientos a eliminar
+ */
+function actualizarContadorEliminados() {
+    let count = 0;
+    state.reversionesPW.forEach(rev => {
+        if (rev.eliminarOriginal && rev.original) count++;
+        if (rev.eliminarReversion) count++;
+        if (rev.eliminarNuevo && rev.nuevo) count++;
+    });
+
+    const contador = document.getElementById('contadorEliminados');
+    if (contador) {
+        contador.textContent = count;
+    }
+}
+
+/**
+ * Actualiza los iconos de un grupo de reversión
+ */
+function actualizarIconosReversion(revIdx) {
+    const rev = state.reversionesPW[revIdx];
+
+    // Actualizar cada asiento del grupo
+    ['original', 'reversion', 'nuevo'].forEach(tipo => {
+        const checkbox = document.getElementById(`rev-${revIdx}-${tipo}`);
+        if (checkbox) {
+            const asientoItem = checkbox.closest('.asiento-item');
+            const iconSpan = asientoItem.querySelector('span:last-child');
+            const checked = checkbox.checked;
+
+            iconSpan.style.color = checked ? '#f44336' : '#4caf50';
+            iconSpan.textContent = checked ? '🗑️' : '✓';
+        }
+    });
+}
+
+/**
+ * Marca o desmarca todos los asientos originales y reversiones
+ */
+function marcarTodosReversionesPW(marcar) {
+    state.reversionesPW.forEach((rev, revIdx) => {
+        if (rev.original) {
+            rev.eliminarOriginal = marcar;
+            const cb = document.getElementById(`rev-${revIdx}-original`);
+            if (cb) cb.checked = marcar;
+        }
+
+        rev.eliminarReversion = marcar;
+        const cbRev = document.getElementById(`rev-${revIdx}-reversion`);
+        if (cbRev) cbRev.checked = marcar;
+
+        // El nuevo nunca se marca por defecto
+        rev.eliminarNuevo = false;
+        const cbNuevo = document.getElementById(`rev-${revIdx}-nuevo`);
+        if (cbNuevo) cbNuevo.checked = false;
+
+        actualizarIconosReversion(revIdx);
+    });
+
+    actualizarContadorEliminados();
+}
+
+/**
+ * Cierra el modal de reversiones sin hacer cambios
+ */
+function cerrarModalReversionesPW() {
+    const modal = document.getElementById('modalReversionesPW');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    state.reversionesPW = null;
+}
+
+/**
+ * Ignora las reversiones y exporta todo
+ */
+function ignorarReversionesPW() {
+    cerrarModalReversionesPW();
+    generarAsientosPWFinal();
+}
+
+/**
+ * Aplica la depuración eliminando los asientos marcados
+ */
+function aplicarDepuracionPW() {
+    if (!state.reversionesPW) {
+        cerrarModalReversionesPW();
+        return;
+    }
+
+    // Recopilar índices de asientos a eliminar
+    const indicesAEliminar = new Set();
+
+    state.reversionesPW.forEach(rev => {
+        if (rev.eliminarOriginal && rev.original) {
+            indicesAEliminar.add(rev.original.idx);
+        }
+        if (rev.eliminarReversion) {
+            indicesAEliminar.add(rev.reversion.idx);
+        }
+        if (rev.eliminarNuevo && rev.nuevo) {
+            indicesAEliminar.add(rev.nuevo.idx);
+        }
+    });
+
+    console.log(`Puente Web: Eliminando ${indicesAEliminar.size} asientos`);
+
+    // Eliminar asientos de groupedData (de mayor a menor para no afectar índices)
+    const indicesOrdenados = Array.from(indicesAEliminar).sort((a, b) => b - a);
+    indicesOrdenados.forEach(idx => {
+        state.groupedData.splice(idx, 1);
+    });
+
+    // Cerrar modal
+    cerrarModalReversionesPW();
+
+    // Continuar con la generación
+    generarAsientosPWFinal();
+}
+
+/**
+ * Genera los asientos finales de Puente Web (después de depuración)
+ */
+function generarAsientosPWFinal() {
+    // Llamar a la función original de generación
+    generateFinalExcel();
 }
 
 // ============================================
