@@ -2211,8 +2211,43 @@ function parseLaPampaWithPositions(linesWithPositions) {
 
     // Regex para detectar fecha DD/MM/AA o DD/MM/AAAA
     const dateRegex = /^(\d{2}\/\d{2}\/\d{2,4})\b/;
-    // Regex para importes argentinos (punto como separador de miles)
-    const amountRegex = /^-?\d{1,3}(?:\.\d{3})*(?:,\d{2})?$/;
+
+    // Funciones de parseo para el formato particular del BDLP
+    // El BDLP usa: punto como decimal (27165.83), coma como separador de millones en saldos (68,428615.16)
+
+    // Parsear importes de débito/crédito del BDLP (formato: 27165.83 - punto es decimal)
+    const parseImporteBDLP = (importeStr) => {
+        if (!importeStr || importeStr.trim() === '' || importeStr === '0') return 0;
+        // El punto ya es decimal, no hay separador de miles
+        return parseFloat(importeStr.trim());
+    };
+
+    // Parsear saldos del BDLP (formato: 68,428615.16 - coma separa millones, punto es decimal)
+    const parseSaldoBDLP = (saldoStr) => {
+        if (!saldoStr || saldoStr.trim() === '') return 0;
+        let cleaned = saldoStr.trim();
+        // Si tiene coma, es separador de millones (formato BDLP)
+        // Ejemplo: "68,428615.16" -> "68428615.16"
+        if (cleaned.includes(',')) {
+            cleaned = cleaned.replace(/,/g, '');
+        }
+        // Ahora el punto es decimal
+        return parseFloat(cleaned);
+    };
+
+    // Convertir número a formato argentino para mostrar/almacenar
+    const formatoArgentino = (numero) => {
+        if (numero === null || numero === undefined || numero === 0) return '0';
+        return numero.toLocaleString('es-AR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    };
+
+    // Regex para detectar importes del BDLP (punto como decimal)
+    // Formato débito/crédito: 27165.83, 1142.31, 10388.35
+    // Formato saldo: 68,428615.16 o 400307.02
+    const bdlpImporteRegex = /^\d+(?:,\d+)?\.\d{2}$/;
 
     console.log('='.repeat(80));
     console.log('PROCESANDO EXTRACTO BANCO DE LA PAMPA');
@@ -2303,6 +2338,18 @@ function parseLaPampaWithPositions(linesWithPositions) {
             continue;
         }
 
+        // Filtrar líneas que NO son movimientos (encabezados, totales, saldos informativos)
+        if (/Titulares:/i.test(text) ||
+            /Cantidad de Titulares/i.test(text) ||
+            /SALDO\s+ANTERIOR/i.test(text) ||
+            /Saldo\s+inicial/i.test(text) ||
+            /Resumen\s+Consolidado/i.test(text) ||
+            /Total\s+D[eé]bitos/i.test(text) ||
+            /Total\s+Cr[eé]ditos/i.test(text)) {
+            console.log('Línea ignorada (no es movimiento):', text.substring(0, 50));
+            continue;
+        }
+
         // Actualizar sección según marcadores
         if (/Saldo\s+final/i.test(text)) {
             currentSection = 'POST_MOVIMIENTOS';
@@ -2345,17 +2392,21 @@ function parseLaPampaWithPositions(linesWithPositions) {
                     fecha = `${parts[0]}/${parts[1]}/${fullYear}`;
                 }
 
-                // Buscar importes con sus posiciones
+                // Buscar importes con sus posiciones (formato BDLP)
+                // Formato BDLP: débitos/créditos usan punto decimal (27165.83)
+                // Saldos usan coma como separador de millones y punto decimal (68,428615.16 o 400307.02)
                 const amountsWithPositions = [];
                 for (const item of lineData.items) {
-                    const cleanText = item.text.trim().replace(/\./g, '');
-                    // Verificar si es un importe
-                    if (/^\d{1,3}(?:\d{3})*(?:,\d{2})?$/.test(item.text.trim().replace(/\./g, '').replace(',', '')) ||
-                        /^\d+,\d{2}$/.test(item.text.trim()) ||
-                        /^\d{1,3}(?:\.\d{3})*,\d{2}$/.test(item.text.trim())) {
+                    const itemText = item.text.trim();
+                    // Verificar si es un importe en formato BDLP:
+                    // - Débito/Crédito: 27165.83, 1142.31 (número con punto decimal)
+                    // - Saldo: 68,428615.16 o 400307.02 (opcionalmente con coma de millones)
+                    if (/^\d+(?:,\d+)?\.\d{2}$/.test(itemText)) {
                         amountsWithPositions.push({
-                            value: item.text.trim(),
-                            x: item.x
+                            value: itemText,
+                            x: item.x,
+                            // Marcar si es probablemente un saldo (tiene coma de millones)
+                            esSaldo: itemText.includes(',')
                         });
                     }
                 }
@@ -2383,43 +2434,50 @@ function parseLaPampaWithPositions(linesWithPositions) {
                 // Si no encontramos concepto, usar texto sin fecha ni números
                 if (!concepto) {
                     concepto = textAfterDate
-                        .replace(/\d{1,3}(?:\.\d{3})*,\d{2}/g, '')
+                        // Limpiar importes en formato BDLP (con punto decimal y opcionalmente coma de millones)
+                        .replace(/\d+(?:,\d+)?\.\d{2}/g, '')
                         .replace(/\d{6,}/g, '')
                         .trim();
                 }
 
-                // Clasificar importes
+                // Clasificar importes y convertir a formato argentino
                 let debito = '0';
                 let credito = '0';
                 let saldo = '0';
 
                 if (amountsWithPositions.length >= 1) {
-                    // El último siempre es saldo
-                    saldo = amountsWithPositions[amountsWithPositions.length - 1].value;
+                    // El último siempre es saldo - parsear y convertir a formato argentino
+                    const saldoRaw = amountsWithPositions[amountsWithPositions.length - 1].value;
+                    const saldoNumerico = parseSaldoBDLP(saldoRaw);
+                    saldo = formatoArgentino(saldoNumerico);
                 }
 
                 if (amountsWithPositions.length >= 2) {
-                    // El penúltimo es el movimiento
+                    // El penúltimo es el movimiento (débito o crédito)
                     const movAmount = amountsWithPositions[amountsWithPositions.length - 2];
+                    const importeNumerico = parseImporteBDLP(movAmount.value);
+                    const importeFormateado = formatoArgentino(importeNumerico);
 
                     if (movAmount.x < midPoint) {
-                        debito = movAmount.value;
+                        debito = importeFormateado;
                     } else {
-                        credito = movAmount.value;
+                        credito = importeFormateado;
                     }
                 }
 
-                // Si hay 3+ importes, revisar
+                // Si hay 3+ importes, revisar (puede haber débito Y crédito en la misma línea)
                 if (amountsWithPositions.length >= 3) {
                     const first = amountsWithPositions[0];
                     const second = amountsWithPositions[1];
 
                     // Primer importe podría ser débito si no es el comprobante
                     if (first.x >= debitoColumnX - 50 && first.x < midPoint) {
-                        debito = first.value;
+                        const importeNumerico = parseImporteBDLP(first.value);
+                        debito = formatoArgentino(importeNumerico);
                     }
                     if (second.x >= midPoint && second.x < saldoColumnX - 30) {
-                        credito = second.value;
+                        const importeNumerico = parseImporteBDLP(second.value);
+                        credito = formatoArgentino(importeNumerico);
                     }
                 }
 
@@ -2550,9 +2608,21 @@ function parseLaPampaWithPositions(linesWithPositions) {
 
 // Enriquecer movimientos con información de las secciones de detalle
 function enrichLaPampaMovements(movements, debitosAuto, transfEmitidas, transfRecibidas) {
+    // Parsea formato argentino (punto=miles, coma=decimal) usado en movimientos ya procesados
     const parseArgNumber = (str) => {
         if (!str || str === '0') return 0;
         return parseFloat(str.replace(/\./g, '').replace(',', '.'));
+    };
+
+    // Parsea formato BDLP (punto=decimal) usado en los detalles
+    const parseBDLPNumber = (str) => {
+        if (!str || str === '0') return 0;
+        // Formato BDLP: punto es decimal, coma es separador de millones
+        let cleaned = str.trim();
+        if (cleaned.includes(',')) {
+            cleaned = cleaned.replace(/,/g, '');
+        }
+        return parseFloat(cleaned);
     };
 
     const formatDate = (dateStr) => {
@@ -2603,7 +2673,7 @@ function enrichLaPampaMovements(movements, debitosAuto, transfEmitidas, transfRe
         if (seccionBusqueda === 'DEBITOS_AUTOMATICOS' || seccionBusqueda === 'TODAS') {
             for (const det of debitosAuto) {
                 const detDate = formatDate(det.fecha);
-                const detAmount = parseArgNumber(det.importe);
+                const detAmount = parseBDLPNumber(det.importe);
 
                 // Correlacionar por comprobante e importe
                 if (det.comprobante === movComprobante && Math.abs(detAmount - movAmount) < 0.01) {
@@ -2631,7 +2701,7 @@ function enrichLaPampaMovements(movements, debitosAuto, transfEmitidas, transfRe
         if (!detalleEncontrado && (seccionBusqueda === 'TRANSFERENCIAS_EMITIDAS' || seccionBusqueda === 'TODAS')) {
             for (const det of transfEmitidas) {
                 const detDate = formatDate(det.fecha);
-                const detAmount = parseArgNumber(det.importe);
+                const detAmount = parseBDLPNumber(det.importe);
 
                 if (det.comprobante === movComprobante && Math.abs(detAmount - movAmount) < 0.01) {
                     detalleEncontrado = {
@@ -2655,7 +2725,7 @@ function enrichLaPampaMovements(movements, debitosAuto, transfEmitidas, transfRe
         if (!detalleEncontrado && (seccionBusqueda === 'TRANSFERENCIAS_RECIBIDAS' || seccionBusqueda === 'TODAS')) {
             for (const det of transfRecibidas) {
                 const detDate = formatDate(det.fecha);
-                const detAmount = parseArgNumber(det.importe);
+                const detAmount = parseBDLPNumber(det.importe);
 
                 if (det.comprobante === movComprobante && Math.abs(detAmount - movAmount) < 0.01) {
                     detalleEncontrado = {
@@ -2726,9 +2796,23 @@ async function processLaPampaPDF(pdfFile) {
         for (const lineData of linesWithPositions) {
             // Buscar línea con "Saldo anterior" o "Saldo inicial"
             if (/Saldo\s+(anterior|inicial)/i.test(lineData.text)) {
-                const amounts = lineData.text.match(/\d{1,3}(?:\.\d{3})*,\d{2}/g);
+                // Formato BDLP: saldos con punto decimal y opcionalmente coma de millones
+                // Ejemplo: 68,428615.16 o 400307.02
+                const amounts = lineData.text.match(/\d+(?:,\d+)?\.\d{2}/g);
                 if (amounts && amounts.length >= 1) {
-                    state.saldoInicial = amounts[amounts.length - 1];
+                    // Parsear y convertir a formato argentino
+                    const saldoRaw = amounts[amounts.length - 1];
+                    let saldoNumerico;
+                    if (saldoRaw.includes(',')) {
+                        // Formato con coma de millones: "68,428615.16" -> 68428615.16
+                        saldoNumerico = parseFloat(saldoRaw.replace(/,/g, ''));
+                    } else {
+                        saldoNumerico = parseFloat(saldoRaw);
+                    }
+                    state.saldoInicial = saldoNumerico.toLocaleString('es-AR', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    });
                 }
                 break;
             }
