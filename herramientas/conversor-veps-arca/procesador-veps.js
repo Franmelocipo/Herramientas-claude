@@ -2,6 +2,7 @@
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 let datosExtraidos = [];
+let contadorVEPsSinNumero = 0; // Contador para generar IDs únicos cuando no se puede extraer el número de VEP
 
 // Drag & Drop
 const uploadArea = document.getElementById('uploadArea');
@@ -35,6 +36,7 @@ async function procesarArchivos(archivos) {
     }
 
     datosExtraidos = [];
+    contadorVEPsSinNumero = 0; // Resetear contador de VEPs sin número
 
     document.getElementById('progressSection').style.display = 'block';
     document.getElementById('resultsSection').style.display = 'none';
@@ -59,11 +61,6 @@ async function procesarArchivos(archivos) {
 }
 
 async function procesarVEP(archivo) {
-    // Extraer número de VEP del nombre del archivo
-    const nombreArchivo = archivo.name;
-    const matchVEP = nombreArchivo.match(/nrovep_(\d+)/);
-    const nroVEP = matchVEP ? matchVEP[1] : '';
-
     // Leer PDF
     const arrayBuffer = await archivo.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -72,6 +69,51 @@ async function procesarVEP(archivo) {
     const page = await pdf.getPage(1);
     const textContent = await page.getTextContent();
     const texto = textContent.items.map(item => item.str).join(' ');
+
+    // Extraer número de VEP: primero del nombre del archivo, luego del contenido del PDF
+    let nroVEP = '';
+
+    // Intentar desde el nombre del archivo
+    const nombreArchivo = archivo.name;
+    const matchVEPNombre = nombreArchivo.match(/nrovep_(\d+)/i);
+    if (matchVEPNombre) {
+        nroVEP = matchVEPNombre[1];
+    } else {
+        // Intentar extraer del contenido del PDF con varios patrones
+        // Patrones comunes en VEPs de ARCA/AFIP:
+        // - "VEP Nro. 12345678"
+        // - "VEP N° 12345678"
+        // - "Número de VEP: 12345678"
+        // - "VEP: 12345678"
+        // - "N° VEP 12345678"
+        // - "VEP 12345678901234" (número de 8-14 dígitos después de VEP)
+        const patronesVEP = [
+            /VEP\s*(?:Nro\.?|N[°º]\.?|:)\s*(\d+)/i,
+            /N[°º]\.?\s*(?:de\s+)?VEP[:\s]*(\d+)/i,
+            /Número\s+de\s+VEP[:\s]*(\d+)/i,
+            /Nro\.?\s*VEP[:\s]*(\d+)/i,
+            /VEP\s+(\d{8,14})/i,  // VEP seguido de número largo (8-14 dígitos)
+            /(\d{10,14})\s*VEP/i  // Número largo seguido de VEP
+        ];
+
+        for (const patron of patronesVEP) {
+            const match = texto.match(patron);
+            if (match) {
+                nroVEP = match[1];
+                console.log(`Número de VEP extraído del contenido: ${nroVEP}`);
+                break;
+            }
+        }
+    }
+
+    // Si aún no se encontró el número de VEP, generar uno basado en el nombre del archivo
+    if (!nroVEP) {
+        contadorVEPsSinNumero++;
+        // Usar nombre del archivo sin extensión como identificador
+        const nombreSinExtension = archivo.name.replace(/\.pdf$/i, '').replace(/[^a-zA-Z0-9]/g, '_');
+        nroVEP = `AUTO_${contadorVEPsSinNumero}_${nombreSinExtension.substring(0, 20)}`;
+        console.warn(`No se pudo extraer número de VEP, generando ID: ${nroVEP}`);
+    }
 
     // Extraer datos del texto
     const datos = extraerDatosVEP(texto, nroVEP);
