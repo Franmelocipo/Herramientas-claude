@@ -524,8 +524,17 @@ body {
 }
 
 .dropdown-item.activo {
-    background: #e3f2fd;
-    border-left: 3px solid #3b82f6;
+    background: #dbeafe;
+    border-left: 4px solid #2563eb;
+    box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.2);
+}
+
+.dropdown-item.activo .dropdown-item-code {
+    color: #1d4ed8;
+}
+
+.dropdown-item.activo .dropdown-item-desc {
+    color: #3b82f6;
 }
 
 .dropdown-item-code {
