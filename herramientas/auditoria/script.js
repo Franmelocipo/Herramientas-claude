@@ -1214,14 +1214,31 @@ function renderizarDetalleExtracto() {
         stats.classList.remove('modo-rango');
     }
 
+    // Calcular saldo inicial y cierre
+    const saldoInicial = state.extractoActual?.saldo_inicial ?? null;
+    // Ordenar movimientos por fecha para obtener el último saldo
+    const movimientosOrdenados = [...state.movimientosEditados].sort((a, b) => {
+        const fechaA = a.fecha?.split('/').reverse().join('') || '';
+        const fechaB = b.fecha?.split('/').reverse().join('') || '';
+        return fechaA.localeCompare(fechaB);
+    });
+    const ultimoMovimiento = movimientosOrdenados[movimientosOrdenados.length - 1];
+    const saldoCierre = ultimoMovimiento?.saldo ?? null;
+
     stats.innerHTML = `
-        <span>Mostrando ${movimientos.length} de ${state.movimientosEditados.length} movimientos</span>
-        ${state.modoRango ? `<span class="stat-rango">📅 ${state.extractosRango.length} extractos combinados</span>` : ''}
-        <span class="stat-credito">Total Créditos: <strong>$${formatNumber(totalCreditos)}</strong></span>
-        <span class="stat-debito">Total Débitos: <strong>$${formatNumber(totalDebitos)}</strong></span>
-        <span class="stat-categorias">Clasificados: <strong>${conCategoria}</strong> | Sin categoría: <strong>${sinCategoria}</strong></span>
-        ${state.movimientosEliminados.length > 0 ?
-            `<span class="stat-eliminados">${state.movimientosEliminados.length} eliminados (restaurables)</span>` : ''}
+        <div class="stats-row stats-saldos">
+            <span class="stat-saldo-inicio">Saldo Inicio: <strong>${saldoInicial !== null ? '$' + formatNumber(saldoInicial) : 'N/D'}</strong></span>
+            <span class="stat-saldo-cierre">Saldo Cierre: <strong>${saldoCierre !== null ? '$' + formatNumber(saldoCierre) : 'N/D'}</strong></span>
+        </div>
+        <div class="stats-row stats-movimientos">
+            <span>Mostrando ${movimientos.length} de ${state.movimientosEditados.length} movimientos</span>
+            ${state.modoRango ? `<span class="stat-rango">📅 ${state.extractosRango.length} extractos combinados</span>` : ''}
+            <span class="stat-credito">Total Créditos: <strong>$${formatNumber(totalCreditos)}</strong></span>
+            <span class="stat-debito">Total Débitos: <strong>$${formatNumber(totalDebitos)}</strong></span>
+            <span class="stat-categorias">Clasificados: <strong>${conCategoria}</strong> | Sin categoría: <strong>${sinCategoria}</strong></span>
+            ${state.movimientosEliminados.length > 0 ?
+                `<span class="stat-eliminados">${state.movimientosEliminados.length} eliminados (restaurables)</span>` : ''}
+        </div>
     `;
 
     // Renderizar filas con columna de categoría y checkbox

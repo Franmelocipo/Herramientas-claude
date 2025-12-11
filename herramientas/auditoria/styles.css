@@ -677,6 +677,38 @@ body {
     color: #f59e0b;
 }
 
+/* Filas de estadísticas */
+.stats-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    width: 100%;
+}
+
+.stats-saldos {
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.stat-saldo-inicio,
+.stat-saldo-cierre {
+    font-weight: 500;
+}
+
+.stat-saldo-inicio strong,
+.stat-saldo-cierre strong {
+    font-size: 15px;
+}
+
+.stat-saldo-inicio {
+    color: #6366f1;
+}
+
+.stat-saldo-cierre {
+    color: #0891b2;
+}
+
 /* Tabla */
 .preview-container {
     border: 1px solid #e2e8f0;
@@ -1064,6 +1096,15 @@ body {
     .stats-bar {
         flex-direction: column;
         gap: 8px;
+    }
+
+    .stats-row {
+        gap: 12px;
+    }
+
+    .stats-saldos {
+        padding-bottom: 8px;
+        margin-bottom: 8px;
     }
 
     /* Responsive para marcadores */
