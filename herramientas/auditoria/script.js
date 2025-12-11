@@ -1,55 +1,51 @@
 // ============================================
-// MÓDULO DE AUDITORÍA - CUENTAS BANCARIAS Y EXTRACTOS
+// HERRAMIENTA DE AUDITORÍA - CUENTAS BANCARIAS Y EXTRACTOS
 // ============================================
 
-// Estado del módulo de auditoría
-const auditoriaState = {
+// Estado de la herramienta
+const state = {
     clienteActual: null,
     cuentaActual: null,
     extractoActual: null,
-    movimientosOriginales: [], // Para restaurar
+    movimientosOriginales: [],
     movimientosEditados: [],
     movimientosEliminados: [],
     ordenActual: { columna: null, direccion: 'asc' },
     filtros: {},
-    clientesCache: [] // Cache de clientes para el selector
+    clientesCache: []
 };
 
 // ============================================
-// MODAL PRINCIPAL DE AUDITORÍA
+// INICIALIZACIÓN
+// ============================================
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await cargarClientes();
+
+    // Event listeners para filtros
+    const filtroFecha = document.getElementById('filtroFecha');
+    const filtroDescripcion = document.getElementById('filtroDescripcion');
+    const filtroOrigen = document.getElementById('filtroOrigen');
+
+    if (filtroFecha) filtroFecha.addEventListener('input', aplicarFiltrosExtracto);
+    if (filtroDescripcion) filtroDescripcion.addEventListener('input', aplicarFiltrosExtracto);
+    if (filtroOrigen) filtroOrigen.addEventListener('input', aplicarFiltrosExtracto);
+});
+
+// ============================================
+// GESTIÓN DE CLIENTES
 // ============================================
 
 /**
- * Abrir modal principal de auditoría
+ * Cargar clientes en el selector
  */
-async function abrirModalAuditoria() {
-    document.getElementById('modalAuditoria').classList.remove('hidden');
-    document.getElementById('auditoriaDashboard').style.display = 'none';
-    document.getElementById('auditoriaEmptyState').style.display = 'block';
-    document.getElementById('auditoriaClienteSelect').value = '';
-    document.getElementById('auditoriaClienteSearch').value = '';
-
-    await cargarClientesAuditoria();
-}
-
-/**
- * Cerrar modal principal de auditoría
- */
-function cerrarModalAuditoria() {
-    document.getElementById('modalAuditoria').classList.add('hidden');
-    auditoriaState.clienteActual = null;
-}
-
-/**
- * Cargar clientes en el selector de auditoría
- */
-async function cargarClientesAuditoria() {
-    const select = document.getElementById('auditoriaClienteSelect');
+async function cargarClientes() {
+    const select = document.getElementById('clienteSelect');
 
     try {
         let clientes = [];
 
-        if (supabase) {
+        if (typeof supabase !== 'undefined' && supabase) {
             const { data, error } = await supabase
                 .from('clientes')
                 .select('*')
@@ -62,7 +58,7 @@ async function cargarClientesAuditoria() {
             clientes = JSON.parse(localStorage.getItem('clientes') || '[]');
         }
 
-        auditoriaState.clientesCache = clientes;
+        state.clientesCache = clientes;
         renderizarSelectClientes(clientes);
     } catch (error) {
         console.error('Error cargando clientes:', error);
@@ -74,7 +70,7 @@ async function cargarClientesAuditoria() {
  * Renderizar opciones del selector de clientes
  */
 function renderizarSelectClientes(clientes) {
-    const select = document.getElementById('auditoriaClienteSelect');
+    const select = document.getElementById('clienteSelect');
 
     select.innerHTML = '<option value="">-- Seleccione un cliente --</option>' +
         clientes.map(c => `<option value="${c.id}" data-cuit="${c.cuit || ''}">${c.razon_social}${c.cuit ? ` (${c.cuit})` : ''}</option>`).join('');
@@ -83,9 +79,9 @@ function renderizarSelectClientes(clientes) {
 /**
  * Filtrar clientes en el selector
  */
-function filtrarClientesAuditoria() {
-    const busqueda = document.getElementById('auditoriaClienteSearch').value.toLowerCase();
-    const clientes = auditoriaState.clientesCache;
+function filtrarClientes() {
+    const busqueda = document.getElementById('clienteSearch').value.toLowerCase();
+    const clientes = state.clientesCache;
 
     const filtrados = clientes.filter(c => {
         const nombre = (c.razon_social || '').toLowerCase();
@@ -96,17 +92,21 @@ function filtrarClientesAuditoria() {
     renderizarSelectClientes(filtrados);
 }
 
+// ============================================
+// DASHBOARD PRINCIPAL
+// ============================================
+
 /**
- * Cargar dashboard de auditoría cuando se selecciona un cliente
+ * Cargar dashboard cuando se selecciona un cliente
  */
-async function cargarDashboardAuditoria() {
-    const select = document.getElementById('auditoriaClienteSelect');
+async function cargarDashboard() {
+    const select = document.getElementById('clienteSelect');
     const clienteId = select.value;
 
     if (!clienteId) {
-        document.getElementById('auditoriaDashboard').style.display = 'none';
-        document.getElementById('auditoriaEmptyState').style.display = 'block';
-        auditoriaState.clienteActual = null;
+        document.getElementById('dashboard').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'block';
+        state.clienteActual = null;
         return;
     }
 
@@ -115,19 +115,19 @@ async function cargarDashboardAuditoria() {
     const clienteNombre = selectedOption.text.split(' (')[0];
     const clienteCuit = selectedOption.dataset.cuit || '';
 
-    auditoriaState.clienteActual = {
+    state.clienteActual = {
         id: clienteId,
         nombre: clienteNombre,
         cuit: clienteCuit
     };
 
     // Mostrar info del cliente
-    document.getElementById('auditoriaClienteNombre').textContent = clienteNombre;
-    document.getElementById('auditoriaClienteCuit').textContent = clienteCuit ? `CUIT: ${clienteCuit}` : '';
+    document.getElementById('clienteNombre').textContent = clienteNombre;
+    document.getElementById('clienteCuit').textContent = clienteCuit ? `CUIT: ${clienteCuit}` : '';
 
     // Mostrar dashboard y ocultar estado vacío
-    document.getElementById('auditoriaDashboard').style.display = 'block';
-    document.getElementById('auditoriaEmptyState').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('emptyState').style.display = 'none';
 
     // Cargar cuentas bancarias con extractos
     await cargarCuentasConExtractos(clienteId);
@@ -137,13 +137,13 @@ async function cargarDashboardAuditoria() {
  * Cargar cuentas bancarias con sus extractos para el dashboard
  */
 async function cargarCuentasConExtractos(clienteId) {
-    const container = document.getElementById('auditoriaCuentasList');
+    const container = document.getElementById('cuentasList');
     container.innerHTML = '<div class="loading-state">Cargando cuentas bancarias y extractos...</div>';
 
     try {
         let cuentas = [];
 
-        if (supabase) {
+        if (typeof supabase !== 'undefined' && supabase) {
             // Cargar cuentas bancarias
             const { data: cuentasData, error: cuentasError } = await supabase
                 .from('cuentas_bancarias')
@@ -184,7 +184,7 @@ async function cargarCuentasConExtractos(clienteId) {
  * Renderizar cuentas bancarias con sus extractos en formato de panel
  */
 function renderizarCuentasConExtractos(cuentas) {
-    const container = document.getElementById('auditoriaCuentasList');
+    const container = document.getElementById('cuentasList');
     const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
     const mesesCompletos = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
                            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -194,7 +194,7 @@ function renderizarCuentasConExtractos(cuentas) {
             <div class="empty-state" style="padding: 40px;">
                 <div style="font-size: 48px; margin-bottom: 12px;">🏦</div>
                 <p>No hay cuentas bancarias configuradas para este cliente.</p>
-                <button onclick="mostrarNuevaCuentaBancariaAuditoria()" class="btn-primary" style="margin-top: 16px;">+ Agregar Cuenta Bancaria</button>
+                <button onclick="mostrarNuevaCuentaBancaria()" class="btn-primary" style="margin-top: 16px;">+ Agregar Cuenta Bancaria</button>
             </div>
         `;
         return;
@@ -215,37 +215,35 @@ function renderizarCuentasConExtractos(cuentas) {
         });
 
         html += `
-            <div class="cuenta-panel" style="background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 20px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <div class="cuenta-panel">
                 <!-- Header de la cuenta -->
-                <div style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-                    <div>
-                        <h4 style="margin: 0; color: #1e293b; font-size: 16px;">
+                <div class="cuenta-header">
+                    <div class="cuenta-info">
+                        <h4>
                             🏦 ${cuenta.banco || 'Sin nombre'}
-                            <span style="font-weight: normal; color: #64748b; font-size: 14px;"> - ${cuenta.tipo_cuenta || 'Cuenta'}</span>
+                            <span class="cuenta-tipo"> - ${cuenta.tipo_cuenta || 'Cuenta'}</span>
                         </h4>
-                        <div style="font-size: 13px; color: #64748b; margin-top: 4px;">
+                        <div class="cuenta-detalle">
                             ${cuenta.numero_cuenta ? `N°: ${cuenta.numero_cuenta}` : ''}
                             ${cuenta.alias ? ` | Alias: ${cuenta.alias}` : ''}
                         </div>
                     </div>
-                    <div style="display: flex; gap: 8px;">
-                        <button onclick="mostrarSubirExtractoAuditoria('${cuenta.id}', '${(cuenta.banco || '').replace(/'/g, "\\'")} - ${(cuenta.tipo_cuenta || '').replace(/'/g, "\\'")}')" class="btn-primary btn-sm" style="padding: 6px 12px;">
+                    <div class="cuenta-actions">
+                        <button onclick="mostrarSubirExtractoDirecto('${cuenta.id}', '${(cuenta.banco || '').replace(/'/g, "\\'")} - ${(cuenta.tipo_cuenta || '').replace(/'/g, "\\'")}')" class="btn-primary btn-sm">
                             📤 Subir Extracto
                         </button>
-                        <button onclick="editarCuentaBancariaAuditoria('${cuenta.id}')" class="btn-secondary btn-sm" style="padding: 6px 12px;">✏️</button>
-                        <button onclick="eliminarCuentaBancariaAuditoria('${cuenta.id}')" class="btn-danger btn-sm" style="padding: 6px 12px;">🗑️</button>
+                        <button onclick="editarCuentaBancaria('${cuenta.id}')" class="btn-secondary btn-sm">✏️</button>
+                        <button onclick="eliminarCuentaBancaria('${cuenta.id}')" class="btn-danger btn-sm">🗑️</button>
                     </div>
                 </div>
 
                 <!-- Grid de extractos por año -->
-                <div style="padding: 16px;">
+                <div class="extractos-grid-container">
                     ${anios.map(anio => {
-                        const tieneExtractos = meses.some((_, idx) => extractosMap[`${anio}-${idx + 1}`]);
-
                         return `
-                            <div style="margin-bottom: 16px;">
-                                <h5 style="margin: 0 0 8px 0; color: #475569; font-size: 14px;">${anio}</h5>
-                                <div style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px;">
+                            <div class="extractos-anio">
+                                <h5>${anio}</h5>
+                                <div class="extractos-grid">
                                     ${meses.map((mes, idx) => {
                                         const extracto = extractosMap[`${anio}-${idx + 1}`];
                                         const movimientos = extracto?.data?.length || 0;
@@ -253,25 +251,19 @@ function renderizarCuentasConExtractos(cuentas) {
                                         if (extracto) {
                                             return `
                                                 <div class="extracto-cell extracto-cargado"
-                                                     onclick="verDetalleExtractoAuditoria('${extracto.id}', '${cuenta.id}')"
-                                                     style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border: 1px solid #86efac; border-radius: 8px; padding: 8px 4px; text-align: center; cursor: pointer; transition: all 0.2s;"
-                                                     onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 12px rgba(34,197,94,0.3)'"
-                                                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none'"
+                                                     onclick="verDetalleExtracto('${extracto.id}', '${cuenta.id}')"
                                                      title="${mesesCompletos[idx]} ${anio} - ${movimientos} movimientos - Click para ver detalle">
-                                                    <div style="font-weight: 600; color: #16a34a; font-size: 12px;">${mes}</div>
-                                                    <div style="font-size: 10px; color: #22c55e;">${movimientos} mov</div>
+                                                    <div class="extracto-mes">${mes}</div>
+                                                    <div class="extracto-mov">${movimientos} mov</div>
                                                 </div>
                                             `;
                                         } else {
                                             return `
                                                 <div class="extracto-cell extracto-vacio"
-                                                     onclick="mostrarSubirExtractoAuditoria('${cuenta.id}', '${(cuenta.banco || '').replace(/'/g, "\\'")}', ${idx + 1}, ${anio})"
-                                                     style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 8px 4px; text-align: center; cursor: pointer; transition: all 0.2s;"
-                                                     onmouseover="this.style.borderColor='#3b82f6'; this.style.background='#eff6ff'"
-                                                     onmouseout="this.style.borderColor='#cbd5e1'; this.style.background='#f8fafc'"
+                                                     onclick="mostrarSubirExtractoDirecto('${cuenta.id}', '${(cuenta.banco || '').replace(/'/g, "\\'")}', ${idx + 1}, ${anio})"
                                                      title="${mesesCompletos[idx]} ${anio} - Click para cargar extracto">
-                                                    <div style="font-weight: 500; color: #94a3b8; font-size: 12px;">${mes}</div>
-                                                    <div style="font-size: 10px; color: #cbd5e1;">---</div>
+                                                    <div class="extracto-mes">${mes}</div>
+                                                    <div class="extracto-mov">---</div>
                                                 </div>
                                             `;
                                         }
@@ -283,9 +275,9 @@ function renderizarCuentasConExtractos(cuentas) {
 
                     <!-- Ver todos los extractos -->
                     ${(cuenta.extractos || []).length > 0 ? `
-                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
+                        <div class="ver-todos-extractos">
                             <button onclick="verTodosExtractosCuenta('${cuenta.id}', '${(cuenta.banco || '').replace(/'/g, "\\'")} - ${(cuenta.numero_cuenta || '').replace(/'/g, "\\'")}')"
-                                    class="btn-secondary" style="width: 100%; padding: 8px;">
+                                    class="btn-secondary btn-full">
                                 📋 Ver todos los extractos (${(cuenta.extractos || []).length})
                             </button>
                         </div>
@@ -298,204 +290,25 @@ function renderizarCuentasConExtractos(cuentas) {
     container.innerHTML = html;
 }
 
-/**
- * Mostrar modal para nueva cuenta bancaria desde auditoría
- */
-function mostrarNuevaCuentaBancariaAuditoria() {
-    if (!auditoriaState.clienteActual) {
-        alert('Seleccione un cliente primero');
-        return;
-    }
-    mostrarNuevaCuentaBancaria();
-}
-
-/**
- * Mostrar modal para subir extracto desde auditoría
- */
-function mostrarSubirExtractoAuditoria(cuentaId, cuentaNombre, mes, anio) {
-    auditoriaState.cuentaActual = { id: cuentaId, nombre: cuentaNombre };
-
-    // Establecer mes y año si se proporcionan
-    if (mes) {
-        document.getElementById('extractoMes').value = mes;
-    } else {
-        document.getElementById('extractoMes').value = new Date().getMonth() + 1;
-    }
-
-    if (anio) {
-        document.getElementById('extractoAnio').value = anio;
-    } else {
-        document.getElementById('extractoAnio').value = new Date().getFullYear();
-    }
-
-    document.getElementById('extractoFile').value = '';
-    document.getElementById('extractoFileInfo').textContent = '';
-    document.getElementById('modalSubirExtracto').classList.remove('hidden');
-}
-
-/**
- * Ver detalle de extracto desde auditoría
- */
-async function verDetalleExtractoAuditoria(extractoId, cuentaId) {
-    auditoriaState.cuentaActual = { id: cuentaId };
-    await verDetalleExtracto(extractoId);
-}
-
-/**
- * Ver todos los extractos de una cuenta
- */
-async function verTodosExtractosCuenta(cuentaId, cuentaNombre) {
-    auditoriaState.cuentaActual = { id: cuentaId, nombre: cuentaNombre };
-    document.getElementById('extractosCuentaNombre').textContent = cuentaNombre;
-    document.getElementById('modalExtractosMensuales').classList.remove('hidden');
-    await cargarExtractosMensuales(cuentaId);
-}
-
-/**
- * Editar cuenta bancaria desde auditoría
- */
-async function editarCuentaBancariaAuditoria(id) {
-    await editarCuentaBancaria(id);
-}
-
-/**
- * Eliminar cuenta bancaria desde auditoría
- */
-async function eliminarCuentaBancariaAuditoria(id) {
-    if (!confirm('¿Eliminar esta cuenta bancaria? También se eliminarán todos los extractos asociados.')) {
-        return;
-    }
-
-    const clienteId = auditoriaState.clienteActual?.id;
-
-    try {
-        if (supabase) {
-            await supabase.from('extractos_mensuales').delete().eq('cuenta_id', id);
-            const { error } = await supabase.from('cuentas_bancarias').delete().eq('id', id);
-            if (error) throw error;
-        } else {
-            const cuentas = JSON.parse(localStorage.getItem(`cuentas_bancarias_${clienteId}`) || '[]');
-            const nuevasCuentas = cuentas.filter(c => c.id !== id);
-            localStorage.setItem(`cuentas_bancarias_${clienteId}`, JSON.stringify(nuevasCuentas));
-            localStorage.removeItem(`extractos_${id}`);
-        }
-
-        await cargarCuentasConExtractos(clienteId);
-        alert('Cuenta bancaria eliminada');
-    } catch (error) {
-        console.error('Error eliminando cuenta:', error);
-        alert('Error al eliminar la cuenta bancaria');
-    }
-}
-
 // ============================================
 // GESTIÓN DE CUENTAS BANCARIAS
 // ============================================
 
 /**
- * Abrir modal de cuentas bancarias para un cliente
- */
-async function abrirCuentasBancarias(clienteId, clienteNombre) {
-    auditoriaState.clienteActual = { id: clienteId, nombre: clienteNombre };
-
-    document.getElementById('cuentasBancariasClienteNombre').textContent = clienteNombre;
-    document.getElementById('modalCuentasBancarias').classList.remove('hidden');
-
-    await cargarCuentasBancarias(clienteId);
-}
-
-/**
- * Cerrar modal de cuentas bancarias
- */
-function cerrarCuentasBancarias() {
-    document.getElementById('modalCuentasBancarias').classList.add('hidden');
-    auditoriaState.clienteActual = null;
-}
-
-/**
- * Cargar cuentas bancarias desde Supabase
- */
-async function cargarCuentasBancarias(clienteId) {
-    const lista = document.getElementById('cuentasBancariasList');
-    lista.innerHTML = '<div class="loading-state">Cargando cuentas bancarias...</div>';
-
-    try {
-        // Intentar cargar desde Supabase
-        if (supabase) {
-            const { data, error } = await supabase
-                .from('cuentas_bancarias')
-                .select('*')
-                .eq('cliente_id', clienteId)
-                .order('banco');
-
-            if (error) throw error;
-
-            renderizarCuentasBancarias(data || []);
-        } else {
-            // Fallback a localStorage
-            const cuentas = JSON.parse(localStorage.getItem(`cuentas_bancarias_${clienteId}`) || '[]');
-            renderizarCuentasBancarias(cuentas);
-        }
-    } catch (error) {
-        console.error('Error cargando cuentas bancarias:', error);
-        lista.innerHTML = '<div class="error-state">Error al cargar cuentas bancarias</div>';
-    }
-}
-
-/**
- * Renderizar lista de cuentas bancarias
- */
-function renderizarCuentasBancarias(cuentas) {
-    const lista = document.getElementById('cuentasBancariasList');
-
-    if (cuentas.length === 0) {
-        lista.innerHTML = '<div class="empty-state">No hay cuentas bancarias configuradas. Agregue una para comenzar.</div>';
-        return;
-    }
-
-    const html = `
-        <table class="preview-table" style="width: 100%;">
-            <thead>
-                <tr>
-                    <th>Banco</th>
-                    <th>Tipo de Cuenta</th>
-                    <th>Número/CBU</th>
-                    <th>Alias</th>
-                    <th style="width: 200px; text-align: center;">Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${cuentas.map(cuenta => `
-                    <tr>
-                        <td>${cuenta.banco || '-'}</td>
-                        <td>${cuenta.tipo_cuenta || '-'}</td>
-                        <td>${cuenta.numero_cuenta || '-'}</td>
-                        <td>${cuenta.alias || '-'}</td>
-                        <td style="text-align: center;">
-                            <button onclick="verExtractosCuenta('${cuenta.id}', '${(cuenta.banco || '').replace(/'/g, "\\'")} - ${(cuenta.numero_cuenta || '').replace(/'/g, "\\'")}')" class="btn-sm btn-primary" style="margin-right: 4px;">📋 Extractos</button>
-                            <button onclick="editarCuentaBancaria('${cuenta.id}')" class="btn-sm btn-secondary" style="margin-right: 4px;">✏️</button>
-                            <button onclick="eliminarCuentaBancaria('${cuenta.id}')" class="btn-sm btn-danger">🗑️</button>
-                        </td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-    `;
-
-    lista.innerHTML = html;
-}
-
-/**
  * Mostrar modal para nueva cuenta bancaria
  */
 function mostrarNuevaCuentaBancaria() {
-    document.getElementById('nuevaCuentaBancariaId').value = '';
-    document.getElementById('nuevaCuentaBanco').value = '';
-    document.getElementById('nuevaCuentaTipo').value = 'Cuenta Corriente';
-    document.getElementById('nuevaCuentaNumero').value = '';
-    document.getElementById('nuevaCuentaAlias').value = '';
+    if (!state.clienteActual) {
+        alert('Seleccione un cliente primero');
+        return;
+    }
+    document.getElementById('cuentaBancariaId').value = '';
+    document.getElementById('cuentaBanco').value = '';
+    document.getElementById('cuentaTipo').value = 'Cuenta Corriente';
+    document.getElementById('cuentaNumero').value = '';
+    document.getElementById('cuentaAlias').value = '';
     document.getElementById('modalNuevaCuentaBancaria').classList.remove('hidden');
-    document.getElementById('nuevaCuentaBanco').focus();
+    document.getElementById('cuentaBanco').focus();
 }
 
 /**
@@ -509,18 +322,18 @@ function cerrarNuevaCuentaBancaria() {
  * Guardar cuenta bancaria (crear o editar)
  */
 async function guardarCuentaBancaria() {
-    const id = document.getElementById('nuevaCuentaBancariaId').value;
-    const banco = document.getElementById('nuevaCuentaBanco').value.trim();
-    const tipo = document.getElementById('nuevaCuentaTipo').value;
-    const numero = document.getElementById('nuevaCuentaNumero').value.trim();
-    const alias = document.getElementById('nuevaCuentaAlias').value.trim();
+    const id = document.getElementById('cuentaBancariaId').value;
+    const banco = document.getElementById('cuentaBanco').value.trim();
+    const tipo = document.getElementById('cuentaTipo').value;
+    const numero = document.getElementById('cuentaNumero').value.trim();
+    const alias = document.getElementById('cuentaAlias').value.trim();
 
     if (!banco) {
         alert('El nombre del banco es obligatorio');
         return;
     }
 
-    const clienteId = auditoriaState.clienteActual?.id;
+    const clienteId = state.clienteActual?.id;
     if (!clienteId) {
         alert('Error: No hay cliente seleccionado');
         return;
@@ -535,7 +348,7 @@ async function guardarCuentaBancaria() {
             alias
         };
 
-        if (supabase) {
+        if (typeof supabase !== 'undefined' && supabase) {
             if (id) {
                 // Actualizar
                 const { error } = await supabase
@@ -564,8 +377,7 @@ async function guardarCuentaBancaria() {
         }
 
         cerrarNuevaCuentaBancaria();
-        await cargarCuentasBancarias(clienteId);
-        await recargarDashboardAuditoriaSiVisible(); // Recargar dashboard si está visible
+        await cargarCuentasConExtractos(clienteId);
         alert(id ? 'Cuenta bancaria actualizada' : 'Cuenta bancaria creada');
     } catch (error) {
         console.error('Error guardando cuenta bancaria:', error);
@@ -579,9 +391,9 @@ async function guardarCuentaBancaria() {
 async function editarCuentaBancaria(id) {
     try {
         let cuenta;
-        const clienteId = auditoriaState.clienteActual?.id;
+        const clienteId = state.clienteActual?.id;
 
-        if (supabase) {
+        if (typeof supabase !== 'undefined' && supabase) {
             const { data, error } = await supabase
                 .from('cuentas_bancarias')
                 .select('*')
@@ -599,11 +411,11 @@ async function editarCuentaBancaria(id) {
             return;
         }
 
-        document.getElementById('nuevaCuentaBancariaId').value = cuenta.id;
-        document.getElementById('nuevaCuentaBanco').value = cuenta.banco || '';
-        document.getElementById('nuevaCuentaTipo').value = cuenta.tipo_cuenta || 'Cuenta Corriente';
-        document.getElementById('nuevaCuentaNumero').value = cuenta.numero_cuenta || '';
-        document.getElementById('nuevaCuentaAlias').value = cuenta.alias || '';
+        document.getElementById('cuentaBancariaId').value = cuenta.id;
+        document.getElementById('cuentaBanco').value = cuenta.banco || '';
+        document.getElementById('cuentaTipo').value = cuenta.tipo_cuenta || 'Cuenta Corriente';
+        document.getElementById('cuentaNumero').value = cuenta.numero_cuenta || '';
+        document.getElementById('cuentaAlias').value = cuenta.alias || '';
         document.getElementById('modalNuevaCuentaBancaria').classList.remove('hidden');
     } catch (error) {
         console.error('Error cargando cuenta:', error);
@@ -619,21 +431,12 @@ async function eliminarCuentaBancaria(id) {
         return;
     }
 
-    const clienteId = auditoriaState.clienteActual?.id;
+    const clienteId = state.clienteActual?.id;
 
     try {
-        if (supabase) {
-            // Primero eliminar extractos asociados
-            await supabase
-                .from('extractos_mensuales')
-                .delete()
-                .eq('cuenta_id', id);
-
-            // Luego eliminar la cuenta
-            const { error } = await supabase
-                .from('cuentas_bancarias')
-                .delete()
-                .eq('id', id);
+        if (typeof supabase !== 'undefined' && supabase) {
+            await supabase.from('extractos_mensuales').delete().eq('cuenta_id', id);
+            const { error } = await supabase.from('cuentas_bancarias').delete().eq('id', id);
             if (error) throw error;
         } else {
             const cuentas = JSON.parse(localStorage.getItem(`cuentas_bancarias_${clienteId}`) || '[]');
@@ -642,7 +445,7 @@ async function eliminarCuentaBancaria(id) {
             localStorage.removeItem(`extractos_${id}`);
         }
 
-        await cargarCuentasBancarias(clienteId);
+        await cargarCuentasConExtractos(clienteId);
         alert('Cuenta bancaria eliminada');
     } catch (error) {
         console.error('Error eliminando cuenta:', error);
@@ -655,14 +458,36 @@ async function eliminarCuentaBancaria(id) {
 // ============================================
 
 /**
- * Ver extractos de una cuenta
+ * Mostrar modal para subir extracto directamente
  */
-async function verExtractosCuenta(cuentaId, cuentaNombre) {
-    auditoriaState.cuentaActual = { id: cuentaId, nombre: cuentaNombre };
+function mostrarSubirExtractoDirecto(cuentaId, cuentaNombre, mes, anio) {
+    state.cuentaActual = { id: cuentaId, nombre: cuentaNombre };
 
+    // Establecer mes y año si se proporcionan
+    if (mes) {
+        document.getElementById('extractoMes').value = mes;
+    } else {
+        document.getElementById('extractoMes').value = new Date().getMonth() + 1;
+    }
+
+    if (anio) {
+        document.getElementById('extractoAnio').value = anio;
+    } else {
+        document.getElementById('extractoAnio').value = new Date().getFullYear();
+    }
+
+    document.getElementById('extractoFile').value = '';
+    document.getElementById('extractoFileInfo').textContent = '';
+    document.getElementById('modalSubirExtracto').classList.remove('hidden');
+}
+
+/**
+ * Ver todos los extractos de una cuenta
+ */
+async function verTodosExtractosCuenta(cuentaId, cuentaNombre) {
+    state.cuentaActual = { id: cuentaId, nombre: cuentaNombre };
     document.getElementById('extractosCuentaNombre').textContent = cuentaNombre;
     document.getElementById('modalExtractosMensuales').classList.remove('hidden');
-
     await cargarExtractosMensuales(cuentaId);
 }
 
@@ -671,11 +496,11 @@ async function verExtractosCuenta(cuentaId, cuentaNombre) {
  */
 function cerrarExtractosMensuales() {
     document.getElementById('modalExtractosMensuales').classList.add('hidden');
-    auditoriaState.cuentaActual = null;
+    state.cuentaActual = null;
 }
 
 /**
- * Cargar extractos mensuales desde Supabase
+ * Cargar extractos mensuales
  */
 async function cargarExtractosMensuales(cuentaId) {
     const lista = document.getElementById('extractosMensualesList');
@@ -684,7 +509,7 @@ async function cargarExtractosMensuales(cuentaId) {
     try {
         let extractos = [];
 
-        if (supabase) {
+        if (typeof supabase !== 'undefined' && supabase) {
             const { data, error } = await supabase
                 .from('extractos_mensuales')
                 .select('*')
@@ -720,13 +545,13 @@ function renderizarExtractosMensuales(extractos) {
     }
 
     const html = `
-        <table class="preview-table" style="width: 100%;">
+        <table class="preview-table">
             <thead>
                 <tr>
                     <th>Período</th>
                     <th>Movimientos</th>
                     <th>Fecha de Carga</th>
-                    <th style="width: 200px; text-align: center;">Acciones</th>
+                    <th class="actions-col">Acciones</th>
                 </tr>
             </thead>
             <tbody>
@@ -738,8 +563,8 @@ function renderizarExtractosMensuales(extractos) {
                             <td>${meses[ext.mes - 1]} ${ext.anio}</td>
                             <td>${movimientos} movimientos</td>
                             <td>${fechaCarga}</td>
-                            <td style="text-align: center;">
-                                <button onclick="verDetalleExtracto('${ext.id}')" class="btn-sm btn-primary" style="margin-right: 4px;">👁️ Ver</button>
+                            <td class="actions-col">
+                                <button onclick="verDetalleExtracto('${ext.id}', '${state.cuentaActual?.id}')" class="btn-sm btn-primary">👁️ Ver</button>
                                 <button onclick="eliminarExtracto('${ext.id}')" class="btn-sm btn-danger">🗑️</button>
                             </td>
                         </tr>
@@ -756,7 +581,6 @@ function renderizarExtractosMensuales(extractos) {
  * Mostrar modal para subir nuevo extracto
  */
 function mostrarSubirExtracto() {
-    // Establecer mes y año actual por defecto
     const hoy = new Date();
     document.getElementById('extractoMes').value = hoy.getMonth() + 1;
     document.getElementById('extractoAnio').value = hoy.getFullYear();
@@ -801,7 +625,7 @@ async function procesarExtracto() {
         return;
     }
 
-    const cuentaId = auditoriaState.cuentaActual?.id;
+    const cuentaId = state.cuentaActual?.id;
     if (!cuentaId) {
         alert('Error: No hay cuenta seleccionada');
         return;
@@ -814,9 +638,8 @@ async function procesarExtracto() {
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
 
-        // Detectar si hay saldo inicial (fila con "Saldo inicial" en columna G)
+        // Detectar si hay saldo inicial
         let saldoInicial = null;
-        let startRow = 0;
 
         // Buscar encabezados (Fecha, Descripción, etc.)
         let headerRow = -1;
@@ -846,7 +669,6 @@ async function procesarExtracto() {
             // Parsear fecha
             let fecha = row[0];
             if (typeof fecha === 'number') {
-                // Fecha en formato Excel
                 const excelDate = new Date((fecha - 25569) * 86400 * 1000);
                 fecha = excelDate.toLocaleDateString('es-AR');
             }
@@ -868,7 +690,7 @@ async function procesarExtracto() {
         }
 
         // Verificar si ya existe extracto para ese período
-        if (supabase) {
+        if (typeof supabase !== 'undefined' && supabase) {
             const { data: existente } = await supabase
                 .from('extractos_mensuales')
                 .select('id')
@@ -881,7 +703,6 @@ async function procesarExtracto() {
                 if (!confirm(`Ya existe un extracto para ${mes}/${anio}. ¿Desea reemplazarlo?`)) {
                     return;
                 }
-                // Eliminar el existente
                 await supabase.from('extractos_mensuales').delete().eq('id', existente.id);
             }
 
@@ -923,8 +744,16 @@ async function procesarExtracto() {
         }
 
         cerrarSubirExtracto();
-        await cargarExtractosMensuales(cuentaId);
-        await recargarDashboardAuditoriaSiVisible(); // Recargar dashboard si está visible
+
+        // Recargar la lista de extractos si el modal está visible
+        const modalExtractos = document.getElementById('modalExtractosMensuales');
+        if (!modalExtractos.classList.contains('hidden')) {
+            await cargarExtractosMensuales(cuentaId);
+        }
+
+        // Recargar el dashboard
+        await cargarCuentasConExtractos(state.clienteActual.id);
+
         alert(`Extracto cargado: ${movimientos.length} movimientos`);
     } catch (error) {
         console.error('Error procesando extracto:', error);
@@ -940,10 +769,10 @@ async function eliminarExtracto(id) {
         return;
     }
 
-    const cuentaId = auditoriaState.cuentaActual?.id;
+    const cuentaId = state.cuentaActual?.id;
 
     try {
-        if (supabase) {
+        if (typeof supabase !== 'undefined' && supabase) {
             const { error } = await supabase
                 .from('extractos_mensuales')
                 .delete()
@@ -956,7 +785,12 @@ async function eliminarExtracto(id) {
         }
 
         await cargarExtractosMensuales(cuentaId);
-        await recargarDashboardAuditoriaSiVisible(); // Recargar dashboard si está visible
+
+        // Recargar el dashboard
+        if (state.clienteActual?.id) {
+            await cargarCuentasConExtractos(state.clienteActual.id);
+        }
+
         alert('Extracto eliminado');
     } catch (error) {
         console.error('Error eliminando extracto:', error);
@@ -971,12 +805,16 @@ async function eliminarExtracto(id) {
 /**
  * Ver detalle de un extracto
  */
-async function verDetalleExtracto(id) {
+async function verDetalleExtracto(id, cuentaId) {
+    // Guardar la cuenta actual si se proporciona
+    if (cuentaId) {
+        state.cuentaActual = { id: cuentaId };
+    }
+
     try {
         let extracto;
-        const cuentaId = auditoriaState.cuentaActual?.id;
 
-        if (supabase) {
+        if (typeof supabase !== 'undefined' && supabase) {
             const { data, error } = await supabase
                 .from('extractos_mensuales')
                 .select('*')
@@ -994,12 +832,12 @@ async function verDetalleExtracto(id) {
             return;
         }
 
-        auditoriaState.extractoActual = extracto;
-        auditoriaState.movimientosOriginales = JSON.parse(JSON.stringify(extracto.data || []));
-        auditoriaState.movimientosEditados = JSON.parse(JSON.stringify(extracto.data || []));
-        auditoriaState.movimientosEliminados = [];
-        auditoriaState.filtros = {};
-        auditoriaState.ordenActual = { columna: null, direccion: 'asc' };
+        state.extractoActual = extracto;
+        state.movimientosOriginales = JSON.parse(JSON.stringify(extracto.data || []));
+        state.movimientosEditados = JSON.parse(JSON.stringify(extracto.data || []));
+        state.movimientosEliminados = [];
+        state.filtros = {};
+        state.ordenActual = { columna: null, direccion: 'asc' };
 
         const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
                        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -1025,7 +863,7 @@ async function verDetalleExtracto(id) {
  */
 function cerrarDetalleExtracto() {
     document.getElementById('modalDetalleExtracto').classList.add('hidden');
-    auditoriaState.extractoActual = null;
+    state.extractoActual = null;
 }
 
 /**
@@ -1035,40 +873,38 @@ function renderizarDetalleExtracto() {
     const tbody = document.getElementById('detalleExtractoBody');
     const stats = document.getElementById('detalleExtractoStats');
 
-    let movimientos = [...auditoriaState.movimientosEditados];
+    let movimientos = [...state.movimientosEditados];
 
     // Aplicar filtros
-    if (auditoriaState.filtros.fecha) {
+    if (state.filtros.fecha) {
         movimientos = movimientos.filter(m =>
-            m.fecha.toLowerCase().includes(auditoriaState.filtros.fecha.toLowerCase())
+            m.fecha.toLowerCase().includes(state.filtros.fecha.toLowerCase())
         );
     }
-    if (auditoriaState.filtros.descripcion) {
+    if (state.filtros.descripcion) {
         movimientos = movimientos.filter(m =>
-            m.descripcion.toLowerCase().includes(auditoriaState.filtros.descripcion.toLowerCase())
+            m.descripcion.toLowerCase().includes(state.filtros.descripcion.toLowerCase())
         );
     }
-    if (auditoriaState.filtros.origen) {
+    if (state.filtros.origen) {
         movimientos = movimientos.filter(m =>
-            m.origen.toLowerCase().includes(auditoriaState.filtros.origen.toLowerCase())
+            m.origen.toLowerCase().includes(state.filtros.origen.toLowerCase())
         );
     }
 
     // Aplicar ordenamiento
-    if (auditoriaState.ordenActual.columna) {
-        const col = auditoriaState.ordenActual.columna;
-        const dir = auditoriaState.ordenActual.direccion === 'asc' ? 1 : -1;
+    if (state.ordenActual.columna) {
+        const col = state.ordenActual.columna;
+        const dir = state.ordenActual.direccion === 'asc' ? 1 : -1;
 
         movimientos.sort((a, b) => {
             let valA = a[col];
             let valB = b[col];
 
-            // Para números
             if (typeof valA === 'number' && typeof valB === 'number') {
                 return (valA - valB) * dir;
             }
 
-            // Para strings
             valA = String(valA || '').toLowerCase();
             valB = String(valB || '').toLowerCase();
 
@@ -1082,11 +918,11 @@ function renderizarDetalleExtracto() {
     const totalCreditos = movimientos.reduce((sum, m) => sum + (m.credito || 0), 0);
     const totalDebitos = movimientos.reduce((sum, m) => sum + (m.debito || 0), 0);
     stats.innerHTML = `
-        <span>Mostrando ${movimientos.length} de ${auditoriaState.movimientosEditados.length} movimientos</span>
-        <span style="margin-left: 20px;">Total Créditos: <strong style="color: #38a169;">$${formatNumber(totalCreditos)}</strong></span>
-        <span style="margin-left: 20px;">Total Débitos: <strong style="color: #e53e3e;">$${formatNumber(totalDebitos)}</strong></span>
-        ${auditoriaState.movimientosEliminados.length > 0 ?
-            `<span style="margin-left: 20px; color: #f59e0b;">${auditoriaState.movimientosEliminados.length} eliminados (restaurables)</span>` : ''}
+        <span>Mostrando ${movimientos.length} de ${state.movimientosEditados.length} movimientos</span>
+        <span class="stat-credito">Total Créditos: <strong>$${formatNumber(totalCreditos)}</strong></span>
+        <span class="stat-debito">Total Débitos: <strong>$${formatNumber(totalDebitos)}</strong></span>
+        ${state.movimientosEliminados.length > 0 ?
+            `<span class="stat-eliminados">${state.movimientosEliminados.length} eliminados (restaurables)</span>` : ''}
     `;
 
     // Renderizar filas
@@ -1095,10 +931,10 @@ function renderizarDetalleExtracto() {
             <td>${m.fecha}</td>
             <td class="editable" onclick="editarCelda(this, '${m.id}', 'descripcion')">${escapeHtml(m.descripcion)}</td>
             <td>${m.origen}</td>
-            <td style="text-align: right; color: #38a169;">${m.credito > 0 ? '$' + formatNumber(m.credito) : '-'}</td>
-            <td style="text-align: right; color: #e53e3e;">${m.debito > 0 ? '$' + formatNumber(m.debito) : '-'}</td>
-            <td style="text-align: right;">${'$' + formatNumber(m.saldo)}</td>
-            <td style="text-align: center;">
+            <td class="text-right credito">${m.credito > 0 ? '$' + formatNumber(m.credito) : '-'}</td>
+            <td class="text-right debito">${m.debito > 0 ? '$' + formatNumber(m.debito) : '-'}</td>
+            <td class="text-right">${'$' + formatNumber(m.saldo)}</td>
+            <td class="actions-col">
                 <button onclick="eliminarMovimiento('${m.id}')" class="btn-sm btn-danger" title="Eliminar">🗑️</button>
             </td>
         </tr>
@@ -1108,8 +944,8 @@ function renderizarDetalleExtracto() {
     document.querySelectorAll('#detalleExtractoTable th[data-sort]').forEach(th => {
         const col = th.dataset.sort;
         th.classList.remove('sort-asc', 'sort-desc');
-        if (auditoriaState.ordenActual.columna === col) {
-            th.classList.add(`sort-${auditoriaState.ordenActual.direccion}`);
+        if (state.ordenActual.columna === col) {
+            th.classList.add(`sort-${state.ordenActual.direccion}`);
         }
     });
 }
@@ -1134,12 +970,12 @@ function escapeHtml(text) {
  * Ordenar por columna
  */
 function ordenarPorColumna(columna) {
-    if (auditoriaState.ordenActual.columna === columna) {
-        auditoriaState.ordenActual.direccion =
-            auditoriaState.ordenActual.direccion === 'asc' ? 'desc' : 'asc';
+    if (state.ordenActual.columna === columna) {
+        state.ordenActual.direccion =
+            state.ordenActual.direccion === 'asc' ? 'desc' : 'asc';
     } else {
-        auditoriaState.ordenActual.columna = columna;
-        auditoriaState.ordenActual.direccion = 'asc';
+        state.ordenActual.columna = columna;
+        state.ordenActual.direccion = 'asc';
     }
     renderizarDetalleExtracto();
 }
@@ -1148,7 +984,7 @@ function ordenarPorColumna(columna) {
  * Aplicar filtros
  */
 function aplicarFiltrosExtracto() {
-    auditoriaState.filtros = {
+    state.filtros = {
         fecha: document.getElementById('filtroFecha').value,
         descripcion: document.getElementById('filtroDescripcion').value,
         origen: document.getElementById('filtroOrigen').value
@@ -1163,7 +999,7 @@ function limpiarFiltrosExtracto() {
     document.getElementById('filtroFecha').value = '';
     document.getElementById('filtroDescripcion').value = '';
     document.getElementById('filtroOrigen').value = '';
-    auditoriaState.filtros = {};
+    state.filtros = {};
     renderizarDetalleExtracto();
 }
 
@@ -1171,18 +1007,17 @@ function limpiarFiltrosExtracto() {
  * Editar celda (descripción)
  */
 function editarCelda(td, movId, campo) {
-    if (td.querySelector('input')) return; // Ya está en modo edición
+    if (td.querySelector('input')) return;
 
     const valorActual = td.textContent;
     const input = document.createElement('input');
     input.type = 'text';
     input.value = valorActual;
     input.className = 'edit-input';
-    input.style.cssText = 'width: 100%; padding: 4px; border: 1px solid #3b82f6; border-radius: 4px;';
 
     const guardar = () => {
         const nuevoValor = input.value.trim();
-        const mov = auditoriaState.movimientosEditados.find(m => m.id === movId);
+        const mov = state.movimientosEditados.find(m => m.id === movId);
         if (mov) {
             mov[campo] = nuevoValor;
         }
@@ -1219,7 +1054,7 @@ function agregarMovimiento() {
         saldo: 0
     };
 
-    auditoriaState.movimientosEditados.unshift(nuevoMov);
+    state.movimientosEditados.unshift(nuevoMov);
     renderizarDetalleExtracto();
 }
 
@@ -1227,10 +1062,10 @@ function agregarMovimiento() {
  * Eliminar movimiento
  */
 function eliminarMovimiento(id) {
-    const idx = auditoriaState.movimientosEditados.findIndex(m => m.id === id);
+    const idx = state.movimientosEditados.findIndex(m => m.id === id);
     if (idx !== -1) {
-        const eliminado = auditoriaState.movimientosEditados.splice(idx, 1)[0];
-        auditoriaState.movimientosEliminados.push(eliminado);
+        const eliminado = state.movimientosEditados.splice(idx, 1)[0];
+        state.movimientosEliminados.push(eliminado);
         renderizarDetalleExtracto();
     }
 }
@@ -1239,13 +1074,13 @@ function eliminarMovimiento(id) {
  * Restaurar movimientos eliminados
  */
 function restaurarMovimientos() {
-    if (auditoriaState.movimientosEliminados.length === 0) {
+    if (state.movimientosEliminados.length === 0) {
         alert('No hay movimientos eliminados para restaurar');
         return;
     }
 
-    auditoriaState.movimientosEditados.push(...auditoriaState.movimientosEliminados);
-    auditoriaState.movimientosEliminados = [];
+    state.movimientosEditados.push(...state.movimientosEliminados);
+    state.movimientosEliminados = [];
     renderizarDetalleExtracto();
     alert('Movimientos restaurados');
 }
@@ -1258,8 +1093,8 @@ function restaurarDatosOriginales() {
         return;
     }
 
-    auditoriaState.movimientosEditados = JSON.parse(JSON.stringify(auditoriaState.movimientosOriginales));
-    auditoriaState.movimientosEliminados = [];
+    state.movimientosEditados = JSON.parse(JSON.stringify(state.movimientosOriginales));
+    state.movimientosEliminados = [];
     renderizarDetalleExtracto();
     alert('Datos restaurados');
 }
@@ -1268,8 +1103,8 @@ function restaurarDatosOriginales() {
  * Guardar cambios del extracto
  */
 async function guardarCambiosExtracto() {
-    const extractoId = auditoriaState.extractoActual?.id;
-    const cuentaId = auditoriaState.cuentaActual?.id;
+    const extractoId = state.extractoActual?.id;
+    const cuentaId = state.cuentaActual?.id;
 
     if (!extractoId) {
         alert('Error: No hay extracto seleccionado');
@@ -1277,11 +1112,11 @@ async function guardarCambiosExtracto() {
     }
 
     try {
-        if (supabase) {
+        if (typeof supabase !== 'undefined' && supabase) {
             const { error } = await supabase
                 .from('extractos_mensuales')
                 .update({
-                    data: auditoriaState.movimientosEditados,
+                    data: state.movimientosEditados,
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', extractoId);
@@ -1291,15 +1126,15 @@ async function guardarCambiosExtracto() {
             const extractos = JSON.parse(localStorage.getItem(`extractos_${cuentaId}`) || '[]');
             const idx = extractos.findIndex(e => e.id === extractoId);
             if (idx !== -1) {
-                extractos[idx].data = auditoriaState.movimientosEditados;
+                extractos[idx].data = state.movimientosEditados;
                 extractos[idx].updated_at = new Date().toISOString();
                 localStorage.setItem(`extractos_${cuentaId}`, JSON.stringify(extractos));
             }
         }
 
         // Actualizar originales
-        auditoriaState.movimientosOriginales = JSON.parse(JSON.stringify(auditoriaState.movimientosEditados));
-        auditoriaState.movimientosEliminados = [];
+        state.movimientosOriginales = JSON.parse(JSON.stringify(state.movimientosEditados));
+        state.movimientosEliminados = [];
 
         alert('Cambios guardados exitosamente');
     } catch (error) {
@@ -1312,8 +1147,8 @@ async function guardarCambiosExtracto() {
  * Descargar extracto como Excel
  */
 function descargarExtractoExcel() {
-    const movimientos = auditoriaState.movimientosEditados;
-    const extracto = auditoriaState.extractoActual;
+    const movimientos = state.movimientosEditados;
+    const extracto = state.extractoActual;
 
     if (!movimientos || movimientos.length === 0) {
         alert('No hay movimientos para descargar');
@@ -1351,12 +1186,12 @@ function descargarExtractoExcel() {
 
     // Ajustar anchos
     ws['!cols'] = [
-        { wch: 12 }, // Fecha
-        { wch: 50 }, // Descripción
-        { wch: 20 }, // Origen
-        { wch: 15 }, // Crédito
-        { wch: 15 }, // Débito
-        { wch: 15 }  // Saldo
+        { wch: 12 },
+        { wch: 50 },
+        { wch: 20 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 15 }
     ];
 
     const wb = XLSX.utils.book_new();
@@ -1364,45 +1199,4 @@ function descargarExtractoExcel() {
 
     const fileName = `extracto_${meses[extracto.mes - 1]}_${extracto.anio}.xlsx`;
     XLSX.writeFile(wb, fileName);
-}
-
-// ============================================
-// INICIALIZACIÓN DE EVENT LISTENERS
-// ============================================
-
-document.addEventListener('DOMContentLoaded', () => {
-    // Event listener para botón de Auditoría en el menú
-    const btnAuditoria = document.getElementById('btnAuditoria');
-    if (btnAuditoria) {
-        btnAuditoria.addEventListener('click', abrirModalAuditoria);
-    }
-
-    // Event listeners para filtros
-    const filtroFecha = document.getElementById('filtroFecha');
-    const filtroDescripcion = document.getElementById('filtroDescripcion');
-    const filtroOrigen = document.getElementById('filtroOrigen');
-
-    if (filtroFecha) {
-        filtroFecha.addEventListener('input', aplicarFiltrosExtracto);
-    }
-    if (filtroDescripcion) {
-        filtroDescripcion.addEventListener('input', aplicarFiltrosExtracto);
-    }
-    if (filtroOrigen) {
-        filtroOrigen.addEventListener('input', aplicarFiltrosExtracto);
-    }
-});
-
-/**
- * Recargar el dashboard de auditoría si está visible
- */
-async function recargarDashboardAuditoriaSiVisible() {
-    const modalAuditoria = document.getElementById('modalAuditoria');
-    const dashboard = document.getElementById('auditoriaDashboard');
-
-    if (modalAuditoria && !modalAuditoria.classList.contains('hidden') &&
-        dashboard && dashboard.style.display !== 'none' &&
-        auditoriaState.clienteActual?.id) {
-        await cargarCuentasConExtractos(auditoriaState.clienteActual.id);
-    }
 }
