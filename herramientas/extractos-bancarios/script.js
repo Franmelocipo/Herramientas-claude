@@ -2814,7 +2814,10 @@ function parseLaPampaWithPositions(linesWithPositions) {
 
         } else if (currentSection === 'TRANSFERENCIAS_EMITIDAS') {
             // Formato: DD/MM/AA CUIT-RAZON_SOCIAL COMPROBANTE IMPORTE
-            const detMatch = text.match(/^(\d{2}\/\d{2}\/\d{2})\s+(\d{11})-(.+?)\s+(\d{9,})\s+([\d.,]+)$/);
+            // Ejemplo: 06/08/24 30714882445-EXPRESO DE A CUATRO SRL                   000562641  1972348.11
+            // La razón social puede tener espacios internos y hay múltiples espacios antes del comprobante
+            // Usamos regex que captura desde el final: comprobante (9+ dígitos) y luego importe
+            const detMatch = text.match(/^(\d{2}\/\d{2}\/\d{2})\s+(\d{11})-(.+?)\s{2,}(\d{9,})\s+([\d.,]+)\s*$/);
             if (detMatch) {
                 const detalle = {
                     fecha: detMatch[1],
@@ -2826,11 +2829,36 @@ function parseLaPampaWithPositions(linesWithPositions) {
                 };
                 detallesTransfEmitidas.push(detalle);
                 console.log('Transferencia emitida:', detalle);
+            } else {
+                // Regex alternativo: un solo espacio antes del comprobante
+                const altMatch = text.match(/^(\d{2}\/\d{2}\/\d{2})\s+(\d{11})-(.+)\s+(\d{9,})\s+([\d.,]+)\s*$/);
+                if (altMatch) {
+                    const detalle = {
+                        fecha: altMatch[1],
+                        cuit: altMatch[2],
+                        razonSocial: altMatch[3].trim(),
+                        comprobante: altMatch[4],
+                        importe: altMatch[5],
+                        tipo: 'TRANSFERENCIA_EMITIDA'
+                    };
+                    detallesTransfEmitidas.push(detalle);
+                    console.log('Transferencia emitida (alt):', detalle);
+                }
             }
 
         } else if (currentSection === 'TRANSFERENCIAS_RECIBIDAS') {
             // Formato: DD/MM/AA CUIT-NOMBRE REFERENCIA COMPROBANTE IMPORTE
-            const detMatch = text.match(/^(\d{2}\/\d{2}\/\d{2})\s+(\d{11})-(.+?)\s+([A-Z0-9\-]+)\s+(\d{9,})\s+([\d.,]+)$/);
+            // Ejemplos:
+            // 01/08/24 30717286789-DINASTIBASA S. R. L.           VAR-       000127877   519417.57
+            // 01/08/24 20238017328-LUNA GABRIEL                   VAR-VARIOS 000237092   432357.54
+            // 01/08/24 20168419563-DEVOTO HUGO RAUL               VAR-VARVarios 000277627 1600000.00
+            // 01/08/24 20165119100-AGOSTINELLI JUAN JOSE          FAC-Agostinelli 000284493 68883.21
+            // 02/08/24 27252201578-MARIELA PAOLA CAVALLARO        L18MKX9R1M1P648V9O6WYV 000172008 215000.00
+            //
+            // La referencia puede ser: VAR-XXX, FAC-XXX, o código alfanumérico largo
+            // Hay múltiples espacios separando: nombre | referencia | comprobante | importe
+            // \S+ captura cualquier secuencia sin espacios (la referencia)
+            const detMatch = text.match(/^(\d{2}\/\d{2}\/\d{2})\s+(\d{11})-(.+?)\s{2,}(\S+)\s+(\d{9,})\s+([\d.,]+)\s*$/);
             if (detMatch) {
                 const detalle = {
                     fecha: detMatch[1],
@@ -2844,20 +2872,39 @@ function parseLaPampaWithPositions(linesWithPositions) {
                 detallesTransfRecibidas.push(detalle);
                 console.log('Transferencia recibida:', detalle);
             } else {
-                // Patrón alternativo sin referencia explícita
-                const altMatch = text.match(/^(\d{2}\/\d{2}\/\d{2})\s+(\d{11})-(.+?)\s+(\d{9,})\s+([\d.,]+)$/);
+                // Patrón alternativo: referencia seguida directamente del comprobante con un solo espacio
+                const altMatch = text.match(/^(\d{2}\/\d{2}\/\d{2})\s+(\d{11})-(.+)\s+(\S+)\s+(\d{9,})\s+([\d.,]+)\s*$/);
                 if (altMatch) {
+                    // Extraer nombre y referencia del grupo 3 (puede venir concatenado)
+                    let nombre = altMatch[3].trim();
+                    let referenciaPago = altMatch[4];
                     const detalle = {
                         fecha: altMatch[1],
                         cuit: altMatch[2],
-                        nombre: altMatch[3].trim(),
-                        referenciaPago: '',
-                        comprobante: altMatch[4],
-                        importe: altMatch[5],
+                        nombre: nombre,
+                        referenciaPago: referenciaPago,
+                        comprobante: altMatch[5],
+                        importe: altMatch[6],
                         tipo: 'TRANSFERENCIA_RECIBIDA'
                     };
                     detallesTransfRecibidas.push(detalle);
                     console.log('Transferencia recibida (alt):', detalle);
+                } else {
+                    // Patrón sin referencia explícita (nombre directo hasta comprobante)
+                    const noRefMatch = text.match(/^(\d{2}\/\d{2}\/\d{2})\s+(\d{11})-(.+?)\s{2,}(\d{9,})\s+([\d.,]+)\s*$/);
+                    if (noRefMatch) {
+                        const detalle = {
+                            fecha: noRefMatch[1],
+                            cuit: noRefMatch[2],
+                            nombre: noRefMatch[3].trim(),
+                            referenciaPago: '',
+                            comprobante: noRefMatch[4],
+                            importe: noRefMatch[5],
+                            tipo: 'TRANSFERENCIA_RECIBIDA'
+                        };
+                        detallesTransfRecibidas.push(detalle);
+                        console.log('Transferencia recibida (sin ref):', detalle);
+                    }
                 }
             }
         }
@@ -2913,6 +2960,16 @@ function enrichLaPampaMovements(movements, debitosAuto, transfEmitidas, transfRe
         return dateStr;
     };
 
+    // Comparar comprobantes ignorando ceros a la izquierda
+    // Ej: "127877" debe coincidir con "000127877"
+    const compararComprobantes = (comp1, comp2) => {
+        if (!comp1 || !comp2) return false;
+        // Eliminar ceros a la izquierda para comparar
+        const norm1 = comp1.replace(/^0+/, '');
+        const norm2 = comp2.replace(/^0+/, '');
+        return norm1 === norm2;
+    };
+
     let enrichedCount = 0;
 
     for (const mov of movements) {
@@ -2956,7 +3013,7 @@ function enrichLaPampaMovements(movements, debitosAuto, transfEmitidas, transfRe
                 const detAmount = parseBDLPNumber(det.importe);
 
                 // Correlacionar por comprobante e importe
-                if (det.comprobante === movComprobante && Math.abs(detAmount - movAmount) < 0.01) {
+                if (compararComprobantes(det.comprobante, movComprobante) && Math.abs(detAmount - movAmount) < 0.01) {
                     detalleEncontrado = {
                         tipo: 'DEBITO_AUTOMATICO',
                         empresa: det.empresa,
@@ -2983,7 +3040,7 @@ function enrichLaPampaMovements(movements, debitosAuto, transfEmitidas, transfRe
                 const detDate = formatDate(det.fecha);
                 const detAmount = parseBDLPNumber(det.importe);
 
-                if (det.comprobante === movComprobante && Math.abs(detAmount - movAmount) < 0.01) {
+                if (compararComprobantes(det.comprobante, movComprobante) && Math.abs(detAmount - movAmount) < 0.01) {
                     detalleEncontrado = {
                         tipo: 'TRANSFERENCIA_EMITIDA',
                         cuit: det.cuit,
@@ -3007,7 +3064,7 @@ function enrichLaPampaMovements(movements, debitosAuto, transfEmitidas, transfRe
                 const detDate = formatDate(det.fecha);
                 const detAmount = parseBDLPNumber(det.importe);
 
-                if (det.comprobante === movComprobante && Math.abs(detAmount - movAmount) < 0.01) {
+                if (compararComprobantes(det.comprobante, movComprobante) && Math.abs(detAmount - movAmount) < 0.01) {
                     detalleEncontrado = {
                         tipo: 'TRANSFERENCIA_RECIBIDA',
                         cuit: det.cuit,
@@ -3033,18 +3090,22 @@ function enrichLaPampaMovements(movements, debitosAuto, transfEmitidas, transfRe
             enrichedCount++;
 
             // Enriquecer la descripción con información del detalle
+            // Formato: CONCEPTO | DETALLE1 | DETALLE2 | ...
             let descripcionEnriquecida = mov.descripcion;
             if (detalleEncontrado.tipo === 'DEBITO_AUTOMATICO') {
-                descripcionEnriquecida += ` - ${detalleEncontrado.empresa}`;
+                // Formato: DEBITO DIRECTO | TELEFONICA MOVIL | TELEFONIA
+                descripcionEnriquecida += ` | ${detalleEncontrado.empresa}`;
                 if (detalleEncontrado.categoria) {
-                    descripcionEnriquecida += ` (${detalleEncontrado.categoria})`;
+                    descripcionEnriquecida += ` | ${detalleEncontrado.categoria}`;
                 }
             } else if (detalleEncontrado.tipo === 'TRANSFERENCIA_EMITIDA') {
-                descripcionEnriquecida += ` - ${detalleEncontrado.cuit} ${detalleEncontrado.razonSocial}`;
+                // Formato: E-BANKING TRF. | CUIT: 30714882445 | EXPRESO DE A CUATRO SRL
+                descripcionEnriquecida += ` | CUIT: ${detalleEncontrado.cuit} | ${detalleEncontrado.razonSocial}`;
             } else if (detalleEncontrado.tipo === 'TRANSFERENCIA_RECIBIDA') {
-                descripcionEnriquecida += ` - ${detalleEncontrado.cuit} ${detalleEncontrado.nombre}`;
+                // Formato: TRF.POR CAJ.AUT./HB | CUIT: 30717286789 | DINASTIBASA S. R. L. | Ref: VAR-
+                descripcionEnriquecida += ` | CUIT: ${detalleEncontrado.cuit} | ${detalleEncontrado.nombre}`;
                 if (detalleEncontrado.referenciaPago) {
-                    descripcionEnriquecida += ` (${detalleEncontrado.referenciaPago})`;
+                    descripcionEnriquecida += ` | Ref: ${detalleEncontrado.referenciaPago}`;
                 }
             }
             mov.descripcion = descripcionEnriquecida;
