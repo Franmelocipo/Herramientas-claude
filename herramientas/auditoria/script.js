@@ -2262,14 +2262,14 @@ async function cargarCategorias() {
 
         if (supabaseClient) {
             const { data, error } = await supabaseClient
-                .from('categorias_movimiento')
+                .from('categorias_movimientos')
                 .select('*')
                 .order('orden');
 
             if (error) {
                 // Si la tabla no existe, usar las predefinidas
                 if (error.code === '42P01' || error.message.includes('does not exist')) {
-                    console.warn('Tabla categorias_movimiento no existe, usando predefinidas');
+                    console.warn('Tabla categorias_movimientos no existe, usando predefinidas');
                     categorias = CATEGORIAS_DEFAULT;
                 } else {
                     throw error;
@@ -2373,7 +2373,7 @@ async function agregarCategoria() {
     try {
         if (typeof supabase !== 'undefined' && supabase) {
             const { error } = await supabase
-                .from('categorias_movimiento')
+                .from('categorias_movimientos')
                 .insert([nuevaCategoria]);
 
             if (error) {
@@ -2465,9 +2465,9 @@ async function guardarEdicionCategoria() {
 
         if (typeof supabase !== 'undefined' && supabase) {
             // Eliminar la antigua y crear la nueva (por si cambió el ID)
-            await supabase.from('categorias_movimiento').delete().eq('id', idOriginal);
+            await supabase.from('categorias_movimientos').delete().eq('id', idOriginal);
             const { error } = await supabase
-                .from('categorias_movimiento')
+                .from('categorias_movimientos')
                 .insert([categoriaActualizada]);
 
             if (error && error.code !== '42P01' && !error.message.includes('does not exist')) {
@@ -2507,7 +2507,7 @@ async function eliminarCategoria(id) {
     try {
         if (typeof supabase !== 'undefined' && supabase) {
             const { error } = await supabase
-                .from('categorias_movimiento')
+                .from('categorias_movimientos')
                 .delete()
                 .eq('id', id);
 
