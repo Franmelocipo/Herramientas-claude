@@ -2681,19 +2681,39 @@ function parseLaPampaWithPositions(linesWithPositions) {
                 }
 
                 // Validación adicional: si hay 2+ candidatos a movimiento,
-                // pueden ser débito Y crédito en la misma línea (raro pero posible)
+                // NUNCA permitir valores en ambas columnas - calcular el NETO
                 if (candidatosMovimiento.length >= 2) {
                     // Ordenar por posición X
                     candidatosMovimiento.sort((a, b) => a.x - b.x);
                     const first = candidatosMovimiento[0];
                     const second = candidatosMovimiento[1];
 
-                    // El de la izquierda es débito, el de la derecha es crédito
-                    if (first.x < midPoint) {
-                        debito = formatoArgentino(parseImporteBDLP(first.value));
-                    }
-                    if (second.x >= midPoint) {
-                        credito = formatoArgentino(parseImporteBDLP(second.value));
+                    // Calcular valores de cada candidato
+                    const firstValue = parseImporteBDLP(first.value);
+                    const secondValue = parseImporteBDLP(second.value);
+
+                    // Determinar si el primero es débito y el segundo crédito por posición
+                    const firstIsDebito = first.x < midPoint;
+                    const secondIsCredito = second.x >= midPoint;
+
+                    if (firstIsDebito && secondIsCredito) {
+                        // Calcular el neto: crédito - débito
+                        const neto = secondValue - firstValue;
+                        if (neto > 0) {
+                            // Neto positivo = crédito
+                            credito = formatoArgentino(neto);
+                            debito = '0';
+                        } else if (neto < 0) {
+                            // Neto negativo = débito
+                            debito = formatoArgentino(Math.abs(neto));
+                            credito = '0';
+                        }
+                        // Si neto es 0, ambos quedan en 0
+                        console.log(`NETO calculado: débito original ${firstValue}, crédito original ${secondValue}, neto = ${neto}`);
+                    } else if (firstIsDebito) {
+                        debito = formatoArgentino(firstValue);
+                    } else if (secondIsCredito) {
+                        credito = formatoArgentino(secondValue);
                     }
                 }
 
@@ -2753,6 +2773,29 @@ function parseLaPampaWithPositions(linesWithPositions) {
                     } else if (esConceptoCredito && !esConceptoDebito) {
                         console.log(`CLASIFICACIÓN por concepto: ${concepto} = CRÉDITO ${importeFormateado}`);
                         credito = importeFormateado;
+                    }
+                }
+
+                // VALIDACIÓN CRÍTICA: Nunca permitir valores != 0 en ambas columnas
+                // Si por alguna razón llegamos aquí con ambos valores, calcular el neto
+                const debitoFinal = parseArgNumber(debito);
+                const creditoFinal = parseArgNumber(credito);
+                if (debitoFinal > 0 && creditoFinal > 0) {
+                    console.warn(`CORRECCIÓN CRÍTICA: ${concepto} tiene débito=${debito} Y crédito=${credito}. Calculando neto...`);
+                    const neto = creditoFinal - debitoFinal;
+                    if (neto > 0) {
+                        credito = formatoArgentino(neto);
+                        debito = '0';
+                        console.log(`  -> Resultado: CRÉDITO neto = ${credito}`);
+                    } else if (neto < 0) {
+                        debito = formatoArgentino(Math.abs(neto));
+                        credito = '0';
+                        console.log(`  -> Resultado: DÉBITO neto = ${debito}`);
+                    } else {
+                        // Neto = 0, ambos valores se anulan
+                        debito = '0';
+                        credito = '0';
+                        console.log(`  -> Resultado: Neto = 0, movimiento anulado`);
                     }
                 }
 
@@ -3294,6 +3337,22 @@ function handleDownloadExcel() {
         let credito = parseArgentineNumber(row.credito);
         let debito = parseArgentineNumber(row.debito);
         let saldo = parseArgentineNumber(row.saldo);
+
+        // VALIDACIÓN CRÍTICA: Nunca exportar valores != 0 en ambas columnas
+        if (credito > 0 && debito > 0) {
+            console.warn(`CORRECCIÓN en export: ${row.descripcion} tiene débito=${debito} Y crédito=${credito}. Calculando neto...`);
+            const neto = credito - debito;
+            if (neto > 0) {
+                credito = neto;
+                debito = 0;
+            } else if (neto < 0) {
+                debito = Math.abs(neto);
+                credito = 0;
+            } else {
+                debito = 0;
+                credito = 0;
+            }
+        }
 
         return [
             fecha,
