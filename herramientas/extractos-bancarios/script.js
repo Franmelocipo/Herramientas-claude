@@ -8,6 +8,24 @@ if (window.pdfjsLib) {
 let clienteSeleccionadoId = null;
 let clienteSeleccionadoNombre = '';
 
+// Función global para parsear números en formato argentino
+function parseArgentineNumber(value) {
+    if (!value || value === '0' || value === '') return 0;
+    // Detectar si el valor es negativo ANTES de limpiar
+    const isNegative = value.toString().includes('-');
+    // Limpiar el formato argentino (puntos de miles y coma decimal)
+    const cleaned = value.toString().replace(/\./g, '').replace(',', '.').replace('-', '');
+    const number = parseFloat(cleaned);
+    // Aplicar el signo negativo si corresponde
+    return isNegative ? -number : (isNaN(number) ? 0 : number);
+}
+
+// Función global para formatear números a formato argentino
+function formatearNumeroArgentino(numero) {
+    if (numero === null || numero === undefined || isNaN(numero)) return '-';
+    return numero.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 // Estado de la aplicación
 const state = {
     selectedType: '',
@@ -217,6 +235,10 @@ function initElements() {
     elements.previewFooter = document.getElementById('previewFooter');
     elements.downloadBtn = document.getElementById('downloadBtn');
     elements.rowCount = document.getElementById('rowCount');
+    // Elementos de resumen de saldos
+    elements.resumenSaldos = document.getElementById('resumenSaldos');
+    elements.saldoInicialPeriodo = document.getElementById('saldoInicialPeriodo');
+    elements.saldoCierrePeriodo = document.getElementById('saldoCierrePeriodo');
 }
 
 function attachEventListeners() {
@@ -3203,6 +3225,10 @@ function renderPreview() {
                 <th class="text-right">Monto</th>
             </tr>
         `;
+        // Ocultar panel de saldos para inversiones
+        if (elements.resumenSaldos) {
+            elements.resumenSaldos.classList.add('hidden');
+        }
     } else {
         elements.previewHeader.innerHTML = `
             <tr>
@@ -3214,6 +3240,31 @@ function renderPreview() {
                 <th class="text-right">Saldo</th>
             </tr>
         `;
+
+        // Recalcular saldos de todos los movimientos: saldo = saldo anterior + crédito - débito
+        recalcularSaldosMovimientos();
+
+        // Mostrar panel de saldos para extractos bancarios
+        if (elements.resumenSaldos && state.extractedData.length > 0) {
+            elements.resumenSaldos.classList.remove('hidden');
+
+            // Calcular saldo inicial del período (saldo antes del primer movimiento)
+            const primerMov = state.extractedData[0];
+            const saldoPrimerMov = parseArgentineNumber(primerMov.saldo);
+            const creditoPrimerMov = parseArgentineNumber(primerMov.credito);
+            const debitoPrimerMov = parseArgentineNumber(primerMov.debito);
+            const saldoInicialPeriodo = saldoPrimerMov - creditoPrimerMov + debitoPrimerMov;
+
+            // Saldo al cierre del período (saldo del último movimiento)
+            const ultimoMov = state.extractedData[state.extractedData.length - 1];
+            const saldoCierrePeriodo = parseArgentineNumber(ultimoMov.saldo);
+
+            // Actualizar los valores en el panel
+            elements.saldoInicialPeriodo.textContent = '$ ' + formatearNumeroArgentino(saldoInicialPeriodo);
+            elements.saldoCierrePeriodo.textContent = '$ ' + formatearNumeroArgentino(saldoCierrePeriodo);
+        } else if (elements.resumenSaldos) {
+            elements.resumenSaldos.classList.add('hidden');
+        }
     }
 
     // Renderizar filas (primeras 10)
@@ -3251,6 +3302,28 @@ function renderPreview() {
     }
 
     elements.rowCount.textContent = state.extractedData.length;
+}
+
+// Función para recalcular los saldos de los movimientos
+// Fórmula: saldo = saldo anterior + crédito - débito
+function recalcularSaldosMovimientos() {
+    if (state.extractedData.length === 0) return;
+
+    // Calcular saldo inicial a partir del primer movimiento
+    const primerMov = state.extractedData[0];
+    const saldoPrimerMov = parseArgentineNumber(primerMov.saldo);
+    const creditoPrimerMov = parseArgentineNumber(primerMov.credito);
+    const debitoPrimerMov = parseArgentineNumber(primerMov.debito);
+    let saldoActual = saldoPrimerMov - creditoPrimerMov + debitoPrimerMov;
+
+    // Recalcular saldo de cada movimiento
+    for (const mov of state.extractedData) {
+        const credito = parseArgentineNumber(mov.credito);
+        const debito = parseArgentineNumber(mov.debito);
+        saldoActual = saldoActual + credito - debito;
+        // Actualizar el saldo en formato argentino
+        mov.saldo = formatearNumeroArgentino(saldoActual);
+    }
 }
 
 function handleDownloadExcel() {
@@ -4561,6 +4634,10 @@ function renderPreviewWithFilter() {
                 <th class="text-right">Monto</th>
             </tr>
         `;
+        // Ocultar panel de saldos para inversiones
+        if (elements.resumenSaldos) {
+            elements.resumenSaldos.classList.add('hidden');
+        }
     } else {
         elements.previewHeader.innerHTML = `
             <tr>
@@ -4572,6 +4649,28 @@ function renderPreviewWithFilter() {
                 <th class="text-right">Saldo</th>
             </tr>
         `;
+
+        // Mostrar panel de saldos para extractos bancarios (siempre con datos completos)
+        if (elements.resumenSaldos && state.extractedData.length > 0) {
+            elements.resumenSaldos.classList.remove('hidden');
+
+            // Calcular saldo inicial del período (saldo antes del primer movimiento)
+            const primerMov = state.extractedData[0];
+            const saldoPrimerMov = parseArgentineNumber(primerMov.saldo);
+            const creditoPrimerMov = parseArgentineNumber(primerMov.credito);
+            const debitoPrimerMov = parseArgentineNumber(primerMov.debito);
+            const saldoInicialPeriodo = saldoPrimerMov - creditoPrimerMov + debitoPrimerMov;
+
+            // Saldo al cierre del período (saldo del último movimiento)
+            const ultimoMov = state.extractedData[state.extractedData.length - 1];
+            const saldoCierrePeriodo = parseArgentineNumber(ultimoMov.saldo);
+
+            // Actualizar los valores en el panel
+            elements.saldoInicialPeriodo.textContent = '$ ' + formatearNumeroArgentino(saldoInicialPeriodo);
+            elements.saldoCierrePeriodo.textContent = '$ ' + formatearNumeroArgentino(saldoCierrePeriodo);
+        } else if (elements.resumenSaldos) {
+            elements.resumenSaldos.classList.add('hidden');
+        }
     }
 
     // Renderizar filas (mostrar más filas si hay filtro activo)
