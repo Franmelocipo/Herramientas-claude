@@ -658,6 +658,62 @@ tbody tr:hover {
     font-weight: 700;
 }
 
+/* Resumen de saldos del período */
+.resumen-saldos {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.resumen-saldos.hidden {
+    display: none;
+}
+
+.saldo-item {
+    border-radius: 10px;
+    padding: 16px;
+}
+
+.saldo-inicial {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border: 1px solid #86efac;
+}
+
+.saldo-cierre {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border: 1px solid #93c5fd;
+}
+
+.saldo-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.saldo-inicial .saldo-label {
+    color: #166534;
+}
+
+.saldo-cierre .saldo-label {
+    color: #1e40af;
+}
+
+.saldo-valor {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.saldo-inicial .saldo-valor {
+    color: #15803d;
+}
+
+.saldo-cierre .saldo-valor {
+    color: #1d4ed8;
+}
+
 /* Archivos procesados */
 .archivos-procesados {
     margin-bottom: 20px;
