@@ -2680,22 +2680,10 @@ function parseLaPampaWithPositions(linesWithPositions) {
                     }
                 }
 
-                // Validación adicional: si hay 2+ candidatos a movimiento,
-                // pueden ser débito Y crédito en la misma línea (raro pero posible)
-                if (candidatosMovimiento.length >= 2) {
-                    // Ordenar por posición X
-                    candidatosMovimiento.sort((a, b) => a.x - b.x);
-                    const first = candidatosMovimiento[0];
-                    const second = candidatosMovimiento[1];
-
-                    // El de la izquierda es débito, el de la derecha es crédito
-                    if (first.x < midPoint) {
-                        debito = formatoArgentino(parseImporteBDLP(first.value));
-                    }
-                    if (second.x >= midPoint) {
-                        credito = formatoArgentino(parseImporteBDLP(second.value));
-                    }
-                }
+                // NOTA: Si hay 2+ candidatos a movimiento, NO asignar a ambas columnas.
+                // En un extracto bancario real, cada movimiento es SOLO débito O SOLO crédito.
+                // El segundo candidato probablemente es el comprobante u otro número mal interpretado.
+                // La lógica anterior (líneas 2659-2681) ya selecciona el mejor candidato único.
 
                 // VALIDACIÓN DE COHERENCIA DE SALDOS
                 // Si tenemos saldo anterior, validar que: saldoActual = saldoAnterior - débito + crédito
