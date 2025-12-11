@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auditoría - Herramientas Contables</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="../../css/buttons.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <script src="../../check-auth.js"></script>
+
+    <!-- Barra de navegación -->
+    <div class="nav-bar">
+        <a href="../../index.html" class="nav-btn">🏠 Inicio</a>
+        <a href="../../index.html" class="nav-btn">← Volver</a>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Auditoría de Extractos Bancarios</h1>
+            <p>Gestione cuentas bancarias y extractos mensuales de sus clientes</p>
+        </div>
+
+        <!-- Selector de Cliente -->
+        <div class="cliente-selector">
+            <div class="search-box">
+                <div class="selector-group">
+                    <label>Seleccionar Cliente:</label>
+                    <select id="clienteSelect" class="input-text" onchange="cargarDashboard()">
+                        <option value="">-- Seleccione un cliente --</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <input type="text" id="clienteSearch" class="input-text" placeholder="🔍 Filtrar clientes..." oninput="filtrarClientes()">
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard (se muestra al seleccionar cliente) -->
+        <div id="dashboard" style="display: none;">
+            <!-- Info del Cliente Seleccionado -->
+            <div class="cliente-info">
+                <div class="cliente-datos">
+                    <h3 id="clienteNombre"></h3>
+                    <span id="clienteCuit"></span>
+                </div>
+                <button onclick="mostrarNuevaCuentaBancaria()" class="btn-primary">+ Nueva Cuenta Bancaria</button>
+            </div>
+
+            <!-- Panel de Cuentas Bancarias y Extractos -->
+            <div class="cuentas-panel">
+                <div class="info-box">
+                    <strong>Panel de Extractos Bancarios:</strong> Visualice todas las cuentas bancarias del cliente con sus extractos mensuales.
+                    Puede cargar nuevos extractos, editarlos, filtrar movimientos y descargar reportes.
+                </div>
+
+                <!-- Lista de Cuentas con Extractos -->
+                <div id="cuentasList" class="cuentas-list">
+                    <div class="empty-state">Seleccione un cliente para ver sus cuentas bancarias</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estado vacío inicial -->
+        <div id="emptyState" class="empty-state-container">
+            <div class="empty-icon">🏦</div>
+            <h3>Seleccione un Cliente</h3>
+            <p>Elija un cliente del selector superior para ver sus cuentas bancarias y extractos mensuales.</p>
+        </div>
+    </div>
+
+    <!-- Modal Nueva/Editar Cuenta Bancaria -->
+    <div id="modalNuevaCuentaBancaria" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>Cuenta Bancaria</h3>
+            <input type="hidden" id="cuentaBancariaId">
+            <label>Banco:</label>
+            <input type="text" id="cuentaBanco" placeholder="Ej: Banco Galicia" class="input-text mb-4">
+            <label>Tipo de Cuenta:</label>
+            <select id="cuentaTipo" class="input-text mb-4">
+                <option value="Cuenta Corriente">Cuenta Corriente</option>
+                <option value="Caja de Ahorro">Caja de Ahorro</option>
+                <option value="Cuenta Única">Cuenta Única</option>
+            </select>
+            <label>Número de Cuenta / CBU:</label>
+            <input type="text" id="cuentaNumero" placeholder="Ej: 0070001234567890123456" class="input-text mb-4">
+            <label>Alias (Opcional):</label>
+            <input type="text" id="cuentaAlias" placeholder="Ej: CUENTA.PRINCIPAL" class="input-text mb-4">
+            <div class="btn-group">
+                <button onclick="cerrarNuevaCuentaBancaria()" class="btn-secondary">Cancelar</button>
+                <button onclick="guardarCuentaBancaria()" class="btn-primary">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Extractos Mensuales -->
+    <div id="modalExtractosMensuales" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📋 Extractos Mensuales - <span id="extractosCuentaNombre"></span></h2>
+                <button class="close-btn" onclick="cerrarExtractosMensuales()">✕</button>
+            </div>
+
+            <div class="btn-group mb-4">
+                <button onclick="mostrarSubirExtracto()" class="btn-primary flex-1">📤 Subir Extracto</button>
+            </div>
+
+            <div class="info-box">
+                <strong>Formato:</strong> Suba el archivo Excel generado por el Conversor de Extractos Bancarios.<br>
+                <strong>Columnas esperadas:</strong> Fecha | Descripción | Origen | Crédito | Débito | Saldo
+            </div>
+
+            <div id="extractosMensualesList" class="extractos-list"></div>
+        </div>
+    </div>
+
+    <!-- Modal Subir Extracto -->
+    <div id="modalSubirExtracto" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>Subir Extracto</h3>
+            <label>Mes:</label>
+            <select id="extractoMes" class="input-text mb-4">
+                <option value="1">Enero</option>
+                <option value="2">Febrero</option>
+                <option value="3">Marzo</option>
+                <option value="4">Abril</option>
+                <option value="5">Mayo</option>
+                <option value="6">Junio</option>
+                <option value="7">Julio</option>
+                <option value="8">Agosto</option>
+                <option value="9">Septiembre</option>
+                <option value="10">Octubre</option>
+                <option value="11">Noviembre</option>
+                <option value="12">Diciembre</option>
+            </select>
+            <label>Año:</label>
+            <input type="number" id="extractoAnio" placeholder="2024" class="input-text mb-4" min="2000" max="2100">
+            <label>Archivo Excel:</label>
+            <input type="file" id="extractoFile" accept=".xlsx,.xls" class="input-text mb-4" onchange="handleExtractoFileChange(event)">
+            <div id="extractoFileInfo" class="file-info"></div>
+            <div class="btn-group">
+                <button onclick="cerrarSubirExtracto()" class="btn-secondary">Cancelar</button>
+                <button onclick="procesarExtracto()" class="btn-primary">Procesar y Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detalle de Extracto -->
+    <div id="modalDetalleExtracto" class="modal hidden">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>📊 Detalle Extracto - <span id="detalleExtractoPeriodo"></span></h2>
+                <button class="close-btn" onclick="cerrarDetalleExtracto()">✕</button>
+            </div>
+
+            <!-- Barra de herramientas -->
+            <div class="btn-group mb-4 toolbar">
+                <button onclick="agregarMovimiento()" class="btn-primary">+ Agregar Movimiento</button>
+                <button onclick="restaurarMovimientos()" class="btn-warning">↩️ Restaurar Eliminados</button>
+                <button onclick="restaurarDatosOriginales()" class="btn-secondary">🔄 Restaurar Original</button>
+                <button onclick="guardarCambiosExtracto()" class="btn-success">💾 Guardar Cambios</button>
+                <button onclick="descargarExtractoExcel()" class="btn-template">📥 Descargar Excel</button>
+            </div>
+
+            <!-- Filtros -->
+            <div class="filtros-extracto">
+                <div class="filtro-item">
+                    <label>Filtrar por Fecha:</label>
+                    <input type="text" id="filtroFecha" placeholder="Ej: 15/01" class="input-text">
+                </div>
+                <div class="filtro-item filtro-desc">
+                    <label>Filtrar por Descripción:</label>
+                    <input type="text" id="filtroDescripcion" placeholder="Buscar en descripción..." class="input-text">
+                </div>
+                <div class="filtro-item">
+                    <label>Filtrar por Origen:</label>
+                    <input type="text" id="filtroOrigen" placeholder="Buscar origen..." class="input-text">
+                </div>
+                <div class="filtro-item filtro-btn">
+                    <button onclick="limpiarFiltrosExtracto()" class="btn-secondary">Limpiar</button>
+                </div>
+            </div>
+
+            <!-- Estadísticas -->
+            <div id="detalleExtractoStats" class="stats-bar"></div>
+
+            <!-- Tabla de movimientos -->
+            <div class="preview-container">
+                <div class="preview-table-container">
+                    <table id="detalleExtractoTable" class="preview-table">
+                        <thead>
+                            <tr>
+                                <th data-sort="fecha" onclick="ordenarPorColumna('fecha')" class="sortable">Fecha <span class="sort-indicator">⇅</span></th>
+                                <th data-sort="descripcion" onclick="ordenarPorColumna('descripcion')" class="sortable">Descripción <span class="sort-indicator">⇅</span></th>
+                                <th data-sort="origen" onclick="ordenarPorColumna('origen')" class="sortable">Origen <span class="sort-indicator">⇅</span></th>
+                                <th data-sort="credito" onclick="ordenarPorColumna('credito')" class="sortable text-right">Crédito <span class="sort-indicator">⇅</span></th>
+                                <th data-sort="debito" onclick="ordenarPorColumna('debito')" class="sortable text-right">Débito <span class="sort-indicator">⇅</span></th>
+                                <th data-sort="saldo" onclick="ordenarPorColumna('saldo')" class="sortable text-right">Saldo <span class="sort-indicator">⇅</span></th>
+                                <th class="actions-col">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detalleExtractoBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="info-box mt-4">
+                <strong>Tip:</strong> Haga clic en la descripción de cualquier movimiento para editarla. Los cambios se guardan al hacer clic fuera del campo o presionar Enter.
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuración de Supabase y módulos compartidos -->
+    <script src="../../supabase-config.js"></script>
+    <script src="../../shared/dataStore.js"></script>
+
+    <!-- Script principal -->
+    <script src="script.js"></script>
+</body>
+</html>
