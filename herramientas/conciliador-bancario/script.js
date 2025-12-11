@@ -1,6 +1,14 @@
 /**
  * Conciliador Bancario
  * Compara movimientos del Mayor Contable con Extractos Bancarios
+ *
+ * Formatos de archivo Mayor soportados:
+ * - Tango (exportación "Mayor por cuenta analítico") - Sin modificaciones necesarias
+ * - Formato genérico con columnas: Fecha, Debe, Haber, Leyenda/Descripción
+ *
+ * Lógica de conciliación:
+ * - Debe del Mayor (entrada de dinero) = Crédito del Extracto
+ * - Haber del Mayor (salida de dinero) = Débito del Extracto
  */
 
 // Estado de la aplicación
@@ -322,7 +330,19 @@ function leerExcel(file) {
                 // IMPORTANTE: No usar cellDates para evitar problemas de conversión
                 // Las fechas se manejan manualmente en parsearFecha()
                 const workbook = XLSX.read(e.target.result, { type: 'array' });
-                const sheetName = workbook.SheetNames[0];
+
+                // Buscar hoja preferida para archivos Tango: "Mayor por cuenta analítico"
+                // Si no existe, usar la primera hoja disponible
+                let sheetName = workbook.SheetNames[0];
+                const hojasTango = ['Mayor por cuenta analítico', 'Mayor por cuenta analitico'];
+                for (const hojaTango of hojasTango) {
+                    if (workbook.SheetNames.includes(hojaTango)) {
+                        sheetName = hojaTango;
+                        console.log(`Detectada hoja Tango: "${sheetName}"`);
+                        break;
+                    }
+                }
+
                 const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
                     raw: true,  // Mantener valores crudos (números seriales para fechas)
                     defval: ''
@@ -337,9 +357,27 @@ function leerExcel(file) {
     });
 }
 
+/**
+ * Parsea datos del Mayor Contable.
+ * Soporta múltiples formatos incluyendo:
+ * - Tango (exportación "Mayor por cuenta analítico")
+ * - Formato genérico con columnas estándar
+ *
+ * Mapeo de columnas Tango → Sistema:
+ * - "Fecha asiento" → fecha
+ * - "Leyenda movimiento" → leyenda (descripción)
+ * - "Debe" → debe (entrada de dinero en cuenta bancaria)
+ * - "Haber" → haber (salida de dinero de cuenta bancaria)
+ * - "Saldo" → saldo (saldo acumulado)
+ * - "Número asiento" → numeroAsiento
+ * - "C/E" → ce
+ * - "Tipo de asiento" → tipoAsiento
+ *
+ * Nota: Filas sin fecha válida o sin importe son ignoradas automáticamente.
+ */
 function parsearMayor(data) {
     return data.map((row, index) => {
-        // Buscar las columnas por diferentes nombres posibles
+        // Buscar columnas por diferentes nombres posibles (Tango, genérico, etc.)
         const fecha = parsearFecha(
             row['Fecha asiento'] || row['Fecha'] || row['fecha_asiento'] || row['fecha'] || ''
         );
@@ -349,6 +387,7 @@ function parsearMayor(data) {
         const leyenda = row['Leyenda movimiento'] || row['Leyenda'] || row['leyenda_movimiento'] || row['leyenda'] || row['Descripción'] || '';
         const debe = parsearImporte(row['Debe'] || row['debe'] || '0');
         const haber = parsearImporte(row['Haber'] || row['haber'] || '0');
+        const saldo = parsearImporte(row['Saldo'] || row['saldo'] || '0');
 
         return {
             id: `M${index}`,
@@ -359,6 +398,7 @@ function parsearMayor(data) {
             leyenda,
             debe,
             haber,
+            saldo,
             importe: debe > 0 ? debe : haber,
             esDebe: debe > 0,
             usado: false
@@ -553,11 +593,12 @@ function descargarPlantilla(tipo) {
     let data, filename;
 
     if (tipo === 'mayor') {
+        // Plantilla compatible con formato Tango "Mayor por cuenta analítico"
         data = [
-            ['Fecha asiento', 'Número asiento', 'C/E', 'Tipo de asiento', 'Leyenda movimiento', 'Debe', 'Haber'],
-            ['01/08/2024', '29001', 'E', 'CN', 'Liquidación Visa - Comercio', '', '150000'],
-            ['02/08/2024', '29002', 'E', 'CN', 'Liquidación Mastercard - Comercio', '', '85500'],
-            ['03/08/2024', '29003', 'S', 'PA', 'Pago a proveedor ABC', '200000', '']
+            ['Fecha asiento', 'Número asiento', 'C/E', 'Tipo de asiento', 'Leyenda movimiento', 'Debe', 'Haber', 'Saldo'],
+            ['01/08/2024', '29001', 'E', 'CN', 'Dinastibasa S.R.L () Recibo Nº0003-00009659', '519417.57', '', '68948032.73'],
+            ['01/08/2024', '29002', 'E', 'CN', 'IMP.DEB/CRED P/CRED.', '', '27165.83', '68920866.90'],
+            ['02/08/2024', '29003', 'S', 'PA', 'Pago a proveedor ABC S.A.', '', '200000', '68720866.90']
         ];
         filename = 'Plantilla_Mayor_Contable.xlsx';
     } else {
