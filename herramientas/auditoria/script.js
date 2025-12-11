@@ -10,6 +10,7 @@ const state = {
     movimientosOriginales: [],
     movimientosEditados: [],
     movimientosEliminados: [],
+    movimientosSeleccionados: [], // IDs de movimientos seleccionados
     ordenActual: { columna: null, direccion: 'asc' },
     filtros: {},
     filtroMarcadores: [], // Marcadores seleccionados para filtrar
@@ -296,10 +297,16 @@ function renderizarCuentasConExtractos(cuentas) {
                                         if (extracto) {
                                             return `
                                                 <div class="extracto-cell extracto-cargado"
-                                                     onclick="verDetalleExtracto('${extracto.id}', '${cuenta.id}')"
-                                                     title="${mesesCompletos[idx]} ${anio} - ${movimientos} movimientos - Click para ver detalle">
-                                                    <div class="extracto-mes">${mes}</div>
-                                                    <div class="extracto-mov">${movimientos} mov</div>
+                                                     title="${mesesCompletos[idx]} ${anio} - ${movimientos} movimientos">
+                                                    <div class="extracto-content" onclick="verDetalleExtracto('${extracto.id}', '${cuenta.id}')">
+                                                        <div class="extracto-mes">${mes}</div>
+                                                        <div class="extracto-mov">${movimientos} mov</div>
+                                                    </div>
+                                                    <button class="extracto-delete-btn"
+                                                            onclick="event.stopPropagation(); eliminarExtractoDirecto('${extracto.id}', '${cuenta.id}', '${mesesCompletos[idx]}', ${anio})"
+                                                            title="Eliminar extracto de ${mesesCompletos[idx]} ${anio}">
+                                                        🗑️
+                                                    </button>
                                                 </div>
                                             `;
                                         } else {
@@ -512,21 +519,13 @@ async function eliminarCuentaBancaria(id) {
 function mostrarSubirExtractoDirecto(cuentaId, cuentaNombre, mes, anio) {
     state.cuentaActual = { id: cuentaId, nombre: cuentaNombre };
 
-    // Establecer mes y año si se proporcionan
-    if (mes) {
-        document.getElementById('extractoMes').value = mes;
-    } else {
-        document.getElementById('extractoMes').value = new Date().getMonth() + 1;
-    }
-
-    if (anio) {
-        document.getElementById('extractoAnio').value = anio;
-    } else {
-        document.getElementById('extractoAnio').value = new Date().getFullYear();
-    }
-
     document.getElementById('extractoFile').value = '';
     document.getElementById('extractoFileInfo').textContent = '';
+    const previewInfo = document.getElementById('extractoPreviewInfo');
+    if (previewInfo) {
+        previewInfo.style.display = 'none';
+        previewInfo.innerHTML = '';
+    }
     document.getElementById('modalSubirExtracto').classList.remove('hidden');
 }
 
@@ -630,11 +629,13 @@ function renderizarExtractosMensuales(extractos) {
  * Mostrar modal para subir nuevo extracto
  */
 function mostrarSubirExtracto() {
-    const hoy = new Date();
-    document.getElementById('extractoMes').value = hoy.getMonth() + 1;
-    document.getElementById('extractoAnio').value = hoy.getFullYear();
     document.getElementById('extractoFile').value = '';
     document.getElementById('extractoFileInfo').textContent = '';
+    const previewInfo = document.getElementById('extractoPreviewInfo');
+    if (previewInfo) {
+        previewInfo.style.display = 'none';
+        previewInfo.innerHTML = '';
+    }
     document.getElementById('modalSubirExtracto').classList.remove('hidden');
 }
 
@@ -646,26 +647,146 @@ function cerrarSubirExtracto() {
 }
 
 /**
- * Manejar cambio de archivo de extracto
+ * Manejar cambio de archivo de extracto - con pre-lectura para detectar mes/año
  */
-function handleExtractoFileChange(event) {
+async function handleExtractoFileChange(event) {
     const file = event.target.files[0];
     const info = document.getElementById('extractoFileInfo');
+    const previewInfo = document.getElementById('extractoPreviewInfo');
 
-    if (file) {
-        info.textContent = `Archivo seleccionado: ${file.name}`;
-        info.style.color = '#38a169';
-    } else {
+    if (!file) {
         info.textContent = '';
+        if (previewInfo) {
+            previewInfo.style.display = 'none';
+        }
+        return;
+    }
+
+    info.textContent = `Archivo seleccionado: ${file.name}`;
+    info.style.color = '#38a169';
+
+    // Pre-leer archivo para detectar mes/año
+    try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { raw: true });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
+
+        // Buscar encabezados
+        let headerRow = -1;
+        for (let i = 0; i < Math.min(5, jsonData.length); i++) {
+            const row = jsonData[i];
+            if (row && row[0] && String(row[0]).toLowerCase().includes('fecha')) {
+                headerRow = i;
+                break;
+            }
+        }
+
+        if (headerRow === -1) {
+            if (previewInfo) {
+                previewInfo.style.display = 'block';
+                previewInfo.innerHTML = '<span style="color: #e53e3e;">⚠️ No se encontró columna "Fecha" en el archivo</span>';
+            }
+            return;
+        }
+
+        // Detectar mes/año de las fechas
+        const deteccion = detectarMesAnioDeMovimientos(jsonData, headerRow);
+
+        if (previewInfo && deteccion) {
+            const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                           'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+            if (deteccion.mesesDetectados.length === 1) {
+                const { mes, anio } = deteccion.mesesDetectados[0];
+                previewInfo.style.display = 'block';
+                previewInfo.innerHTML = `
+                    <span style="color: #38a169;">✅ Detectado: <strong>${meses[mes - 1]} ${anio}</strong></span>
+                    <br><small>${deteccion.totalMovimientos} movimientos encontrados</small>
+                `;
+            } else if (deteccion.mesesDetectados.length > 1) {
+                const mesesList = deteccion.mesesDetectados.map(m => `${meses[m.mes - 1]} ${m.anio} (${m.cantidad} mov.)`).join(', ');
+                previewInfo.style.display = 'block';
+                previewInfo.innerHTML = `
+                    <span style="color: #3182ce;">📋 Múltiples meses detectados:</span>
+                    <br><small>${mesesList}</small>
+                    <br><small style="color: #718096;">Se crearán extractos separados para cada mes</small>
+                `;
+            }
+        }
+    } catch (error) {
+        console.error('Error en pre-lectura:', error);
+        if (previewInfo) {
+            previewInfo.style.display = 'block';
+            previewInfo.innerHTML = '<span style="color: #e53e3e;">⚠️ Error al leer el archivo</span>';
+        }
     }
 }
 
 /**
- * Procesar y guardar extracto
+ * Detectar mes y año de los movimientos del archivo
+ */
+function detectarMesAnioDeMovimientos(jsonData, headerRow) {
+    const mesesCount = {}; // { "2025-3": 15, "2025-4": 2, ... }
+
+    for (let i = headerRow + 1; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (!row || !row[0]) continue;
+
+        let fecha = row[0];
+        let mes, anio;
+
+        // Parsear fecha
+        if (typeof fecha === 'number') {
+            // Fecha de Excel
+            const excelDate = new Date((fecha - 25569) * 86400 * 1000);
+            mes = excelDate.getMonth() + 1;
+            anio = excelDate.getFullYear();
+        } else {
+            // Formato texto DD/MM/YYYY o similar
+            const fechaStr = String(fecha);
+            const partes = fechaStr.split(/[\/\-]/);
+            if (partes.length >= 3) {
+                // Asume DD/MM/YYYY
+                const dia = parseInt(partes[0]);
+                const mesNum = parseInt(partes[1]);
+                let anioNum = parseInt(partes[2]);
+
+                // Ajustar año de 2 dígitos
+                if (anioNum < 100) {
+                    anioNum = anioNum > 50 ? 1900 + anioNum : 2000 + anioNum;
+                }
+
+                if (mesNum >= 1 && mesNum <= 12 && anioNum >= 2000 && anioNum <= 2100) {
+                    mes = mesNum;
+                    anio = anioNum;
+                }
+            }
+        }
+
+        if (mes && anio) {
+            const key = `${anio}-${mes}`;
+            mesesCount[key] = (mesesCount[key] || 0) + 1;
+        }
+    }
+
+    // Convertir a array y ordenar por cantidad
+    const mesesDetectados = Object.entries(mesesCount)
+        .map(([key, cantidad]) => {
+            const [anio, mes] = key.split('-').map(Number);
+            return { mes, anio, cantidad };
+        })
+        .sort((a, b) => b.cantidad - a.cantidad);
+
+    const totalMovimientos = Object.values(mesesCount).reduce((sum, c) => sum + c, 0);
+
+    return { mesesDetectados, totalMovimientos };
+}
+
+/**
+ * Procesar y guardar extracto - con detección automática de mes/año
  */
 async function procesarExtracto() {
-    const mes = parseInt(document.getElementById('extractoMes').value);
-    const anio = parseInt(document.getElementById('extractoAnio').value);
     const fileInput = document.getElementById('extractoFile');
     const file = fileInput.files[0];
 
@@ -709,20 +830,45 @@ async function procesarExtracto() {
             return;
         }
 
-        // Parsear movimientos
-        const movimientos = [];
+        // Parsear movimientos con detección de mes/año
+        const movimientosPorMes = {}; // { "2025-3": [...movimientos], "2025-4": [...] }
+
         for (let i = headerRow + 1; i < jsonData.length; i++) {
             const row = jsonData[i];
             if (!row || !row[0]) continue;
 
             // Parsear fecha
             let fecha = row[0];
+            let mes, anio;
+
             if (typeof fecha === 'number') {
                 const excelDate = new Date((fecha - 25569) * 86400 * 1000);
+                mes = excelDate.getMonth() + 1;
+                anio = excelDate.getFullYear();
                 fecha = excelDate.toLocaleDateString('es-AR');
+            } else {
+                const fechaStr = String(fecha);
+                const partes = fechaStr.split(/[\/\-]/);
+                if (partes.length >= 3) {
+                    mes = parseInt(partes[1]);
+                    anio = parseInt(partes[2]);
+                    if (anio < 100) {
+                        anio = anio > 50 ? 1900 + anio : 2000 + anio;
+                    }
+                }
             }
 
-            movimientos.push({
+            if (!mes || !anio || mes < 1 || mes > 12 || anio < 2000 || anio > 2100) {
+                console.warn(`Fecha inválida en fila ${i + 1}:`, row[0]);
+                continue;
+            }
+
+            const key = `${anio}-${mes}`;
+            if (!movimientosPorMes[key]) {
+                movimientosPorMes[key] = [];
+            }
+
+            movimientosPorMes[key].push({
                 id: Date.now().toString() + '_' + i,
                 fecha: String(fecha || ''),
                 descripcion: String(row[1] || ''),
@@ -733,63 +879,81 @@ async function procesarExtracto() {
             });
         }
 
-        if (movimientos.length === 0) {
-            alert('No se encontraron movimientos en el archivo');
+        const mesesKeys = Object.keys(movimientosPorMes);
+        if (mesesKeys.length === 0) {
+            alert('No se encontraron movimientos con fechas válidas en el archivo');
             return;
         }
 
-        // Verificar si ya existe extracto para ese período
-        if (typeof supabase !== 'undefined' && supabase) {
-            const { data: existente } = await supabase
-                .from('extractos_mensuales')
-                .select('id')
-                .eq('cuenta_id', cuentaId)
-                .eq('mes', mes)
-                .eq('anio', anio)
-                .single();
+        const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-            if (existente) {
-                if (!confirm(`Ya existe un extracto para ${mes}/${anio}. ¿Desea reemplazarlo?`)) {
-                    return;
+        // Procesar cada mes detectado
+        let totalGuardados = 0;
+        const mesesGuardados = [];
+
+        for (const key of mesesKeys) {
+            const [anio, mes] = key.split('-').map(Number);
+            const movimientos = movimientosPorMes[key];
+
+            // Verificar si ya existe extracto para ese período
+            if (typeof supabase !== 'undefined' && supabase) {
+                const { data: existente } = await supabase
+                    .from('extractos_mensuales')
+                    .select('id')
+                    .eq('cuenta_id', cuentaId)
+                    .eq('mes', mes)
+                    .eq('anio', anio)
+                    .single();
+
+                if (existente) {
+                    const nombreMes = meses[mes - 1];
+                    if (!confirm(`Ya existe un extracto para ${nombreMes} ${anio}. ¿Desea reemplazarlo?`)) {
+                        continue;
+                    }
+                    await supabase.from('extractos_mensuales').delete().eq('id', existente.id);
                 }
-                await supabase.from('extractos_mensuales').delete().eq('id', existente.id);
-            }
 
-            // Guardar en Supabase
-            const { error } = await supabase
-                .from('extractos_mensuales')
-                .insert([{
+                // Guardar en Supabase
+                const { error } = await supabase
+                    .from('extractos_mensuales')
+                    .insert([{
+                        cuenta_id: cuentaId,
+                        mes,
+                        anio,
+                        saldo_inicial: mesesKeys.length === 1 ? saldoInicial : null,
+                        data: movimientos
+                    }]);
+
+                if (error) throw error;
+            } else {
+                // Fallback localStorage
+                const extractos = JSON.parse(localStorage.getItem(`extractos_${cuentaId}`) || '[]');
+                const existenteIdx = extractos.findIndex(e => e.mes === mes && e.anio === anio);
+
+                if (existenteIdx !== -1) {
+                    const nombreMes = meses[mes - 1];
+                    if (!confirm(`Ya existe un extracto para ${nombreMes} ${anio}. ¿Desea reemplazarlo?`)) {
+                        continue;
+                    }
+                    extractos.splice(existenteIdx, 1);
+                }
+
+                extractos.push({
+                    id: Date.now().toString() + '_' + mes,
                     cuenta_id: cuentaId,
                     mes,
                     anio,
-                    saldo_inicial: saldoInicial,
-                    data: movimientos
-                }]);
+                    saldo_inicial: mesesKeys.length === 1 ? saldoInicial : null,
+                    data: movimientos,
+                    created_at: new Date().toISOString()
+                });
 
-            if (error) throw error;
-        } else {
-            // Fallback localStorage
-            const extractos = JSON.parse(localStorage.getItem(`extractos_${cuentaId}`) || '[]');
-            const existenteIdx = extractos.findIndex(e => e.mes === mes && e.anio === anio);
-
-            if (existenteIdx !== -1) {
-                if (!confirm(`Ya existe un extracto para ${mes}/${anio}. ¿Desea reemplazarlo?`)) {
-                    return;
-                }
-                extractos.splice(existenteIdx, 1);
+                localStorage.setItem(`extractos_${cuentaId}`, JSON.stringify(extractos));
             }
 
-            extractos.push({
-                id: Date.now().toString(),
-                cuenta_id: cuentaId,
-                mes,
-                anio,
-                saldo_inicial: saldoInicial,
-                data: movimientos,
-                created_at: new Date().toISOString()
-            });
-
-            localStorage.setItem(`extractos_${cuentaId}`, JSON.stringify(extractos));
+            totalGuardados += movimientos.length;
+            mesesGuardados.push(`${meses[mes - 1]} ${anio} (${movimientos.length} mov.)`);
         }
 
         cerrarSubirExtracto();
@@ -803,7 +967,11 @@ async function procesarExtracto() {
         // Recargar el dashboard
         await cargarCuentasConExtractos(state.clienteActual.id);
 
-        alert(`Extracto cargado: ${movimientos.length} movimientos`);
+        if (mesesGuardados.length === 1) {
+            alert(`✅ Extracto cargado: ${mesesGuardados[0]}`);
+        } else {
+            alert(`✅ Extractos cargados:\n${mesesGuardados.join('\n')}\n\nTotal: ${totalGuardados} movimientos`);
+        }
     } catch (error) {
         console.error('Error procesando extracto:', error);
         alert('Error al procesar el archivo: ' + error.message);
@@ -811,7 +979,7 @@ async function procesarExtracto() {
 }
 
 /**
- * Eliminar extracto
+ * Eliminar extracto (desde modal de extractos mensuales)
  */
 async function eliminarExtracto(id) {
     if (!confirm('¿Eliminar este extracto?')) {
@@ -841,6 +1009,39 @@ async function eliminarExtracto(id) {
         }
 
         alert('Extracto eliminado');
+    } catch (error) {
+        console.error('Error eliminando extracto:', error);
+        alert('Error al eliminar el extracto');
+    }
+}
+
+/**
+ * Eliminar extracto directamente desde el panel (sin modal abierto)
+ */
+async function eliminarExtractoDirecto(id, cuentaId, nombreMes, anio) {
+    if (!confirm(`¿Eliminar el extracto de ${nombreMes} ${anio}?\n\nEsta acción no se puede deshacer.`)) {
+        return;
+    }
+
+    try {
+        if (typeof supabase !== 'undefined' && supabase) {
+            const { error } = await supabase
+                .from('extractos_mensuales')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        } else {
+            const extractos = JSON.parse(localStorage.getItem(`extractos_${cuentaId}`) || '[]');
+            const nuevos = extractos.filter(e => e.id !== id);
+            localStorage.setItem(`extractos_${cuentaId}`, JSON.stringify(nuevos));
+        }
+
+        // Recargar el dashboard
+        if (state.clienteActual?.id) {
+            await cargarCuentasConExtractos(state.clienteActual.id);
+        }
+
+        alert(`✅ Extracto de ${nombreMes} ${anio} eliminado`);
     } catch (error) {
         console.error('Error eliminando extracto:', error);
         alert('Error al eliminar el extracto');
@@ -906,8 +1107,13 @@ async function verDetalleExtracto(id, cuentaId) {
         document.getElementById('filtroOrigen').value = '';
         state.filtroMarcadores = [];
 
-        // Inicializar controles de marcadores
+        // Limpiar selección
+        state.movimientosSeleccionados = [];
+        actualizarBarraSeleccionados();
+
+        // Inicializar controles de marcadores y selección
         inicializarControlesMarcadores();
+        inicializarSelectCategoriaSeleccionados();
 
         renderizarDetalleExtracto();
     } catch (error) {
@@ -1018,12 +1224,13 @@ function renderizarDetalleExtracto() {
             `<span class="stat-eliminados">${state.movimientosEliminados.length} eliminados (restaurables)</span>` : ''}
     `;
 
-    // Renderizar filas con columna de categoría
+    // Renderizar filas con columna de categoría y checkbox
     const mesesCortos = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
     tbody.innerHTML = movimientos.map(m => {
         const categoria = CATEGORIAS_MOVIMIENTO.find(c => c.id === (m.categoria || '')) || CATEGORIAS_MOVIMIENTO[0];
         const badgeStyle = m.categoria ? `background-color: ${categoria.color}20; color: ${categoria.color}; border: 1px solid ${categoria.color}40;` : '';
+        const estaSeleccionado = state.movimientosSeleccionados.includes(m.id);
 
         // En modo rango, mostrar el período del movimiento
         const periodoCell = state.modoRango && m._extractoMes && m._extractoAnio
@@ -1031,7 +1238,12 @@ function renderizarDetalleExtracto() {
             : '';
 
         return `
-        <tr data-id="${m.id}">
+        <tr data-id="${m.id}" class="${estaSeleccionado ? 'fila-seleccionada' : ''}">
+            <td class="checkbox-cell">
+                <input type="checkbox" class="mov-checkbox" data-id="${m.id}"
+                       ${estaSeleccionado ? 'checked' : ''}
+                       onchange="toggleSeleccionMovimiento('${m.id}', this.checked)">
+            </td>
             <td class="categoria-cell">
                 <select class="categoria-select" onchange="cambiarCategoria('${m.id}', this.value)"
                         style="${m.categoria ? `border-color: ${categoria.color}; background-color: ${categoria.color}10;` : ''}">
@@ -1052,6 +1264,9 @@ function renderizarDetalleExtracto() {
             </td>
         </tr>
     `}).join('');
+
+    // Actualizar checkbox "seleccionar todos"
+    actualizarCheckboxSelectAll(movimientos);
 
     // Actualizar headers de la tabla según modo rango
     actualizarHeadersTabla();
@@ -1715,8 +1930,13 @@ async function cargarExtractosPorRango() {
         document.getElementById('filtroDescripcion').value = '';
         document.getElementById('filtroOrigen').value = '';
 
-        // Inicializar controles de marcadores
+        // Limpiar selección
+        state.movimientosSeleccionados = [];
+        actualizarBarraSeleccionados();
+
+        // Inicializar controles de marcadores y selección
         inicializarControlesMarcadores();
+        inicializarSelectCategoriaSeleccionados();
 
         renderizarDetalleExtracto();
 
@@ -1728,378 +1948,270 @@ async function cargarExtractosPorRango() {
 }
 
 // ============================================
-// GESTIÓN DE CATEGORÍAS
+// SELECCIÓN MÚLTIPLE DE MOVIMIENTOS
 // ============================================
 
 /**
- * Cargar categorías desde Supabase o localStorage
+ * Inicializar select de categorías para la barra de seleccionados
  */
-async function cargarCategorias() {
-    try {
-        let categorias = [];
-        let supabaseClient = null;
+function inicializarSelectCategoriaSeleccionados() {
+    const select = document.getElementById('categoriaSeleccionados');
+    if (select) {
+        select.innerHTML = CATEGORIAS_MOVIMIENTO
+            .filter(c => c.id !== '') // Excluir "Sin categoría"
+            .map(c => `<option value="${c.id}">${c.nombre}</option>`)
+            .join('');
+    }
+}
 
-        // Intentar obtener Supabase
-        if (typeof waitForSupabase === 'function') {
-            supabaseClient = await waitForSupabase();
+/**
+ * Toggle selección de un movimiento individual
+ */
+function toggleSeleccionMovimiento(movId, seleccionado) {
+    if (seleccionado) {
+        if (!state.movimientosSeleccionados.includes(movId)) {
+            state.movimientosSeleccionados.push(movId);
+        }
+    } else {
+        state.movimientosSeleccionados = state.movimientosSeleccionados.filter(id => id !== movId);
+    }
+
+    // Actualizar UI
+    actualizarBarraSeleccionados();
+    actualizarFilaSeleccionada(movId, seleccionado);
+
+    // Actualizar checkbox "seleccionar todos"
+    const movimientosVisibles = obtenerMovimientosVisibles();
+    actualizarCheckboxSelectAll(movimientosVisibles);
+}
+
+/**
+ * Toggle seleccionar todos los movimientos visibles
+ */
+function toggleSeleccionarTodos(checkbox) {
+    const movimientosVisibles = obtenerMovimientosVisibles();
+    const idsVisibles = movimientosVisibles.map(m => m.id);
+
+    if (checkbox.checked) {
+        // Agregar todos los visibles a la selección
+        idsVisibles.forEach(id => {
+            if (!state.movimientosSeleccionados.includes(id)) {
+                state.movimientosSeleccionados.push(id);
+            }
+        });
+    } else {
+        // Quitar todos los visibles de la selección
+        state.movimientosSeleccionados = state.movimientosSeleccionados.filter(id => !idsVisibles.includes(id));
+    }
+
+    // Actualizar UI
+    actualizarBarraSeleccionados();
+    renderizarDetalleExtracto();
+}
+
+/**
+ * Deseleccionar todos los movimientos
+ */
+function deseleccionarTodos() {
+    state.movimientosSeleccionados = [];
+    actualizarBarraSeleccionados();
+    renderizarDetalleExtracto();
+}
+
+/**
+ * Obtener movimientos actualmente visibles (con filtros aplicados)
+ */
+function obtenerMovimientosVisibles() {
+    let movimientos = [...state.movimientosEditados];
+
+    // Aplicar filtros de texto
+    if (state.filtros.fecha) {
+        movimientos = movimientos.filter(m =>
+            m.fecha.toLowerCase().includes(state.filtros.fecha.toLowerCase())
+        );
+    }
+    if (state.filtros.descripcion) {
+        movimientos = movimientos.filter(m =>
+            m.descripcion.toLowerCase().includes(state.filtros.descripcion.toLowerCase())
+        );
+    }
+    if (state.filtros.origen) {
+        movimientos = movimientos.filter(m =>
+            m.origen.toLowerCase().includes(state.filtros.origen.toLowerCase())
+        );
+    }
+
+    // Aplicar filtro de marcadores
+    if (state.filtroMarcadores && state.filtroMarcadores.length > 0) {
+        movimientos = movimientos.filter(m => {
+            const cat = m.categoria || '';
+            return state.filtroMarcadores.includes(cat);
+        });
+    }
+
+    return movimientos;
+}
+
+/**
+ * Actualizar barra de seleccionados
+ */
+function actualizarBarraSeleccionados() {
+    const barra = document.getElementById('barraSeleccionados');
+    const contador = document.getElementById('contadorSeleccionados');
+
+    if (!barra || !contador) return;
+
+    const cantidad = state.movimientosSeleccionados.length;
+
+    if (cantidad > 0) {
+        barra.classList.remove('hidden');
+        contador.textContent = `${cantidad} seleccionado${cantidad !== 1 ? 's' : ''}`;
+    } else {
+        barra.classList.add('hidden');
+    }
+}
+
+/**
+ * Actualizar checkbox "seleccionar todos"
+ */
+function actualizarCheckboxSelectAll(movimientosVisibles) {
+    const checkbox = document.getElementById('selectAllMovimientos');
+    if (!checkbox) return;
+
+    const idsVisibles = movimientosVisibles.map(m => m.id);
+    const seleccionadosVisibles = idsVisibles.filter(id => state.movimientosSeleccionados.includes(id));
+
+    if (seleccionadosVisibles.length === 0) {
+        checkbox.checked = false;
+        checkbox.indeterminate = false;
+    } else if (seleccionadosVisibles.length === idsVisibles.length) {
+        checkbox.checked = true;
+        checkbox.indeterminate = false;
+    } else {
+        checkbox.checked = false;
+        checkbox.indeterminate = true;
+    }
+}
+
+/**
+ * Actualizar estilo de fila seleccionada
+ */
+function actualizarFilaSeleccionada(movId, seleccionado) {
+    const fila = document.querySelector(`tr[data-id="${movId}"]`);
+    if (fila) {
+        if (seleccionado) {
+            fila.classList.add('fila-seleccionada');
         } else {
-            for (let i = 0; i < 50; i++) {
-                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
-                    supabaseClient = supabase;
-                    break;
-                }
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
+            fila.classList.remove('fila-seleccionada');
         }
-
-        if (supabaseClient) {
-            const { data, error } = await supabaseClient
-                .from('categorias_movimientos')
-                .select('*')
-                .eq('activo', true)
-                .order('orden');
-
-            if (error) {
-                console.warn('Error cargando categorías de Supabase:', error.message);
-                // Si hay error (probablemente la tabla no existe), inicializar la tabla
-                await inicializarCategoriasEnSupabase(supabaseClient);
-                categorias = CATEGORIAS_DEFAULT;
-            } else {
-                categorias = data || [];
-            }
-        }
-
-        // Si no hay categorías en Supabase o no hay conexión, usar localStorage
-        if (categorias.length === 0) {
-            const stored = localStorage.getItem('categorias_movimientos');
-            if (stored) {
-                categorias = JSON.parse(stored);
-            } else {
-                categorias = CATEGORIAS_DEFAULT;
-                localStorage.setItem('categorias_movimientos', JSON.stringify(categorias));
-            }
-        }
-
-        // Actualizar variable global con "Sin categoría" al inicio
-        CATEGORIAS_MOVIMIENTO = [
-            { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' },
-            ...categorias
-        ];
-
-        console.log('✅ Categorías cargadas:', CATEGORIAS_MOVIMIENTO.length);
-    } catch (error) {
-        console.error('Error cargando categorías:', error);
-        // Fallback a categorías por defecto
-        CATEGORIAS_MOVIMIENTO = [
-            { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' },
-            ...CATEGORIAS_DEFAULT
-        ];
     }
 }
 
-/**
- * Inicializar categorías en Supabase si la tabla está vacía
- */
-async function inicializarCategoriasEnSupabase(supabaseClient) {
-    try {
-        // Insertar categorías por defecto
-        const { error } = await supabaseClient
-            .from('categorias_movimientos')
-            .insert(CATEGORIAS_DEFAULT);
-
-        if (error && !error.message.includes('duplicate')) {
-            console.warn('No se pudieron insertar categorías iniciales:', error.message);
-        }
-    } catch (error) {
-        console.warn('Error inicializando categorías:', error);
-    }
-}
+// ============================================
+// ACCIONES EN LOTE PARA SELECCIONADOS
+// ============================================
 
 /**
- * Abrir modal de gestión de categorías
+ * Clasificar movimientos seleccionados
  */
-function abrirGestionCategorias() {
-    document.getElementById('modalGestionCategorias').classList.remove('hidden');
-    renderizarListaCategorias();
-    // Limpiar formulario de nueva categoría
-    document.getElementById('nuevaCategoriaId').value = '';
-    document.getElementById('nuevaCategoriaNombre').value = '';
-    document.getElementById('nuevaCategoriaColor').value = '#64748b';
-}
-
-/**
- * Cerrar modal de gestión de categorías
- */
-function cerrarGestionCategorias() {
-    document.getElementById('modalGestionCategorias').classList.add('hidden');
-    // Reinicializar controles de marcadores si hay un extracto abierto
-    if (state.extractoActual || state.modoRango) {
-        inicializarControlesMarcadores();
-        renderizarDetalleExtracto();
-    }
-}
-
-/**
- * Renderizar lista de categorías en el modal
- */
-function renderizarListaCategorias() {
-    const container = document.getElementById('categoriasLista');
-
-    // Filtrar categorías (excluir "Sin categoría")
-    const categorias = CATEGORIAS_MOVIMIENTO.filter(c => c.id !== '');
-
-    if (categorias.length === 0) {
-        container.innerHTML = `
-            <div class="categoria-item-empty">
-                No hay categorías definidas. Agregue una nueva categoría usando el formulario superior.
-            </div>
-        `;
+function clasificarSeleccionados() {
+    if (state.movimientosSeleccionados.length === 0) {
+        alert('No hay movimientos seleccionados');
         return;
     }
 
-    container.innerHTML = categorias.map(cat => `
-        <div class="categoria-item" data-id="${cat.id}">
-            <div class="categoria-color-preview" style="background-color: ${cat.color}"></div>
-            <div class="categoria-info">
-                <div class="categoria-nombre">${escapeHtml(cat.nombre)}</div>
-                <div class="categoria-id">${escapeHtml(cat.id)}</div>
-            </div>
-            <div class="categoria-actions">
-                <button onclick="abrirEditarCategoria('${cat.id}')" class="btn-secondary btn-sm">✏️ Editar</button>
-                <button onclick="eliminarCategoria('${cat.id}')" class="btn-danger btn-sm">🗑️ Eliminar</button>
-            </div>
-        </div>
-    `).join('');
-}
+    const select = document.getElementById('categoriaSeleccionados');
+    const categoriaId = select.value;
 
-/**
- * Agregar nueva categoría
- */
-async function agregarCategoria() {
-    const id = document.getElementById('nuevaCategoriaId').value.trim().toLowerCase().replace(/\s+/g, '_');
-    const nombre = document.getElementById('nuevaCategoriaNombre').value.trim();
-    const color = document.getElementById('nuevaCategoriaColor').value;
-
-    // Validaciones
-    if (!id || !nombre) {
-        alert('Por favor complete el ID y el nombre de la categoría');
+    if (!categoriaId) {
+        alert('Seleccione una categoría para asignar');
         return;
     }
 
-    if (!/^[a-z0-9_]+$/.test(id)) {
-        alert('El ID solo puede contener letras minúsculas, números y guiones bajos');
-        return;
-    }
-
-    // Verificar si ya existe
-    if (CATEGORIAS_MOVIMIENTO.some(c => c.id === id)) {
-        alert('Ya existe una categoría con ese ID');
-        return;
-    }
-
-    const nuevaCategoria = {
-        id,
-        nombre,
-        color,
-        orden: CATEGORIAS_MOVIMIENTO.length,
-        activo: true
-    };
-
-    try {
-        let supabaseClient = null;
-        if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
-            supabaseClient = supabase;
-        }
-
-        if (supabaseClient) {
-            const { error } = await supabaseClient
-                .from('categorias_movimientos')
-                .insert([nuevaCategoria]);
-
-            if (error) {
-                console.warn('Error guardando en Supabase:', error.message);
-            }
-        }
-
-        // Guardar en localStorage como backup
-        const stored = CATEGORIAS_MOVIMIENTO.filter(c => c.id !== '');
-        stored.push(nuevaCategoria);
-        localStorage.setItem('categorias_movimientos', JSON.stringify(stored));
-
-        // Actualizar variable global
-        CATEGORIAS_MOVIMIENTO.push(nuevaCategoria);
-
-        // Limpiar formulario
-        document.getElementById('nuevaCategoriaId').value = '';
-        document.getElementById('nuevaCategoriaNombre').value = '';
-        document.getElementById('nuevaCategoriaColor').value = '#64748b';
-
-        renderizarListaCategorias();
-        console.log('✅ Categoría agregada:', nuevaCategoria);
-    } catch (error) {
-        console.error('Error agregando categoría:', error);
-        alert('Error al agregar la categoría');
-    }
-}
-
-/**
- * Abrir modal de edición de categoría
- */
-function abrirEditarCategoria(categoriaId) {
     const categoria = CATEGORIAS_MOVIMIENTO.find(c => c.id === categoriaId);
-    if (!categoria) return;
+    const cantidad = state.movimientosSeleccionados.length;
 
-    document.getElementById('editarCategoriaIdOriginal').value = categoria.id;
-    document.getElementById('editarCategoriaId').value = categoria.id;
-    document.getElementById('editarCategoriaNombre').value = categoria.nombre;
-    document.getElementById('editarCategoriaColor').value = categoria.color;
+    if (!confirm(`¿Asignar "${categoria.nombre}" a ${cantidad} movimiento${cantidad !== 1 ? 's' : ''} seleccionado${cantidad !== 1 ? 's' : ''}?`)) {
+        return;
+    }
 
-    document.getElementById('modalEditarCategoria').classList.remove('hidden');
+    // Asignar categoría a los movimientos seleccionados
+    let count = 0;
+    state.movimientosEditados.forEach(m => {
+        if (state.movimientosSeleccionados.includes(m.id)) {
+            m.categoria = categoriaId;
+            count++;
+        }
+    });
+
+    renderizarDetalleExtracto();
+    alert(`✅ Se asignó "${categoria.nombre}" a ${count} movimiento${count !== 1 ? 's' : ''}`);
 }
 
 /**
- * Cerrar modal de edición de categoría
+ * Cambiar descripción de movimientos seleccionados
  */
-function cerrarEditarCategoria() {
-    document.getElementById('modalEditarCategoria').classList.add('hidden');
+function cambiarDescripcionSeleccionados() {
+    if (state.movimientosSeleccionados.length === 0) {
+        alert('No hay movimientos seleccionados');
+        return;
+    }
+
+    const cantidad = state.movimientosSeleccionados.length;
+    const nuevaDescripcion = prompt(`Ingrese la nueva descripción para ${cantidad} movimiento${cantidad !== 1 ? 's' : ''}:`);
+
+    if (nuevaDescripcion === null) {
+        return; // Cancelado
+    }
+
+    if (nuevaDescripcion.trim() === '') {
+        alert('La descripción no puede estar vacía');
+        return;
+    }
+
+    // Cambiar descripción de los movimientos seleccionados
+    let count = 0;
+    state.movimientosEditados.forEach(m => {
+        if (state.movimientosSeleccionados.includes(m.id)) {
+            m.descripcion = nuevaDescripcion.trim();
+            count++;
+        }
+    });
+
+    renderizarDetalleExtracto();
+    alert(`✅ Se cambió la descripción de ${count} movimiento${count !== 1 ? 's' : ''}`);
 }
 
 /**
- * Guardar edición de categoría
+ * Eliminar movimientos seleccionados
  */
-async function guardarEdicionCategoria() {
-    const idOriginal = document.getElementById('editarCategoriaIdOriginal').value;
-    const nuevoId = document.getElementById('editarCategoriaId').value.trim().toLowerCase().replace(/\s+/g, '_');
-    const nombre = document.getElementById('editarCategoriaNombre').value.trim();
-    const color = document.getElementById('editarCategoriaColor').value;
-
-    // Validaciones
-    if (!nuevoId || !nombre) {
-        alert('Por favor complete el ID y el nombre de la categoría');
+function eliminarSeleccionados() {
+    if (state.movimientosSeleccionados.length === 0) {
+        alert('No hay movimientos seleccionados');
         return;
     }
 
-    if (!/^[a-z0-9_]+$/.test(nuevoId)) {
-        alert('El ID solo puede contener letras minúsculas, números y guiones bajos');
+    const cantidad = state.movimientosSeleccionados.length;
+
+    if (!confirm(`¿Eliminar ${cantidad} movimiento${cantidad !== 1 ? 's' : ''} seleccionado${cantidad !== 1 ? 's' : ''}?\n\nPodrá restaurarlos con el botón "Restaurar Eliminados".`)) {
         return;
     }
 
-    // Verificar si el nuevo ID ya existe (y no es el mismo)
-    if (nuevoId !== idOriginal && CATEGORIAS_MOVIMIENTO.some(c => c.id === nuevoId)) {
-        alert('Ya existe una categoría con ese ID');
-        return;
-    }
-
-    try {
-        let supabaseClient = null;
-        if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
-            supabaseClient = supabase;
-        }
-
-        if (supabaseClient) {
-            const { error } = await supabaseClient
-                .from('categorias_movimientos')
-                .update({ id: nuevoId, nombre, color })
-                .eq('id', idOriginal);
-
-            if (error) {
-                console.warn('Error actualizando en Supabase:', error.message);
-            }
-        }
-
-        // Actualizar en variable global
-        const idx = CATEGORIAS_MOVIMIENTO.findIndex(c => c.id === idOriginal);
+    // Mover seleccionados a eliminados
+    let count = 0;
+    state.movimientosSeleccionados.forEach(id => {
+        const idx = state.movimientosEditados.findIndex(m => m.id === id);
         if (idx !== -1) {
-            CATEGORIAS_MOVIMIENTO[idx] = {
-                ...CATEGORIAS_MOVIMIENTO[idx],
-                id: nuevoId,
-                nombre,
-                color
-            };
+            const eliminado = state.movimientosEditados.splice(idx, 1)[0];
+            state.movimientosEliminados.push(eliminado);
+            count++;
         }
+    });
 
-        // Actualizar localStorage
-        const stored = CATEGORIAS_MOVIMIENTO.filter(c => c.id !== '');
-        localStorage.setItem('categorias_movimientos', JSON.stringify(stored));
+    // Limpiar selección
+    state.movimientosSeleccionados = [];
+    actualizarBarraSeleccionados();
+    renderizarDetalleExtracto();
 
-        // Si se cambió el ID, actualizar movimientos que usen esa categoría
-        if (nuevoId !== idOriginal && state.movimientosEditados) {
-            state.movimientosEditados.forEach(mov => {
-                if (mov.categoria === idOriginal) {
-                    mov.categoria = nuevoId;
-                }
-            });
-        }
-
-        cerrarEditarCategoria();
-        renderizarListaCategorias();
-        console.log('✅ Categoría actualizada:', nuevoId);
-    } catch (error) {
-        console.error('Error actualizando categoría:', error);
-        alert('Error al actualizar la categoría');
-    }
-}
-
-/**
- * Eliminar categoría
- */
-async function eliminarCategoria(categoriaId) {
-    const categoria = CATEGORIAS_MOVIMIENTO.find(c => c.id === categoriaId);
-    if (!categoria) return;
-
-    // Verificar si hay movimientos con esta categoría
-    let movimientosConCategoria = 0;
-    if (state.movimientosEditados) {
-        movimientosConCategoria = state.movimientosEditados.filter(m => m.categoria === categoriaId).length;
-    }
-
-    let mensaje = `¿Está seguro de eliminar la categoría "${categoria.nombre}"?`;
-    if (movimientosConCategoria > 0) {
-        mensaje += `\n\nATENCIÓN: Hay ${movimientosConCategoria} movimiento(s) con esta categoría asignada. Se les quitará la categoría.`;
-    }
-
-    if (!confirm(mensaje)) return;
-
-    try {
-        let supabaseClient = null;
-        if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
-            supabaseClient = supabase;
-        }
-
-        if (supabaseClient) {
-            const { error } = await supabaseClient
-                .from('categorias_movimientos')
-                .delete()
-                .eq('id', categoriaId);
-
-            if (error) {
-                console.warn('Error eliminando de Supabase:', error.message);
-            }
-        }
-
-        // Eliminar de variable global
-        const idx = CATEGORIAS_MOVIMIENTO.findIndex(c => c.id === categoriaId);
-        if (idx !== -1) {
-            CATEGORIAS_MOVIMIENTO.splice(idx, 1);
-        }
-
-        // Actualizar localStorage
-        const stored = CATEGORIAS_MOVIMIENTO.filter(c => c.id !== '');
-        localStorage.setItem('categorias_movimientos', JSON.stringify(stored));
-
-        // Quitar categoría de los movimientos que la tenían
-        if (state.movimientosEditados) {
-            state.movimientosEditados.forEach(mov => {
-                if (mov.categoria === categoriaId) {
-                    mov.categoria = '';
-                }
-            });
-        }
-
-        renderizarListaCategorias();
-        console.log('✅ Categoría eliminada:', categoriaId);
-    } catch (error) {
-        console.error('Error eliminando categoría:', error);
-        alert('Error al eliminar la categoría');
-    }
+    alert(`✅ Se eliminaron ${count} movimiento${count !== 1 ? 's' : ''}`);
 }
