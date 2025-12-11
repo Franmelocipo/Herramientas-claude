@@ -21,19 +21,23 @@ const state = {
     rangoActual: { desde: null, hasta: null }
 };
 
-// Categorías predefinidas para clasificar movimientos
-const CATEGORIAS_MOVIMIENTO = [
-    { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' },
-    { id: 'comisiones', nombre: 'Comisiones', color: '#f59e0b' },
-    { id: 'iva', nombre: 'IVA', color: '#8b5cf6' },
-    { id: 'gastos_bancarios', nombre: 'Gastos Bancarios', color: '#ef4444' },
-    { id: 'transferencias', nombre: 'Transferencias', color: '#3b82f6' },
-    { id: 'impuestos', nombre: 'Impuestos', color: '#ec4899' },
-    { id: 'servicios', nombre: 'Servicios', color: '#14b8a6' },
-    { id: 'proveedores', nombre: 'Proveedores', color: '#f97316' },
-    { id: 'sueldos', nombre: 'Sueldos', color: '#06b6d4' },
-    { id: 'ventas', nombre: 'Ventas', color: '#22c55e' },
-    { id: 'otros', nombre: 'Otros', color: '#64748b' }
+// Categorías predefinidas por defecto (se cargan desde BD o localStorage)
+const CATEGORIAS_DEFAULT = [
+    { id: 'comisiones', nombre: 'Comisiones', color: '#f59e0b', orden: 1 },
+    { id: 'iva', nombre: 'IVA', color: '#8b5cf6', orden: 2 },
+    { id: 'gastos_bancarios', nombre: 'Gastos Bancarios', color: '#ef4444', orden: 3 },
+    { id: 'transferencias', nombre: 'Transferencias', color: '#3b82f6', orden: 4 },
+    { id: 'impuestos', nombre: 'Impuestos', color: '#ec4899', orden: 5 },
+    { id: 'servicios', nombre: 'Servicios', color: '#14b8a6', orden: 6 },
+    { id: 'proveedores', nombre: 'Proveedores', color: '#f97316', orden: 7 },
+    { id: 'sueldos', nombre: 'Sueldos', color: '#06b6d4', orden: 8 },
+    { id: 'ventas', nombre: 'Ventas', color: '#22c55e', orden: 9 },
+    { id: 'otros', nombre: 'Otros', color: '#64748b', orden: 10 }
+];
+
+// Categorías dinámicas (se cargan al inicio)
+let CATEGORIAS_MOVIMIENTO = [
+    { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' }
 ];
 
 // ============================================
@@ -41,6 +45,9 @@ const CATEGORIAS_MOVIMIENTO = [
 // ============================================
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Cargar categorías dinámicamente
+    await cargarCategorias();
+
     await cargarClientes();
 
     // Event listeners para filtros
