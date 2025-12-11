@@ -131,6 +131,40 @@
             <!-- Vista previa de datos -->
             <div id="previewSection" class="preview-section hidden">
                 <h2>Vista previa de datos</h2>
+
+                <!-- Barra de herramientas -->
+                <div class="preview-toolbar">
+                    <button id="btnBuscarReemplazar" class="toolbar-btn" title="Buscar y Reemplazar (Ctrl+H)">
+                        <span class="toolbar-icon">🔍</span>
+                        <span>Buscar y Reemplazar</span>
+                    </button>
+
+                    <!-- Filtro tipo Excel para descripciones -->
+                    <div class="filter-container">
+                        <button id="btnFiltroDescripcion" class="toolbar-btn filter-btn" title="Filtrar descripciones">
+                            <span class="toolbar-icon">▼</span>
+                            <span>Filtrar Descripción</span>
+                            <span id="filterBadge" class="filter-badge hidden">0</span>
+                        </button>
+                        <div id="filterDropdown" class="filter-dropdown hidden">
+                            <div class="filter-search-box">
+                                <input type="text" id="filterSearchInput" placeholder="Buscar descripción..." class="filter-search-input">
+                            </div>
+                            <div class="filter-actions">
+                                <button id="btnSelectAll" class="filter-action-btn">Seleccionar todo</button>
+                                <button id="btnDeselectAll" class="filter-action-btn">Deseleccionar todo</button>
+                            </div>
+                            <div id="filterCheckboxList" class="filter-checkbox-list">
+                                <!-- Los checkboxes se generan dinámicamente -->
+                            </div>
+                            <div class="filter-footer">
+                                <button id="btnAplicarFiltro" class="filter-apply-btn">Aplicar</button>
+                                <button id="btnLimpiarFiltro" class="filter-clear-btn">Limpiar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="table-wrapper">
                     <table id="previewTable">
                         <thead id="previewHeader"></thead>
@@ -142,6 +176,44 @@
                     <span>⬇️</span>
                     Descargar Excel (<span id="rowCount">0</span> movimientos)
                 </button>
+            </div>
+
+            <!-- Modal de Buscar y Reemplazar -->
+            <div id="modalBuscarReemplazar" class="modal-overlay hidden">
+                <div class="modal-buscar-reemplazar">
+                    <div class="modal-header">
+                        <h3>Buscar y Reemplazar</h3>
+                        <button id="btnCerrarModal" class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="modal-field">
+                            <label for="inputBuscar">Buscar:</label>
+                            <input type="text" id="inputBuscar" placeholder="Texto a buscar..." class="modal-input">
+                        </div>
+                        <div class="modal-field">
+                            <label for="inputReemplazar">Reemplazar con:</label>
+                            <input type="text" id="inputReemplazar" placeholder="Texto de reemplazo..." class="modal-input">
+                        </div>
+                        <div class="modal-options">
+                            <label class="modal-checkbox">
+                                <input type="checkbox" id="chkCaseSensitive">
+                                <span>Distinguir mayúsculas/minúsculas</span>
+                            </label>
+                            <label class="modal-checkbox">
+                                <input type="checkbox" id="chkPalabraCompleta">
+                                <span>Solo palabras completas</span>
+                            </label>
+                        </div>
+                        <div id="buscarResultado" class="buscar-resultado hidden">
+                            <span id="coincidenciasCount">0 coincidencias encontradas</span>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="btnBuscarSiguiente" class="modal-btn secondary">Buscar siguiente</button>
+                        <button id="btnReemplazarUno" class="modal-btn secondary">Reemplazar</button>
+                        <button id="btnReemplazarTodos" class="modal-btn primary">Reemplazar todos</button>
+                    </div>
+                </div>
             </div>
             </div><!-- Fin seccionConvertir -->
 

@@ -4243,3 +4243,632 @@ function hideCombinarMessages() {
     combinarElements.errorBoxCombinar.classList.add('hidden');
     combinarElements.successBoxCombinar.classList.add('hidden');
 }
+
+// ============================================
+// BUSCAR Y REEMPLAZAR + FILTROS TIPO EXCEL
+// ============================================
+
+// Estado para filtros y búsqueda
+const filterState = {
+    selectedDescriptions: new Set(),        // Descripciones seleccionadas para mostrar
+    allDescriptions: [],                    // Todas las descripciones únicas con su conteo
+    isFilterActive: false,                  // Si hay un filtro activo
+    filteredData: [],                       // Datos filtrados actuales
+    searchCurrentIndex: -1,                 // Índice actual de búsqueda
+    searchMatches: []                       // Coincidencias de búsqueda
+};
+
+// Elementos DOM para buscar/reemplazar y filtros
+const filterElements = {
+    btnBuscarReemplazar: null,
+    btnFiltroDescripcion: null,
+    filterDropdown: null,
+    filterSearchInput: null,
+    filterCheckboxList: null,
+    filterBadge: null,
+    btnSelectAll: null,
+    btnDeselectAll: null,
+    btnAplicarFiltro: null,
+    btnLimpiarFiltro: null,
+    modalBuscarReemplazar: null,
+    btnCerrarModal: null,
+    inputBuscar: null,
+    inputReemplazar: null,
+    chkCaseSensitive: null,
+    chkPalabraCompleta: null,
+    buscarResultado: null,
+    coincidenciasCount: null,
+    btnBuscarSiguiente: null,
+    btnReemplazarUno: null,
+    btnReemplazarTodos: null
+};
+
+// Inicializar elementos de filtro después de que el DOM esté listo
+function initFilterElements() {
+    filterElements.btnBuscarReemplazar = document.getElementById('btnBuscarReemplazar');
+    filterElements.btnFiltroDescripcion = document.getElementById('btnFiltroDescripcion');
+    filterElements.filterDropdown = document.getElementById('filterDropdown');
+    filterElements.filterSearchInput = document.getElementById('filterSearchInput');
+    filterElements.filterCheckboxList = document.getElementById('filterCheckboxList');
+    filterElements.filterBadge = document.getElementById('filterBadge');
+    filterElements.btnSelectAll = document.getElementById('btnSelectAll');
+    filterElements.btnDeselectAll = document.getElementById('btnDeselectAll');
+    filterElements.btnAplicarFiltro = document.getElementById('btnAplicarFiltro');
+    filterElements.btnLimpiarFiltro = document.getElementById('btnLimpiarFiltro');
+    filterElements.modalBuscarReemplazar = document.getElementById('modalBuscarReemplazar');
+    filterElements.btnCerrarModal = document.getElementById('btnCerrarModal');
+    filterElements.inputBuscar = document.getElementById('inputBuscar');
+    filterElements.inputReemplazar = document.getElementById('inputReemplazar');
+    filterElements.chkCaseSensitive = document.getElementById('chkCaseSensitive');
+    filterElements.chkPalabraCompleta = document.getElementById('chkPalabraCompleta');
+    filterElements.buscarResultado = document.getElementById('buscarResultado');
+    filterElements.coincidenciasCount = document.getElementById('coincidenciasCount');
+    filterElements.btnBuscarSiguiente = document.getElementById('btnBuscarSiguiente');
+    filterElements.btnReemplazarUno = document.getElementById('btnReemplazarUno');
+    filterElements.btnReemplazarTodos = document.getElementById('btnReemplazarTodos');
+
+    attachFilterEventListeners();
+}
+
+// Agregar event listeners para filtros y búsqueda
+function attachFilterEventListeners() {
+    // Botón buscar y reemplazar
+    if (filterElements.btnBuscarReemplazar) {
+        filterElements.btnBuscarReemplazar.addEventListener('click', openSearchReplaceModal);
+    }
+
+    // Botón filtro de descripción
+    if (filterElements.btnFiltroDescripcion) {
+        filterElements.btnFiltroDescripcion.addEventListener('click', toggleFilterDropdown);
+    }
+
+    // Cerrar dropdown al hacer clic fuera
+    document.addEventListener('click', (e) => {
+        if (filterElements.filterDropdown &&
+            !filterElements.filterDropdown.classList.contains('hidden') &&
+            !filterElements.filterDropdown.contains(e.target) &&
+            !filterElements.btnFiltroDescripcion.contains(e.target)) {
+            filterElements.filterDropdown.classList.add('hidden');
+        }
+    });
+
+    // Búsqueda en filtro
+    if (filterElements.filterSearchInput) {
+        filterElements.filterSearchInput.addEventListener('input', filterCheckboxList);
+    }
+
+    // Seleccionar/Deseleccionar todo
+    if (filterElements.btnSelectAll) {
+        filterElements.btnSelectAll.addEventListener('click', selectAllFilters);
+    }
+    if (filterElements.btnDeselectAll) {
+        filterElements.btnDeselectAll.addEventListener('click', deselectAllFilters);
+    }
+
+    // Aplicar/Limpiar filtro
+    if (filterElements.btnAplicarFiltro) {
+        filterElements.btnAplicarFiltro.addEventListener('click', applyFilter);
+    }
+    if (filterElements.btnLimpiarFiltro) {
+        filterElements.btnLimpiarFiltro.addEventListener('click', clearFilter);
+    }
+
+    // Modal cerrar
+    if (filterElements.btnCerrarModal) {
+        filterElements.btnCerrarModal.addEventListener('click', closeSearchReplaceModal);
+    }
+    if (filterElements.modalBuscarReemplazar) {
+        filterElements.modalBuscarReemplazar.addEventListener('click', (e) => {
+            if (e.target === filterElements.modalBuscarReemplazar) {
+                closeSearchReplaceModal();
+            }
+        });
+    }
+
+    // Búsqueda en tiempo real
+    if (filterElements.inputBuscar) {
+        filterElements.inputBuscar.addEventListener('input', updateSearchCount);
+    }
+
+    // Botones del modal
+    if (filterElements.btnBuscarSiguiente) {
+        filterElements.btnBuscarSiguiente.addEventListener('click', findNext);
+    }
+    if (filterElements.btnReemplazarUno) {
+        filterElements.btnReemplazarUno.addEventListener('click', replaceOne);
+    }
+    if (filterElements.btnReemplazarTodos) {
+        filterElements.btnReemplazarTodos.addEventListener('click', replaceAll);
+    }
+
+    // Atajo de teclado Ctrl+H
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+            if (!elements.previewSection.classList.contains('hidden')) {
+                e.preventDefault();
+                openSearchReplaceModal();
+            }
+        }
+        // Escape para cerrar modal
+        if (e.key === 'Escape') {
+            if (filterElements.modalBuscarReemplazar &&
+                !filterElements.modalBuscarReemplazar.classList.contains('hidden')) {
+                closeSearchReplaceModal();
+            }
+            if (filterElements.filterDropdown &&
+                !filterElements.filterDropdown.classList.contains('hidden')) {
+                filterElements.filterDropdown.classList.add('hidden');
+            }
+        }
+    });
+}
+
+// ============================================
+// FUNCIONES DE FILTRO TIPO EXCEL
+// ============================================
+
+function toggleFilterDropdown() {
+    if (filterElements.filterDropdown.classList.contains('hidden')) {
+        // Generar lista de descripciones únicas
+        generateDescriptionCheckboxes();
+        filterElements.filterDropdown.classList.remove('hidden');
+        filterElements.filterSearchInput.focus();
+    } else {
+        filterElements.filterDropdown.classList.add('hidden');
+    }
+}
+
+function generateDescriptionCheckboxes() {
+    // Contar ocurrencias de cada descripción
+    const descriptionCount = new Map();
+    state.extractedData.forEach(row => {
+        const desc = row.descripcion || '';
+        descriptionCount.set(desc, (descriptionCount.get(desc) || 0) + 1);
+    });
+
+    // Convertir a array y ordenar por frecuencia
+    filterState.allDescriptions = Array.from(descriptionCount.entries())
+        .map(([desc, count]) => ({ description: desc, count }))
+        .sort((a, b) => b.count - a.count);
+
+    // Si no hay filtro activo, seleccionar todas
+    if (!filterState.isFilterActive) {
+        filterState.selectedDescriptions = new Set(filterState.allDescriptions.map(d => d.description));
+    }
+
+    renderCheckboxList(filterState.allDescriptions);
+}
+
+function renderCheckboxList(descriptions) {
+    filterElements.filterCheckboxList.innerHTML = descriptions.map(({ description, count }) => {
+        const isChecked = filterState.selectedDescriptions.has(description);
+        const displayDesc = description || '(vacío)';
+        const escapedDesc = escapeHtml(description);
+        return `
+            <label class="filter-checkbox-item" title="${escapeHtml(displayDesc)}">
+                <input type="checkbox"
+                       value="${escapedDesc}"
+                       ${isChecked ? 'checked' : ''}
+                       onchange="handleCheckboxChange(this)">
+                <span class="filter-checkbox-label">${escapeHtml(displayDesc)}</span>
+                <span class="filter-checkbox-count">${count}</span>
+            </label>
+        `;
+    }).join('');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Función global para manejar cambios en checkboxes
+window.handleCheckboxChange = function(checkbox) {
+    const value = checkbox.value;
+    // Decodificar el valor escapado
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = value;
+    const decodedValue = tempDiv.textContent;
+
+    if (checkbox.checked) {
+        filterState.selectedDescriptions.add(decodedValue);
+    } else {
+        filterState.selectedDescriptions.delete(decodedValue);
+    }
+};
+
+function filterCheckboxList() {
+    const searchText = filterElements.filterSearchInput.value.toLowerCase();
+
+    if (!searchText) {
+        renderCheckboxList(filterState.allDescriptions);
+        return;
+    }
+
+    const filtered = filterState.allDescriptions.filter(({ description }) =>
+        description.toLowerCase().includes(searchText)
+    );
+
+    renderCheckboxList(filtered);
+}
+
+function selectAllFilters() {
+    // Seleccionar solo los visibles actualmente
+    const searchText = filterElements.filterSearchInput.value.toLowerCase();
+
+    filterState.allDescriptions.forEach(({ description }) => {
+        if (!searchText || description.toLowerCase().includes(searchText)) {
+            filterState.selectedDescriptions.add(description);
+        }
+    });
+
+    filterCheckboxList();
+}
+
+function deselectAllFilters() {
+    // Deseleccionar solo los visibles actualmente
+    const searchText = filterElements.filterSearchInput.value.toLowerCase();
+
+    filterState.allDescriptions.forEach(({ description }) => {
+        if (!searchText || description.toLowerCase().includes(searchText)) {
+            filterState.selectedDescriptions.delete(description);
+        }
+    });
+
+    filterCheckboxList();
+}
+
+function applyFilter() {
+    filterState.isFilterActive = filterState.selectedDescriptions.size !== filterState.allDescriptions.length;
+
+    // Actualizar badge
+    if (filterState.isFilterActive) {
+        const deselectedCount = filterState.allDescriptions.length - filterState.selectedDescriptions.size;
+        filterElements.filterBadge.textContent = deselectedCount;
+        filterElements.filterBadge.classList.remove('hidden');
+    } else {
+        filterElements.filterBadge.classList.add('hidden');
+    }
+
+    // Cerrar dropdown
+    filterElements.filterDropdown.classList.add('hidden');
+
+    // Re-renderizar la vista previa con filtro
+    renderPreviewWithFilter();
+}
+
+function clearFilter() {
+    filterState.selectedDescriptions = new Set(filterState.allDescriptions.map(d => d.description));
+    filterState.isFilterActive = false;
+    filterElements.filterBadge.classList.add('hidden');
+    filterElements.filterSearchInput.value = '';
+
+    // Cerrar dropdown
+    filterElements.filterDropdown.classList.add('hidden');
+
+    // Re-renderizar sin filtro
+    renderPreviewWithFilter();
+}
+
+function renderPreviewWithFilter() {
+    elements.previewSection.classList.remove('hidden');
+
+    // Filtrar datos si hay filtro activo
+    let dataToShow = state.extractedData;
+    if (filterState.isFilterActive) {
+        dataToShow = state.extractedData.filter(row =>
+            filterState.selectedDescriptions.has(row.descripcion || '')
+        );
+    }
+    filterState.filteredData = dataToShow;
+
+    // Renderizar encabezados según el tipo
+    if (state.selectedType === 'inversiones') {
+        elements.previewHeader.innerHTML = `
+            <tr>
+                <th>Fecha</th>
+                <th>Descripción</th>
+                <th class="text-right">Cantidad</th>
+                <th class="text-right">Monto</th>
+            </tr>
+        `;
+    } else {
+        elements.previewHeader.innerHTML = `
+            <tr>
+                <th>Fecha</th>
+                <th>Descripción</th>
+                <th>Origen</th>
+                <th class="text-right">Crédito</th>
+                <th class="text-right">Débito</th>
+                <th class="text-right">Saldo</th>
+            </tr>
+        `;
+    }
+
+    // Renderizar filas (mostrar más filas si hay filtro activo)
+    const maxRows = filterState.isFilterActive ? 50 : 10;
+    const rowsToShow = dataToShow.slice(0, maxRows);
+
+    elements.previewBody.innerHTML = rowsToShow.map((row, index) => {
+        if (state.selectedType === 'inversiones') {
+            const monto = row.credito !== '0' ? row.credito : row.debito;
+            return `
+                <tr data-index="${index}">
+                    <td>${row.fecha}</td>
+                    <td class="descripcion-cell">${row.descripcion}</td>
+                    <td class="text-right">${row.origen}</td>
+                    <td class="text-right">${monto}</td>
+                </tr>
+            `;
+        } else {
+            return `
+                <tr data-index="${index}">
+                    <td>${row.fecha}</td>
+                    <td class="descripcion-cell">${row.descripcion}</td>
+                    <td>${row.origen}</td>
+                    <td class="text-right text-green">${row.credito}</td>
+                    <td class="text-right text-red">${row.debito}</td>
+                    <td class="text-right">${row.saldo}</td>
+                </tr>
+            `;
+        }
+    }).join('');
+
+    // Mostrar footer
+    if (dataToShow.length > maxRows) {
+        elements.previewFooter.textContent = `... y ${dataToShow.length - maxRows} movimientos más`;
+    } else {
+        elements.previewFooter.textContent = '';
+    }
+
+    // Actualizar contador
+    const totalText = filterState.isFilterActive
+        ? `${dataToShow.length} de ${state.extractedData.length}`
+        : state.extractedData.length;
+    elements.rowCount.textContent = totalText;
+}
+
+// ============================================
+// FUNCIONES DE BUSCAR Y REEMPLAZAR
+// ============================================
+
+function openSearchReplaceModal() {
+    filterElements.modalBuscarReemplazar.classList.remove('hidden');
+    filterElements.inputBuscar.value = '';
+    filterElements.inputReemplazar.value = '';
+    filterElements.buscarResultado.classList.add('hidden');
+    filterState.searchCurrentIndex = -1;
+    filterState.searchMatches = [];
+
+    setTimeout(() => filterElements.inputBuscar.focus(), 100);
+}
+
+function closeSearchReplaceModal() {
+    filterElements.modalBuscarReemplazar.classList.add('hidden');
+    // Limpiar resaltados
+    clearHighlights();
+}
+
+function updateSearchCount() {
+    const searchText = filterElements.inputBuscar.value;
+
+    if (!searchText) {
+        filterElements.buscarResultado.classList.add('hidden');
+        filterState.searchMatches = [];
+        clearHighlights();
+        return;
+    }
+
+    const caseSensitive = filterElements.chkCaseSensitive.checked;
+    const wholeWord = filterElements.chkPalabraCompleta.checked;
+
+    // Buscar en los datos
+    filterState.searchMatches = [];
+    const dataToSearch = filterState.isFilterActive ? filterState.filteredData : state.extractedData;
+
+    dataToSearch.forEach((row, index) => {
+        const desc = row.descripcion || '';
+        if (textMatches(desc, searchText, caseSensitive, wholeWord)) {
+            filterState.searchMatches.push({ index, row });
+        }
+    });
+
+    // Mostrar resultado
+    filterElements.buscarResultado.classList.remove('hidden');
+    filterElements.coincidenciasCount.textContent =
+        `${filterState.searchMatches.length} coincidencia${filterState.searchMatches.length !== 1 ? 's' : ''} encontrada${filterState.searchMatches.length !== 1 ? 's' : ''}`;
+
+    // Resaltar coincidencias en la tabla
+    highlightMatches(searchText, caseSensitive, wholeWord);
+}
+
+function textMatches(text, search, caseSensitive, wholeWord) {
+    let textToSearch = caseSensitive ? text : text.toLowerCase();
+    let searchTerm = caseSensitive ? search : search.toLowerCase();
+
+    if (wholeWord) {
+        const regex = new RegExp(`\\b${escapeRegex(searchTerm)}\\b`, caseSensitive ? '' : 'i');
+        return regex.test(text);
+    }
+
+    return textToSearch.includes(searchTerm);
+}
+
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightMatches(searchText, caseSensitive, wholeWord) {
+    clearHighlights();
+
+    if (!searchText) return;
+
+    const cells = document.querySelectorAll('.descripcion-cell');
+    cells.forEach(cell => {
+        const text = cell.textContent;
+        if (textMatches(text, searchText, caseSensitive, wholeWord)) {
+            const flags = caseSensitive ? 'g' : 'gi';
+            let pattern;
+            if (wholeWord) {
+                pattern = new RegExp(`(\\b${escapeRegex(searchText)}\\b)`, flags);
+            } else {
+                pattern = new RegExp(`(${escapeRegex(searchText)})`, flags);
+            }
+            cell.innerHTML = text.replace(pattern, '<span class="highlight-match">$1</span>');
+        }
+    });
+}
+
+function clearHighlights() {
+    const cells = document.querySelectorAll('.descripcion-cell');
+    cells.forEach(cell => {
+        cell.textContent = cell.textContent;
+    });
+}
+
+function findNext() {
+    if (filterState.searchMatches.length === 0) {
+        updateSearchCount();
+        if (filterState.searchMatches.length === 0) return;
+    }
+
+    // Incrementar índice
+    filterState.searchCurrentIndex = (filterState.searchCurrentIndex + 1) % filterState.searchMatches.length;
+
+    // Scroll a la fila correspondiente
+    const match = filterState.searchMatches[filterState.searchCurrentIndex];
+    const rows = elements.previewBody.querySelectorAll('tr');
+
+    // Buscar la fila en la tabla visible
+    rows.forEach((row, idx) => {
+        const dataIndex = parseInt(row.getAttribute('data-index'));
+        if (dataIndex === filterState.searchCurrentIndex) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            row.style.backgroundColor = '#fef3c7';
+            setTimeout(() => {
+                row.style.backgroundColor = '';
+            }, 2000);
+        }
+    });
+
+    // Actualizar contador
+    filterElements.coincidenciasCount.textContent =
+        `${filterState.searchCurrentIndex + 1} de ${filterState.searchMatches.length} coincidencias`;
+}
+
+function replaceOne() {
+    const searchText = filterElements.inputBuscar.value;
+    const replaceText = filterElements.inputReemplazar.value;
+
+    if (!searchText) return;
+
+    if (filterState.searchMatches.length === 0) {
+        updateSearchCount();
+        if (filterState.searchMatches.length === 0) return;
+    }
+
+    // Si no hay índice actual, ir al primero
+    if (filterState.searchCurrentIndex < 0) {
+        filterState.searchCurrentIndex = 0;
+    }
+
+    const caseSensitive = filterElements.chkCaseSensitive.checked;
+    const wholeWord = filterElements.chkPalabraCompleta.checked;
+
+    // Obtener el movimiento actual
+    const match = filterState.searchMatches[filterState.searchCurrentIndex];
+    if (!match) return;
+
+    // Reemplazar en la descripción
+    const oldDesc = match.row.descripcion;
+    match.row.descripcion = replaceInText(oldDesc, searchText, replaceText, caseSensitive, wholeWord);
+
+    // Actualizar la búsqueda y la vista
+    updateSearchCount();
+    renderPreviewWithFilter();
+
+    showSuccess(`Reemplazado: "${searchText}" por "${replaceText}"`);
+}
+
+function replaceAll() {
+    const searchText = filterElements.inputBuscar.value;
+    const replaceText = filterElements.inputReemplazar.value;
+
+    if (!searchText) return;
+
+    const caseSensitive = filterElements.chkCaseSensitive.checked;
+    const wholeWord = filterElements.chkPalabraCompleta.checked;
+
+    let replaceCount = 0;
+
+    // Reemplazar en todos los datos
+    state.extractedData.forEach(row => {
+        const oldDesc = row.descripcion || '';
+        if (textMatches(oldDesc, searchText, caseSensitive, wholeWord)) {
+            row.descripcion = replaceInText(oldDesc, searchText, replaceText, caseSensitive, wholeWord);
+            replaceCount++;
+        }
+    });
+
+    if (replaceCount > 0) {
+        // Regenerar filtros ya que las descripciones cambiaron
+        if (filterState.isFilterActive) {
+            // Actualizar las descripciones seleccionadas con el nuevo texto
+            const newSelected = new Set();
+            state.extractedData.forEach(row => {
+                if (filterState.selectedDescriptions.has(row.descripcion)) {
+                    newSelected.add(row.descripcion);
+                }
+            });
+            // Agregar la nueva descripción si reemplazó alguna seleccionada
+            state.extractedData.forEach(row => {
+                const desc = row.descripcion || '';
+                // Mantener selección para descripciones que fueron reemplazadas
+                newSelected.add(desc);
+            });
+        }
+
+        // Actualizar la búsqueda y la vista
+        updateSearchCount();
+        renderPreviewWithFilter();
+
+        showSuccess(`${replaceCount} reemplazo${replaceCount !== 1 ? 's' : ''} realizado${replaceCount !== 1 ? 's' : ''}`);
+    } else {
+        showError('No se encontraron coincidencias para reemplazar');
+    }
+}
+
+function replaceInText(text, search, replace, caseSensitive, wholeWord) {
+    const flags = caseSensitive ? 'g' : 'gi';
+    let pattern;
+
+    if (wholeWord) {
+        pattern = new RegExp(`\\b${escapeRegex(search)}\\b`, flags);
+    } else {
+        pattern = new RegExp(escapeRegex(search), flags);
+    }
+
+    return text.replace(pattern, replace);
+}
+
+// Sobrescribir la función renderPreview original para usar la nueva
+const originalRenderPreview = renderPreview;
+renderPreview = function() {
+    // Resetear estado de filtro cuando se cargan nuevos datos
+    filterState.isFilterActive = false;
+    filterState.selectedDescriptions = new Set();
+    filterState.filteredData = [];
+
+    if (filterElements.filterBadge) {
+        filterElements.filterBadge.classList.add('hidden');
+    }
+
+    // Llamar a la versión con filtro
+    renderPreviewWithFilter();
+};
+
+// Inicializar filtros cuando el DOM esté listo
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(initFilterElements, 100);
+});
