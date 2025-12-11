@@ -424,7 +424,7 @@ async function renderClientsList(searchTerm = '') {
                 <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
                     <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569;">Razón Social</th>
                     <th style="padding: 12px; text-align: left; font-weight: 600; color: #475569;">CUIT</th>
-                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #475569; width: 400px;">Acciones</th>
+                    <th style="padding: 12px; text-align: center; font-weight: 600; color: #475569; width: 520px;">Acciones</th>
                 </tr>
             </thead>
             <tbody>
@@ -438,6 +438,7 @@ async function renderClientsList(searchTerm = '') {
                             <td style="padding: 12px; text-align: center;">
                                 <button onclick="abrirPlanCuentas('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="background: #8b5cf6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#7c3aed'" onmouseout="this.style.background='#8b5cf6'" title="Plan de cuentas del sistema">📊 Plan</button>
                                 <button onclick="abrirPlanCuentasCliente('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="background: #f59e0b; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#d97706'" onmouseout="this.style.background='#f59e0b'" title="Plan de cuentas del sistema del cliente">📋 Plan Cliente</button>
+                                <button onclick="abrirCuentasBancarias('${client.id}', '${client.razon_social.replace(/'/g, "\\'")}')" style="background: #0891b2; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#0e7490'" onmouseout="this.style.background='#0891b2'" title="Cuentas bancarias y extractos">🏦 Cuentas</button>
                                 <button onclick="editarCliente('${client.id}')" style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">✏️ Editar</button>
                                 <button onclick="eliminarClienteUI('${client.id}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">🗑️ Eliminar</button>
                             </td>
