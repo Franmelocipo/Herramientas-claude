@@ -284,6 +284,15 @@ body {
     margin-top: 12px;
     padding-top: 12px;
     border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Botón de rango de fechas */
+.btn-rango-fechas {
+    flex: 1;
+    min-width: 180px;
 }
 
 /* Estado vacío */
@@ -739,6 +748,95 @@ body {
 .file-info {
     margin-bottom: 16px;
     font-size: 12px;
+}
+
+/* ============================================
+   MODO RANGO DE FECHAS
+   ============================================ */
+
+/* Modal de rango de fechas */
+.rango-fechas-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0;
+}
+
+.rango-field label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #475569;
+    font-size: 14px;
+}
+
+.rango-selects {
+    display: flex;
+    gap: 8px;
+}
+
+.rango-selects select,
+.rango-selects input {
+    flex: 1;
+}
+
+.info-text {
+    color: #64748b;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+
+/* Badge de período rango */
+.periodo-rango {
+    color: #0369a1;
+}
+
+/* Columna de período en modo rango */
+.periodo-col {
+    width: 90px;
+    min-width: 90px;
+}
+
+.periodo-cell {
+    font-size: 12px;
+    color: #6366f1;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* Indicador de extractos combinados en stats */
+.stat-rango {
+    color: #3b82f6;
+    font-weight: 500;
+}
+
+.badge-rango {
+    display: inline-block;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    margin-left: 8px;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+/* Indicador de modo rango en la barra de stats */
+.stats-bar.modo-rango {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border: 1px solid #93c5fd;
+}
+
+/* Responsive para rango de fechas */
+@media (max-width: 480px) {
+    .rango-fechas-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .rango-selects {
+        flex-direction: column;
+    }
 }
 
 /* Responsive */

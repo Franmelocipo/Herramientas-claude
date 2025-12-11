@@ -13,7 +13,11 @@ const state = {
     ordenActual: { columna: null, direccion: 'asc' },
     filtros: {},
     filtroMarcadores: [], // Marcadores seleccionados para filtrar
-    clientesCache: []
+    clientesCache: [],
+    // Modo rango de fechas
+    modoRango: false,
+    extractosRango: [], // Lista de extractos cargados en modo rango
+    rangoActual: { desde: null, hasta: null }
 };
 
 // Categorías predefinidas para clasificar movimientos
@@ -307,9 +311,13 @@ function renderizarCuentasConExtractos(cuentas) {
                         `;
                     }).join('')}
 
-                    <!-- Ver todos los extractos -->
+                    <!-- Ver todos los extractos y rango de fechas -->
                     ${(cuenta.extractos || []).length > 0 ? `
                         <div class="ver-todos-extractos">
+                            <button onclick="mostrarModalRangoFechas('${cuenta.id}', '${(cuenta.banco || '').replace(/'/g, "\\'")} - ${(cuenta.numero_cuenta || '').replace(/'/g, "\\'")}')"
+                                    class="btn-primary btn-rango-fechas">
+                                📅 Ver por rango de fechas
+                            </button>
                             <button onclick="verTodosExtractosCuenta('${cuenta.id}', '${(cuenta.banco || '').replace(/'/g, "\\'")} - ${(cuenta.numero_cuenta || '').replace(/'/g, "\\'")}')"
                                     class="btn-secondary btn-full">
                                 📋 Ver todos los extractos (${(cuenta.extractos || []).length})
@@ -845,6 +853,11 @@ async function verDetalleExtracto(id, cuentaId) {
         state.cuentaActual = { id: cuentaId };
     }
 
+    // Resetear modo rango (estamos viendo un extracto individual)
+    state.modoRango = false;
+    state.extractosRango = [];
+    state.rangoActual = { desde: null, hasta: null };
+
     try {
         let extracto;
 
@@ -902,6 +915,10 @@ async function verDetalleExtracto(id, cuentaId) {
 function cerrarDetalleExtracto() {
     document.getElementById('modalDetalleExtracto').classList.add('hidden');
     state.extractoActual = null;
+    // Resetear modo rango
+    state.modoRango = false;
+    state.extractosRango = [];
+    state.rangoActual = { desde: null, hasta: null };
 }
 
 /**
@@ -977,8 +994,16 @@ function renderizarDetalleExtracto() {
     const sinCategoria = categoriasCount[''] || 0;
     const conCategoria = state.movimientosEditados.length - sinCategoria;
 
+    // Agregar clase de modo rango si corresponde
+    if (state.modoRango) {
+        stats.classList.add('modo-rango');
+    } else {
+        stats.classList.remove('modo-rango');
+    }
+
     stats.innerHTML = `
         <span>Mostrando ${movimientos.length} de ${state.movimientosEditados.length} movimientos</span>
+        ${state.modoRango ? `<span class="stat-rango">📅 ${state.extractosRango.length} extractos combinados</span>` : ''}
         <span class="stat-credito">Total Créditos: <strong>$${formatNumber(totalCreditos)}</strong></span>
         <span class="stat-debito">Total Débitos: <strong>$${formatNumber(totalDebitos)}</strong></span>
         <span class="stat-categorias">Clasificados: <strong>${conCategoria}</strong> | Sin categoría: <strong>${sinCategoria}</strong></span>
@@ -987,9 +1012,16 @@ function renderizarDetalleExtracto() {
     `;
 
     // Renderizar filas con columna de categoría
+    const mesesCortos = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
     tbody.innerHTML = movimientos.map(m => {
         const categoria = CATEGORIAS_MOVIMIENTO.find(c => c.id === (m.categoria || '')) || CATEGORIAS_MOVIMIENTO[0];
         const badgeStyle = m.categoria ? `background-color: ${categoria.color}20; color: ${categoria.color}; border: 1px solid ${categoria.color}40;` : '';
+
+        // En modo rango, mostrar el período del movimiento
+        const periodoCell = state.modoRango && m._extractoMes && m._extractoAnio
+            ? `<td class="periodo-cell">${mesesCortos[m._extractoMes - 1]} ${m._extractoAnio}</td>`
+            : '';
 
         return `
         <tr data-id="${m.id}">
@@ -1001,6 +1033,7 @@ function renderizarDetalleExtracto() {
                     ).join('')}
                 </select>
             </td>
+            ${periodoCell}
             <td>${m.fecha}</td>
             <td class="editable" onclick="editarCelda(this, '${m.id}', 'descripcion')">${escapeHtml(m.descripcion)}</td>
             <td>${m.origen}</td>
@@ -1013,6 +1046,9 @@ function renderizarDetalleExtracto() {
         </tr>
     `}).join('');
 
+    // Actualizar headers de la tabla según modo rango
+    actualizarHeadersTabla();
+
     // Actualizar indicadores de orden en headers
     document.querySelectorAll('#detalleExtractoTable th[data-sort]').forEach(th => {
         const col = th.dataset.sort;
@@ -1024,6 +1060,37 @@ function renderizarDetalleExtracto() {
 
     // Actualizar contador de movimientos filtrados para asignación
     actualizarContadorFiltrados();
+}
+
+/**
+ * Actualizar headers de la tabla según modo (rango o individual)
+ */
+function actualizarHeadersTabla() {
+    const thead = document.querySelector('#detalleExtractoTable thead tr');
+    if (!thead) return;
+
+    const periodoHeader = thead.querySelector('th.periodo-col');
+
+    if (state.modoRango) {
+        // Agregar columna de período si no existe
+        if (!periodoHeader) {
+            const newTh = document.createElement('th');
+            newTh.className = 'periodo-col sortable';
+            newTh.dataset.sort = '_extractoMes';
+            newTh.onclick = () => ordenarPorColumna('_extractoMes');
+            newTh.innerHTML = 'Período <span class="sort-indicator">⇅</span>';
+            // Insertar después de la columna de categoría
+            const categoriaCol = thead.querySelector('th.categoria-col');
+            if (categoriaCol && categoriaCol.nextSibling) {
+                thead.insertBefore(newTh, categoriaCol.nextSibling);
+            }
+        }
+    } else {
+        // Remover columna de período si existe
+        if (periodoHeader) {
+            periodoHeader.remove();
+        }
+    }
 }
 
 /**
@@ -1176,9 +1243,15 @@ function restaurarDatosOriginales() {
 }
 
 /**
- * Guardar cambios del extracto
+ * Guardar cambios del extracto (detecta automáticamente si es modo rango o individual)
  */
 async function guardarCambiosExtracto() {
+    // Si estamos en modo rango, usar la función específica
+    if (state.modoRango) {
+        return guardarCambiosExtractoModoRango();
+    }
+
+    // Modo individual (extracto único)
     const extractoId = state.extractoActual?.id;
     const cuentaId = state.cuentaActual?.id;
 
@@ -1213,6 +1286,72 @@ async function guardarCambiosExtracto() {
         state.movimientosEliminados = [];
 
         alert('Cambios guardados exitosamente');
+    } catch (error) {
+        console.error('Error guardando cambios:', error);
+        alert('Error al guardar los cambios: ' + error.message);
+    }
+}
+
+/**
+ * Guardar cambios en modo rango (múltiples extractos)
+ */
+async function guardarCambiosExtractoModoRango() {
+    const cuentaId = state.cuentaActual?.id;
+
+    if (!cuentaId) {
+        alert('Error: No hay cuenta seleccionada');
+        return;
+    }
+
+    try {
+        // Agrupar movimientos por extracto
+        const movimientosPorExtracto = {};
+
+        state.movimientosEditados.forEach(mov => {
+            const extractoId = mov._extractoId;
+            if (!movimientosPorExtracto[extractoId]) {
+                movimientosPorExtracto[extractoId] = [];
+            }
+            // Crear copia sin campos internos
+            const movLimpio = { ...mov };
+            delete movLimpio._extractoId;
+            delete movLimpio._extractoMes;
+            delete movLimpio._extractoAnio;
+            movimientosPorExtracto[extractoId].push(movLimpio);
+        });
+
+        // Actualizar cada extracto
+        if (typeof supabase !== 'undefined' && supabase) {
+            for (const extractoId of Object.keys(movimientosPorExtracto)) {
+                const { error } = await supabase
+                    .from('extractos_mensuales')
+                    .update({
+                        data: movimientosPorExtracto[extractoId],
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', extractoId);
+
+                if (error) throw error;
+            }
+        } else {
+            // Fallback localStorage
+            const extractos = JSON.parse(localStorage.getItem(`extractos_${cuentaId}`) || '[]');
+            for (const extractoId of Object.keys(movimientosPorExtracto)) {
+                const idx = extractos.findIndex(e => e.id === extractoId);
+                if (idx !== -1) {
+                    extractos[idx].data = movimientosPorExtracto[extractoId];
+                    extractos[idx].updated_at = new Date().toISOString();
+                }
+            }
+            localStorage.setItem(`extractos_${cuentaId}`, JSON.stringify(extractos));
+        }
+
+        // Actualizar originales manteniendo referencias
+        state.movimientosOriginales = JSON.parse(JSON.stringify(state.movimientosEditados));
+        state.movimientosEliminados = [];
+
+        const totalExtractos = Object.keys(movimientosPorExtracto).length;
+        alert(`Cambios guardados exitosamente en ${totalExtractos} extractos`);
     } catch (error) {
         console.error('Error guardando cambios:', error);
         alert('Error al guardar los cambios: ' + error.message);
@@ -1426,4 +1565,157 @@ function limpiarFiltroMarcadores() {
     });
 
     renderizarDetalleExtracto();
+}
+
+// ============================================
+// MODO RANGO DE FECHAS - VER MÚLTIPLES EXTRACTOS
+// ============================================
+
+/**
+ * Mostrar modal para seleccionar rango de fechas
+ */
+function mostrarModalRangoFechas(cuentaId, cuentaNombre) {
+    document.getElementById('rangoCuentaId').value = cuentaId;
+    document.getElementById('rangoCuentaNombre').value = cuentaNombre;
+
+    // Establecer valores por defecto (último año)
+    const hoy = new Date();
+    const anioActual = hoy.getFullYear();
+    const mesActual = hoy.getMonth() + 1;
+
+    document.getElementById('rangoMesDesde').value = '1';
+    document.getElementById('rangoAnioDesde').value = anioActual;
+    document.getElementById('rangoMesHasta').value = mesActual;
+    document.getElementById('rangoAnioHasta').value = anioActual;
+
+    document.getElementById('modalRangoFechas').classList.remove('hidden');
+}
+
+/**
+ * Cerrar modal de rango de fechas
+ */
+function cerrarModalRangoFechas() {
+    document.getElementById('modalRangoFechas').classList.add('hidden');
+}
+
+/**
+ * Cargar extractos por rango de fechas
+ */
+async function cargarExtractosPorRango() {
+    const cuentaId = document.getElementById('rangoCuentaId').value;
+    const cuentaNombre = document.getElementById('rangoCuentaNombre').value;
+
+    const mesDesde = parseInt(document.getElementById('rangoMesDesde').value);
+    const anioDesde = parseInt(document.getElementById('rangoAnioDesde').value);
+    const mesHasta = parseInt(document.getElementById('rangoMesHasta').value);
+    const anioHasta = parseInt(document.getElementById('rangoAnioHasta').value);
+
+    // Validar rango
+    if (!anioDesde || !anioHasta) {
+        alert('Por favor complete el año de inicio y fin');
+        return;
+    }
+
+    const fechaDesde = anioDesde * 100 + mesDesde;
+    const fechaHasta = anioHasta * 100 + mesHasta;
+
+    if (fechaDesde > fechaHasta) {
+        alert('La fecha "Desde" debe ser anterior o igual a la fecha "Hasta"');
+        return;
+    }
+
+    try {
+        let extractos = [];
+
+        if (typeof supabase !== 'undefined' && supabase) {
+            // Cargar extractos de la cuenta en el rango especificado
+            const { data, error } = await supabase
+                .from('extractos_mensuales')
+                .select('*')
+                .eq('cuenta_id', cuentaId)
+                .order('anio', { ascending: true })
+                .order('mes', { ascending: true });
+
+            if (error) throw error;
+
+            // Filtrar por rango de fechas
+            extractos = (data || []).filter(ext => {
+                const fechaExt = ext.anio * 100 + ext.mes;
+                return fechaExt >= fechaDesde && fechaExt <= fechaHasta;
+            });
+        } else {
+            // Fallback localStorage
+            const todosExtractos = JSON.parse(localStorage.getItem(`extractos_${cuentaId}`) || '[]');
+            extractos = todosExtractos.filter(ext => {
+                const fechaExt = ext.anio * 100 + ext.mes;
+                return fechaExt >= fechaDesde && fechaExt <= fechaHasta;
+            }).sort((a, b) => {
+                const fechaA = a.anio * 100 + a.mes;
+                const fechaB = b.anio * 100 + b.mes;
+                return fechaA - fechaB;
+            });
+        }
+
+        if (extractos.length === 0) {
+            alert('No se encontraron extractos en el rango seleccionado');
+            return;
+        }
+
+        // Configurar estado para modo rango
+        state.modoRango = true;
+        state.extractosRango = extractos;
+        state.cuentaActual = { id: cuentaId, nombre: cuentaNombre };
+        state.rangoActual = {
+            desde: { mes: mesDesde, anio: anioDesde },
+            hasta: { mes: mesHasta, anio: anioHasta }
+        };
+
+        // Combinar todos los movimientos con referencia a su extracto
+        const movimientosCombinados = [];
+        extractos.forEach(ext => {
+            const movs = ext.data || [];
+            movs.forEach(mov => {
+                movimientosCombinados.push({
+                    ...mov,
+                    _extractoId: ext.id,
+                    _extractoMes: ext.mes,
+                    _extractoAnio: ext.anio
+                });
+            });
+        });
+
+        state.movimientosOriginales = JSON.parse(JSON.stringify(movimientosCombinados));
+        state.movimientosEditados = JSON.parse(JSON.stringify(movimientosCombinados));
+        state.movimientosEliminados = [];
+        state.filtros = {};
+        state.filtroMarcadores = [];
+        state.ordenActual = { columna: null, direccion: 'asc' };
+
+        // Actualizar título del modal
+        const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const periodoTexto = `${meses[mesDesde - 1]} ${anioDesde} - ${meses[mesHasta - 1]} ${anioHasta}`;
+
+        document.getElementById('detalleExtractoPeriodo').innerHTML =
+            `<span class="periodo-rango">${periodoTexto}</span> <span class="badge-rango">${extractos.length} extractos</span>`;
+
+        // Cerrar modal de rango y abrir detalle
+        cerrarModalRangoFechas();
+        document.getElementById('modalDetalleExtracto').classList.remove('hidden');
+
+        // Limpiar filtros de texto
+        document.getElementById('filtroFecha').value = '';
+        document.getElementById('filtroDescripcion').value = '';
+        document.getElementById('filtroOrigen').value = '';
+
+        // Inicializar controles de marcadores
+        inicializarControlesMarcadores();
+
+        renderizarDetalleExtracto();
+
+        console.log(`✅ Cargados ${extractos.length} extractos con ${movimientosCombinados.length} movimientos en total`);
+    } catch (error) {
+        console.error('Error cargando extractos por rango:', error);
+        alert('Error al cargar los extractos: ' + error.message);
+    }
 }

@@ -149,6 +149,65 @@
         </div>
     </div>
 
+    <!-- Modal Seleccionar Rango de Fechas -->
+    <div id="modalRangoFechas" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>📅 Ver extractos por rango de fechas</h3>
+            <p class="info-text">Seleccione un rango para ver y clasificar movimientos de múltiples meses a la vez.</p>
+
+            <input type="hidden" id="rangoCuentaId">
+            <input type="hidden" id="rangoCuentaNombre">
+
+            <div class="rango-fechas-grid">
+                <div class="rango-field">
+                    <label>Desde:</label>
+                    <div class="rango-selects">
+                        <select id="rangoMesDesde" class="input-text">
+                            <option value="1">Enero</option>
+                            <option value="2">Febrero</option>
+                            <option value="3">Marzo</option>
+                            <option value="4">Abril</option>
+                            <option value="5">Mayo</option>
+                            <option value="6">Junio</option>
+                            <option value="7">Julio</option>
+                            <option value="8">Agosto</option>
+                            <option value="9">Septiembre</option>
+                            <option value="10">Octubre</option>
+                            <option value="11">Noviembre</option>
+                            <option value="12">Diciembre</option>
+                        </select>
+                        <input type="number" id="rangoAnioDesde" class="input-text" min="2000" max="2100" placeholder="Año">
+                    </div>
+                </div>
+                <div class="rango-field">
+                    <label>Hasta:</label>
+                    <div class="rango-selects">
+                        <select id="rangoMesHasta" class="input-text">
+                            <option value="1">Enero</option>
+                            <option value="2">Febrero</option>
+                            <option value="3">Marzo</option>
+                            <option value="4">Abril</option>
+                            <option value="5">Mayo</option>
+                            <option value="6">Junio</option>
+                            <option value="7">Julio</option>
+                            <option value="8">Agosto</option>
+                            <option value="9">Septiembre</option>
+                            <option value="10">Octubre</option>
+                            <option value="11">Noviembre</option>
+                            <option value="12">Diciembre</option>
+                        </select>
+                        <input type="number" id="rangoAnioHasta" class="input-text" min="2000" max="2100" placeholder="Año">
+                    </div>
+                </div>
+            </div>
+
+            <div class="btn-group mt-4">
+                <button onclick="cerrarModalRangoFechas()" class="btn-secondary">Cancelar</button>
+                <button onclick="cargarExtractosPorRango()" class="btn-primary">Ver Extractos</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal Detalle de Extracto -->
     <div id="modalDetalleExtracto" class="modal hidden">
         <div class="modal-content modal-lg">
