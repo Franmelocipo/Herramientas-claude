@@ -728,3 +728,158 @@ body {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* =====================================================
+   MÓDULO DE AUDITORÍA - ESTILOS
+   ===================================================== */
+
+/* Estados de carga y error */
+.loading-state,
+.error-state {
+    text-align: center;
+    padding: 32px 20px;
+    color: #64748b;
+    font-size: 14px;
+}
+
+.error-state {
+    color: #dc2626;
+    background: #fef2f2;
+    border-radius: 8px;
+}
+
+/* Tabla de extractos - Celdas editables */
+.preview-table td.editable {
+    cursor: text;
+    position: relative;
+}
+
+.preview-table td.editable:hover {
+    background: #f0f9ff;
+}
+
+.preview-table td.editable:hover::after {
+    content: '✏️';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    opacity: 0.5;
+}
+
+/* Indicadores de ordenamiento */
+.preview-table th[data-sort] {
+    position: relative;
+}
+
+.preview-table th .sort-indicator {
+    opacity: 0.3;
+    font-size: 10px;
+    margin-left: 4px;
+}
+
+.preview-table th.sort-asc .sort-indicator::after {
+    content: '▲';
+}
+
+.preview-table th.sort-desc .sort-indicator::after {
+    content: '▼';
+}
+
+.preview-table th.sort-asc .sort-indicator,
+.preview-table th.sort-desc .sort-indicator {
+    opacity: 1;
+    color: #3b82f6;
+}
+
+.preview-table th.sort-asc .sort-indicator {
+    content: '▲';
+}
+
+/* Botones pequeños para tabla */
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-sm.btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-sm.btn-primary:hover {
+    background: #2563eb;
+}
+
+.btn-sm.btn-secondary {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.btn-sm.btn-secondary:hover {
+    background: #d1d5db;
+}
+
+.btn-sm.btn-danger {
+    background: #ef4444;
+    color: white;
+}
+
+.btn-sm.btn-danger:hover {
+    background: #dc2626;
+}
+
+/* Filtros de extracto */
+.filtros-extracto .input-text {
+    font-size: 13px;
+}
+
+/* Resaltar movimientos editados */
+.preview-table tr.editado {
+    background: #fef3c7 !important;
+}
+
+/* Animación de entrada para nuevas filas */
+.preview-table tr.nuevo {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive para modal de detalle */
+@media (max-width: 768px) {
+    .filtros-extracto {
+        flex-direction: column;
+    }
+
+    .filtros-extracto > div {
+        width: 100% !important;
+        min-width: unset !important;
+    }
+
+    #detalleExtractoTable {
+        font-size: 11px;
+    }
+
+    .btn-group {
+        flex-direction: column;
+    }
+
+    .btn-group button {
+        width: 100%;
+    }
+}
