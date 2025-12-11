@@ -24,6 +24,10 @@
                     <span>👥</span>
                     <span>Clientes</span>
                 </button>
+                <button id="btnAuditoria" class="data-btn">
+                    <span>🔍</span>
+                    <span>Auditoría</span>
+                </button>
                 <div class="data-dropdown">
                     <button id="btnTablas" class="data-btn">
                         <span>📋</span>
@@ -170,6 +174,63 @@
             <p style="margin-top: 10px; font-size: 12px; opacity: 0.7;">
                 Todas las herramientas funcionan localmente en tu navegador. No se envían datos a servidores externos.
             </p>
+        </div>
+    </div>
+
+    <!-- Modal Principal de Auditoría -->
+    <div id="modalAuditoria" class="modal hidden">
+        <div class="modal-content" style="max-width: 1400px;">
+            <div class="modal-header">
+                <h2>🔍 Módulo de Auditoría</h2>
+                <button class="close-btn" onclick="cerrarModalAuditoria()">✕</button>
+            </div>
+
+            <!-- Selector de Cliente -->
+            <div id="auditoriaClienteSelector" style="margin-bottom: 20px;">
+                <div class="search-box" style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+                    <div style="flex: 2; min-width: 300px;">
+                        <label style="display: block; font-size: 13px; color: #475569; margin-bottom: 6px; font-weight: 600;">Seleccionar Cliente:</label>
+                        <select id="auditoriaClienteSelect" class="input-text" style="width: 100%; padding: 10px;" onchange="cargarDashboardAuditoria()">
+                            <option value="">-- Seleccione un cliente --</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <input type="text" id="auditoriaClienteSearch" class="input-text" placeholder="🔍 Filtrar clientes..." style="width: 100%; padding: 10px;" oninput="filtrarClientesAuditoria()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard de Auditoría (se muestra al seleccionar cliente) -->
+            <div id="auditoriaDashboard" style="display: none;">
+                <!-- Info del Cliente Seleccionado -->
+                <div id="auditoriaClienteInfo" style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); padding: 16px; border-radius: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <h3 id="auditoriaClienteNombre" style="margin: 0; color: #0369a1; font-size: 18px;"></h3>
+                        <span id="auditoriaClienteCuit" style="color: #0284c7; font-size: 13px;"></span>
+                    </div>
+                    <button onclick="mostrarNuevaCuentaBancariaAuditoria()" class="btn-primary">+ Nueva Cuenta Bancaria</button>
+                </div>
+
+                <!-- Panel de Cuentas Bancarias y Extractos -->
+                <div id="auditoriaCuentasPanel">
+                    <div class="info-box" style="font-size: 13px; padding: 12px; margin-bottom: 16px;">
+                        <strong>Panel de Extractos Bancarios:</strong> Visualice todas las cuentas bancarias del cliente con sus extractos mensuales.
+                        Puede cargar nuevos extractos, editarlos, filtrar movimientos y descargar reportes.
+                    </div>
+
+                    <!-- Lista de Cuentas con Extractos -->
+                    <div id="auditoriaCuentasList" class="clients-list">
+                        <div class="empty-state">Seleccione un cliente para ver sus cuentas bancarias</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Estado vacío inicial -->
+            <div id="auditoriaEmptyState" style="text-align: center; padding: 60px 20px; color: #64748b;">
+                <div style="font-size: 64px; margin-bottom: 16px;">🏦</div>
+                <h3 style="margin: 0 0 8px 0; color: #475569;">Seleccione un Cliente</h3>
+                <p style="margin: 0;">Elija un cliente del selector superior para ver sus cuentas bancarias y extractos mensuales.</p>
+            </div>
         </div>
     </div>
 
