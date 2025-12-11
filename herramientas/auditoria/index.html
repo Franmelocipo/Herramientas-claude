@@ -255,6 +255,7 @@
                         </select>
                         <button onclick="asignarMarcadorFiltrados()" class="btn-primary btn-sm">Aplicar</button>
                         <button onclick="quitarMarcadorFiltrados()" class="btn-secondary btn-sm">Quitar categoría</button>
+                        <button onclick="abrirGestionCategorias()" class="btn-template btn-sm" title="Gestionar categorías">⚙️ Gestionar</button>
                     </div>
                 </div>
 
@@ -297,6 +298,73 @@
                 • Haga clic en la descripción para editarla inline.<br>
                 • <strong>Clasificar movimientos:</strong> Filtre por descripción, luego use "Asignar a filtrados" para categorizar todos los movimientos visibles.<br>
                 • <strong>Filtrar por categoría:</strong> Seleccione una o más categorías en los checkboxes para ver solo esos movimientos.
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Gestión de Categorías -->
+    <div id="modalGestionCategorias" class="modal hidden">
+        <div class="modal-content modal-categorias">
+            <div class="modal-header">
+                <h2>⚙️ Gestión de Categorías</h2>
+                <button class="close-btn" onclick="cerrarGestionCategorias()">✕</button>
+            </div>
+
+            <div class="info-box">
+                <strong>Gestión de categorías:</strong> Cree, edite o elimine categorías para clasificar los movimientos bancarios.
+                Los cambios se guardan automáticamente en la base de datos.
+            </div>
+
+            <!-- Formulario para nueva categoría -->
+            <div class="nueva-categoria-form">
+                <h4>Nueva Categoría</h4>
+                <div class="categoria-form-row">
+                    <div class="categoria-form-field">
+                        <label>ID (único):</label>
+                        <input type="text" id="nuevaCategoriaId" class="input-text" placeholder="ej: gastos_varios">
+                    </div>
+                    <div class="categoria-form-field">
+                        <label>Nombre:</label>
+                        <input type="text" id="nuevaCategoriaNombre" class="input-text" placeholder="ej: Gastos Varios">
+                    </div>
+                    <div class="categoria-form-field categoria-color-field">
+                        <label>Color:</label>
+                        <input type="color" id="nuevaCategoriaColor" class="input-color" value="#64748b">
+                    </div>
+                    <div class="categoria-form-field categoria-btn-field">
+                        <button onclick="agregarCategoria()" class="btn-primary">+ Agregar</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de categorías existentes -->
+            <div class="categorias-lista-container">
+                <h4>Categorías Existentes</h4>
+                <div id="categoriasLista" class="categorias-lista">
+                    <!-- Se llena dinámicamente -->
+                </div>
+            </div>
+
+            <div class="btn-group mt-4">
+                <button onclick="cerrarGestionCategorias()" class="btn-secondary">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Editar Categoría -->
+    <div id="modalEditarCategoria" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>Editar Categoría</h3>
+            <input type="hidden" id="editarCategoriaIdOriginal">
+            <label>ID (único):</label>
+            <input type="text" id="editarCategoriaId" class="input-text mb-4" placeholder="ej: gastos_varios">
+            <label>Nombre:</label>
+            <input type="text" id="editarCategoriaNombre" class="input-text mb-4" placeholder="ej: Gastos Varios">
+            <label>Color:</label>
+            <input type="color" id="editarCategoriaColor" class="input-color mb-4" value="#64748b">
+            <div class="btn-group">
+                <button onclick="cerrarEditarCategoria()" class="btn-secondary">Cancelar</button>
+                <button onclick="guardarEdicionCategoria()" class="btn-primary">Guardar</button>
             </div>
         </div>
     </div>

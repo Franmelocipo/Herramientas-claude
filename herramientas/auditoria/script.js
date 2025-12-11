@@ -20,19 +20,23 @@ const state = {
     rangoActual: { desde: null, hasta: null }
 };
 
-// Categorías predefinidas para clasificar movimientos
-const CATEGORIAS_MOVIMIENTO = [
-    { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' },
-    { id: 'comisiones', nombre: 'Comisiones', color: '#f59e0b' },
-    { id: 'iva', nombre: 'IVA', color: '#8b5cf6' },
-    { id: 'gastos_bancarios', nombre: 'Gastos Bancarios', color: '#ef4444' },
-    { id: 'transferencias', nombre: 'Transferencias', color: '#3b82f6' },
-    { id: 'impuestos', nombre: 'Impuestos', color: '#ec4899' },
-    { id: 'servicios', nombre: 'Servicios', color: '#14b8a6' },
-    { id: 'proveedores', nombre: 'Proveedores', color: '#f97316' },
-    { id: 'sueldos', nombre: 'Sueldos', color: '#06b6d4' },
-    { id: 'ventas', nombre: 'Ventas', color: '#22c55e' },
-    { id: 'otros', nombre: 'Otros', color: '#64748b' }
+// Categorías predefinidas por defecto (se cargan desde BD o localStorage)
+const CATEGORIAS_DEFAULT = [
+    { id: 'comisiones', nombre: 'Comisiones', color: '#f59e0b', orden: 1 },
+    { id: 'iva', nombre: 'IVA', color: '#8b5cf6', orden: 2 },
+    { id: 'gastos_bancarios', nombre: 'Gastos Bancarios', color: '#ef4444', orden: 3 },
+    { id: 'transferencias', nombre: 'Transferencias', color: '#3b82f6', orden: 4 },
+    { id: 'impuestos', nombre: 'Impuestos', color: '#ec4899', orden: 5 },
+    { id: 'servicios', nombre: 'Servicios', color: '#14b8a6', orden: 6 },
+    { id: 'proveedores', nombre: 'Proveedores', color: '#f97316', orden: 7 },
+    { id: 'sueldos', nombre: 'Sueldos', color: '#06b6d4', orden: 8 },
+    { id: 'ventas', nombre: 'Ventas', color: '#22c55e', orden: 9 },
+    { id: 'otros', nombre: 'Otros', color: '#64748b', orden: 10 }
+];
+
+// Categorías dinámicas (se cargan al inicio)
+let CATEGORIAS_MOVIMIENTO = [
+    { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' }
 ];
 
 // ============================================
@@ -40,6 +44,9 @@ const CATEGORIAS_MOVIMIENTO = [
 // ============================================
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Cargar categorías dinámicamente
+    await cargarCategorias();
+
     await cargarClientes();
 
     // Event listeners para filtros
@@ -1717,5 +1724,382 @@ async function cargarExtractosPorRango() {
     } catch (error) {
         console.error('Error cargando extractos por rango:', error);
         alert('Error al cargar los extractos: ' + error.message);
+    }
+}
+
+// ============================================
+// GESTIÓN DE CATEGORÍAS
+// ============================================
+
+/**
+ * Cargar categorías desde Supabase o localStorage
+ */
+async function cargarCategorias() {
+    try {
+        let categorias = [];
+        let supabaseClient = null;
+
+        // Intentar obtener Supabase
+        if (typeof waitForSupabase === 'function') {
+            supabaseClient = await waitForSupabase();
+        } else {
+            for (let i = 0; i < 50; i++) {
+                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
+                    supabaseClient = supabase;
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        if (supabaseClient) {
+            const { data, error } = await supabaseClient
+                .from('categorias_movimientos')
+                .select('*')
+                .eq('activo', true)
+                .order('orden');
+
+            if (error) {
+                console.warn('Error cargando categorías de Supabase:', error.message);
+                // Si hay error (probablemente la tabla no existe), inicializar la tabla
+                await inicializarCategoriasEnSupabase(supabaseClient);
+                categorias = CATEGORIAS_DEFAULT;
+            } else {
+                categorias = data || [];
+            }
+        }
+
+        // Si no hay categorías en Supabase o no hay conexión, usar localStorage
+        if (categorias.length === 0) {
+            const stored = localStorage.getItem('categorias_movimientos');
+            if (stored) {
+                categorias = JSON.parse(stored);
+            } else {
+                categorias = CATEGORIAS_DEFAULT;
+                localStorage.setItem('categorias_movimientos', JSON.stringify(categorias));
+            }
+        }
+
+        // Actualizar variable global con "Sin categoría" al inicio
+        CATEGORIAS_MOVIMIENTO = [
+            { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' },
+            ...categorias
+        ];
+
+        console.log('✅ Categorías cargadas:', CATEGORIAS_MOVIMIENTO.length);
+    } catch (error) {
+        console.error('Error cargando categorías:', error);
+        // Fallback a categorías por defecto
+        CATEGORIAS_MOVIMIENTO = [
+            { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' },
+            ...CATEGORIAS_DEFAULT
+        ];
+    }
+}
+
+/**
+ * Inicializar categorías en Supabase si la tabla está vacía
+ */
+async function inicializarCategoriasEnSupabase(supabaseClient) {
+    try {
+        // Insertar categorías por defecto
+        const { error } = await supabaseClient
+            .from('categorias_movimientos')
+            .insert(CATEGORIAS_DEFAULT);
+
+        if (error && !error.message.includes('duplicate')) {
+            console.warn('No se pudieron insertar categorías iniciales:', error.message);
+        }
+    } catch (error) {
+        console.warn('Error inicializando categorías:', error);
+    }
+}
+
+/**
+ * Abrir modal de gestión de categorías
+ */
+function abrirGestionCategorias() {
+    document.getElementById('modalGestionCategorias').classList.remove('hidden');
+    renderizarListaCategorias();
+    // Limpiar formulario de nueva categoría
+    document.getElementById('nuevaCategoriaId').value = '';
+    document.getElementById('nuevaCategoriaNombre').value = '';
+    document.getElementById('nuevaCategoriaColor').value = '#64748b';
+}
+
+/**
+ * Cerrar modal de gestión de categorías
+ */
+function cerrarGestionCategorias() {
+    document.getElementById('modalGestionCategorias').classList.add('hidden');
+    // Reinicializar controles de marcadores si hay un extracto abierto
+    if (state.extractoActual || state.modoRango) {
+        inicializarControlesMarcadores();
+        renderizarDetalleExtracto();
+    }
+}
+
+/**
+ * Renderizar lista de categorías en el modal
+ */
+function renderizarListaCategorias() {
+    const container = document.getElementById('categoriasLista');
+
+    // Filtrar categorías (excluir "Sin categoría")
+    const categorias = CATEGORIAS_MOVIMIENTO.filter(c => c.id !== '');
+
+    if (categorias.length === 0) {
+        container.innerHTML = `
+            <div class="categoria-item-empty">
+                No hay categorías definidas. Agregue una nueva categoría usando el formulario superior.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = categorias.map(cat => `
+        <div class="categoria-item" data-id="${cat.id}">
+            <div class="categoria-color-preview" style="background-color: ${cat.color}"></div>
+            <div class="categoria-info">
+                <div class="categoria-nombre">${escapeHtml(cat.nombre)}</div>
+                <div class="categoria-id">${escapeHtml(cat.id)}</div>
+            </div>
+            <div class="categoria-actions">
+                <button onclick="abrirEditarCategoria('${cat.id}')" class="btn-secondary btn-sm">✏️ Editar</button>
+                <button onclick="eliminarCategoria('${cat.id}')" class="btn-danger btn-sm">🗑️ Eliminar</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+/**
+ * Agregar nueva categoría
+ */
+async function agregarCategoria() {
+    const id = document.getElementById('nuevaCategoriaId').value.trim().toLowerCase().replace(/\s+/g, '_');
+    const nombre = document.getElementById('nuevaCategoriaNombre').value.trim();
+    const color = document.getElementById('nuevaCategoriaColor').value;
+
+    // Validaciones
+    if (!id || !nombre) {
+        alert('Por favor complete el ID y el nombre de la categoría');
+        return;
+    }
+
+    if (!/^[a-z0-9_]+$/.test(id)) {
+        alert('El ID solo puede contener letras minúsculas, números y guiones bajos');
+        return;
+    }
+
+    // Verificar si ya existe
+    if (CATEGORIAS_MOVIMIENTO.some(c => c.id === id)) {
+        alert('Ya existe una categoría con ese ID');
+        return;
+    }
+
+    const nuevaCategoria = {
+        id,
+        nombre,
+        color,
+        orden: CATEGORIAS_MOVIMIENTO.length,
+        activo: true
+    };
+
+    try {
+        let supabaseClient = null;
+        if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
+            supabaseClient = supabase;
+        }
+
+        if (supabaseClient) {
+            const { error } = await supabaseClient
+                .from('categorias_movimientos')
+                .insert([nuevaCategoria]);
+
+            if (error) {
+                console.warn('Error guardando en Supabase:', error.message);
+            }
+        }
+
+        // Guardar en localStorage como backup
+        const stored = CATEGORIAS_MOVIMIENTO.filter(c => c.id !== '');
+        stored.push(nuevaCategoria);
+        localStorage.setItem('categorias_movimientos', JSON.stringify(stored));
+
+        // Actualizar variable global
+        CATEGORIAS_MOVIMIENTO.push(nuevaCategoria);
+
+        // Limpiar formulario
+        document.getElementById('nuevaCategoriaId').value = '';
+        document.getElementById('nuevaCategoriaNombre').value = '';
+        document.getElementById('nuevaCategoriaColor').value = '#64748b';
+
+        renderizarListaCategorias();
+        console.log('✅ Categoría agregada:', nuevaCategoria);
+    } catch (error) {
+        console.error('Error agregando categoría:', error);
+        alert('Error al agregar la categoría');
+    }
+}
+
+/**
+ * Abrir modal de edición de categoría
+ */
+function abrirEditarCategoria(categoriaId) {
+    const categoria = CATEGORIAS_MOVIMIENTO.find(c => c.id === categoriaId);
+    if (!categoria) return;
+
+    document.getElementById('editarCategoriaIdOriginal').value = categoria.id;
+    document.getElementById('editarCategoriaId').value = categoria.id;
+    document.getElementById('editarCategoriaNombre').value = categoria.nombre;
+    document.getElementById('editarCategoriaColor').value = categoria.color;
+
+    document.getElementById('modalEditarCategoria').classList.remove('hidden');
+}
+
+/**
+ * Cerrar modal de edición de categoría
+ */
+function cerrarEditarCategoria() {
+    document.getElementById('modalEditarCategoria').classList.add('hidden');
+}
+
+/**
+ * Guardar edición de categoría
+ */
+async function guardarEdicionCategoria() {
+    const idOriginal = document.getElementById('editarCategoriaIdOriginal').value;
+    const nuevoId = document.getElementById('editarCategoriaId').value.trim().toLowerCase().replace(/\s+/g, '_');
+    const nombre = document.getElementById('editarCategoriaNombre').value.trim();
+    const color = document.getElementById('editarCategoriaColor').value;
+
+    // Validaciones
+    if (!nuevoId || !nombre) {
+        alert('Por favor complete el ID y el nombre de la categoría');
+        return;
+    }
+
+    if (!/^[a-z0-9_]+$/.test(nuevoId)) {
+        alert('El ID solo puede contener letras minúsculas, números y guiones bajos');
+        return;
+    }
+
+    // Verificar si el nuevo ID ya existe (y no es el mismo)
+    if (nuevoId !== idOriginal && CATEGORIAS_MOVIMIENTO.some(c => c.id === nuevoId)) {
+        alert('Ya existe una categoría con ese ID');
+        return;
+    }
+
+    try {
+        let supabaseClient = null;
+        if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
+            supabaseClient = supabase;
+        }
+
+        if (supabaseClient) {
+            const { error } = await supabaseClient
+                .from('categorias_movimientos')
+                .update({ id: nuevoId, nombre, color })
+                .eq('id', idOriginal);
+
+            if (error) {
+                console.warn('Error actualizando en Supabase:', error.message);
+            }
+        }
+
+        // Actualizar en variable global
+        const idx = CATEGORIAS_MOVIMIENTO.findIndex(c => c.id === idOriginal);
+        if (idx !== -1) {
+            CATEGORIAS_MOVIMIENTO[idx] = {
+                ...CATEGORIAS_MOVIMIENTO[idx],
+                id: nuevoId,
+                nombre,
+                color
+            };
+        }
+
+        // Actualizar localStorage
+        const stored = CATEGORIAS_MOVIMIENTO.filter(c => c.id !== '');
+        localStorage.setItem('categorias_movimientos', JSON.stringify(stored));
+
+        // Si se cambió el ID, actualizar movimientos que usen esa categoría
+        if (nuevoId !== idOriginal && state.movimientosEditados) {
+            state.movimientosEditados.forEach(mov => {
+                if (mov.categoria === idOriginal) {
+                    mov.categoria = nuevoId;
+                }
+            });
+        }
+
+        cerrarEditarCategoria();
+        renderizarListaCategorias();
+        console.log('✅ Categoría actualizada:', nuevoId);
+    } catch (error) {
+        console.error('Error actualizando categoría:', error);
+        alert('Error al actualizar la categoría');
+    }
+}
+
+/**
+ * Eliminar categoría
+ */
+async function eliminarCategoria(categoriaId) {
+    const categoria = CATEGORIAS_MOVIMIENTO.find(c => c.id === categoriaId);
+    if (!categoria) return;
+
+    // Verificar si hay movimientos con esta categoría
+    let movimientosConCategoria = 0;
+    if (state.movimientosEditados) {
+        movimientosConCategoria = state.movimientosEditados.filter(m => m.categoria === categoriaId).length;
+    }
+
+    let mensaje = `¿Está seguro de eliminar la categoría "${categoria.nombre}"?`;
+    if (movimientosConCategoria > 0) {
+        mensaje += `\n\nATENCIÓN: Hay ${movimientosConCategoria} movimiento(s) con esta categoría asignada. Se les quitará la categoría.`;
+    }
+
+    if (!confirm(mensaje)) return;
+
+    try {
+        let supabaseClient = null;
+        if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
+            supabaseClient = supabase;
+        }
+
+        if (supabaseClient) {
+            const { error } = await supabaseClient
+                .from('categorias_movimientos')
+                .delete()
+                .eq('id', categoriaId);
+
+            if (error) {
+                console.warn('Error eliminando de Supabase:', error.message);
+            }
+        }
+
+        // Eliminar de variable global
+        const idx = CATEGORIAS_MOVIMIENTO.findIndex(c => c.id === categoriaId);
+        if (idx !== -1) {
+            CATEGORIAS_MOVIMIENTO.splice(idx, 1);
+        }
+
+        // Actualizar localStorage
+        const stored = CATEGORIAS_MOVIMIENTO.filter(c => c.id !== '');
+        localStorage.setItem('categorias_movimientos', JSON.stringify(stored));
+
+        // Quitar categoría de los movimientos que la tenían
+        if (state.movimientosEditados) {
+            state.movimientosEditados.forEach(mov => {
+                if (mov.categoria === categoriaId) {
+                    mov.categoria = '';
+                }
+            });
+        }
+
+        renderizarListaCategorias();
+        console.log('✅ Categoría eliminada:', categoriaId);
+    } catch (error) {
+        console.error('Error eliminando categoría:', error);
+        alert('Error al eliminar la categoría');
     }
 }
