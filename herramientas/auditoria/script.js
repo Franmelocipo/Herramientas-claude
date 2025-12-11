@@ -45,8 +45,24 @@ async function cargarClientes() {
     try {
         let clientes = [];
 
-        if (typeof supabase !== 'undefined' && supabase) {
-            const { data, error } = await supabase
+        // Esperar a que Supabase esté disponible
+        let supabaseClient = null;
+
+        if (typeof waitForSupabase === 'function') {
+            supabaseClient = await waitForSupabase();
+        } else {
+            // Fallback: esperar a que la variable global supabase esté disponible
+            for (let i = 0; i < 50; i++) {
+                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
+                    supabaseClient = supabase;
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        if (supabaseClient) {
+            const { data, error } = await supabaseClient
                 .from('clientes')
                 .select('*')
                 .order('razon_social');
@@ -55,11 +71,13 @@ async function cargarClientes() {
             clientes = data || [];
         } else {
             // Fallback a localStorage
+            console.warn('Supabase no disponible, usando localStorage');
             clientes = JSON.parse(localStorage.getItem('clientes') || '[]');
         }
 
         state.clientesCache = clientes;
         renderizarSelectClientes(clientes);
+        console.log('✅ Clientes cargados:', clientes.length);
     } catch (error) {
         console.error('Error cargando clientes:', error);
         select.innerHTML = '<option value="">Error al cargar clientes</option>';
