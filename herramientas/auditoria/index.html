@@ -166,7 +166,7 @@
                 <button onclick="descargarExtractoExcel()" class="btn-template">📥 Descargar Excel</button>
             </div>
 
-            <!-- Filtros -->
+            <!-- Filtros de texto -->
             <div class="filtros-extracto">
                 <div class="filtro-item">
                     <label>Filtrar por Fecha:</label>
@@ -185,6 +185,30 @@
                 </div>
             </div>
 
+            <!-- Panel de Marcadores/Categorías -->
+            <div class="marcadores-panel">
+                <!-- Asignación masiva de marcadores -->
+                <div class="asignar-marcador-section">
+                    <div class="asignar-marcador-row">
+                        <span class="asignar-label">🏷️ Asignar a filtrados:</span>
+                        <select id="marcadorAsignar" class="input-text marcador-select">
+                            <!-- Opciones se llenan dinámicamente -->
+                        </select>
+                        <button onclick="asignarMarcadorFiltrados()" class="btn-primary btn-sm">Aplicar</button>
+                        <button onclick="quitarMarcadorFiltrados()" class="btn-secondary btn-sm">Quitar categoría</button>
+                    </div>
+                </div>
+
+                <!-- Filtro por marcadores -->
+                <div class="filtro-marcadores-section">
+                    <span class="filtro-marcadores-label">Filtrar por categoría:</span>
+                    <div id="filtroMarcadoresContainer" class="filtro-marcadores-container">
+                        <!-- Checkboxes se llenan dinámicamente -->
+                    </div>
+                    <button onclick="limpiarFiltroMarcadores()" class="btn-secondary btn-xs">Limpiar</button>
+                </div>
+            </div>
+
             <!-- Estadísticas -->
             <div id="detalleExtractoStats" class="stats-bar"></div>
 
@@ -194,6 +218,7 @@
                     <table id="detalleExtractoTable" class="preview-table">
                         <thead>
                             <tr>
+                                <th data-sort="categoria" onclick="ordenarPorColumna('categoria')" class="sortable categoria-col">Categoría <span class="sort-indicator">⇅</span></th>
                                 <th data-sort="fecha" onclick="ordenarPorColumna('fecha')" class="sortable">Fecha <span class="sort-indicator">⇅</span></th>
                                 <th data-sort="descripcion" onclick="ordenarPorColumna('descripcion')" class="sortable">Descripción <span class="sort-indicator">⇅</span></th>
                                 <th data-sort="origen" onclick="ordenarPorColumna('origen')" class="sortable">Origen <span class="sort-indicator">⇅</span></th>
@@ -209,7 +234,10 @@
             </div>
 
             <div class="info-box mt-4">
-                <strong>Tip:</strong> Haga clic en la descripción de cualquier movimiento para editarla. Los cambios se guardan al hacer clic fuera del campo o presionar Enter.
+                <strong>Tips:</strong><br>
+                • Haga clic en la descripción para editarla inline.<br>
+                • <strong>Clasificar movimientos:</strong> Filtre por descripción, luego use "Asignar a filtrados" para categorizar todos los movimientos visibles.<br>
+                • <strong>Filtrar por categoría:</strong> Seleccione una o más categorías en los checkboxes para ver solo esos movimientos.
             </div>
         </div>
     </div>

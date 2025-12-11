@@ -12,8 +12,24 @@ const state = {
     movimientosEliminados: [],
     ordenActual: { columna: null, direccion: 'asc' },
     filtros: {},
+    filtroMarcadores: [], // Marcadores seleccionados para filtrar
     clientesCache: []
 };
+
+// Categorías predefinidas para clasificar movimientos
+const CATEGORIAS_MOVIMIENTO = [
+    { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' },
+    { id: 'comisiones', nombre: 'Comisiones', color: '#f59e0b' },
+    { id: 'iva', nombre: 'IVA', color: '#8b5cf6' },
+    { id: 'gastos_bancarios', nombre: 'Gastos Bancarios', color: '#ef4444' },
+    { id: 'transferencias', nombre: 'Transferencias', color: '#3b82f6' },
+    { id: 'impuestos', nombre: 'Impuestos', color: '#ec4899' },
+    { id: 'servicios', nombre: 'Servicios', color: '#14b8a6' },
+    { id: 'proveedores', nombre: 'Proveedores', color: '#f97316' },
+    { id: 'sueldos', nombre: 'Sueldos', color: '#06b6d4' },
+    { id: 'ventas', nombre: 'Ventas', color: '#22c55e' },
+    { id: 'otros', nombre: 'Otros', color: '#64748b' }
+];
 
 // ============================================
 // INICIALIZACIÓN
@@ -868,6 +884,10 @@ async function verDetalleExtracto(id, cuentaId) {
         document.getElementById('filtroFecha').value = '';
         document.getElementById('filtroDescripcion').value = '';
         document.getElementById('filtroOrigen').value = '';
+        state.filtroMarcadores = [];
+
+        // Inicializar controles de marcadores
+        inicializarControlesMarcadores();
 
         renderizarDetalleExtracto();
     } catch (error) {
@@ -893,7 +913,7 @@ function renderizarDetalleExtracto() {
 
     let movimientos = [...state.movimientosEditados];
 
-    // Aplicar filtros
+    // Aplicar filtros de texto
     if (state.filtros.fecha) {
         movimientos = movimientos.filter(m =>
             m.fecha.toLowerCase().includes(state.filtros.fecha.toLowerCase())
@@ -908,6 +928,18 @@ function renderizarDetalleExtracto() {
         movimientos = movimientos.filter(m =>
             m.origen.toLowerCase().includes(state.filtros.origen.toLowerCase())
         );
+    }
+
+    // Guardar movimientos filtrados por texto (antes de filtrar por marcadores)
+    // para poder asignar marcadores a estos
+    state.movimientosFiltradosTexto = movimientos.map(m => m.id);
+
+    // Aplicar filtro de marcadores (si hay alguno seleccionado)
+    if (state.filtroMarcadores && state.filtroMarcadores.length > 0) {
+        movimientos = movimientos.filter(m => {
+            const cat = m.categoria || '';
+            return state.filtroMarcadores.includes(cat);
+        });
     }
 
     // Aplicar ordenamiento
@@ -935,17 +967,40 @@ function renderizarDetalleExtracto() {
     // Actualizar estadísticas
     const totalCreditos = movimientos.reduce((sum, m) => sum + (m.credito || 0), 0);
     const totalDebitos = movimientos.reduce((sum, m) => sum + (m.debito || 0), 0);
+
+    // Contar categorías
+    const categoriasCount = {};
+    state.movimientosEditados.forEach(m => {
+        const cat = m.categoria || '';
+        categoriasCount[cat] = (categoriasCount[cat] || 0) + 1;
+    });
+    const sinCategoria = categoriasCount[''] || 0;
+    const conCategoria = state.movimientosEditados.length - sinCategoria;
+
     stats.innerHTML = `
         <span>Mostrando ${movimientos.length} de ${state.movimientosEditados.length} movimientos</span>
         <span class="stat-credito">Total Créditos: <strong>$${formatNumber(totalCreditos)}</strong></span>
         <span class="stat-debito">Total Débitos: <strong>$${formatNumber(totalDebitos)}</strong></span>
+        <span class="stat-categorias">Clasificados: <strong>${conCategoria}</strong> | Sin categoría: <strong>${sinCategoria}</strong></span>
         ${state.movimientosEliminados.length > 0 ?
             `<span class="stat-eliminados">${state.movimientosEliminados.length} eliminados (restaurables)</span>` : ''}
     `;
 
-    // Renderizar filas
-    tbody.innerHTML = movimientos.map(m => `
+    // Renderizar filas con columna de categoría
+    tbody.innerHTML = movimientos.map(m => {
+        const categoria = CATEGORIAS_MOVIMIENTO.find(c => c.id === (m.categoria || '')) || CATEGORIAS_MOVIMIENTO[0];
+        const badgeStyle = m.categoria ? `background-color: ${categoria.color}20; color: ${categoria.color}; border: 1px solid ${categoria.color}40;` : '';
+
+        return `
         <tr data-id="${m.id}">
+            <td class="categoria-cell">
+                <select class="categoria-select" onchange="cambiarCategoria('${m.id}', this.value)"
+                        style="${m.categoria ? `border-color: ${categoria.color}; background-color: ${categoria.color}10;` : ''}">
+                    ${CATEGORIAS_MOVIMIENTO.map(c =>
+                        `<option value="${c.id}" ${m.categoria === c.id ? 'selected' : ''}>${c.nombre}</option>`
+                    ).join('')}
+                </select>
+            </td>
             <td>${m.fecha}</td>
             <td class="editable" onclick="editarCelda(this, '${m.id}', 'descripcion')">${escapeHtml(m.descripcion)}</td>
             <td>${m.origen}</td>
@@ -956,7 +1011,7 @@ function renderizarDetalleExtracto() {
                 <button onclick="eliminarMovimiento('${m.id}')" class="btn-sm btn-danger" title="Eliminar">🗑️</button>
             </td>
         </tr>
-    `).join('');
+    `}).join('');
 
     // Actualizar indicadores de orden en headers
     document.querySelectorAll('#detalleExtractoTable th[data-sort]').forEach(th => {
@@ -966,6 +1021,9 @@ function renderizarDetalleExtracto() {
             th.classList.add(`sort-${state.ordenActual.direccion}`);
         }
     });
+
+    // Actualizar contador de movimientos filtrados para asignación
+    actualizarContadorFiltrados();
 }
 
 /**
@@ -1177,15 +1235,19 @@ function descargarExtractoExcel() {
                    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
     const wsData = [
-        ['Fecha', 'Descripción', 'Origen', 'Crédito', 'Débito', 'Saldo'],
-        ...movimientos.map(m => [
-            m.fecha,
-            m.descripcion,
-            m.origen,
-            m.credito || 0,
-            m.debito || 0,
-            m.saldo || 0
-        ])
+        ['Categoría', 'Fecha', 'Descripción', 'Origen', 'Crédito', 'Débito', 'Saldo'],
+        ...movimientos.map(m => {
+            const cat = CATEGORIAS_MOVIMIENTO.find(c => c.id === (m.categoria || ''));
+            return [
+                cat ? cat.nombre : '',
+                m.fecha,
+                m.descripcion,
+                m.origen,
+                m.credito || 0,
+                m.debito || 0,
+                m.saldo || 0
+            ];
+        })
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -1193,7 +1255,7 @@ function descargarExtractoExcel() {
     // Formatear columnas numéricas
     const range = XLSX.utils.decode_range(ws['!ref']);
     for (let row = 1; row <= range.e.r; row++) {
-        for (let col = 3; col <= 5; col++) {
+        for (let col = 4; col <= 6; col++) {
             const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
             if (ws[cellRef] && typeof ws[cellRef].v === 'number') {
                 ws[cellRef].t = 'n';
@@ -1204,6 +1266,7 @@ function descargarExtractoExcel() {
 
     // Ajustar anchos
     ws['!cols'] = [
+        { wch: 18 },
         { wch: 12 },
         { wch: 50 },
         { wch: 20 },
@@ -1217,4 +1280,150 @@ function descargarExtractoExcel() {
 
     const fileName = `extracto_${meses[extracto.mes - 1]}_${extracto.anio}.xlsx`;
     XLSX.writeFile(wb, fileName);
+}
+
+// ============================================
+// GESTIÓN DE MARCADORES/CATEGORÍAS
+// ============================================
+
+/**
+ * Inicializar controles de marcadores
+ */
+function inicializarControlesMarcadores() {
+    // Llenar select de asignación masiva
+    const selectAsignar = document.getElementById('marcadorAsignar');
+    if (selectAsignar) {
+        selectAsignar.innerHTML = CATEGORIAS_MOVIMIENTO
+            .filter(c => c.id !== '') // Excluir "Sin categoría" del selector de asignación
+            .map(c => `<option value="${c.id}">${c.nombre}</option>`)
+            .join('');
+    }
+
+    // Llenar checkboxes de filtro
+    const container = document.getElementById('filtroMarcadoresContainer');
+    if (container) {
+        container.innerHTML = CATEGORIAS_MOVIMIENTO.map(c => {
+            const checkId = `filtroMarcador_${c.id || 'sin'}`;
+            return `
+                <label class="marcador-checkbox" style="${c.id ? `--marcador-color: ${c.color};` : ''}">
+                    <input type="checkbox" id="${checkId}" value="${c.id}" onchange="toggleFiltroMarcador('${c.id}')">
+                    <span class="marcador-label ${c.id ? 'con-color' : ''}">${c.id ? c.nombre : 'Sin categoría'}</span>
+                </label>
+            `;
+        }).join('');
+    }
+}
+
+/**
+ * Actualizar contador de movimientos filtrados
+ */
+function actualizarContadorFiltrados() {
+    const label = document.querySelector('.asignar-label');
+    if (label && state.movimientosFiltradosTexto) {
+        const count = state.movimientosFiltradosTexto.length;
+        label.textContent = `🏷️ Asignar a filtrados (${count}):`;
+    }
+}
+
+/**
+ * Cambiar categoría de un movimiento individual
+ */
+function cambiarCategoria(movId, categoriaId) {
+    const mov = state.movimientosEditados.find(m => m.id === movId);
+    if (mov) {
+        mov.categoria = categoriaId;
+        renderizarDetalleExtracto();
+    }
+}
+
+/**
+ * Asignar marcador a todos los movimientos filtrados por texto
+ */
+function asignarMarcadorFiltrados() {
+    const selectAsignar = document.getElementById('marcadorAsignar');
+    const categoriaId = selectAsignar.value;
+
+    if (!categoriaId) {
+        alert('Seleccione una categoría para asignar');
+        return;
+    }
+
+    const idsFiltrados = state.movimientosFiltradosTexto || [];
+
+    if (idsFiltrados.length === 0) {
+        alert('No hay movimientos filtrados para asignar');
+        return;
+    }
+
+    const categoria = CATEGORIAS_MOVIMIENTO.find(c => c.id === categoriaId);
+    if (!confirm(`¿Asignar "${categoria.nombre}" a ${idsFiltrados.length} movimientos filtrados?`)) {
+        return;
+    }
+
+    // Asignar categoría a los movimientos filtrados
+    let count = 0;
+    state.movimientosEditados.forEach(m => {
+        if (idsFiltrados.includes(m.id)) {
+            m.categoria = categoriaId;
+            count++;
+        }
+    });
+
+    renderizarDetalleExtracto();
+    alert(`Se asignó "${categoria.nombre}" a ${count} movimientos`);
+}
+
+/**
+ * Quitar categoría de todos los movimientos filtrados
+ */
+function quitarMarcadorFiltrados() {
+    const idsFiltrados = state.movimientosFiltradosTexto || [];
+
+    if (idsFiltrados.length === 0) {
+        alert('No hay movimientos filtrados');
+        return;
+    }
+
+    if (!confirm(`¿Quitar la categoría de ${idsFiltrados.length} movimientos filtrados?`)) {
+        return;
+    }
+
+    // Quitar categoría de los movimientos filtrados
+    let count = 0;
+    state.movimientosEditados.forEach(m => {
+        if (idsFiltrados.includes(m.id) && m.categoria) {
+            m.categoria = '';
+            count++;
+        }
+    });
+
+    renderizarDetalleExtracto();
+    alert(`Se quitó la categoría de ${count} movimientos`);
+}
+
+/**
+ * Toggle filtro de marcador (checkbox)
+ */
+function toggleFiltroMarcador(categoriaId) {
+    const idx = state.filtroMarcadores.indexOf(categoriaId);
+    if (idx === -1) {
+        state.filtroMarcadores.push(categoriaId);
+    } else {
+        state.filtroMarcadores.splice(idx, 1);
+    }
+    renderizarDetalleExtracto();
+}
+
+/**
+ * Limpiar filtro de marcadores
+ */
+function limpiarFiltroMarcadores() {
+    state.filtroMarcadores = [];
+
+    // Desmarcar todos los checkboxes
+    document.querySelectorAll('#filtroMarcadoresContainer input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+
+    renderizarDetalleExtracto();
 }
