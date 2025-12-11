@@ -2215,3 +2215,303 @@ function eliminarSeleccionados() {
 
     alert(`✅ Se eliminaron ${count} movimiento${count !== 1 ? 's' : ''}`);
 }
+
+// ============================================
+// GESTIÓN DE CATEGORÍAS
+// ============================================
+
+/**
+ * Cargar categorías desde la base de datos o usar las predefinidas
+ */
+async function cargarCategorias() {
+    try {
+        let categorias = [];
+
+        // Esperar a que Supabase esté disponible
+        let supabaseClient = null;
+
+        if (typeof waitForSupabase === 'function') {
+            supabaseClient = await waitForSupabase();
+        } else {
+            // Fallback: esperar a que la variable global supabase esté disponible
+            for (let i = 0; i < 50; i++) {
+                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
+                    supabaseClient = supabase;
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        if (supabaseClient) {
+            const { data, error } = await supabaseClient
+                .from('categorias_movimiento')
+                .select('*')
+                .order('orden');
+
+            if (error) {
+                // Si la tabla no existe, usar las predefinidas
+                if (error.code === '42P01' || error.message.includes('does not exist')) {
+                    console.warn('Tabla categorias_movimiento no existe, usando predefinidas');
+                    categorias = CATEGORIAS_DEFAULT;
+                } else {
+                    throw error;
+                }
+            } else {
+                categorias = data || [];
+            }
+        }
+
+        // Si no hay categorías en BD, usar las predefinidas
+        if (categorias.length === 0) {
+            categorias = CATEGORIAS_DEFAULT;
+        }
+
+        // Construir CATEGORIAS_MOVIMIENTO con "Sin categoría" al inicio
+        CATEGORIAS_MOVIMIENTO = [
+            { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' },
+            ...categorias
+        ];
+
+        console.log('✅ Categorías cargadas:', CATEGORIAS_MOVIMIENTO.length);
+    } catch (error) {
+        console.error('Error cargando categorías:', error);
+        // Usar predefinidas en caso de error
+        CATEGORIAS_MOVIMIENTO = [
+            { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' },
+            ...CATEGORIAS_DEFAULT
+        ];
+    }
+}
+
+/**
+ * Abrir modal de gestión de categorías
+ */
+function abrirGestionCategorias() {
+    document.getElementById('modalGestionCategorias').classList.remove('hidden');
+    renderizarListaCategorias();
+}
+
+/**
+ * Cerrar modal de gestión de categorías
+ */
+function cerrarGestionCategorias() {
+    document.getElementById('modalGestionCategorias').classList.add('hidden');
+}
+
+/**
+ * Renderizar lista de categorías en el modal de gestión
+ */
+function renderizarListaCategorias() {
+    const container = document.getElementById('categoriasLista');
+    // Excluir "Sin categoría" de la lista editable
+    const categorias = CATEGORIAS_MOVIMIENTO.filter(c => c.id !== '');
+
+    if (categorias.length === 0) {
+        container.innerHTML = '<p class="empty-state">No hay categorías definidas</p>';
+        return;
+    }
+
+    container.innerHTML = categorias.map(cat => `
+        <div class="categoria-item" style="--cat-color: ${cat.color}">
+            <div class="categoria-info">
+                <span class="categoria-color-indicator" style="background-color: ${cat.color}"></span>
+                <span class="categoria-nombre">${cat.nombre}</span>
+                <span class="categoria-id">(${cat.id})</span>
+            </div>
+            <div class="categoria-acciones">
+                <button onclick="editarCategoria('${cat.id}')" class="btn-secondary btn-xs">✏️ Editar</button>
+                <button onclick="eliminarCategoria('${cat.id}')" class="btn-danger btn-xs">🗑️</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+/**
+ * Agregar nueva categoría
+ */
+async function agregarCategoria() {
+    const id = document.getElementById('nuevaCategoriaId').value.trim().toLowerCase().replace(/\s+/g, '_');
+    const nombre = document.getElementById('nuevaCategoriaNombre').value.trim();
+    const color = document.getElementById('nuevaCategoriaColor').value;
+
+    if (!id || !nombre) {
+        alert('El ID y el nombre son obligatorios');
+        return;
+    }
+
+    // Verificar que el ID no exista
+    if (CATEGORIAS_MOVIMIENTO.some(c => c.id === id)) {
+        alert('Ya existe una categoría con ese ID');
+        return;
+    }
+
+    const nuevaCategoria = {
+        id,
+        nombre,
+        color,
+        orden: CATEGORIAS_MOVIMIENTO.length
+    };
+
+    try {
+        if (typeof supabase !== 'undefined' && supabase) {
+            const { error } = await supabase
+                .from('categorias_movimiento')
+                .insert([nuevaCategoria]);
+
+            if (error) {
+                // Si la tabla no existe, crear solo en memoria
+                if (error.code === '42P01' || error.message.includes('does not exist')) {
+                    console.warn('Tabla no existe, guardando solo en memoria');
+                } else {
+                    throw error;
+                }
+            }
+        }
+
+        // Agregar a la lista en memoria
+        CATEGORIAS_MOVIMIENTO.push(nuevaCategoria);
+
+        // Limpiar formulario
+        document.getElementById('nuevaCategoriaId').value = '';
+        document.getElementById('nuevaCategoriaNombre').value = '';
+        document.getElementById('nuevaCategoriaColor').value = '#64748b';
+
+        renderizarListaCategorias();
+        inicializarControlesMarcadores();
+        inicializarSelectCategoriaSeleccionados();
+
+        alert('✅ Categoría agregada');
+    } catch (error) {
+        console.error('Error agregando categoría:', error);
+        alert('Error al agregar la categoría: ' + error.message);
+    }
+}
+
+/**
+ * Editar categoría existente
+ */
+function editarCategoria(id) {
+    const categoria = CATEGORIAS_MOVIMIENTO.find(c => c.id === id);
+    if (!categoria) {
+        alert('Categoría no encontrada');
+        return;
+    }
+
+    document.getElementById('editarCategoriaIdOriginal').value = id;
+    document.getElementById('editarCategoriaId').value = id;
+    document.getElementById('editarCategoriaNombre').value = categoria.nombre;
+    document.getElementById('editarCategoriaColor').value = categoria.color;
+    document.getElementById('modalEditarCategoria').classList.remove('hidden');
+}
+
+/**
+ * Cerrar modal de editar categoría
+ */
+function cerrarEditarCategoria() {
+    document.getElementById('modalEditarCategoria').classList.add('hidden');
+}
+
+/**
+ * Guardar edición de categoría
+ */
+async function guardarEdicionCategoria() {
+    const idOriginal = document.getElementById('editarCategoriaIdOriginal').value;
+    const nuevoId = document.getElementById('editarCategoriaId').value.trim().toLowerCase().replace(/\s+/g, '_');
+    const nombre = document.getElementById('editarCategoriaNombre').value.trim();
+    const color = document.getElementById('editarCategoriaColor').value;
+
+    if (!nuevoId || !nombre) {
+        alert('El ID y el nombre son obligatorios');
+        return;
+    }
+
+    // Verificar que el nuevo ID no exista (si cambió)
+    if (nuevoId !== idOriginal && CATEGORIAS_MOVIMIENTO.some(c => c.id === nuevoId)) {
+        alert('Ya existe una categoría con ese ID');
+        return;
+    }
+
+    try {
+        const idx = CATEGORIAS_MOVIMIENTO.findIndex(c => c.id === idOriginal);
+        if (idx === -1) {
+            alert('Categoría no encontrada');
+            return;
+        }
+
+        const categoriaActualizada = {
+            ...CATEGORIAS_MOVIMIENTO[idx],
+            id: nuevoId,
+            nombre,
+            color
+        };
+
+        if (typeof supabase !== 'undefined' && supabase) {
+            // Eliminar la antigua y crear la nueva (por si cambió el ID)
+            await supabase.from('categorias_movimiento').delete().eq('id', idOriginal);
+            const { error } = await supabase
+                .from('categorias_movimiento')
+                .insert([categoriaActualizada]);
+
+            if (error && error.code !== '42P01' && !error.message.includes('does not exist')) {
+                throw error;
+            }
+        }
+
+        // Actualizar en memoria
+        CATEGORIAS_MOVIMIENTO[idx] = categoriaActualizada;
+
+        cerrarEditarCategoria();
+        renderizarListaCategorias();
+        inicializarControlesMarcadores();
+        inicializarSelectCategoriaSeleccionados();
+
+        alert('✅ Categoría actualizada');
+    } catch (error) {
+        console.error('Error actualizando categoría:', error);
+        alert('Error al actualizar la categoría: ' + error.message);
+    }
+}
+
+/**
+ * Eliminar categoría
+ */
+async function eliminarCategoria(id) {
+    const categoria = CATEGORIAS_MOVIMIENTO.find(c => c.id === id);
+    if (!categoria) {
+        alert('Categoría no encontrada');
+        return;
+    }
+
+    if (!confirm(`¿Eliminar la categoría "${categoria.nombre}"?\n\nLos movimientos que tengan esta categoría quedarán sin clasificar.`)) {
+        return;
+    }
+
+    try {
+        if (typeof supabase !== 'undefined' && supabase) {
+            const { error } = await supabase
+                .from('categorias_movimiento')
+                .delete()
+                .eq('id', id);
+
+            if (error && error.code !== '42P01' && !error.message.includes('does not exist')) {
+                throw error;
+            }
+        }
+
+        // Eliminar de memoria
+        const idx = CATEGORIAS_MOVIMIENTO.findIndex(c => c.id === id);
+        if (idx !== -1) {
+            CATEGORIAS_MOVIMIENTO.splice(idx, 1);
+        }
+
+        renderizarListaCategorias();
+        inicializarControlesMarcadores();
+        inicializarSelectCategoriaSeleccionados();
+
+        alert('✅ Categoría eliminada');
+    } catch (error) {
+        console.error('Error eliminando categoría:', error);
+        alert('Error al eliminar la categoría: ' + error.message);
+    }
+}
