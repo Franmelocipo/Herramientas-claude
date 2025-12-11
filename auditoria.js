@@ -11,8 +11,382 @@ const auditoriaState = {
     movimientosEditados: [],
     movimientosEliminados: [],
     ordenActual: { columna: null, direccion: 'asc' },
-    filtros: {}
+    filtros: {},
+    clientesCache: [] // Cache de clientes para el selector
 };
+
+// ============================================
+// MODAL PRINCIPAL DE AUDITORÍA
+// ============================================
+
+/**
+ * Abrir modal principal de auditoría
+ */
+async function abrirModalAuditoria() {
+    document.getElementById('modalAuditoria').classList.remove('hidden');
+    document.getElementById('auditoriaDashboard').style.display = 'none';
+    document.getElementById('auditoriaEmptyState').style.display = 'block';
+    document.getElementById('auditoriaClienteSelect').value = '';
+    document.getElementById('auditoriaClienteSearch').value = '';
+
+    await cargarClientesAuditoria();
+}
+
+/**
+ * Cerrar modal principal de auditoría
+ */
+function cerrarModalAuditoria() {
+    document.getElementById('modalAuditoria').classList.add('hidden');
+    auditoriaState.clienteActual = null;
+}
+
+/**
+ * Cargar clientes en el selector de auditoría
+ */
+async function cargarClientesAuditoria() {
+    const select = document.getElementById('auditoriaClienteSelect');
+
+    try {
+        let clientes = [];
+
+        if (supabase) {
+            const { data, error } = await supabase
+                .from('clientes')
+                .select('*')
+                .order('razon_social');
+
+            if (error) throw error;
+            clientes = data || [];
+        } else {
+            // Fallback a localStorage
+            clientes = JSON.parse(localStorage.getItem('clientes') || '[]');
+        }
+
+        auditoriaState.clientesCache = clientes;
+        renderizarSelectClientes(clientes);
+    } catch (error) {
+        console.error('Error cargando clientes:', error);
+        select.innerHTML = '<option value="">Error al cargar clientes</option>';
+    }
+}
+
+/**
+ * Renderizar opciones del selector de clientes
+ */
+function renderizarSelectClientes(clientes) {
+    const select = document.getElementById('auditoriaClienteSelect');
+
+    select.innerHTML = '<option value="">-- Seleccione un cliente --</option>' +
+        clientes.map(c => `<option value="${c.id}" data-cuit="${c.cuit || ''}">${c.razon_social}${c.cuit ? ` (${c.cuit})` : ''}</option>`).join('');
+}
+
+/**
+ * Filtrar clientes en el selector
+ */
+function filtrarClientesAuditoria() {
+    const busqueda = document.getElementById('auditoriaClienteSearch').value.toLowerCase();
+    const clientes = auditoriaState.clientesCache;
+
+    const filtrados = clientes.filter(c => {
+        const nombre = (c.razon_social || '').toLowerCase();
+        const cuit = (c.cuit || '').toLowerCase();
+        return nombre.includes(busqueda) || cuit.includes(busqueda);
+    });
+
+    renderizarSelectClientes(filtrados);
+}
+
+/**
+ * Cargar dashboard de auditoría cuando se selecciona un cliente
+ */
+async function cargarDashboardAuditoria() {
+    const select = document.getElementById('auditoriaClienteSelect');
+    const clienteId = select.value;
+
+    if (!clienteId) {
+        document.getElementById('auditoriaDashboard').style.display = 'none';
+        document.getElementById('auditoriaEmptyState').style.display = 'block';
+        auditoriaState.clienteActual = null;
+        return;
+    }
+
+    // Obtener datos del cliente
+    const selectedOption = select.options[select.selectedIndex];
+    const clienteNombre = selectedOption.text.split(' (')[0];
+    const clienteCuit = selectedOption.dataset.cuit || '';
+
+    auditoriaState.clienteActual = {
+        id: clienteId,
+        nombre: clienteNombre,
+        cuit: clienteCuit
+    };
+
+    // Mostrar info del cliente
+    document.getElementById('auditoriaClienteNombre').textContent = clienteNombre;
+    document.getElementById('auditoriaClienteCuit').textContent = clienteCuit ? `CUIT: ${clienteCuit}` : '';
+
+    // Mostrar dashboard y ocultar estado vacío
+    document.getElementById('auditoriaDashboard').style.display = 'block';
+    document.getElementById('auditoriaEmptyState').style.display = 'none';
+
+    // Cargar cuentas bancarias con extractos
+    await cargarCuentasConExtractos(clienteId);
+}
+
+/**
+ * Cargar cuentas bancarias con sus extractos para el dashboard
+ */
+async function cargarCuentasConExtractos(clienteId) {
+    const container = document.getElementById('auditoriaCuentasList');
+    container.innerHTML = '<div class="loading-state">Cargando cuentas bancarias y extractos...</div>';
+
+    try {
+        let cuentas = [];
+
+        if (supabase) {
+            // Cargar cuentas bancarias
+            const { data: cuentasData, error: cuentasError } = await supabase
+                .from('cuentas_bancarias')
+                .select('*')
+                .eq('cliente_id', clienteId)
+                .order('banco');
+
+            if (cuentasError) throw cuentasError;
+            cuentas = cuentasData || [];
+
+            // Cargar extractos para cada cuenta
+            for (let cuenta of cuentas) {
+                const { data: extractosData } = await supabase
+                    .from('extractos_mensuales')
+                    .select('id, mes, anio, data, created_at, updated_at')
+                    .eq('cuenta_id', cuenta.id)
+                    .order('anio', { ascending: false })
+                    .order('mes', { ascending: false });
+
+                cuenta.extractos = extractosData || [];
+            }
+        } else {
+            // Fallback localStorage
+            cuentas = JSON.parse(localStorage.getItem(`cuentas_bancarias_${clienteId}`) || '[]');
+            for (let cuenta of cuentas) {
+                cuenta.extractos = JSON.parse(localStorage.getItem(`extractos_${cuenta.id}`) || '[]');
+            }
+        }
+
+        renderizarCuentasConExtractos(cuentas);
+    } catch (error) {
+        console.error('Error cargando cuentas con extractos:', error);
+        container.innerHTML = '<div class="error-state">Error al cargar las cuentas bancarias</div>';
+    }
+}
+
+/**
+ * Renderizar cuentas bancarias con sus extractos en formato de panel
+ */
+function renderizarCuentasConExtractos(cuentas) {
+    const container = document.getElementById('auditoriaCuentasList');
+    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const mesesCompletos = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                           'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+    if (cuentas.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding: 40px;">
+                <div style="font-size: 48px; margin-bottom: 12px;">🏦</div>
+                <p>No hay cuentas bancarias configuradas para este cliente.</p>
+                <button onclick="mostrarNuevaCuentaBancariaAuditoria()" class="btn-primary" style="margin-top: 16px;">+ Agregar Cuenta Bancaria</button>
+            </div>
+        `;
+        return;
+    }
+
+    // Obtener el año actual y el anterior para mostrar extractos
+    const anioActual = new Date().getFullYear();
+    const anios = [anioActual, anioActual - 1];
+
+    let html = '';
+
+    cuentas.forEach(cuenta => {
+        // Crear mapa de extractos por año-mes
+        const extractosMap = {};
+        (cuenta.extractos || []).forEach(ext => {
+            const key = `${ext.anio}-${ext.mes}`;
+            extractosMap[key] = ext;
+        });
+
+        html += `
+            <div class="cuenta-panel" style="background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 20px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <!-- Header de la cuenta -->
+                <div style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                    <div>
+                        <h4 style="margin: 0; color: #1e293b; font-size: 16px;">
+                            🏦 ${cuenta.banco || 'Sin nombre'}
+                            <span style="font-weight: normal; color: #64748b; font-size: 14px;"> - ${cuenta.tipo_cuenta || 'Cuenta'}</span>
+                        </h4>
+                        <div style="font-size: 13px; color: #64748b; margin-top: 4px;">
+                            ${cuenta.numero_cuenta ? `N°: ${cuenta.numero_cuenta}` : ''}
+                            ${cuenta.alias ? ` | Alias: ${cuenta.alias}` : ''}
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="mostrarSubirExtractoAuditoria('${cuenta.id}', '${(cuenta.banco || '').replace(/'/g, "\\'")} - ${(cuenta.tipo_cuenta || '').replace(/'/g, "\\'")}')" class="btn-primary btn-sm" style="padding: 6px 12px;">
+                            📤 Subir Extracto
+                        </button>
+                        <button onclick="editarCuentaBancariaAuditoria('${cuenta.id}')" class="btn-secondary btn-sm" style="padding: 6px 12px;">✏️</button>
+                        <button onclick="eliminarCuentaBancariaAuditoria('${cuenta.id}')" class="btn-danger btn-sm" style="padding: 6px 12px;">🗑️</button>
+                    </div>
+                </div>
+
+                <!-- Grid de extractos por año -->
+                <div style="padding: 16px;">
+                    ${anios.map(anio => {
+                        const tieneExtractos = meses.some((_, idx) => extractosMap[`${anio}-${idx + 1}`]);
+
+                        return `
+                            <div style="margin-bottom: 16px;">
+                                <h5 style="margin: 0 0 8px 0; color: #475569; font-size: 14px;">${anio}</h5>
+                                <div style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px;">
+                                    ${meses.map((mes, idx) => {
+                                        const extracto = extractosMap[`${anio}-${idx + 1}`];
+                                        const movimientos = extracto?.data?.length || 0;
+
+                                        if (extracto) {
+                                            return `
+                                                <div class="extracto-cell extracto-cargado"
+                                                     onclick="verDetalleExtractoAuditoria('${extracto.id}', '${cuenta.id}')"
+                                                     style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border: 1px solid #86efac; border-radius: 8px; padding: 8px 4px; text-align: center; cursor: pointer; transition: all 0.2s;"
+                                                     onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 12px rgba(34,197,94,0.3)'"
+                                                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none'"
+                                                     title="${mesesCompletos[idx]} ${anio} - ${movimientos} movimientos - Click para ver detalle">
+                                                    <div style="font-weight: 600; color: #16a34a; font-size: 12px;">${mes}</div>
+                                                    <div style="font-size: 10px; color: #22c55e;">${movimientos} mov</div>
+                                                </div>
+                                            `;
+                                        } else {
+                                            return `
+                                                <div class="extracto-cell extracto-vacio"
+                                                     onclick="mostrarSubirExtractoAuditoria('${cuenta.id}', '${(cuenta.banco || '').replace(/'/g, "\\'")}', ${idx + 1}, ${anio})"
+                                                     style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 8px 4px; text-align: center; cursor: pointer; transition: all 0.2s;"
+                                                     onmouseover="this.style.borderColor='#3b82f6'; this.style.background='#eff6ff'"
+                                                     onmouseout="this.style.borderColor='#cbd5e1'; this.style.background='#f8fafc'"
+                                                     title="${mesesCompletos[idx]} ${anio} - Click para cargar extracto">
+                                                    <div style="font-weight: 500; color: #94a3b8; font-size: 12px;">${mes}</div>
+                                                    <div style="font-size: 10px; color: #cbd5e1;">---</div>
+                                                </div>
+                                            `;
+                                        }
+                                    }).join('')}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+
+                    <!-- Ver todos los extractos -->
+                    ${(cuenta.extractos || []).length > 0 ? `
+                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;">
+                            <button onclick="verTodosExtractosCuenta('${cuenta.id}', '${(cuenta.banco || '').replace(/'/g, "\\'")} - ${(cuenta.numero_cuenta || '').replace(/'/g, "\\'")}')"
+                                    class="btn-secondary" style="width: 100%; padding: 8px;">
+                                📋 Ver todos los extractos (${(cuenta.extractos || []).length})
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+/**
+ * Mostrar modal para nueva cuenta bancaria desde auditoría
+ */
+function mostrarNuevaCuentaBancariaAuditoria() {
+    if (!auditoriaState.clienteActual) {
+        alert('Seleccione un cliente primero');
+        return;
+    }
+    mostrarNuevaCuentaBancaria();
+}
+
+/**
+ * Mostrar modal para subir extracto desde auditoría
+ */
+function mostrarSubirExtractoAuditoria(cuentaId, cuentaNombre, mes, anio) {
+    auditoriaState.cuentaActual = { id: cuentaId, nombre: cuentaNombre };
+
+    // Establecer mes y año si se proporcionan
+    if (mes) {
+        document.getElementById('extractoMes').value = mes;
+    } else {
+        document.getElementById('extractoMes').value = new Date().getMonth() + 1;
+    }
+
+    if (anio) {
+        document.getElementById('extractoAnio').value = anio;
+    } else {
+        document.getElementById('extractoAnio').value = new Date().getFullYear();
+    }
+
+    document.getElementById('extractoFile').value = '';
+    document.getElementById('extractoFileInfo').textContent = '';
+    document.getElementById('modalSubirExtracto').classList.remove('hidden');
+}
+
+/**
+ * Ver detalle de extracto desde auditoría
+ */
+async function verDetalleExtractoAuditoria(extractoId, cuentaId) {
+    auditoriaState.cuentaActual = { id: cuentaId };
+    await verDetalleExtracto(extractoId);
+}
+
+/**
+ * Ver todos los extractos de una cuenta
+ */
+async function verTodosExtractosCuenta(cuentaId, cuentaNombre) {
+    auditoriaState.cuentaActual = { id: cuentaId, nombre: cuentaNombre };
+    document.getElementById('extractosCuentaNombre').textContent = cuentaNombre;
+    document.getElementById('modalExtractosMensuales').classList.remove('hidden');
+    await cargarExtractosMensuales(cuentaId);
+}
+
+/**
+ * Editar cuenta bancaria desde auditoría
+ */
+async function editarCuentaBancariaAuditoria(id) {
+    await editarCuentaBancaria(id);
+}
+
+/**
+ * Eliminar cuenta bancaria desde auditoría
+ */
+async function eliminarCuentaBancariaAuditoria(id) {
+    if (!confirm('¿Eliminar esta cuenta bancaria? También se eliminarán todos los extractos asociados.')) {
+        return;
+    }
+
+    const clienteId = auditoriaState.clienteActual?.id;
+
+    try {
+        if (supabase) {
+            await supabase.from('extractos_mensuales').delete().eq('cuenta_id', id);
+            const { error } = await supabase.from('cuentas_bancarias').delete().eq('id', id);
+            if (error) throw error;
+        } else {
+            const cuentas = JSON.parse(localStorage.getItem(`cuentas_bancarias_${clienteId}`) || '[]');
+            const nuevasCuentas = cuentas.filter(c => c.id !== id);
+            localStorage.setItem(`cuentas_bancarias_${clienteId}`, JSON.stringify(nuevasCuentas));
+            localStorage.removeItem(`extractos_${id}`);
+        }
+
+        await cargarCuentasConExtractos(clienteId);
+        alert('Cuenta bancaria eliminada');
+    } catch (error) {
+        console.error('Error eliminando cuenta:', error);
+        alert('Error al eliminar la cuenta bancaria');
+    }
+}
 
 // ============================================
 // GESTIÓN DE CUENTAS BANCARIAS
@@ -191,6 +565,7 @@ async function guardarCuentaBancaria() {
 
         cerrarNuevaCuentaBancaria();
         await cargarCuentasBancarias(clienteId);
+        await recargarDashboardAuditoriaSiVisible(); // Recargar dashboard si está visible
         alert(id ? 'Cuenta bancaria actualizada' : 'Cuenta bancaria creada');
     } catch (error) {
         console.error('Error guardando cuenta bancaria:', error);
@@ -549,6 +924,7 @@ async function procesarExtracto() {
 
         cerrarSubirExtracto();
         await cargarExtractosMensuales(cuentaId);
+        await recargarDashboardAuditoriaSiVisible(); // Recargar dashboard si está visible
         alert(`Extracto cargado: ${movimientos.length} movimientos`);
     } catch (error) {
         console.error('Error procesando extracto:', error);
@@ -580,6 +956,7 @@ async function eliminarExtracto(id) {
         }
 
         await cargarExtractosMensuales(cuentaId);
+        await recargarDashboardAuditoriaSiVisible(); // Recargar dashboard si está visible
         alert('Extracto eliminado');
     } catch (error) {
         console.error('Error eliminando extracto:', error);
@@ -994,6 +1371,12 @@ function descargarExtractoExcel() {
 // ============================================
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Event listener para botón de Auditoría en el menú
+    const btnAuditoria = document.getElementById('btnAuditoria');
+    if (btnAuditoria) {
+        btnAuditoria.addEventListener('click', abrirModalAuditoria);
+    }
+
     // Event listeners para filtros
     const filtroFecha = document.getElementById('filtroFecha');
     const filtroDescripcion = document.getElementById('filtroDescripcion');
@@ -1009,3 +1392,17 @@ document.addEventListener('DOMContentLoaded', () => {
         filtroOrigen.addEventListener('input', aplicarFiltrosExtracto);
     }
 });
+
+/**
+ * Recargar el dashboard de auditoría si está visible
+ */
+async function recargarDashboardAuditoriaSiVisible() {
+    const modalAuditoria = document.getElementById('modalAuditoria');
+    const dashboard = document.getElementById('auditoriaDashboard');
+
+    if (modalAuditoria && !modalAuditoria.classList.contains('hidden') &&
+        dashboard && dashboard.style.display !== 'none' &&
+        auditoriaState.clienteActual?.id) {
+        await cargarCuentasConExtractos(auditoriaState.clienteActual.id);
+    }
+}
