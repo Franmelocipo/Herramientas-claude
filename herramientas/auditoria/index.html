@@ -122,26 +122,13 @@
     <div id="modalSubirExtracto" class="modal hidden">
         <div class="modal-content-sm">
             <h3>Subir Extracto</h3>
-            <label>Mes:</label>
-            <select id="extractoMes" class="input-text mb-4">
-                <option value="1">Enero</option>
-                <option value="2">Febrero</option>
-                <option value="3">Marzo</option>
-                <option value="4">Abril</option>
-                <option value="5">Mayo</option>
-                <option value="6">Junio</option>
-                <option value="7">Julio</option>
-                <option value="8">Agosto</option>
-                <option value="9">Septiembre</option>
-                <option value="10">Octubre</option>
-                <option value="11">Noviembre</option>
-                <option value="12">Diciembre</option>
-            </select>
-            <label>Año:</label>
-            <input type="number" id="extractoAnio" placeholder="2024" class="input-text mb-4" min="2000" max="2100">
+            <div class="info-box mb-4">
+                <strong>📅 Detección automática:</strong> El mes y año se detectarán automáticamente de las fechas del archivo.
+            </div>
             <label>Archivo Excel:</label>
             <input type="file" id="extractoFile" accept=".xlsx,.xls" class="input-text mb-4" onchange="handleExtractoFileChange(event)">
             <div id="extractoFileInfo" class="file-info"></div>
+            <div id="extractoPreviewInfo" class="preview-info" style="display: none;"></div>
             <div class="btn-group">
                 <button onclick="cerrarSubirExtracto()" class="btn-secondary">Cancelar</button>
                 <button onclick="procesarExtracto()" class="btn-primary">Procesar y Guardar</button>
@@ -225,6 +212,22 @@
                 <button onclick="descargarExtractoExcel()" class="btn-template">📥 Descargar Excel</button>
             </div>
 
+            <!-- Barra de acciones para seleccionados (oculta por defecto) -->
+            <div id="barraSeleccionados" class="barra-seleccionados hidden">
+                <div class="seleccion-info">
+                    <span id="contadorSeleccionados">0 seleccionados</span>
+                    <button onclick="deseleccionarTodos()" class="btn-link">Deseleccionar todos</button>
+                </div>
+                <div class="seleccion-acciones">
+                    <select id="categoriaSeleccionados" class="input-text categoria-select-accion">
+                        <!-- Opciones se llenan dinámicamente -->
+                    </select>
+                    <button onclick="clasificarSeleccionados()" class="btn-primary btn-sm">🏷️ Clasificar</button>
+                    <button onclick="cambiarDescripcionSeleccionados()" class="btn-secondary btn-sm">✏️ Cambiar Descripción</button>
+                    <button onclick="eliminarSeleccionados()" class="btn-danger btn-sm">🗑️ Eliminar</button>
+                </div>
+            </div>
+
             <!-- Filtros de texto -->
             <div class="filtros-extracto">
                 <div class="filtro-item">
@@ -277,6 +280,9 @@
                     <table id="detalleExtractoTable" class="preview-table">
                         <thead>
                             <tr>
+                                <th class="checkbox-col">
+                                    <input type="checkbox" id="selectAllMovimientos" onchange="toggleSeleccionarTodos(this)" title="Seleccionar todos">
+                                </th>
                                 <th data-sort="categoria" onclick="ordenarPorColumna('categoria')" class="sortable categoria-col">Categoría <span class="sort-indicator">⇅</span></th>
                                 <th data-sort="fecha" onclick="ordenarPorColumna('fecha')" class="sortable">Fecha <span class="sort-indicator">⇅</span></th>
                                 <th data-sort="descripcion" onclick="ordenarPorColumna('descripcion')" class="sortable">Descripción <span class="sort-indicator">⇅</span></th>
