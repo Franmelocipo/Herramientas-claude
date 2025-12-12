@@ -4358,7 +4358,10 @@ const filterElements = {
     filterImportesDropdown: null,
     filterImportesBadge: null,
     btnAplicarFiltroImportes: null,
-    btnLimpiarFiltroImportes: null
+    btnLimpiarFiltroImportes: null,
+    // Elementos para plantillas de buscar/reemplazar
+    plantillasContainer: null,
+    btnGuardarPlantilla: null
 };
 
 // Inicializar elementos de filtro después de que el DOM esté listo
@@ -4390,6 +4393,9 @@ function initFilterElements() {
     filterElements.filterImportesBadge = document.getElementById('filterImportesBadge');
     filterElements.btnAplicarFiltroImportes = document.getElementById('btnAplicarFiltroImportes');
     filterElements.btnLimpiarFiltroImportes = document.getElementById('btnLimpiarFiltroImportes');
+    // Elementos para plantillas de buscar/reemplazar
+    filterElements.plantillasContainer = document.getElementById('plantillasContainer');
+    filterElements.btnGuardarPlantilla = document.getElementById('btnGuardarPlantilla');
 
     attachFilterEventListeners();
 }
@@ -4463,6 +4469,11 @@ function attachFilterEventListeners() {
     }
     if (filterElements.btnReemplazarTodos) {
         filterElements.btnReemplazarTodos.addEventListener('click', replaceAll);
+    }
+
+    // Botón guardar plantilla
+    if (filterElements.btnGuardarPlantilla) {
+        filterElements.btnGuardarPlantilla.addEventListener('click', guardarPlantillaBuscarReemplazar);
     }
 
     // Atajo de teclado Ctrl+H
@@ -4855,6 +4866,9 @@ function openSearchReplaceModal() {
     filterState.searchCurrentIndex = -1;
     filterState.searchMatches = [];
 
+    // Cargar plantillas guardadas para el banco/cliente actual
+    renderizarPlantillas();
+
     setTimeout(() => filterElements.inputBuscar.focus(), 100);
 }
 
@@ -5064,6 +5078,227 @@ function replaceInText(text, search, replace, caseSensitive, wholeWord) {
     }
 
     return text.replace(pattern, replace);
+}
+
+// ============================================
+// PLANTILLAS DE BUSCAR Y REEMPLAZAR
+// ============================================
+
+const PLANTILLAS_STORAGE_KEY = 'buscar_reemplazar_plantillas';
+
+// Obtener todas las plantillas desde localStorage
+function obtenerPlantillasGuardadas() {
+    try {
+        const stored = localStorage.getItem(PLANTILLAS_STORAGE_KEY);
+        return stored ? JSON.parse(stored) : { bancos: {} };
+    } catch (e) {
+        console.error('Error al cargar plantillas:', e);
+        return { bancos: {} };
+    }
+}
+
+// Guardar plantillas en localStorage
+function guardarPlantillasEnStorage(data) {
+    try {
+        localStorage.setItem(PLANTILLAS_STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {
+        console.error('Error al guardar plantillas:', e);
+    }
+}
+
+// Obtener plantillas para el banco y cliente actual
+function obtenerPlantillasActuales() {
+    const data = obtenerPlantillasGuardadas();
+    const bancoId = state.selectedBank || 'general';
+    const clienteId = clienteSeleccionadoId || 'general';
+
+    const plantillas = [];
+
+    // Plantillas del banco para este cliente específico
+    if (data.bancos[bancoId]?.clientes?.[clienteId]?.plantillas) {
+        data.bancos[bancoId].clientes[clienteId].plantillas.forEach(p => {
+            plantillas.push({ ...p, scope: 'cliente' });
+        });
+    }
+
+    // Plantillas generales del banco (para todos los clientes)
+    if (data.bancos[bancoId]?.plantillasGenerales) {
+        data.bancos[bancoId].plantillasGenerales.forEach(p => {
+            plantillas.push({ ...p, scope: 'banco' });
+        });
+    }
+
+    return plantillas;
+}
+
+// Guardar una nueva plantilla
+function guardarPlantillaBuscarReemplazar() {
+    const buscar = filterElements.inputBuscar.value.trim();
+    const reemplazar = filterElements.inputReemplazar.value;
+
+    if (!buscar) {
+        showError('Ingrese un texto a buscar para guardar la plantilla');
+        return;
+    }
+
+    if (!state.selectedBank) {
+        showError('Primero seleccione un banco');
+        return;
+    }
+
+    // Preguntar si es para este cliente o para todo el banco
+    const tieneCliente = clienteSeleccionadoId !== null;
+    let scope = 'banco';
+
+    if (tieneCliente) {
+        const resultado = confirm(
+            `¿Guardar plantilla para "${clienteSeleccionadoNombre}"?\n\n` +
+            `Aceptar = Solo para este cliente\n` +
+            `Cancelar = Para todos los clientes de este banco`
+        );
+        scope = resultado ? 'cliente' : 'banco';
+    }
+
+    // Solicitar nombre para la plantilla
+    const nombreDefault = buscar.substring(0, 30) + (buscar.length > 30 ? '...' : '');
+    const nombre = prompt('Nombre para la plantilla:', nombreDefault);
+
+    if (!nombre) return;
+
+    const data = obtenerPlantillasGuardadas();
+    const bancoId = state.selectedBank;
+
+    // Asegurar estructura
+    if (!data.bancos[bancoId]) {
+        data.bancos[bancoId] = { clientes: {}, plantillasGenerales: [] };
+    }
+
+    const nuevaPlantilla = {
+        id: Date.now().toString(),
+        nombre: nombre,
+        buscar: buscar,
+        reemplazar: reemplazar,
+        caseSensitive: filterElements.chkCaseSensitive.checked,
+        wholeWord: filterElements.chkPalabraCompleta.checked
+    };
+
+    if (scope === 'cliente' && clienteSeleccionadoId) {
+        if (!data.bancos[bancoId].clientes[clienteSeleccionadoId]) {
+            data.bancos[bancoId].clientes[clienteSeleccionadoId] = {
+                nombre: clienteSeleccionadoNombre,
+                plantillas: []
+            };
+        }
+        data.bancos[bancoId].clientes[clienteSeleccionadoId].plantillas.push(nuevaPlantilla);
+    } else {
+        data.bancos[bancoId].plantillasGenerales.push(nuevaPlantilla);
+    }
+
+    guardarPlantillasEnStorage(data);
+    renderizarPlantillas();
+    showSuccess(`Plantilla "${nombre}" guardada correctamente`);
+}
+
+// Eliminar una plantilla
+function eliminarPlantilla(plantillaId, scope) {
+    if (!confirm('¿Eliminar esta plantilla?')) return;
+
+    const data = obtenerPlantillasGuardadas();
+    const bancoId = state.selectedBank;
+
+    if (scope === 'cliente' && clienteSeleccionadoId) {
+        const plantillas = data.bancos[bancoId]?.clientes?.[clienteSeleccionadoId]?.plantillas;
+        if (plantillas) {
+            const idx = plantillas.findIndex(p => p.id === plantillaId);
+            if (idx !== -1) {
+                plantillas.splice(idx, 1);
+            }
+        }
+    } else {
+        const plantillas = data.bancos[bancoId]?.plantillasGenerales;
+        if (plantillas) {
+            const idx = plantillas.findIndex(p => p.id === plantillaId);
+            if (idx !== -1) {
+                plantillas.splice(idx, 1);
+            }
+        }
+    }
+
+    guardarPlantillasEnStorage(data);
+    renderizarPlantillas();
+    showSuccess('Plantilla eliminada');
+}
+
+// Aplicar una plantilla a los campos del modal
+function aplicarPlantilla(plantilla) {
+    filterElements.inputBuscar.value = plantilla.buscar;
+    filterElements.inputReemplazar.value = plantilla.reemplazar;
+    filterElements.chkCaseSensitive.checked = plantilla.caseSensitive || false;
+    filterElements.chkPalabraCompleta.checked = plantilla.wholeWord || false;
+
+    // Actualizar la búsqueda
+    updateSearchCount();
+}
+
+// Renderizar las plantillas en el contenedor
+function renderizarPlantillas() {
+    const container = filterElements.plantillasContainer;
+    if (!container) return;
+
+    const plantillas = obtenerPlantillasActuales();
+
+    if (plantillas.length === 0) {
+        container.innerHTML = '<span class="plantillas-empty">No hay plantillas guardadas para este banco/cliente</span>';
+        return;
+    }
+
+    container.innerHTML = '';
+
+    plantillas.forEach(plantilla => {
+        const item = document.createElement('div');
+        item.className = 'plantilla-item';
+        item.title = `Buscar: "${plantilla.buscar}"\nReemplazar: "${plantilla.reemplazar}"`;
+
+        const scopeBadge = plantilla.scope === 'cliente'
+            ? '<span class="plantilla-scope-badge cliente">Cliente</span>'
+            : '<span class="plantilla-scope-badge banco">Banco</span>';
+
+        const previewText = plantilla.reemplazar
+            ? `"${plantilla.buscar.substring(0, 20)}..." → "${plantilla.reemplazar.substring(0, 20)}..."`
+            : `Eliminar: "${plantilla.buscar.substring(0, 25)}..."`;
+
+        item.innerHTML = `
+            <div class="plantilla-info">
+                <div class="plantilla-nombre">${escapeHtml(plantilla.nombre)}</div>
+                <div class="plantilla-preview">${escapeHtml(previewText)}</div>
+            </div>
+            ${scopeBadge}
+            <button class="plantilla-delete" title="Eliminar plantilla">&times;</button>
+        `;
+
+        // Click en el item para aplicar
+        item.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('plantilla-delete')) {
+                aplicarPlantilla(plantilla);
+            }
+        });
+
+        // Click en eliminar
+        const deleteBtn = item.querySelector('.plantilla-delete');
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            eliminarPlantilla(plantilla.id, plantilla.scope);
+        });
+
+        container.appendChild(item);
+    });
+}
+
+// Función helper para escapar HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Sobrescribir la función renderPreview original para usar la nueva
