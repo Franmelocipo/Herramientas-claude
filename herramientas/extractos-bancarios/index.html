@@ -252,6 +252,19 @@
                         <button id="btnCerrarModal" class="modal-close-btn">&times;</button>
                     </div>
                     <div class="modal-body">
+                        <!-- Sección de plantillas guardadas -->
+                        <div class="plantillas-section">
+                            <div class="plantillas-header">
+                                <label>Plantillas guardadas:</label>
+                                <button id="btnGuardarPlantilla" class="btn-plantilla" title="Guardar plantilla actual">
+                                    <span>+</span> Guardar
+                                </button>
+                            </div>
+                            <div id="plantillasContainer" class="plantillas-container">
+                                <span class="plantillas-empty">No hay plantillas guardadas para este banco/cliente</span>
+                            </div>
+                        </div>
+
                         <div class="modal-field">
                             <label for="inputBuscar">Buscar:</label>
                             <input type="text" id="inputBuscar" placeholder="Texto a buscar..." class="modal-input">
