@@ -19,7 +19,20 @@ let state = {
     toleranciaFecha: 30,
     toleranciaImporte: 20000,
     resultados: null,
-    eliminados: [] // Movimientos del Mayor eliminados del proceso de conciliación
+    eliminados: [], // Movimientos del Mayor eliminados del proceso de conciliación
+    // Integración con auditoría
+    fuenteExtracto: 'archivo', // 'archivo' o 'auditoria'
+    clienteSeleccionado: null,
+    cuentaSeleccionada: null,
+    extractosAuditoria: [], // Extractos cargados desde auditoría
+    rangoExtractos: { desde: null, hasta: null }
+};
+
+// Cache de datos de auditoría
+let auditoriaCache = {
+    clientes: [],
+    cuentas: [],
+    extractosDisponibles: []
 };
 
 // Estado de selección para conciliación manual
@@ -246,6 +259,9 @@ function init() {
     elements.btnLimpiarSeleccion.addEventListener('click', limpiarSeleccion);
     elements.selectAllMayor.addEventListener('change', (e) => seleccionarTodosMayor(e.target.checked));
     elements.selectAllExtracto.addEventListener('change', (e) => seleccionarTodosExtracto(e.target.checked));
+
+    // Inicializar integración con auditoría
+    initAuditoriaIntegration();
 }
 
 // ========== SELECCIÓN DE TIPO ==========
@@ -263,6 +279,469 @@ function seleccionarTipo(tipo) {
     elements.stepTolerancias.classList.remove('hidden');
 
     actualizarBotonConciliar();
+}
+
+// ========== INTEGRACIÓN CON AUDITORÍA ==========
+
+/**
+ * Inicializar la integración con auditoría
+ */
+async function initAuditoriaIntegration() {
+    // Cargar clientes al inicio (en background)
+    try {
+        await cargarClientesAuditoria();
+    } catch (error) {
+        console.warn('No se pudieron cargar los clientes de auditoría:', error);
+    }
+}
+
+/**
+ * Cambiar entre fuente de extracto (archivo o auditoría)
+ */
+function cambiarFuenteExtracto() {
+    const fuente = document.querySelector('input[name="fuenteExtracto"]:checked').value;
+    state.fuenteExtracto = fuente;
+
+    const archivoSection = document.getElementById('extractoArchivoSection');
+    const auditoriaSection = document.getElementById('extractoAuditoriaSection');
+
+    if (fuente === 'archivo') {
+        archivoSection.classList.remove('hidden');
+        auditoriaSection.classList.add('hidden');
+    } else {
+        archivoSection.classList.add('hidden');
+        auditoriaSection.classList.remove('hidden');
+        // Cargar clientes si no están cargados
+        if (auditoriaCache.clientes.length === 0) {
+            cargarClientesAuditoria();
+        }
+    }
+
+    // Limpiar extractos cuando se cambia de fuente
+    state.datosExtracto = [];
+    state.extractosAuditoria = [];
+    actualizarBotonConciliar();
+}
+
+/**
+ * Cargar clientes desde Supabase para el selector
+ */
+async function cargarClientesAuditoria() {
+    const select = document.getElementById('clienteSelect');
+    if (!select) return;
+
+    try {
+        let supabaseClient = null;
+
+        if (typeof waitForSupabase === 'function') {
+            supabaseClient = await waitForSupabase();
+        } else if (typeof supabase !== 'undefined' && supabase) {
+            supabaseClient = supabase;
+        }
+
+        if (!supabaseClient) {
+            console.warn('Supabase no disponible');
+            return;
+        }
+
+        const { data, error } = await supabaseClient
+            .from('clientes')
+            .select('*')
+            .order('razon_social');
+
+        if (error) throw error;
+
+        auditoriaCache.clientes = data || [];
+        renderizarSelectClientes(auditoriaCache.clientes);
+        console.log('Clientes de auditoría cargados:', auditoriaCache.clientes.length);
+    } catch (error) {
+        console.error('Error cargando clientes:', error);
+        actualizarEstadoAuditoria('error', 'Error al cargar clientes');
+    }
+}
+
+/**
+ * Renderizar opciones del selector de clientes
+ */
+function renderizarSelectClientes(clientes) {
+    const select = document.getElementById('clienteSelect');
+    if (!select) return;
+
+    select.innerHTML = '<option value="">-- Seleccione un cliente --</option>' +
+        clientes.map(c => `<option value="${c.id}">${c.razon_social}${c.cuit ? ` (${c.cuit})` : ''}</option>`).join('');
+}
+
+/**
+ * Filtrar clientes en el selector
+ */
+function filtrarClientesConciliador() {
+    const busqueda = document.getElementById('clienteSearch')?.value.toLowerCase() || '';
+    const clientes = auditoriaCache.clientes;
+
+    const filtrados = clientes.filter(c => {
+        const nombre = (c.razon_social || '').toLowerCase();
+        const cuit = (c.cuit || '').toLowerCase();
+        return nombre.includes(busqueda) || cuit.includes(busqueda);
+    });
+
+    renderizarSelectClientes(filtrados);
+}
+
+/**
+ * Cargar cuentas bancarias del cliente seleccionado
+ */
+async function cargarCuentasCliente() {
+    const clienteId = document.getElementById('clienteSelect')?.value;
+    const cuentaSelect = document.getElementById('cuentaSelect');
+    const rangoDesde = document.getElementById('rangoDesde');
+    const rangoHasta = document.getElementById('rangoHasta');
+
+    if (!cuentaSelect) return;
+
+    // Limpiar selecciones anteriores
+    cuentaSelect.innerHTML = '<option value="">-- Seleccione una cuenta --</option>';
+    cuentaSelect.disabled = true;
+    rangoDesde.innerHTML = '<option value="">-- Mes/Año --</option>';
+    rangoDesde.disabled = true;
+    rangoHasta.innerHTML = '<option value="">-- Mes/Año --</option>';
+    rangoHasta.disabled = true;
+
+    // Ocultar preview
+    document.getElementById('previewExtractoAuditoria')?.classList.add('hidden');
+
+    if (!clienteId) {
+        state.clienteSeleccionado = null;
+        auditoriaCache.cuentas = [];
+        actualizarEstadoAuditoria('info', 'Seleccione un cliente para ver sus cuentas bancarias');
+        return;
+    }
+
+    // Guardar cliente seleccionado
+    const clienteOption = document.getElementById('clienteSelect').selectedOptions[0];
+    state.clienteSeleccionado = {
+        id: clienteId,
+        nombre: clienteOption.text
+    };
+
+    actualizarEstadoAuditoria('loading', 'Cargando cuentas bancarias...');
+
+    try {
+        let supabaseClient = typeof supabase !== 'undefined' ? supabase : null;
+        if (!supabaseClient) {
+            throw new Error('Supabase no disponible');
+        }
+
+        const { data, error } = await supabaseClient
+            .from('cuentas_bancarias')
+            .select('*')
+            .eq('cliente_id', clienteId)
+            .order('banco');
+
+        if (error) throw error;
+
+        auditoriaCache.cuentas = data || [];
+
+        if (auditoriaCache.cuentas.length === 0) {
+            actualizarEstadoAuditoria('info', 'Este cliente no tiene cuentas bancarias configuradas');
+            return;
+        }
+
+        // Renderizar opciones
+        cuentaSelect.innerHTML = '<option value="">-- Seleccione una cuenta --</option>' +
+            auditoriaCache.cuentas.map(c =>
+                `<option value="${c.id}">${c.banco} - ${c.tipo_cuenta || 'Cuenta'}${c.numero_cuenta ? ` (${c.numero_cuenta})` : ''}</option>`
+            ).join('');
+        cuentaSelect.disabled = false;
+
+        actualizarEstadoAuditoria('info', `${auditoriaCache.cuentas.length} cuenta(s) encontrada(s). Seleccione una cuenta.`);
+    } catch (error) {
+        console.error('Error cargando cuentas:', error);
+        actualizarEstadoAuditoria('error', 'Error al cargar las cuentas bancarias');
+    }
+}
+
+/**
+ * Cargar extractos disponibles para la cuenta seleccionada
+ */
+async function cargarExtractosDisponibles() {
+    const cuentaId = document.getElementById('cuentaSelect')?.value;
+    const rangoDesde = document.getElementById('rangoDesde');
+    const rangoHasta = document.getElementById('rangoHasta');
+
+    // Limpiar rangos
+    rangoDesde.innerHTML = '<option value="">-- Mes/Año --</option>';
+    rangoDesde.disabled = true;
+    rangoHasta.innerHTML = '<option value="">-- Mes/Año --</option>';
+    rangoHasta.disabled = true;
+
+    // Ocultar preview
+    document.getElementById('previewExtractoAuditoria')?.classList.add('hidden');
+
+    if (!cuentaId) {
+        state.cuentaSeleccionada = null;
+        auditoriaCache.extractosDisponibles = [];
+        actualizarEstadoAuditoria('info', 'Seleccione una cuenta bancaria');
+        return;
+    }
+
+    // Guardar cuenta seleccionada
+    const cuentaOption = document.getElementById('cuentaSelect').selectedOptions[0];
+    state.cuentaSeleccionada = {
+        id: cuentaId,
+        nombre: cuentaOption.text
+    };
+
+    actualizarEstadoAuditoria('loading', 'Cargando extractos disponibles...');
+
+    try {
+        let supabaseClient = typeof supabase !== 'undefined' ? supabase : null;
+        if (!supabaseClient) {
+            throw new Error('Supabase no disponible');
+        }
+
+        const { data, error } = await supabaseClient
+            .from('extractos_mensuales')
+            .select('id, mes, anio, data')
+            .eq('cuenta_id', cuentaId)
+            .order('anio', { ascending: false })
+            .order('mes', { ascending: false });
+
+        if (error) throw error;
+
+        auditoriaCache.extractosDisponibles = data || [];
+
+        if (auditoriaCache.extractosDisponibles.length === 0) {
+            actualizarEstadoAuditoria('info', 'Esta cuenta no tiene extractos cargados. Cargue extractos desde la herramienta de Auditoría.');
+            return;
+        }
+
+        // Generar opciones de rango
+        const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+        const opciones = auditoriaCache.extractosDisponibles.map(ext => {
+            const movimientos = (ext.data || []).length;
+            return `<option value="${ext.anio}-${ext.mes}">${mesesNombres[ext.mes - 1]} ${ext.anio} (${movimientos} mov.)</option>`;
+        }).join('');
+
+        rangoDesde.innerHTML = '<option value="">-- Mes/Año --</option>' + opciones;
+        rangoDesde.disabled = false;
+        rangoHasta.innerHTML = '<option value="">-- Mes/Año --</option>' + opciones;
+        rangoHasta.disabled = false;
+
+        actualizarEstadoAuditoria('success', `${auditoriaCache.extractosDisponibles.length} extracto(s) disponible(s). Seleccione el período a conciliar.`);
+    } catch (error) {
+        console.error('Error cargando extractos:', error);
+        actualizarEstadoAuditoria('error', 'Error al cargar los extractos');
+    }
+}
+
+/**
+ * Actualizar extractos seleccionados basado en el rango
+ */
+async function actualizarExtractosSeleccionados() {
+    const desdeValue = document.getElementById('rangoDesde')?.value;
+    const hastaValue = document.getElementById('rangoHasta')?.value;
+
+    // Si no hay rango seleccionado
+    if (!desdeValue && !hastaValue) {
+        document.getElementById('previewExtractoAuditoria')?.classList.add('hidden');
+        state.datosExtracto = [];
+        state.extractosAuditoria = [];
+        actualizarBotonConciliar();
+        return;
+    }
+
+    // Si solo hay uno seleccionado, usar ese como ambos límites
+    const desde = desdeValue || hastaValue;
+    const hasta = hastaValue || desdeValue;
+
+    // Parsear valores
+    const [anioDesde, mesDesde] = desde.split('-').map(Number);
+    const [anioHasta, mesHasta] = hasta.split('-').map(Number);
+
+    // Filtrar extractos en el rango
+    const extractosEnRango = auditoriaCache.extractosDisponibles.filter(ext => {
+        const fechaExt = ext.anio * 100 + ext.mes;
+        const fechaDesde = anioDesde * 100 + mesDesde;
+        const fechaHasta = anioHasta * 100 + mesHasta;
+
+        // El rango puede estar invertido
+        const min = Math.min(fechaDesde, fechaHasta);
+        const max = Math.max(fechaDesde, fechaHasta);
+
+        return fechaExt >= min && fechaExt <= max;
+    });
+
+    if (extractosEnRango.length === 0) {
+        actualizarEstadoAuditoria('error', 'No hay extractos en el rango seleccionado');
+        document.getElementById('previewExtractoAuditoria')?.classList.add('hidden');
+        state.datosExtracto = [];
+        actualizarBotonConciliar();
+        return;
+    }
+
+    // Combinar todos los movimientos de los extractos en el rango
+    let todosLosMovimientos = [];
+    for (const extracto of extractosEnRango) {
+        const movimientos = extracto.data || [];
+        // Agregar información del extracto a cada movimiento
+        movimientos.forEach((mov, idx) => {
+            todosLosMovimientos.push({
+                ...mov,
+                extractoId: extracto.id,
+                extractoMes: extracto.mes,
+                extractoAnio: extracto.anio
+            });
+        });
+    }
+
+    // Convertir al formato que espera el conciliador
+    state.datosExtracto = convertirMovimientosAuditoria(todosLosMovimientos);
+    state.extractosAuditoria = extractosEnRango;
+    state.rangoExtractos = { desde, hasta };
+
+    // Mostrar preview
+    mostrarPreviewExtractoAuditoria(extractosEnRango, state.datosExtracto.length);
+
+    actualizarBotonConciliar();
+}
+
+/**
+ * Convertir movimientos de auditoría al formato del conciliador
+ */
+function convertirMovimientosAuditoria(movimientos) {
+    return movimientos.map((mov, index) => {
+        // Parsear fecha
+        let fecha = null;
+        if (mov.fecha) {
+            fecha = parsearFecha(mov.fecha);
+        }
+
+        // Parsear importes
+        const debito = parsearImporte(mov.debito) || 0;
+        const credito = parsearImporte(mov.credito) || 0;
+
+        return {
+            id: `EA${index}`, // EA = Extracto Auditoría
+            fecha: fecha,
+            descripcion: mov.descripcion || '',
+            origen: mov.origen || '',
+            debito: debito,
+            credito: credito,
+            importe: debito > 0 ? debito : credito,
+            esDebito: debito > 0,
+            usado: false,
+            // Información adicional de auditoría
+            extractoId: mov.extractoId,
+            extractoMes: mov.extractoMes,
+            extractoAnio: mov.extractoAnio,
+            categoriaId: mov.categoria_id || null,
+            marcadores: mov.marcadores || []
+        };
+    });
+}
+
+/**
+ * Mostrar preview de extractos de auditoría seleccionados
+ */
+function mostrarPreviewExtractoAuditoria(extractos, totalMovimientos) {
+    const preview = document.getElementById('previewExtractoAuditoria');
+    const clienteNombre = document.getElementById('extractoClienteNombre');
+    const cuentaNombre = document.getElementById('extractoCuentaNombre');
+    const periodo = document.getElementById('extractoPeriodo');
+    const recordCount = document.getElementById('recordCountExtractoAuditoria');
+
+    if (!preview) return;
+
+    const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                         'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+    // Información del cliente y cuenta
+    clienteNombre.textContent = state.clienteSeleccionado?.nombre || '';
+    cuentaNombre.textContent = state.cuentaSeleccionada?.nombre || '';
+
+    // Período
+    if (extractos.length === 1) {
+        const ext = extractos[0];
+        periodo.textContent = `${mesesNombres[ext.mes - 1]} ${ext.anio}`;
+    } else {
+        // Ordenar para mostrar el rango
+        const sorted = [...extractos].sort((a, b) => (a.anio * 100 + a.mes) - (b.anio * 100 + b.mes));
+        const primero = sorted[0];
+        const ultimo = sorted[sorted.length - 1];
+        periodo.textContent = `${mesesNombres[primero.mes - 1]} ${primero.anio} - ${mesesNombres[ultimo.mes - 1]} ${ultimo.anio}`;
+    }
+
+    // Cantidad de movimientos
+    recordCount.textContent = `${totalMovimientos} movimientos`;
+
+    // Mostrar preview
+    preview.classList.remove('hidden');
+
+    // Ocultar status
+    document.getElementById('extractoAuditoriaStatus')?.classList.add('hidden');
+}
+
+/**
+ * Limpiar extracto de auditoría seleccionado
+ */
+function limpiarExtractoAuditoria() {
+    // Limpiar selectores de rango
+    const rangoDesde = document.getElementById('rangoDesde');
+    const rangoHasta = document.getElementById('rangoHasta');
+
+    if (rangoDesde) rangoDesde.value = '';
+    if (rangoHasta) rangoHasta.value = '';
+
+    // Limpiar estado
+    state.datosExtracto = [];
+    state.extractosAuditoria = [];
+    state.rangoExtractos = { desde: null, hasta: null };
+
+    // Ocultar preview
+    document.getElementById('previewExtractoAuditoria')?.classList.add('hidden');
+
+    // Mostrar status
+    actualizarEstadoAuditoria('info', 'Seleccione el período a conciliar');
+
+    actualizarBotonConciliar();
+}
+
+/**
+ * Actualizar el estado/mensaje de la sección de auditoría
+ */
+function actualizarEstadoAuditoria(tipo, mensaje) {
+    const status = document.getElementById('extractoAuditoriaStatus');
+    if (!status) return;
+
+    const icon = status.querySelector('.status-icon');
+    const text = status.querySelector('.status-text');
+
+    // Resetear clases
+    status.classList.remove('error', 'success', 'loading', 'hidden');
+
+    switch (tipo) {
+        case 'error':
+            status.classList.add('error');
+            icon.textContent = '❌';
+            break;
+        case 'success':
+            status.classList.add('success');
+            icon.textContent = '✅';
+            break;
+        case 'loading':
+            status.classList.add('loading');
+            icon.textContent = '⏳';
+            break;
+        case 'info':
+        default:
+            icon.textContent = 'ℹ️';
+            break;
+    }
+
+    text.textContent = mensaje;
+    status.classList.remove('hidden');
 }
 
 // ========== CARGA DE ARCHIVOS ==========
@@ -3179,7 +3658,13 @@ function reiniciar() {
         toleranciaFecha: 30,
         toleranciaImporte: 20000,
         resultados: null,
-        eliminados: []
+        eliminados: [],
+        // Integración con auditoría
+        fuenteExtracto: 'archivo',
+        clienteSeleccionado: null,
+        cuentaSeleccionada: null,
+        extractosAuditoria: [],
+        rangoExtractos: { desde: null, hasta: null }
     };
 
     // Resetear selección y contador
@@ -3228,6 +3713,56 @@ function reiniciar() {
     if (elements.historialProcesamiento) {
         elements.historialProcesamiento.classList.add('hidden');
     }
+
+    // Resetear integración con auditoría
+    resetearAuditoria();
+}
+
+/**
+ * Resetear la sección de auditoría
+ */
+function resetearAuditoria() {
+    // Resetear radios a archivo
+    const radioArchivo = document.querySelector('input[name="fuenteExtracto"][value="archivo"]');
+    if (radioArchivo) {
+        radioArchivo.checked = true;
+    }
+
+    // Mostrar sección archivo, ocultar auditoría
+    const archivoSection = document.getElementById('extractoArchivoSection');
+    const auditoriaSection = document.getElementById('extractoAuditoriaSection');
+    if (archivoSection) archivoSection.classList.remove('hidden');
+    if (auditoriaSection) auditoriaSection.classList.add('hidden');
+
+    // Resetear selectores de auditoría
+    const clienteSelect = document.getElementById('clienteSelect');
+    const cuentaSelect = document.getElementById('cuentaSelect');
+    const rangoDesde = document.getElementById('rangoDesde');
+    const rangoHasta = document.getElementById('rangoHasta');
+
+    if (clienteSelect) clienteSelect.value = '';
+    if (cuentaSelect) {
+        cuentaSelect.innerHTML = '<option value="">-- Seleccione una cuenta --</option>';
+        cuentaSelect.disabled = true;
+    }
+    if (rangoDesde) {
+        rangoDesde.innerHTML = '<option value="">-- Mes/Año --</option>';
+        rangoDesde.disabled = true;
+    }
+    if (rangoHasta) {
+        rangoHasta.innerHTML = '<option value="">-- Mes/Año --</option>';
+        rangoHasta.disabled = true;
+    }
+
+    // Ocultar preview
+    document.getElementById('previewExtractoAuditoria')?.classList.add('hidden');
+
+    // Resetear estado del status
+    actualizarEstadoAuditoria('info', 'Seleccione un cliente y cuenta para cargar los extractos disponibles');
+
+    // Limpiar cache de cuentas y extractos
+    auditoriaCache.cuentas = [];
+    auditoriaCache.extractosDisponibles = [];
 }
 
 // ========== REPROCESAMIENTO DE PENDIENTES ==========
