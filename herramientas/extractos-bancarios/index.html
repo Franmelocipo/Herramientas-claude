@@ -175,6 +175,30 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Botón limpiar filtros (visible en toolbar) -->
+                    <button id="btnLimpiarFiltrosGlobal" class="toolbar-btn toolbar-btn-clear hidden" title="Limpiar todos los filtros">
+                        <span class="toolbar-icon">✖</span>
+                        <span>Limpiar filtros</span>
+                    </button>
+
+                    <!-- Separador -->
+                    <div class="toolbar-separator"></div>
+
+                    <!-- Botón eliminar seleccionados -->
+                    <button id="btnEliminarSeleccionados" class="toolbar-btn toolbar-btn-danger hidden" title="Eliminar movimientos seleccionados">
+                        <span class="toolbar-icon">🗑️</span>
+                        <span>Eliminar (<span id="contadorSeleccionados">0</span>)</span>
+                    </button>
+
+                    <!-- Espaciador flexible -->
+                    <div class="toolbar-spacer"></div>
+
+                    <!-- Botón enviar a auditoría -->
+                    <button id="btnEnviarAuditoria" class="toolbar-btn toolbar-btn-audit" title="Enviar movimientos a herramienta de auditoría">
+                        <span class="toolbar-icon">📊</span>
+                        <span>Enviar a Auditoría</span>
+                    </button>
                 </div>
 
                 <div class="table-wrapper">
@@ -227,6 +251,148 @@
                     </div>
                 </div>
             </div>
+            <!-- Modal de Enviar a Auditoría -->
+            <div id="modalEnviarAuditoria" class="modal-overlay hidden">
+                <div class="modal-auditoria">
+                    <div class="modal-header">
+                        <h3>Enviar a Auditoría</h3>
+                        <button id="btnCerrarModalAuditoria" class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Paso 1: Selección de cliente y cuenta -->
+                        <div id="auditoriaStep1" class="auditoria-step">
+                            <div class="auditoria-info-box">
+                                <span class="auditoria-info-icon">ℹ️</span>
+                                <p>Los movimientos se enviarán a la herramienta de Auditoría para su clasificación y análisis.</p>
+                            </div>
+
+                            <div class="modal-field">
+                                <label for="auditoriaCliente">Cliente:</label>
+                                <select id="auditoriaCliente" class="modal-select">
+                                    <option value="">-- Cargando clientes... --</option>
+                                </select>
+                            </div>
+
+                            <div class="modal-field">
+                                <label for="auditoriaCuenta">Cuenta bancaria:</label>
+                                <select id="auditoriaCuenta" class="modal-select" disabled>
+                                    <option value="">-- Seleccione un cliente primero --</option>
+                                </select>
+                                <button id="btnNuevaCuentaAuditoria" class="btn-link-small hidden">+ Crear nueva cuenta</button>
+                            </div>
+
+                            <div class="modal-field">
+                                <label>Período detectado:</label>
+                                <div class="auditoria-periodo">
+                                    <select id="auditoriaMes" class="modal-select modal-select-sm">
+                                        <option value="1">Enero</option>
+                                        <option value="2">Febrero</option>
+                                        <option value="3">Marzo</option>
+                                        <option value="4">Abril</option>
+                                        <option value="5">Mayo</option>
+                                        <option value="6">Junio</option>
+                                        <option value="7">Julio</option>
+                                        <option value="8">Agosto</option>
+                                        <option value="9">Septiembre</option>
+                                        <option value="10">Octubre</option>
+                                        <option value="11">Noviembre</option>
+                                        <option value="12">Diciembre</option>
+                                    </select>
+                                    <select id="auditoriaAnio" class="modal-select modal-select-sm">
+                                        <!-- Se llenan dinámicamente -->
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div id="auditoriaResumen" class="auditoria-resumen">
+                                <div class="resumen-row">
+                                    <span>Movimientos a enviar:</span>
+                                    <strong id="auditoriaMovCount">0</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Paso 2: Advertencia de datos existentes -->
+                        <div id="auditoriaStep2" class="auditoria-step hidden">
+                            <div class="auditoria-warning-box">
+                                <span class="auditoria-warning-icon">⚠️</span>
+                                <h4>¡Atención! Ya existen datos para este período</h4>
+                                <p id="auditoriaWarningDetail">Se encontraron <strong id="auditoriaExistingCount">0</strong> movimientos existentes para <span id="auditoriaPeriodoExistente"></span>.</p>
+                            </div>
+
+                            <div class="auditoria-action-options">
+                                <label class="auditoria-option">
+                                    <input type="radio" name="auditoriaAction" value="replace" checked>
+                                    <div class="option-content">
+                                        <strong>Reemplazar datos existentes</strong>
+                                        <span>Se eliminarán los movimientos actuales y se cargarán los nuevos</span>
+                                    </div>
+                                </label>
+                                <label class="auditoria-option">
+                                    <input type="radio" name="auditoriaAction" value="merge">
+                                    <div class="option-content">
+                                        <strong>Combinar con datos existentes</strong>
+                                        <span>Se agregarán los nuevos movimientos a los existentes</span>
+                                    </div>
+                                </label>
+                                <label class="auditoria-option">
+                                    <input type="radio" name="auditoriaAction" value="cancel">
+                                    <div class="option-content">
+                                        <strong>Cancelar operación</strong>
+                                        <span>No se realizarán cambios</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Paso 3: Modal para crear nueva cuenta -->
+                        <div id="auditoriaStep3" class="auditoria-step hidden">
+                            <h4>Crear nueva cuenta bancaria</h4>
+                            <div class="modal-field">
+                                <label for="nuevaCuentaBanco">Banco:</label>
+                                <input type="text" id="nuevaCuentaBanco" class="modal-input" placeholder="Ej: Banco Galicia">
+                            </div>
+                            <div class="modal-field">
+                                <label for="nuevaCuentaTipo">Tipo de cuenta:</label>
+                                <select id="nuevaCuentaTipo" class="modal-select">
+                                    <option value="Cuenta Corriente">Cuenta Corriente</option>
+                                    <option value="Caja de Ahorro">Caja de Ahorro</option>
+                                    <option value="Cuenta Única">Cuenta Única</option>
+                                </select>
+                            </div>
+                            <div class="modal-field">
+                                <label for="nuevaCuentaNumero">Número de cuenta (opcional):</label>
+                                <input type="text" id="nuevaCuentaNumero" class="modal-input" placeholder="Ej: 123-456789/0">
+                            </div>
+                            <div class="modal-field">
+                                <label for="nuevaCuentaAlias">Alias (opcional):</label>
+                                <input type="text" id="nuevaCuentaAlias" class="modal-input" placeholder="Ej: MI.ALIAS.CBU">
+                            </div>
+                        </div>
+
+                        <!-- Estado de progreso -->
+                        <div id="auditoriaProgress" class="auditoria-progress hidden">
+                            <div class="progress-spinner"></div>
+                            <p id="auditoriaProgressText">Procesando...</p>
+                        </div>
+
+                        <!-- Resultado de la operación -->
+                        <div id="auditoriaResult" class="auditoria-result hidden">
+                            <div id="auditoriaResultIcon" class="result-icon"></div>
+                            <h4 id="auditoriaResultTitle"></h4>
+                            <p id="auditoriaResultMessage"></p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="btnAuditoriaCancelar" class="modal-btn secondary">Cancelar</button>
+                        <button id="btnAuditoriaBack" class="modal-btn secondary hidden">Volver</button>
+                        <button id="btnAuditoriaNext" class="modal-btn primary">Verificar período</button>
+                        <button id="btnAuditoriaEnviar" class="modal-btn primary hidden">Enviar movimientos</button>
+                        <button id="btnAuditoriaCerrar" class="modal-btn primary hidden">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+
             </div><!-- Fin seccionConvertir -->
 
             <!-- ============================================ -->
