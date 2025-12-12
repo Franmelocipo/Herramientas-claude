@@ -839,6 +839,23 @@ body {
     background: #fafafa;
 }
 
+/* Botón toggle color conciliación */
+.btn-toggle-color {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-right: 4px;
+}
+
+.btn-toggle-color:hover {
+    background: #e2e8f0;
+    transform: scale(1.1);
+}
+
 /* Botón desconciliar */
 .btn-desconciliar {
     background: #fee2e2;
