@@ -25,8 +25,8 @@
         }
     }
 
-    // PRIORIDAD 2: Verificar autenticación del sistema anterior (sessionStorage)
-    const isAuthenticated = sessionStorage.getItem('herramientas_auth') === 'authenticated';
+    // PRIORIDAD 2: Verificar autenticación del sistema (localStorage para compartir entre pestañas)
+    const isAuthenticated = localStorage.getItem('herramientas_auth') === 'authenticated';
 
     if (!isAuthenticated) {
         // Si no está autenticado, redirigir a login.html
@@ -44,7 +44,7 @@
         }
 
         // Guardar la URL actual para redirigir después del login
-        sessionStorage.setItem('return_url', window.location.href);
+        localStorage.setItem('return_url', window.location.href);
 
         // Redirigir inmediatamente
         window.location.replace(loginPath);

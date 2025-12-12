@@ -40,8 +40,8 @@ document.addEventListener('DOMContentLoaded', async () => {
  */
 async function checkAuth() {
     try {
-        // Verificar si hay sesión activa
-        const sessionAuth = sessionStorage.getItem('herramientas_auth');
+        // Verificar si hay sesión activa (localStorage para compartir entre pestañas)
+        const sessionAuth = localStorage.getItem('herramientas_auth');
         if (sessionAuth !== 'authenticated') {
             redirectToLogin();
             return;
@@ -198,7 +198,7 @@ function redirectToLogin() {
  * Maneja el cierre de sesión
  */
 function handleLogout() {
-    sessionStorage.removeItem('herramientas_auth');
+    localStorage.removeItem('herramientas_auth');
     localStorage.removeItem('user_email');
     redirectToLogin();
 }
