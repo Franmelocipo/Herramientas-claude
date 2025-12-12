@@ -1201,8 +1201,6 @@ async function procesarArchivo(file, tipo) {
             elements.recordCountMayor.textContent = `${state.datosMayor.length} registros`;
             elements.previewMayor.classList.remove('hidden');
             elements.dropZoneMayor.style.display = 'none';
-            // Mostrar panel de administración del mayor para asignar etiquetas
-            mostrarAdminMayor();
         } else {
             state.datosExtracto = parsearExtracto(data);
             elements.fileNameExtracto.textContent = file.name;
@@ -1858,27 +1856,15 @@ function buscarCoincidenciaExacta(movMayor, listaExtracto) {
 }
 
 /**
- * Verifica si dos movimientos son compatibles según sus etiquetas.
- * Reglas:
- * - Si el movimiento del mayor tiene etiqueta, el extracto debe tener la MISMA etiqueta
- * - Si el movimiento del mayor NO tiene etiqueta, puede conciliarse con cualquier movimiento
- * - Los movimientos sin etiqueta son "comodines" y pueden conciliarse con cualquiera
+ * Verifica si dos movimientos son compatibles.
+ * Siempre retorna true - la funcionalidad de etiquetado del mayor fue removida.
  *
  * @param {Object} movMayor - Movimiento del mayor
  * @param {Object} movExtracto - Movimiento del extracto
- * @returns {boolean} true si son compatibles
+ * @returns {boolean} true siempre
  */
 function verificarCompatibilidadEtiquetas(movMayor, movExtracto) {
-    const categoriaMayor = movMayor.categoria || '';
-    const categoriaExtracto = movExtracto.categoria || '';
-
-    // Si el mayor no tiene etiqueta, es compatible con cualquier extracto
-    if (!categoriaMayor) {
-        return true;
-    }
-
-    // Si el mayor tiene etiqueta, el extracto debe tener la misma etiqueta
-    return categoriaMayor === categoriaExtracto;
+    return true;
 }
 
 /**
@@ -2278,7 +2264,10 @@ function llenarTablaConciliados(conciliados) {
         const maxRows = Math.max(match.mayor.length, match.extracto.length);
 
         // Determinar clase según coincidencia de descripción
-        const tieneCoincidencia = matchTieneCoincidenciaDescripcion(match);
+        // Si hay override manual, usar ese valor; sino, calcular automáticamente
+        const tieneCoincidencia = match.coincidenciaOverride !== undefined
+            ? match.coincidenciaOverride
+            : matchTieneCoincidenciaDescripcion(match);
         const coincidenciaClass = tieneCoincidencia ? ' row-coincidencia-descripcion' : ' row-sin-coincidencia';
 
         for (let i = 0; i < maxRows; i++) {
@@ -2334,9 +2323,17 @@ function llenarTablaConciliados(conciliados) {
                     const tooltipText = `Reproceso #${match.parametrosReproceso.numeroReproceso}: ${match.parametrosReproceso.toleranciaFecha} días, $${match.parametrosReproceso.toleranciaImporte.toLocaleString('es-AR')}`;
                     reprocesoBadge = `<span class="badge-reproceso" title="${tooltipText}">🔄 Rep</span>`;
                 }
+                // Botón para cambiar categoría de color (verde/naranja)
+                const colorBtnIcon = tieneCoincidencia ? '🟢' : '🟠';
+                const colorBtnTitle = tieneCoincidencia
+                    ? 'Marcar como sin coincidencia (naranja)'
+                    : 'Marcar como con coincidencia (verde)';
                 html += `
                     <td class="col-action">
                         ${manualBadge}${reprocesoBadge}
+                        <button class="btn-toggle-color" onclick="toggleColorConciliacion('${match.id}')" title="${colorBtnTitle}">
+                            ${colorBtnIcon}
+                        </button>
                         <button class="btn-desconciliar" onclick="desconciliar('${match.id}')" title="Desconciliar">
                             ✕
                         </button>
@@ -2439,6 +2436,31 @@ function llenarTablaExtractoPendiente(pendientes) {
 }
 
 // ========== CONCILIACIÓN MANUAL ==========
+
+/**
+ * Cambiar la categoría de color de una conciliación (verde/naranja)
+ * Verde = coincidencia de descripción, Naranja = sin coincidencia
+ */
+function toggleColorConciliacion(idConciliacion) {
+    if (!state.resultados) return;
+
+    const match = state.resultados.conciliados.find(c => c.id === idConciliacion);
+    if (!match) {
+        console.warn('No se encontró la conciliación:', idConciliacion);
+        return;
+    }
+
+    // Si no tiene override, calcular el valor actual
+    if (match.coincidenciaOverride === undefined) {
+        match.coincidenciaOverride = matchTieneCoincidenciaDescripcion(match);
+    }
+
+    // Toggle el valor
+    match.coincidenciaOverride = !match.coincidenciaOverride;
+
+    // Actualizar la tabla
+    llenarTablaConciliados(state.resultados.conciliados);
+}
 
 /**
  * Desconciliar un grupo de movimientos conciliados
@@ -4619,7 +4641,7 @@ function truncar(texto, maxLen) {
 
 // Verifica si hay al menos N palabras coincidentes entre dos textos
 // Ignora palabras cortas (<=2 caracteres) y normaliza el texto
-function tieneCoincidenciaPalabras(texto1, texto2, minimoCoincidencias = 2) {
+function tieneCoincidenciaPalabras(texto1, texto2, minimoCoincidencias = 1) {
     if (!texto1 || !texto2) return false;
 
     // Normalizar: quitar acentos, convertir a minúsculas, quitar caracteres especiales
@@ -4654,7 +4676,7 @@ function matchTieneCoincidenciaDescripcion(match) {
 
     for (const m of match.mayor) {
         for (const e of match.extracto) {
-            if (tieneCoincidenciaPalabras(m.leyenda, e.descripcion, 2)) {
+            if (tieneCoincidenciaPalabras(m.leyenda, e.descripcion, 1)) {
                 return true;
             }
         }
