@@ -97,6 +97,22 @@
 
                     <!-- Opción: Cargar archivo -->
                     <div id="extractoArchivoSection">
+                    <!-- Selector de origen del extracto -->
+                    <div class="origen-extracto-selector">
+                        <label class="origen-option">
+                            <input type="radio" name="origenExtracto" value="archivo" checked onchange="cambiarOrigenExtracto('archivo')">
+                            <span class="origen-icon">📄</span>
+                            <span>Cargar archivo Excel</span>
+                        </label>
+                        <label class="origen-option">
+                            <input type="radio" name="origenExtracto" value="auditoria" onchange="cambiarOrigenExtracto('auditoria')">
+                            <span class="origen-icon">🗄️</span>
+                            <span>Usar extractos de Auditoría</span>
+                        </label>
+                    </div>
+
+                    <!-- Opción: Cargar archivo Excel -->
+                    <div id="opcionArchivoExtracto">
                         <div class="file-drop-zone" id="dropZoneExtracto">
                             <div class="upload-icon">📤</div>
                             <div class="upload-text">Haz clic para seleccionar un archivo Excel</div>
@@ -129,6 +145,21 @@
                             <div class="selector-group">
                                 <label for="cuentaSelect">Cuenta Bancaria:</label>
                                 <select id="cuentaSelect" onchange="cargarExtractosDisponibles()" disabled>
+                    <!-- Opción: Usar extractos de Auditoría -->
+                    <div id="opcionAuditoriaExtracto" class="hidden">
+                        <div class="auditoria-selectors">
+                            <!-- Selector de cliente -->
+                            <div class="selector-row">
+                                <label for="selectClienteAuditoria">Cliente:</label>
+                                <select id="selectClienteAuditoria" class="input-select" onchange="cargarCuentasCliente()">
+                                    <option value="">-- Seleccione un cliente --</option>
+                                </select>
+                            </div>
+
+                            <!-- Selector de cuenta bancaria -->
+                            <div class="selector-row hidden" id="rowCuentaBancaria">
+                                <label for="selectCuentaBancaria">Cuenta Bancaria:</label>
+                                <select id="selectCuentaBancaria" class="input-select" onchange="cargarExtractosDisponibles()">
                                     <option value="">-- Seleccione una cuenta --</option>
                                 </select>
                             </div>
@@ -146,6 +177,25 @@
                                     <div class="rango-input">
                                         <label for="rangoHasta">Hasta:</label>
                                         <select id="rangoHasta" onchange="actualizarExtractosSeleccionados()" disabled>
+                            <!-- Selector de extractos (rango de meses) -->
+                            <div class="extractos-selector hidden" id="rowExtractosSelector">
+                                <div class="extractos-rango-header">
+                                    <span>Seleccionar período:</span>
+                                    <div class="extractos-search-container">
+                                        <input type="text" id="searchExtractos" class="input-search" placeholder="🔍 Buscar mes/año..." oninput="filtrarExtractos()">
+                                    </div>
+                                </div>
+
+                                <div class="extractos-rango-grid">
+                                    <div class="rango-column">
+                                        <label>Desde:</label>
+                                        <select id="selectExtractoDesde" class="input-select" onchange="validarRangoExtractos()">
+                                            <option value="">-- Mes/Año --</option>
+                                        </select>
+                                    </div>
+                                    <div class="rango-column">
+                                        <label>Hasta:</label>
+                                        <select id="selectExtractoHasta" class="input-select" onchange="validarRangoExtractos()">
                                             <option value="">-- Mes/Año --</option>
                                         </select>
                                     </div>
@@ -173,6 +223,20 @@
                         <div id="extractoAuditoriaStatus" class="auditoria-status">
                             <span class="status-icon">ℹ️</span>
                             <span class="status-text">Seleccione un cliente y cuenta para cargar los extractos disponibles</span>
+
+                                <!-- Lista visual de extractos agrupados por año -->
+                                <div id="extractosListaVisual" class="extractos-lista-visual hidden">
+                                    <!-- Se llena dinámicamente con extractos agrupados por año -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Preview de extractos seleccionados -->
+                        <div id="previewExtractoAuditoria" class="file-preview hidden">
+                            <span class="file-icon">✅</span>
+                            <span id="extractoAuditoriaInfo"></span>
+                            <span class="record-count" id="recordCountExtractoAuditoria"></span>
+                            <button class="btn-remove" id="btnRemoveExtractoAuditoria" onclick="limpiarSeleccionAuditoria()">✕</button>
                         </div>
                     </div>
                 </div>

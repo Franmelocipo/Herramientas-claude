@@ -1349,6 +1349,9 @@ async function conciliar(mayor, extracto) {
     }
 
     // Paso 3b: Buscar coincidencias muchos a 1 (suma de Mayor vs Extracto)
+    // IMPORTANTE: Para este tipo de conciliación, validamos que todos los movimientos
+    // del mayor sean de la misma entidad/cliente para evitar agrupar movimientos
+    // de diferentes clientes solo porque la suma coincide
     actualizarPaso(3, 'Buscando coincidencias múltiples (N a 1)...');
     actualizarProgreso(70);
     await sleep(50);
@@ -1361,7 +1364,8 @@ async function conciliar(mayor, extracto) {
             movExtracto.importe,
             movExtracto.fecha,
             mayorNoConciliado,
-            5
+            5,
+            true // Validar que los movimientos sean de la misma entidad
         );
 
         if (combinacion) {
@@ -1426,7 +1430,17 @@ function buscarCoincidenciaExacta(movMayor, listaExtracto) {
     return -1;
 }
 
-function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos) {
+/**
+ * Busca una combinación de movimientos que sumen el importe objetivo.
+ *
+ * @param {number} importeObjetivo - Importe a alcanzar
+ * @param {Date} fechaRef - Fecha de referencia para filtrar por tolerancia
+ * @param {Array} lista - Lista de movimientos candidatos
+ * @param {number} maxElementos - Máximo de elementos a combinar
+ * @param {boolean} validarEntidades - Si es true, valida que todos los movimientos sean de la misma entidad
+ * @returns {Array|null} Combinación encontrada o null
+ */
+function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos, validarEntidades = false) {
     // Filtrar por fecha primero
     const candidatos = lista.filter(m => fechaDentroTolerancia(fechaRef, m.fecha));
 
@@ -1434,14 +1448,23 @@ function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos
 
     // Buscar combinaciones de 2 a maxElementos elementos
     for (let n = 2; n <= Math.min(maxElementos, candidatos.length); n++) {
-        const resultado = encontrarCombinacion(candidatos, importeObjetivo, n);
+        const resultado = encontrarCombinacion(candidatos, importeObjetivo, n, validarEntidades);
         if (resultado) return resultado;
     }
 
     return null;
 }
 
-function encontrarCombinacion(lista, objetivo, n) {
+/**
+ * Busca una combinación de n elementos que sume el importe objetivo.
+ *
+ * @param {Array} lista - Lista de movimientos candidatos
+ * @param {number} objetivo - Importe objetivo a alcanzar
+ * @param {number} n - Cantidad exacta de elementos a combinar
+ * @param {boolean} validarEntidades - Si es true, valida que todos los movimientos sean de la misma entidad
+ * @returns {Array|null} Combinación encontrada o null
+ */
+function encontrarCombinacion(lista, objetivo, n, validarEntidades = false) {
     const indices = [];
 
     function buscar(start, suma, count) {
@@ -1449,7 +1472,15 @@ function encontrarCombinacion(lista, objetivo, n) {
         if (count === n) {
             const diferencia = Math.abs(suma - objetivo);
             if (diferencia <= state.toleranciaImporte) {
-                return indices.map(i => lista[i]);
+                const combinacion = indices.map(i => lista[i]);
+
+                // Si se requiere validación de entidades, verificar que todos
+                // los movimientos sean de la misma entidad/cliente
+                if (validarEntidades && !validarMismaEntidad(combinacion)) {
+                    return null; // Rechazar combinación de diferentes entidades
+                }
+
+                return combinacion;
             }
             return null;
         }
@@ -1494,6 +1525,138 @@ function fechaDentroTolerancia(fecha1, fecha2) {
     }
 
     return diffDias <= state.toleranciaFecha;
+}
+
+// ========== VALIDACIÓN DE ENTIDADES PARA CONCILIACIONES N:1 ==========
+
+/**
+ * Extrae el nombre de la entidad/cliente de una leyenda del mayor.
+ * La función normaliza el texto y extrae las primeras palabras significativas
+ * que generalmente corresponden al nombre del cliente/proveedor.
+ *
+ * @param {string} texto - Leyenda del movimiento
+ * @returns {string} Nombre de entidad normalizado
+ */
+function extraerEntidad(texto) {
+    if (!texto || typeof texto !== 'string') return '';
+
+    // Normalizar: quitar acentos, convertir a minúsculas
+    let normalizado = texto
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+
+    // Eliminar prefijos comunes que no identifican la entidad
+    const prefijosIgnorar = [
+        /^rec\.?\s*/i,           // Rec. o Rec
+        /^recibo\s*/i,           // Recibo
+        /^pago\s*/i,             // Pago
+        /^cobro\s*/i,            // Cobro
+        /^fact\.?\s*/i,          // Fact. o Factura
+        /^factura\s*/i,
+        /^nota\s+de\s+credito\s*/i,
+        /^nc\s*/i,               // NC (Nota de Crédito)
+        /^nd\s*/i,               // ND (Nota de Débito)
+        /^op\s*/i,               // OP (Orden de Pago)
+        /^transferencia\s*/i,
+        /^trf\.?\s*/i,
+        /^dep\.?\s*/i,           // Dep. o Depósito
+        /^deposito\s*/i,
+        /^cheque\s*/i,
+        /^ch\.?\s*/i,
+    ];
+
+    for (const prefijo of prefijosIgnorar) {
+        normalizado = normalizado.replace(prefijo, '');
+    }
+
+    // Eliminar números de documento/recibo al final o paréntesis con info adicional
+    normalizado = normalizado
+        .replace(/\s*\(.*\)\s*$/g, '')      // (info adicional)
+        .replace(/\s*n[º°]?\s*\d+.*$/gi, '') // Nº 12345...
+        .replace(/\s+\d{4,}.*$/g, '')        // números largos al final
+        .replace(/\s+-\s+.*$/g, '')          // - info adicional
+        .trim();
+
+    // Extraer las primeras palabras significativas (máximo 4 palabras para el nombre)
+    const palabras = normalizado.split(/\s+/).filter(p => p.length > 1);
+
+    // Si quedan menos de 1 palabra significativa, retornar el texto original normalizado
+    if (palabras.length === 0) {
+        return texto.toLowerCase().trim().substring(0, 30);
+    }
+
+    // Retornar las primeras 4 palabras como identificador de entidad
+    return palabras.slice(0, 4).join(' ');
+}
+
+/**
+ * Calcula la similitud entre dos entidades usando el coeficiente de Jaccard
+ * sobre los tokens (palabras) de cada nombre.
+ *
+ * @param {string} entidad1 - Primera entidad
+ * @param {string} entidad2 - Segunda entidad
+ * @returns {number} Coeficiente de similitud entre 0 y 1
+ */
+function calcularSimilitudEntidades(entidad1, entidad2) {
+    if (!entidad1 || !entidad2) return 0;
+
+    // Si son exactamente iguales
+    if (entidad1 === entidad2) return 1;
+
+    // Tokenizar ambas entidades
+    const tokens1 = new Set(entidad1.split(/\s+/).filter(t => t.length > 1));
+    const tokens2 = new Set(entidad2.split(/\s+/).filter(t => t.length > 1));
+
+    if (tokens1.size === 0 || tokens2.size === 0) return 0;
+
+    // Calcular intersección
+    const interseccion = new Set([...tokens1].filter(t => tokens2.has(t)));
+
+    // Coeficiente de Jaccard: |A ∩ B| / |A ∪ B|
+    const union = new Set([...tokens1, ...tokens2]);
+    const jaccard = interseccion.size / union.size;
+
+    // También verificar si una entidad contiene a la otra (para casos como "Juan" vs "Juan Perez")
+    const contieneBonus = (entidad1.includes(entidad2) || entidad2.includes(entidad1)) ? 0.3 : 0;
+
+    return Math.min(1, jaccard + contieneBonus);
+}
+
+/**
+ * Valida que todos los movimientos de una combinación correspondan a la misma entidad.
+ * Esta función es crítica para evitar conciliaciones incorrectas donde se agrupan
+ * movimientos de diferentes clientes solo porque la suma de importes coincide.
+ *
+ * @param {Array} movimientos - Array de movimientos del mayor
+ * @returns {boolean} true si todos los movimientos son de la misma entidad
+ */
+function validarMismaEntidad(movimientos) {
+    if (!movimientos || movimientos.length < 2) return true;
+
+    // Extraer entidades de cada movimiento
+    const entidades = movimientos.map(m => extraerEntidad(m.leyenda || ''));
+
+    // Verificar que todas las entidades sean similares a la primera
+    const entidadBase = entidades[0];
+
+    // Umbral de similitud requerido para considerar que son la misma entidad
+    // Usamos un umbral relativamente bajo (0.3) porque los nombres pueden variar
+    // pero debe haber al menos algo en común
+    const UMBRAL_SIMILITUD = 0.3;
+
+    for (let i = 1; i < entidades.length; i++) {
+        const similitud = calcularSimilitudEntidades(entidadBase, entidades[i]);
+
+        if (similitud < UMBRAL_SIMILITUD) {
+            // Las entidades son muy diferentes - no permitir esta combinación
+            // console.log(`Entidades diferentes detectadas: "${entidadBase}" vs "${entidades[i]}" (similitud: ${similitud.toFixed(2)})`);
+            return false;
+        }
+    }
+
+    return true;
 }
 
 // ========== MOSTRAR RESULTADOS ==========
@@ -3960,3 +4123,614 @@ function mostrarResumenReproceso(nuevosConciliados) {
         mostrarMensaje('', 'clear');
     }, 5000);
 }
+
+// ========== SELECTOR DE EXTRACTOS DE AUDITORÍA ==========
+
+// Estado para extractos de auditoría
+let extractosAuditoria = {
+    origenActual: 'archivo', // 'archivo' o 'auditoria'
+    clienteId: null,
+    cuentaId: null,
+    extractosDisponibles: [], // Lista de extractos disponibles (ordenados cronológicamente)
+    extractosSeleccionados: [], // IDs de extractos seleccionados
+    extractoDesde: null,
+    extractoHasta: null
+};
+
+// Nombres de los meses en español
+const MESES_NOMBRES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+/**
+ * Cambiar entre cargar archivo Excel o usar extractos de Auditoría
+ */
+function cambiarOrigenExtracto(origen) {
+    extractosAuditoria.origenActual = origen;
+
+    const opcionArchivo = document.getElementById('opcionArchivoExtracto');
+    const opcionAuditoria = document.getElementById('opcionAuditoriaExtracto');
+
+    if (origen === 'archivo') {
+        opcionArchivo.classList.remove('hidden');
+        opcionAuditoria.classList.add('hidden');
+        // Limpiar selección de auditoría
+        limpiarSeleccionAuditoria();
+    } else {
+        opcionArchivo.classList.add('hidden');
+        opcionAuditoria.classList.remove('hidden');
+        // Limpiar archivo cargado
+        limpiarExtractoArchivo();
+        // Cargar clientes si es necesario
+        cargarClientesParaAuditoria();
+    }
+
+    actualizarBotonConciliar();
+}
+
+/**
+ * Limpiar el archivo de extracto cargado
+ */
+function limpiarExtractoArchivo() {
+    state.datosExtracto = [];
+    const fileInput = document.getElementById('fileExtracto');
+    if (fileInput) fileInput.value = '';
+    const preview = document.getElementById('previewExtracto');
+    if (preview) preview.classList.add('hidden');
+}
+
+/**
+ * Limpiar la selección de extractos de auditoría
+ */
+function limpiarSeleccionAuditoria() {
+    extractosAuditoria.extractosSeleccionados = [];
+    extractosAuditoria.extractoDesde = null;
+    extractosAuditoria.extractoHasta = null;
+    state.datosExtracto = [];
+
+    // Reset selectores
+    const selectDesde = document.getElementById('selectExtractoDesde');
+    const selectHasta = document.getElementById('selectExtractoHasta');
+    if (selectDesde) selectDesde.value = '';
+    if (selectHasta) selectHasta.value = '';
+
+    // Ocultar preview
+    const preview = document.getElementById('previewExtractoAuditoria');
+    if (preview) preview.classList.add('hidden');
+
+    // Actualizar lista visual si existe
+    actualizarListaVisualExtractos();
+
+    actualizarBotonConciliar();
+}
+
+/**
+ * Cargar clientes desde Supabase para el selector de auditoría
+ */
+async function cargarClientesParaAuditoria() {
+    const select = document.getElementById('selectClienteAuditoria');
+    if (!select) return;
+
+    try {
+        select.innerHTML = '<option value="">Cargando clientes...</option>';
+
+        if (typeof supabase !== 'undefined' && supabase) {
+            const { data: clientes, error } = await supabase
+                .from('clientes')
+                .select('id, razon_social, cuit')
+                .order('razon_social');
+
+            if (error) throw error;
+
+            select.innerHTML = '<option value="">-- Seleccione un cliente --</option>';
+            clientes.forEach(cliente => {
+                const option = document.createElement('option');
+                option.value = cliente.id;
+                option.textContent = `${cliente.razon_social}${cliente.cuit ? ` (${cliente.cuit})` : ''}`;
+                select.appendChild(option);
+            });
+        } else {
+            select.innerHTML = '<option value="">No hay conexión a base de datos</option>';
+        }
+    } catch (error) {
+        console.error('Error cargando clientes:', error);
+        select.innerHTML = '<option value="">Error al cargar clientes</option>';
+    }
+}
+
+/**
+ * Cargar cuentas bancarias del cliente seleccionado
+ */
+async function cargarCuentasCliente() {
+    const clienteId = document.getElementById('selectClienteAuditoria')?.value;
+    const selectCuenta = document.getElementById('selectCuentaBancaria');
+    const rowCuenta = document.getElementById('rowCuentaBancaria');
+    const rowExtractos = document.getElementById('rowExtractosSelector');
+
+    if (!clienteId) {
+        if (rowCuenta) rowCuenta.classList.add('hidden');
+        if (rowExtractos) rowExtractos.classList.add('hidden');
+        limpiarSeleccionAuditoria();
+        return;
+    }
+
+    extractosAuditoria.clienteId = clienteId;
+
+    try {
+        if (selectCuenta) {
+            selectCuenta.innerHTML = '<option value="">Cargando cuentas...</option>';
+        }
+        if (rowCuenta) rowCuenta.classList.remove('hidden');
+        if (rowExtractos) rowExtractos.classList.add('hidden');
+
+        if (typeof supabase !== 'undefined' && supabase) {
+            const { data: cuentas, error } = await supabase
+                .from('cuentas_bancarias')
+                .select('id, banco, tipo, numero')
+                .eq('cliente_id', clienteId)
+                .order('banco');
+
+            if (error) throw error;
+
+            if (selectCuenta) {
+                selectCuenta.innerHTML = '<option value="">-- Seleccione una cuenta --</option>';
+
+                if (cuentas.length === 0) {
+                    selectCuenta.innerHTML = '<option value="">No hay cuentas bancarias</option>';
+                } else {
+                    cuentas.forEach(cuenta => {
+                        const option = document.createElement('option');
+                        option.value = cuenta.id;
+                        option.textContent = `${cuenta.banco} - ${cuenta.tipo}${cuenta.numero ? ` (${cuenta.numero.slice(-4)})` : ''}`;
+                        selectCuenta.appendChild(option);
+                    });
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error cargando cuentas:', error);
+        if (selectCuenta) {
+            selectCuenta.innerHTML = '<option value="">Error al cargar cuentas</option>';
+        }
+    }
+}
+
+/**
+ * Cargar extractos disponibles de la cuenta seleccionada
+ * Ordenados cronológicamente (más antiguo primero)
+ */
+async function cargarExtractosDisponibles() {
+    const cuentaId = document.getElementById('selectCuentaBancaria')?.value;
+    const rowExtractos = document.getElementById('rowExtractosSelector');
+    const selectDesde = document.getElementById('selectExtractoDesde');
+    const selectHasta = document.getElementById('selectExtractoHasta');
+
+    if (!cuentaId) {
+        if (rowExtractos) rowExtractos.classList.add('hidden');
+        extractosAuditoria.extractosDisponibles = [];
+        limpiarSeleccionAuditoria();
+        return;
+    }
+
+    extractosAuditoria.cuentaId = cuentaId;
+
+    try {
+        if (rowExtractos) rowExtractos.classList.remove('hidden');
+        if (selectDesde) selectDesde.innerHTML = '<option value="">Cargando...</option>';
+        if (selectHasta) selectHasta.innerHTML = '<option value="">Cargando...</option>';
+
+        if (typeof supabase !== 'undefined' && supabase) {
+            const { data: extractos, error } = await supabase
+                .from('extractos_mensuales')
+                .select('id, mes, anio, data, created_at')
+                .eq('cuenta_id', cuentaId)
+                // ORDEN CRONOLÓGICO: más antiguo primero
+                .order('anio', { ascending: true })
+                .order('mes', { ascending: true });
+
+            if (error) throw error;
+
+            // Guardar extractos disponibles
+            extractosAuditoria.extractosDisponibles = extractos.map(ext => ({
+                id: ext.id,
+                mes: ext.mes,
+                anio: ext.anio,
+                movimientos: ext.data?.length || 0,
+                created_at: ext.created_at,
+                // Valor para ordenar: AAAAMM
+                valor: ext.anio * 100 + ext.mes
+            }));
+
+            // Renderizar selectores y lista visual
+            renderizarSelectoresExtractos();
+            renderizarListaVisualExtractos();
+        }
+    } catch (error) {
+        console.error('Error cargando extractos:', error);
+        if (selectDesde) selectDesde.innerHTML = '<option value="">Error al cargar</option>';
+        if (selectHasta) selectHasta.innerHTML = '<option value="">Error al cargar</option>';
+    }
+}
+
+/**
+ * Renderizar los selectores de extractos (Desde/Hasta)
+ */
+function renderizarSelectoresExtractos() {
+    const selectDesde = document.getElementById('selectExtractoDesde');
+    const selectHasta = document.getElementById('selectExtractoHasta');
+
+    if (!selectDesde || !selectHasta) return;
+
+    const extractos = extractosAuditoria.extractosDisponibles;
+
+    if (extractos.length === 0) {
+        selectDesde.innerHTML = '<option value="">No hay extractos</option>';
+        selectHasta.innerHTML = '<option value="">No hay extractos</option>';
+        return;
+    }
+
+    // Generar opciones (orden cronológico - más antiguo primero)
+    const opciones = extractos.map(ext => {
+        const mesNombre = MESES_NOMBRES[ext.mes - 1];
+        return `<option value="${ext.id}" data-valor="${ext.valor}">${mesNombre} ${ext.anio} (${ext.movimientos} mov.)</option>`;
+    }).join('');
+
+    selectDesde.innerHTML = '<option value="">-- Mes/Año --</option>' + opciones;
+    selectHasta.innerHTML = '<option value="">-- Mes/Año --</option>' + opciones;
+}
+
+/**
+ * Renderizar lista visual de extractos agrupados por año
+ */
+function renderizarListaVisualExtractos() {
+    const container = document.getElementById('extractosListaVisual');
+    if (!container) return;
+
+    const extractos = extractosAuditoria.extractosDisponibles;
+
+    if (extractos.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    // Agrupar por año (orden cronológico - años más antiguos primero)
+    const porAnio = {};
+    extractos.forEach(ext => {
+        if (!porAnio[ext.anio]) {
+            porAnio[ext.anio] = [];
+        }
+        porAnio[ext.anio].push(ext);
+    });
+
+    // Ordenar años cronológicamente (más antiguo primero)
+    const anios = Object.keys(porAnio).sort((a, b) => parseInt(a) - parseInt(b));
+
+    let html = '';
+    anios.forEach((anio, idx) => {
+        const extractosAnio = porAnio[anio];
+        const totalMov = extractosAnio.reduce((sum, e) => sum + e.movimientos, 0);
+        // Solo colapsar si hay más de 2 años y no es el año actual o el anterior
+        const anioActual = new Date().getFullYear();
+        const collapsed = anios.length > 2 && parseInt(anio) < anioActual - 1;
+
+        html += `
+            <div class="extractos-anio-group${collapsed ? ' collapsed' : ''}" data-anio="${anio}">
+                <div class="extractos-anio-header" onclick="toggleAnioGroup('${anio}')">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="extractos-anio-toggle">▼</span>
+                        <h4>${anio}</h4>
+                    </div>
+                    <span class="extractos-anio-count">${extractosAnio.length} extractos · ${totalMov.toLocaleString('es-AR')} mov.</span>
+                </div>
+                <div class="extractos-anio-content">
+                    ${extractosAnio.map(ext => {
+                        const mesNombre = MESES_NOMBRES[ext.mes - 1];
+                        const selected = extractosAuditoria.extractosSeleccionados.includes(ext.id);
+                        return `
+                            <div class="extracto-item${selected ? ' selected' : ''}"
+                                 data-id="${ext.id}"
+                                 data-valor="${ext.valor}"
+                                 onclick="toggleExtractoSeleccion('${ext.id}')">
+                                <span class="extracto-mes-nombre">${mesNombre}</span>
+                                <span class="extracto-mov">${ext.movimientos} mov.</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+    container.classList.remove('hidden');
+}
+
+/**
+ * Toggle para expandir/colapsar grupo de año
+ */
+function toggleAnioGroup(anio) {
+    const group = document.querySelector(`.extractos-anio-group[data-anio="${anio}"]`);
+    if (group) {
+        group.classList.toggle('collapsed');
+    }
+}
+
+/**
+ * Toggle selección de un extracto individual
+ */
+function toggleExtractoSeleccion(extractoId) {
+    const idx = extractosAuditoria.extractosSeleccionados.indexOf(extractoId);
+    if (idx > -1) {
+        extractosAuditoria.extractosSeleccionados.splice(idx, 1);
+    } else {
+        extractosAuditoria.extractosSeleccionados.push(extractoId);
+    }
+
+    // Actualizar selectores Desde/Hasta basado en selección
+    actualizarSelectoresDesdeSeleccion();
+
+    // Actualizar visualización
+    actualizarListaVisualExtractos();
+
+    // Cargar datos de extractos seleccionados
+    cargarDatosExtractosSeleccionados();
+}
+
+/**
+ * Actualizar los selectores Desde/Hasta basado en la selección de extractos
+ */
+function actualizarSelectoresDesdeSeleccion() {
+    if (extractosAuditoria.extractosSeleccionados.length === 0) {
+        document.getElementById('selectExtractoDesde').value = '';
+        document.getElementById('selectExtractoHasta').value = '';
+        return;
+    }
+
+    // Encontrar el rango de extractos seleccionados
+    const seleccionados = extractosAuditoria.extractosDisponibles.filter(
+        ext => extractosAuditoria.extractosSeleccionados.includes(ext.id)
+    );
+
+    if (seleccionados.length > 0) {
+        seleccionados.sort((a, b) => a.valor - b.valor);
+        const primero = seleccionados[0];
+        const ultimo = seleccionados[seleccionados.length - 1];
+
+        document.getElementById('selectExtractoDesde').value = primero.id;
+        document.getElementById('selectExtractoHasta').value = ultimo.id;
+    }
+}
+
+/**
+ * Actualizar la visualización de la lista de extractos (marcar seleccionados)
+ */
+function actualizarListaVisualExtractos() {
+    const items = document.querySelectorAll('.extracto-item');
+    items.forEach(item => {
+        const id = item.dataset.id;
+        if (extractosAuditoria.extractosSeleccionados.includes(id)) {
+            item.classList.add('selected');
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+}
+
+/**
+ * Validar el rango de extractos seleccionados en los selectores
+ */
+function validarRangoExtractos() {
+    const selectDesde = document.getElementById('selectExtractoDesde');
+    const selectHasta = document.getElementById('selectExtractoHasta');
+
+    const desdeId = selectDesde?.value;
+    const hastaId = selectHasta?.value;
+
+    if (!desdeId || !hastaId) {
+        // Solo un selector tiene valor - seleccionar solo ese extracto
+        if (desdeId) {
+            extractosAuditoria.extractosSeleccionados = [desdeId];
+        } else if (hastaId) {
+            extractosAuditoria.extractosSeleccionados = [hastaId];
+        } else {
+            extractosAuditoria.extractosSeleccionados = [];
+        }
+    } else {
+        // Ambos selectores tienen valor - seleccionar rango
+        const desde = extractosAuditoria.extractosDisponibles.find(e => e.id === desdeId);
+        const hasta = extractosAuditoria.extractosDisponibles.find(e => e.id === hastaId);
+
+        if (desde && hasta) {
+            // Asegurar que "desde" sea menor que "hasta"
+            const valorDesde = Math.min(desde.valor, hasta.valor);
+            const valorHasta = Math.max(desde.valor, hasta.valor);
+
+            // Seleccionar todos los extractos en el rango
+            extractosAuditoria.extractosSeleccionados = extractosAuditoria.extractosDisponibles
+                .filter(ext => ext.valor >= valorDesde && ext.valor <= valorHasta)
+                .map(ext => ext.id);
+        }
+    }
+
+    // Actualizar visualización
+    actualizarListaVisualExtractos();
+
+    // Cargar datos de extractos seleccionados
+    cargarDatosExtractosSeleccionados();
+}
+
+/**
+ * Filtrar extractos en la lista visual por búsqueda
+ */
+function filtrarExtractos() {
+    const busqueda = document.getElementById('searchExtractos')?.value?.toLowerCase() || '';
+    const items = document.querySelectorAll('.extracto-item');
+
+    items.forEach(item => {
+        const mesNombre = item.querySelector('.extracto-mes-nombre')?.textContent?.toLowerCase() || '';
+        const anio = item.closest('.extractos-anio-group')?.dataset.anio || '';
+
+        if (busqueda === '' || mesNombre.includes(busqueda) || anio.includes(busqueda)) {
+            item.style.display = '';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+
+    // Mostrar/ocultar grupos de año según si tienen items visibles
+    document.querySelectorAll('.extractos-anio-group').forEach(group => {
+        const visibles = group.querySelectorAll('.extracto-item[style=""]').length +
+            group.querySelectorAll('.extracto-item:not([style])').length;
+        if (visibles === 0 && busqueda !== '') {
+            group.style.display = 'none';
+        } else {
+            group.style.display = '';
+            // Si hay búsqueda, expandir grupos que tengan resultados
+            if (busqueda !== '') {
+                group.classList.remove('collapsed');
+            }
+        }
+    });
+}
+
+/**
+ * Cargar los datos de los extractos seleccionados
+ */
+async function cargarDatosExtractosSeleccionados() {
+    const seleccionados = extractosAuditoria.extractosSeleccionados;
+
+    if (seleccionados.length === 0) {
+        state.datosExtracto = [];
+        document.getElementById('previewExtractoAuditoria')?.classList.add('hidden');
+        actualizarBotonConciliar();
+        return;
+    }
+
+    try {
+        // Cargar datos de cada extracto seleccionado
+        let todosMovimientos = [];
+
+        if (typeof supabase !== 'undefined' && supabase) {
+            const { data: extractos, error } = await supabase
+                .from('extractos_mensuales')
+                .select('id, mes, anio, data')
+                .in('id', seleccionados);
+
+            if (error) throw error;
+
+            // Combinar todos los movimientos
+            extractos.forEach(ext => {
+                if (ext.data && Array.isArray(ext.data)) {
+                    ext.data.forEach(mov => {
+                        todosMovimientos.push({
+                            ...mov,
+                            extractoId: ext.id,
+                            extractoMes: ext.mes,
+                            extractoAnio: ext.anio
+                        });
+                    });
+                }
+            });
+        }
+
+        // Ordenar movimientos por fecha (cronológico)
+        todosMovimientos.sort((a, b) => {
+            const fechaA = parsearFecha(a.fecha);
+            const fechaB = parsearFecha(b.fecha);
+            return fechaA - fechaB;
+        });
+
+        // Formatear para el conciliador
+        state.datosExtracto = todosMovimientos.map((mov, idx) => ({
+            id: `ext_${idx}`,
+            fecha: mov.fecha,
+            descripcion: mov.descripcion || '',
+            origen: mov.origen || '',
+            debito: parseFloat(mov.debito) || 0,
+            credito: parseFloat(mov.credito) || 0,
+            saldo: parseFloat(mov.saldo) || 0,
+            extractoOrigen: `${MESES_NOMBRES[mov.extractoMes - 1]} ${mov.extractoAnio}`
+        }));
+
+        // Mostrar preview
+        mostrarPreviewExtractoAuditoria();
+
+        actualizarBotonConciliar();
+
+    } catch (error) {
+        console.error('Error cargando datos de extractos:', error);
+        mostrarMensaje('Error al cargar los extractos seleccionados', 'error');
+    }
+}
+
+/**
+ * Mostrar preview de extractos de auditoría seleccionados
+ */
+function mostrarPreviewExtractoAuditoria() {
+    const preview = document.getElementById('previewExtractoAuditoria');
+    const info = document.getElementById('extractoAuditoriaInfo');
+    const count = document.getElementById('recordCountExtractoAuditoria');
+
+    if (!preview) return;
+
+    const seleccionados = extractosAuditoria.extractosSeleccionados;
+    const movimientos = state.datosExtracto.length;
+
+    if (seleccionados.length === 0) {
+        preview.classList.add('hidden');
+        return;
+    }
+
+    // Obtener rango de períodos
+    const extractosInfo = extractosAuditoria.extractosDisponibles.filter(
+        ext => seleccionados.includes(ext.id)
+    );
+    extractosInfo.sort((a, b) => a.valor - b.valor);
+
+    let periodoText = '';
+    if (extractosInfo.length === 1) {
+        const ext = extractosInfo[0];
+        periodoText = `${MESES_NOMBRES[ext.mes - 1]} ${ext.anio}`;
+    } else if (extractosInfo.length > 1) {
+        const primero = extractosInfo[0];
+        const ultimo = extractosInfo[extractosInfo.length - 1];
+        periodoText = `${MESES_NOMBRES[primero.mes - 1]} ${primero.anio} - ${MESES_NOMBRES[ultimo.mes - 1]} ${ultimo.anio}`;
+    }
+
+    if (info) info.textContent = periodoText;
+    if (count) count.textContent = `${movimientos.toLocaleString('es-AR')} movimientos`;
+
+    preview.classList.remove('hidden');
+}
+
+/**
+ * Parsear fecha en varios formatos
+ */
+function parsearFecha(fechaStr) {
+    if (!fechaStr) return new Date(0);
+
+    // Si ya es una fecha
+    if (fechaStr instanceof Date) return fechaStr;
+
+    // Formato DD/MM/YYYY
+    if (typeof fechaStr === 'string' && fechaStr.includes('/')) {
+        const [dia, mes, anio] = fechaStr.split('/');
+        return new Date(parseInt(anio), parseInt(mes) - 1, parseInt(dia));
+    }
+
+    // Formato YYYY-MM-DD
+    if (typeof fechaStr === 'string' && fechaStr.includes('-')) {
+        return new Date(fechaStr);
+    }
+
+    return new Date(fechaStr);
+}
+
+// Extender la función init para cargar clientes si es necesario
+const originalInit = init;
+init = function () {
+    originalInit();
+    // Si se selecciona auditoría por defecto, cargar clientes
+    if (extractosAuditoria.origenActual === 'auditoria') {
+        cargarClientesParaAuditoria();
+    }
+};
