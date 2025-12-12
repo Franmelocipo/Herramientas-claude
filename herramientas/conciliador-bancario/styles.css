@@ -879,6 +879,24 @@ body {
     background: #e0f2fe !important;
 }
 
+/* Filas conciliadas CON coincidencia en descripción (verde muy claro) */
+.row-coincidencia-descripcion {
+    background: #f0fdf4 !important;
+}
+
+.row-coincidencia-descripcion:hover {
+    background: #dcfce7 !important;
+}
+
+/* Filas conciliadas SIN coincidencia en descripción (naranja muy claro) */
+.row-sin-coincidencia {
+    background: #fff7ed !important;
+}
+
+.row-sin-coincidencia:hover {
+    background: #ffedd5 !important;
+}
+
 /* Filas seleccionadas */
 .row-selected {
     background: #fef3c7 !important;

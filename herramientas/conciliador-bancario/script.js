@@ -1835,6 +1835,10 @@ function llenarTablaConciliados(conciliados) {
     conciliados.forEach((match, idx) => {
         const maxRows = Math.max(match.mayor.length, match.extracto.length);
 
+        // Determinar clase según coincidencia de descripción
+        const tieneCoincidencia = matchTieneCoincidenciaDescripcion(match);
+        const coincidenciaClass = tieneCoincidencia ? ' row-coincidencia-descripcion' : ' row-sin-coincidencia';
+
         for (let i = 0; i < maxRows; i++) {
             const m = match.mayor[i];
             const e = match.extracto[i];
@@ -1842,7 +1846,7 @@ function llenarTablaConciliados(conciliados) {
             const isSubRow = i > 0;
             const manualClass = match.manual ? ' row-manual' : '';
 
-            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}">`;
+            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}${coincidenciaClass}">`;
 
             // Columnas Mayor
             if (m) {
@@ -4169,6 +4173,51 @@ function formatearMoneda(num) {
 function truncar(texto, maxLen) {
     if (!texto) return '';
     return texto.length > maxLen ? texto.substring(0, maxLen) + '...' : texto;
+}
+
+// Verifica si hay al menos N palabras coincidentes entre dos textos
+// Ignora palabras cortas (<=2 caracteres) y normaliza el texto
+function tieneCoincidenciaPalabras(texto1, texto2, minimoCoincidencias = 2) {
+    if (!texto1 || !texto2) return false;
+
+    // Normalizar: quitar acentos, convertir a minúsculas, quitar caracteres especiales
+    const normalizar = (texto) => {
+        return texto
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') // Quitar acentos
+            .replace(/[^a-z0-9\s]/g, ' ')    // Reemplazar caracteres especiales por espacios
+            .split(/\s+/)                     // Separar por espacios
+            .filter(palabra => palabra.length > 2); // Ignorar palabras muy cortas
+    };
+
+    const palabras1 = new Set(normalizar(texto1));
+    const palabras2 = normalizar(texto2);
+
+    let coincidencias = 0;
+    for (const palabra of palabras2) {
+        if (palabras1.has(palabra)) {
+            coincidencias++;
+            if (coincidencias >= minimoCoincidencias) return true;
+        }
+    }
+
+    return false;
+}
+
+// Verifica coincidencia de palabras para un match de conciliación
+// Compara todas las leyendas del mayor con todas las descripciones del extracto
+function matchTieneCoincidenciaDescripcion(match) {
+    if (!match.mayor || !match.extracto) return false;
+
+    for (const m of match.mayor) {
+        for (const e of match.extracto) {
+            if (tieneCoincidenciaPalabras(m.leyenda, e.descripcion, 2)) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 function mostrarMensaje(mensaje, tipo) {
