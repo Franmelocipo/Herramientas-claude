@@ -68,9 +68,28 @@ let filtrosExtracto = {
     origen: ''
 };
 
+// Estado de filtros para Conciliados
+let filtrosConciliados = {
+    // Mayor
+    fechaMayorDesde: null,
+    fechaMayorHasta: null,
+    numeroAsiento: '',
+    leyenda: '',
+    // Extracto
+    fechaExtractoDesde: null,
+    fechaExtractoHasta: null,
+    descripcion: '',
+    origen: '',
+    // Importe (aplica a ambos)
+    importeTipo: '',
+    importeValor: null,
+    importeValor2: null
+};
+
 // Datos filtrados (para mantener la lista original intacta)
 let mayorPendienteFiltrado = [];
 let extractoPendienteFiltrado = [];
+let conciliadosFiltrado = [];
 
 // Estado de ordenamiento para Mayor Pendiente
 let ordenMayor = {
@@ -1886,6 +1905,12 @@ function llenarTablaConciliados(conciliados) {
     });
 
     elements.tablaConciliados.innerHTML = html || '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos conciliados</td></tr>';
+
+    // Actualizar contador en tab
+    const countTab = document.getElementById('countConciliadosTab');
+    if (countTab) {
+        countTab.textContent = `(${conciliados.length})`;
+    }
 }
 
 function llenarTablaMayorPendiente(pendientes) {
@@ -2946,6 +2971,51 @@ function removerFiltro(seccion, campo) {
                 break;
         }
         aplicarFiltrosExtracto();
+    } else if (seccion === 'conciliados') {
+        switch (campo) {
+            case 'fechaMayorDesde':
+                filtrosConciliados.fechaMayorDesde = null;
+                document.getElementById('filtroConciliadosMayorFechaDesde').value = '';
+                break;
+            case 'fechaMayorHasta':
+                filtrosConciliados.fechaMayorHasta = null;
+                document.getElementById('filtroConciliadosMayorFechaHasta').value = '';
+                break;
+            case 'numeroAsiento':
+                filtrosConciliados.numeroAsiento = '';
+                document.getElementById('filtroConciliadosNumeroAsiento').value = '';
+                break;
+            case 'leyenda':
+                filtrosConciliados.leyenda = '';
+                document.getElementById('filtroConciliadosLeyenda').value = '';
+                break;
+            case 'fechaExtractoDesde':
+                filtrosConciliados.fechaExtractoDesde = null;
+                document.getElementById('filtroConciliadosExtractoFechaDesde').value = '';
+                break;
+            case 'fechaExtractoHasta':
+                filtrosConciliados.fechaExtractoHasta = null;
+                document.getElementById('filtroConciliadosExtractoFechaHasta').value = '';
+                break;
+            case 'descripcion':
+                filtrosConciliados.descripcion = '';
+                document.getElementById('filtroConciliadosDescripcion').value = '';
+                break;
+            case 'origen':
+                filtrosConciliados.origen = '';
+                document.getElementById('filtroConciliadosOrigen').value = '';
+                break;
+            case 'importe':
+                filtrosConciliados.importeTipo = '';
+                filtrosConciliados.importeValor = null;
+                filtrosConciliados.importeValor2 = null;
+                document.getElementById('filtroConciliadosImporteTipo').value = '';
+                document.getElementById('filtroConciliadosImporteValor').value = '';
+                document.getElementById('filtroConciliadosImporteValor2').value = '';
+                document.getElementById('filtroConciliadosImporteValor2').classList.add('hidden');
+                break;
+        }
+        aplicarFiltrosConciliados();
     }
 }
 
@@ -3201,6 +3271,374 @@ function limpiarFiltrosExtracto() {
     // Re-renderizar con todos los datos
     if (state.resultados) {
         llenarTablaExtractoPendiente(state.resultados.extractoNoConciliado);
+    }
+}
+
+// ========== FILTROS CONCILIADOS ==========
+
+/**
+ * Aplicar filtros a Conciliados
+ */
+function aplicarFiltrosConciliados() {
+    if (!state.resultados) return;
+
+    // Leer valores de los inputs - Mayor
+    filtrosConciliados.fechaMayorDesde = document.getElementById('filtroConciliadosMayorFechaDesde').value || null;
+    filtrosConciliados.fechaMayorHasta = document.getElementById('filtroConciliadosMayorFechaHasta').value || null;
+    filtrosConciliados.numeroAsiento = document.getElementById('filtroConciliadosNumeroAsiento').value.trim();
+    filtrosConciliados.leyenda = document.getElementById('filtroConciliadosLeyenda').value.trim();
+
+    // Leer valores de los inputs - Extracto
+    filtrosConciliados.fechaExtractoDesde = document.getElementById('filtroConciliadosExtractoFechaDesde').value || null;
+    filtrosConciliados.fechaExtractoHasta = document.getElementById('filtroConciliadosExtractoFechaHasta').value || null;
+    filtrosConciliados.descripcion = document.getElementById('filtroConciliadosDescripcion').value.trim();
+    filtrosConciliados.origen = document.getElementById('filtroConciliadosOrigen').value.trim();
+
+    // Leer valores de los inputs - Importe
+    filtrosConciliados.importeTipo = document.getElementById('filtroConciliadosImporteTipo').value || '';
+    filtrosConciliados.importeValor = parseFloat(document.getElementById('filtroConciliadosImporteValor').value) || null;
+    filtrosConciliados.importeValor2 = parseFloat(document.getElementById('filtroConciliadosImporteValor2').value) || null;
+
+    // Aplicar filtros
+    const original = state.resultados.conciliados;
+    conciliadosFiltrado = filtrarConciliados(original);
+
+    // Actualizar UI
+    renderizarConciliadosFiltrado();
+    mostrarResultadoFiltrosConciliados(conciliadosFiltrado.length, original.length);
+    mostrarBadgesFiltrosConciliados();
+}
+
+/**
+ * Filtrar conciliaciones según los filtros activos
+ */
+function filtrarConciliados(conciliaciones) {
+    return conciliaciones.filter(match => {
+        // Filtros para Mayor - se aplican a cualquier movimiento del grupo mayor
+        const mayorMovs = match.mayor || [];
+
+        // Filtro fecha Mayor desde
+        if (filtrosConciliados.fechaMayorDesde) {
+            const fechaDesde = new Date(filtrosConciliados.fechaMayorDesde);
+            const algunoEnRango = mayorMovs.some(m => m.fecha >= fechaDesde);
+            if (!algunoEnRango) return false;
+        }
+
+        // Filtro fecha Mayor hasta
+        if (filtrosConciliados.fechaMayorHasta) {
+            const fechaHasta = new Date(filtrosConciliados.fechaMayorHasta);
+            fechaHasta.setHours(23, 59, 59, 999);
+            const algunoEnRango = mayorMovs.some(m => m.fecha <= fechaHasta);
+            if (!algunoEnRango) return false;
+        }
+
+        // Filtro número de asiento (búsqueda parcial)
+        if (filtrosConciliados.numeroAsiento) {
+            const algunoCoincide = mayorMovs.some(m =>
+                String(m.numeroAsiento).toLowerCase().includes(filtrosConciliados.numeroAsiento.toLowerCase())
+            );
+            if (!algunoCoincide) return false;
+        }
+
+        // Filtro leyenda (búsqueda parcial, case insensitive)
+        if (filtrosConciliados.leyenda) {
+            const algunoCoincide = mayorMovs.some(m =>
+                m.leyenda && m.leyenda.toLowerCase().includes(filtrosConciliados.leyenda.toLowerCase())
+            );
+            if (!algunoCoincide) return false;
+        }
+
+        // Filtros para Extracto - se aplican a cualquier movimiento del grupo extracto
+        const extractoMovs = match.extracto || [];
+
+        // Filtro fecha Extracto desde
+        if (filtrosConciliados.fechaExtractoDesde) {
+            const fechaDesde = new Date(filtrosConciliados.fechaExtractoDesde);
+            const algunoEnRango = extractoMovs.some(e => e.fecha >= fechaDesde);
+            if (!algunoEnRango) return false;
+        }
+
+        // Filtro fecha Extracto hasta
+        if (filtrosConciliados.fechaExtractoHasta) {
+            const fechaHasta = new Date(filtrosConciliados.fechaExtractoHasta);
+            fechaHasta.setHours(23, 59, 59, 999);
+            const algunoEnRango = extractoMovs.some(e => e.fecha <= fechaHasta);
+            if (!algunoEnRango) return false;
+        }
+
+        // Filtro descripción (búsqueda parcial, case insensitive)
+        if (filtrosConciliados.descripcion) {
+            const algunoCoincide = extractoMovs.some(e =>
+                e.descripcion && e.descripcion.toLowerCase().includes(filtrosConciliados.descripcion.toLowerCase())
+            );
+            if (!algunoCoincide) return false;
+        }
+
+        // Filtro origen (búsqueda parcial)
+        if (filtrosConciliados.origen) {
+            const algunoCoincide = extractoMovs.some(e =>
+                String(e.origen).toLowerCase().includes(filtrosConciliados.origen.toLowerCase())
+            );
+            if (!algunoCoincide) return false;
+        }
+
+        // Filtro importe - busca en los importes de mayor y extracto
+        if (filtrosConciliados.importeTipo && filtrosConciliados.importeValor !== null) {
+            // Obtener todos los importes del match
+            const importesMayor = mayorMovs.map(m => m.importe || 0);
+            const importesExtracto = extractoMovs.map(e => e.importe || 0);
+            const todosImportes = [...importesMayor, ...importesExtracto];
+
+            let algunoCumple = false;
+            for (const importe of todosImportes) {
+                switch (filtrosConciliados.importeTipo) {
+                    case 'mayor':
+                        if (importe > filtrosConciliados.importeValor) algunoCumple = true;
+                        break;
+                    case 'menor':
+                        if (importe < filtrosConciliados.importeValor) algunoCumple = true;
+                        break;
+                    case 'igual':
+                        if (Math.abs(importe - filtrosConciliados.importeValor) <= 0.01) algunoCumple = true;
+                        break;
+                    case 'entre':
+                        if (filtrosConciliados.importeValor2 !== null) {
+                            if (importe >= filtrosConciliados.importeValor && importe <= filtrosConciliados.importeValor2) algunoCumple = true;
+                        }
+                        break;
+                }
+                if (algunoCumple) break;
+            }
+            if (!algunoCumple) return false;
+        }
+
+        return true;
+    });
+}
+
+/**
+ * Renderizar tabla de Conciliados con datos filtrados
+ */
+function renderizarConciliadosFiltrado() {
+    let html = '';
+
+    conciliadosFiltrado.forEach((match, idx) => {
+        const maxRows = Math.max(match.mayor.length, match.extracto.length);
+
+        for (let i = 0; i < maxRows; i++) {
+            const m = match.mayor[i];
+            const e = match.extracto[i];
+            const isFirst = i === 0;
+            const isSubRow = i > 0;
+            const manualClass = match.manual ? ' row-manual' : '';
+
+            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}">`;
+
+            // Columnas Mayor
+            if (m) {
+                html += `
+                    <td class="col-fecha">${formatearFecha(m.fecha)}</td>
+                    <td class="col-numero">${m.numeroAsiento}</td>
+                    <td class="col-leyenda" title="${m.leyenda}">${truncar(m.leyenda, 30)}</td>
+                    <td class="col-importe">${formatearNumero(m.importe)}</td>
+                `;
+            } else {
+                html += '<td class="col-fecha"></td><td class="col-numero"></td><td class="col-leyenda"></td><td class="col-importe"></td>';
+            }
+
+            // Separador
+            html += '<td class="separator"></td>';
+
+            // Columnas Extracto
+            if (e) {
+                html += `
+                    <td class="col-fecha">${formatearFecha(e.fecha)}</td>
+                    <td class="col-descripcion" title="${e.descripcion}">${truncar(e.descripcion, 25)}</td>
+                    <td class="col-origen">${e.origen}</td>
+                    <td class="col-importe">${formatearNumero(e.importe)}</td>
+                `;
+            } else {
+                html += '<td class="col-fecha"></td><td class="col-descripcion"></td><td class="col-origen"></td><td class="col-importe"></td>';
+            }
+
+            // Diferencia (solo en primera fila)
+            if (isFirst) {
+                const colorClass = match.diferencia > 0 ? 'text-red' : 'text-green';
+                html += `<td class="col-diferencia ${colorClass}">${match.diferencia > 0 ? formatearNumero(match.diferencia) : '-'}</td>`;
+            } else {
+                html += '<td class="col-diferencia"></td>';
+            }
+
+            // Botón de acción (solo en primera fila)
+            if (isFirst) {
+                const manualBadge = match.manual ? '<span class="badge-manual">Manual</span>' : '';
+                let reprocesoBadge = '';
+                if (match.reproceso && match.parametrosReproceso) {
+                    const tooltipText = `Reproceso #${match.parametrosReproceso.numeroReproceso}: ${match.parametrosReproceso.toleranciaFecha} días, $${match.parametrosReproceso.toleranciaImporte.toLocaleString('es-AR')}`;
+                    reprocesoBadge = `<span class="badge-reproceso" title="${tooltipText}">🔄 Rep</span>`;
+                }
+                html += `
+                    <td class="col-action">
+                        ${manualBadge}${reprocesoBadge}
+                        <button class="btn-desconciliar" onclick="desconciliar('${match.id}')" title="Desconciliar">
+                            ✕
+                        </button>
+                    </td>
+                `;
+            } else {
+                html += '<td class="col-action"></td>';
+            }
+
+            html += '</tr>';
+        }
+    });
+
+    elements.tablaConciliados.innerHTML = html || '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:20px;">No hay conciliaciones que coincidan con los filtros</td></tr>';
+
+    // Actualizar contador en tab
+    const countTab = document.getElementById('countConciliadosTab');
+    if (countTab) {
+        countTab.textContent = `(${conciliadosFiltrado.length})`;
+    }
+}
+
+/**
+ * Mostrar contador de resultados filtrados Conciliados
+ */
+function mostrarResultadoFiltrosConciliados(mostrados, total) {
+    const resultado = document.getElementById('filtrosConciliadosResultado');
+    const spanMostrados = document.getElementById('filtrosConciliadosMostrados');
+    const spanTotal = document.getElementById('filtrosConciliadosTotal');
+
+    if (hayFiltrosActivosConciliados()) {
+        spanMostrados.textContent = mostrados;
+        spanTotal.textContent = total;
+        resultado.classList.remove('hidden');
+    } else {
+        resultado.classList.add('hidden');
+    }
+}
+
+/**
+ * Verificar si hay filtros activos en Conciliados
+ */
+function hayFiltrosActivosConciliados() {
+    return filtrosConciliados.fechaMayorDesde ||
+           filtrosConciliados.fechaMayorHasta ||
+           filtrosConciliados.numeroAsiento ||
+           filtrosConciliados.leyenda ||
+           filtrosConciliados.fechaExtractoDesde ||
+           filtrosConciliados.fechaExtractoHasta ||
+           filtrosConciliados.descripcion ||
+           filtrosConciliados.origen ||
+           (filtrosConciliados.importeTipo && filtrosConciliados.importeValor !== null);
+}
+
+/**
+ * Mostrar badges de filtros activos Conciliados
+ */
+function mostrarBadgesFiltrosConciliados() {
+    const container = document.getElementById('filtrosConciliadosActivos');
+    let badges = '';
+
+    // Badges de Mayor
+    if (filtrosConciliados.fechaMayorDesde) {
+        badges += crearBadgeFiltro('Mayor desde: ' + filtrosConciliados.fechaMayorDesde, 'conciliados', 'fechaMayorDesde');
+    }
+    if (filtrosConciliados.fechaMayorHasta) {
+        badges += crearBadgeFiltro('Mayor hasta: ' + filtrosConciliados.fechaMayorHasta, 'conciliados', 'fechaMayorHasta');
+    }
+    if (filtrosConciliados.numeroAsiento) {
+        badges += crearBadgeFiltro('Asiento: ' + filtrosConciliados.numeroAsiento, 'conciliados', 'numeroAsiento');
+    }
+    if (filtrosConciliados.leyenda) {
+        badges += crearBadgeFiltro('Leyenda: ' + truncar(filtrosConciliados.leyenda, 20), 'conciliados', 'leyenda');
+    }
+
+    // Badges de Extracto
+    if (filtrosConciliados.fechaExtractoDesde) {
+        badges += crearBadgeFiltro('Extracto desde: ' + filtrosConciliados.fechaExtractoDesde, 'conciliados', 'fechaExtractoDesde');
+    }
+    if (filtrosConciliados.fechaExtractoHasta) {
+        badges += crearBadgeFiltro('Extracto hasta: ' + filtrosConciliados.fechaExtractoHasta, 'conciliados', 'fechaExtractoHasta');
+    }
+    if (filtrosConciliados.descripcion) {
+        badges += crearBadgeFiltro('Descripción: ' + truncar(filtrosConciliados.descripcion, 20), 'conciliados', 'descripcion');
+    }
+    if (filtrosConciliados.origen) {
+        badges += crearBadgeFiltro('Origen: ' + filtrosConciliados.origen, 'conciliados', 'origen');
+    }
+
+    // Badge de importe
+    if (filtrosConciliados.importeTipo && filtrosConciliados.importeValor !== null) {
+        let textoImporte = '';
+        switch (filtrosConciliados.importeTipo) {
+            case 'mayor': textoImporte = `> $${formatearNumero(filtrosConciliados.importeValor)}`; break;
+            case 'menor': textoImporte = `< $${formatearNumero(filtrosConciliados.importeValor)}`; break;
+            case 'igual': textoImporte = `= $${formatearNumero(filtrosConciliados.importeValor)}`; break;
+            case 'entre': textoImporte = `$${formatearNumero(filtrosConciliados.importeValor)} - $${formatearNumero(filtrosConciliados.importeValor2 || 0)}`; break;
+        }
+        badges += crearBadgeFiltro('Importe: ' + textoImporte, 'conciliados', 'importe');
+    }
+
+    container.innerHTML = badges;
+    if (badges) {
+        container.classList.remove('hidden');
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
+/**
+ * Limpiar todos los filtros de Conciliados
+ */
+function limpiarFiltrosConciliados() {
+    // Resetear estado
+    filtrosConciliados = {
+        fechaMayorDesde: null,
+        fechaMayorHasta: null,
+        numeroAsiento: '',
+        leyenda: '',
+        fechaExtractoDesde: null,
+        fechaExtractoHasta: null,
+        descripcion: '',
+        origen: '',
+        importeTipo: '',
+        importeValor: null,
+        importeValor2: null
+    };
+
+    // Resetear inputs - Mayor
+    document.getElementById('filtroConciliadosMayorFechaDesde').value = '';
+    document.getElementById('filtroConciliadosMayorFechaHasta').value = '';
+    document.getElementById('filtroConciliadosNumeroAsiento').value = '';
+    document.getElementById('filtroConciliadosLeyenda').value = '';
+
+    // Resetear inputs - Extracto
+    document.getElementById('filtroConciliadosExtractoFechaDesde').value = '';
+    document.getElementById('filtroConciliadosExtractoFechaHasta').value = '';
+    document.getElementById('filtroConciliadosDescripcion').value = '';
+    document.getElementById('filtroConciliadosOrigen').value = '';
+
+    // Resetear inputs - Importe
+    document.getElementById('filtroConciliadosImporteTipo').value = '';
+    document.getElementById('filtroConciliadosImporteValor').value = '';
+    document.getElementById('filtroConciliadosImporteValor2').value = '';
+    document.getElementById('filtroConciliadosImporteValor2').classList.add('hidden');
+
+    // Ocultar resultados y badges
+    document.getElementById('filtrosConciliadosResultado').classList.add('hidden');
+    document.getElementById('filtrosConciliadosActivos').classList.add('hidden');
+    document.getElementById('filtrosConciliadosActivos').innerHTML = '';
+
+    // Re-renderizar con todos los datos
+    if (state.resultados) {
+        llenarTablaConciliados(state.resultados.conciliados);
+        // Actualizar contador
+        const countTab = document.getElementById('countConciliadosTab');
+        if (countTab) {
+            countTab.textContent = `(${state.resultados.conciliados.length})`;
+        }
     }
 }
 

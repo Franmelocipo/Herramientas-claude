@@ -332,6 +332,94 @@
 
                 <!-- Tabla de conciliados -->
                 <div class="tab-content active" id="tab-conciliados">
+                    <div class="panel-header-pendiente">
+                        <h3>Conciliados <span id="countConciliadosTab">(0)</span></h3>
+                        <button class="btn-filtros" id="btnFiltrosConciliados" onclick="toggleFiltros('conciliados')">
+                            🔍 Filtros ▼
+                        </button>
+                    </div>
+
+                    <!-- Panel de filtros Conciliados -->
+                    <div id="filtros-conciliados" class="filtros-panel hidden">
+                        <div class="filtros-conciliados-container">
+                            <!-- Filtros Mayor Contable -->
+                            <div class="filtros-seccion">
+                                <h4 class="filtros-seccion-titulo">Mayor Contable</h4>
+                                <div class="filtros-grid">
+                                    <div class="filtro-grupo">
+                                        <label>Fecha desde:</label>
+                                        <input type="date" id="filtroConciliadosMayorFechaDesde" class="filtro-input">
+                                    </div>
+                                    <div class="filtro-grupo">
+                                        <label>Fecha hasta:</label>
+                                        <input type="date" id="filtroConciliadosMayorFechaHasta" class="filtro-input">
+                                    </div>
+                                    <div class="filtro-grupo">
+                                        <label>Nº Asiento:</label>
+                                        <input type="text" id="filtroConciliadosNumeroAsiento" class="filtro-input" placeholder="Buscar...">
+                                    </div>
+                                    <div class="filtro-grupo filtro-ancho">
+                                        <label>Leyenda:</label>
+                                        <input type="text" id="filtroConciliadosLeyenda" class="filtro-input" placeholder="Buscar en leyenda...">
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Filtros Extracto Bancario -->
+                            <div class="filtros-seccion">
+                                <h4 class="filtros-seccion-titulo">Extracto Bancario</h4>
+                                <div class="filtros-grid">
+                                    <div class="filtro-grupo">
+                                        <label>Fecha desde:</label>
+                                        <input type="date" id="filtroConciliadosExtractoFechaDesde" class="filtro-input">
+                                    </div>
+                                    <div class="filtro-grupo">
+                                        <label>Fecha hasta:</label>
+                                        <input type="date" id="filtroConciliadosExtractoFechaHasta" class="filtro-input">
+                                    </div>
+                                    <div class="filtro-grupo">
+                                        <label>Origen:</label>
+                                        <input type="text" id="filtroConciliadosOrigen" class="filtro-input" placeholder="Buscar...">
+                                    </div>
+                                    <div class="filtro-grupo filtro-ancho">
+                                        <label>Descripción:</label>
+                                        <input type="text" id="filtroConciliadosDescripcion" class="filtro-input" placeholder="Buscar en descripción...">
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Filtro de Importe (común) -->
+                            <div class="filtros-seccion filtros-seccion-importe">
+                                <h4 class="filtros-seccion-titulo">Importe</h4>
+                                <div class="filtros-grid">
+                                    <div class="filtro-grupo filtro-importe">
+                                        <div class="filtro-importe-wrapper">
+                                            <select id="filtroConciliadosImporteTipo" class="filtro-select" onchange="toggleSegundoImporte('conciliados')">
+                                                <option value="">-- Seleccionar --</option>
+                                                <option value="mayor">Mayor que</option>
+                                                <option value="menor">Menor que</option>
+                                                <option value="igual">Igual a</option>
+                                                <option value="entre">Entre</option>
+                                            </select>
+                                            <input type="number" id="filtroConciliadosImporteValor" class="filtro-input filtro-numero" placeholder="Monto" step="0.01">
+                                            <input type="number" id="filtroConciliadosImporteValor2" class="filtro-input filtro-numero hidden" placeholder="Monto máx" step="0.01">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="filtros-acciones">
+                            <button class="btn-aplicar-filtro" onclick="aplicarFiltrosConciliados()">Aplicar Filtros</button>
+                            <button class="btn-limpiar-filtro" onclick="limpiarFiltrosConciliados()">Limpiar</button>
+                        </div>
+                    </div>
+
+                    <!-- Contador de resultados filtrados -->
+                    <div id="filtrosConciliadosResultado" class="filtros-resultado hidden">
+                        Mostrando <span id="filtrosConciliadosMostrados">0</span> de <span id="filtrosConciliadosTotal">0</span> conciliaciones
+                    </div>
+
+                    <!-- Badges de filtros activos -->
+                    <div id="filtrosConciliadosActivos" class="filtros-activos hidden"></div>
+
                     <div class="table-wrapper">
                         <table class="results-table">
                             <thead>
