@@ -2260,7 +2260,21 @@ function mostrarResultados() {
 function llenarTablaConciliados(conciliados) {
     let html = '';
 
-    conciliados.forEach((match, idx) => {
+    // Ordenar por color: verdes (con coincidencia) arriba, naranjas (sin coincidencia) abajo
+    const conciliadosOrdenados = [...conciliados].sort((a, b) => {
+        const tieneCoincidenciaA = a.coincidenciaOverride !== undefined
+            ? a.coincidenciaOverride
+            : matchTieneCoincidenciaDescripcion(a);
+        const tieneCoincidenciaB = b.coincidenciaOverride !== undefined
+            ? b.coincidenciaOverride
+            : matchTieneCoincidenciaDescripcion(b);
+
+        // Verdes (true) primero, naranjas (false) después
+        if (tieneCoincidenciaA === tieneCoincidenciaB) return 0;
+        return tieneCoincidenciaA ? -1 : 1;
+    });
+
+    conciliadosOrdenados.forEach((match, idx) => {
         const maxRows = Math.max(match.mayor.length, match.extracto.length);
 
         // Determinar clase según coincidencia de descripción
