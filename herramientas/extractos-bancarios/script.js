@@ -5135,14 +5135,16 @@ function toggleMovimientoSeleccionado(index, checkbox) {
 
 // Toggle seleccionar todos (solo los visibles/filtrados)
 function toggleSeleccionarTodos(checkbox) {
-    const dataToShow = filterState.isFilterActive ? filterState.filteredData : state.extractedData;
+    // Verificar si ALGÚN filtro está activo (descripción O importes)
+    const anyFilterActive = filterState.isFilterActive || filterState.isImportesFilterActive;
+    const dataToShow = anyFilterActive ? filterState.filteredData : state.extractedData;
 
     selectionState.selectAllChecked = checkbox.checked;
 
     if (checkbox.checked) {
         // Seleccionar todos los visibles
         dataToShow.forEach((_, idx) => {
-            const originalIndex = filterState.isFilterActive
+            const originalIndex = anyFilterActive
                 ? state.extractedData.indexOf(dataToShow[idx])
                 : idx;
             selectionState.selectedIndices.add(originalIndex);
