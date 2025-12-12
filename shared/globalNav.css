@@ -1,0 +1,262 @@
+/**
+ * Estilos para la Navegación Global
+ * Barra superior persistente para todo el sistema
+ */
+
+/* Barra de navegación principal */
+.global-nav {
+    background: #1a3a5c;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 12px 0;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.global-nav-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+/* Logo / Título */
+.global-nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #ffffff;
+    text-decoration: none;
+    transition: opacity 0.2s;
+}
+
+.global-nav-brand:hover {
+    opacity: 0.9;
+}
+
+.global-nav-icon {
+    font-size: 22px;
+}
+
+.global-nav-left {
+    display: flex;
+    align-items: center;
+}
+
+/* Contenedor de botones */
+.global-nav-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Botones de la barra */
+.global-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #2c5282;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(44, 82, 130, 0.25);
+    white-space: nowrap;
+}
+
+.global-nav-btn:hover {
+    transform: translateY(-1px);
+    background: #2a4a6d;
+    box-shadow: 0 4px 10px rgba(44, 82, 130, 0.35);
+}
+
+/* Botón de Herramientas - destacado */
+.global-nav-btn.herramientas-btn {
+    background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+    box-shadow: 0 2px 8px rgba(56, 161, 105, 0.3);
+}
+
+.global-nav-btn.herramientas-btn:hover {
+    background: linear-gradient(135deg, #2f855a 0%, #276749 100%);
+    box-shadow: 0 4px 12px rgba(56, 161, 105, 0.4);
+}
+
+/* Dropdown */
+.global-nav-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-arrow {
+    font-size: 9px;
+    margin-left: 4px;
+    transition: transform 0.2s ease;
+}
+
+.global-nav-dropdown:hover .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.global-nav-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 280px;
+    background: #2c5282;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    z-index: 1001;
+    margin-top: 4px;
+    overflow: hidden;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+/* Menú de herramientas más ancho */
+.global-nav-dropdown-menu.herramientas-menu {
+    min-width: 320px;
+    right: 0;
+    left: auto;
+}
+
+.global-nav-dropdown:hover .global-nav-dropdown-menu {
+    display: block;
+    animation: fadeInDown 0.15s ease-out;
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Items del dropdown */
+.global-nav-dropdown-menu .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 16px;
+    background: transparent;
+    color: white;
+    border: none;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    text-align: left;
+    text-decoration: none;
+}
+
+.global-nav-dropdown-menu .dropdown-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.global-nav-dropdown-menu .dropdown-item span:first-child {
+    font-size: 16px;
+    width: 24px;
+    text-align: center;
+}
+
+/* Separador visual entre grupos de herramientas */
+.global-nav-dropdown-menu .dropdown-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.15);
+    margin: 4px 12px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .global-nav-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .global-nav-left {
+        justify-content: center;
+        margin-bottom: 8px;
+    }
+
+    .global-nav-buttons {
+        justify-content: center;
+    }
+
+    .global-nav-dropdown-menu.herramientas-menu {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+    }
+}
+
+@media (max-width: 600px) {
+    .global-nav {
+        padding: 10px 0;
+    }
+
+    .global-nav-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .global-nav-btn span:not(:first-child):not(.dropdown-arrow) {
+        display: none;
+    }
+
+    .global-nav-btn span:first-child {
+        font-size: 16px;
+    }
+
+    .global-nav-brand span:not(.global-nav-icon) {
+        display: none;
+    }
+
+    .global-nav-dropdown-menu {
+        min-width: 260px;
+        font-size: 12px;
+    }
+
+    .global-nav-dropdown-menu .dropdown-item {
+        padding: 10px 14px;
+    }
+}
+
+/* Ocultar nav-bar existente cuando se use globalNav */
+.global-nav ~ .nav-bar,
+.global-nav + .nav-bar {
+    display: none !important;
+}
+
+/* Scrollbar del dropdown */
+.global-nav-dropdown-menu::-webkit-scrollbar {
+    width: 6px;
+}
+
+.global-nav-dropdown-menu::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.global-nav-dropdown-menu::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+}
+
+.global-nav-dropdown-menu::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
+}
