@@ -179,6 +179,87 @@
                 </div>
             </div>
 
+            <!-- Paso 2.5: Administración del Mayor (opcional) -->
+            <div class="step hidden" id="step-admin-mayor">
+                <h2 class="step-title">
+                    <span class="step-number">📒</span>
+                    Administrar Mayor Contable
+                </h2>
+                <p class="step-subtitle">Filtra y etiqueta los movimientos del mayor. Las etiquetas permiten una conciliación más precisa.</p>
+
+                <!-- Panel de estadísticas -->
+                <div id="estadisticasCategoriasMayor" class="estadisticas-categorias"></div>
+
+                <!-- Filtros por categoría -->
+                <div class="filtros-categorias-container">
+                    <div class="filtros-categorias-header">
+                        <span class="filtros-label">Filtrar por categoría:</span>
+                        <button class="btn-limpiar-filtros" onclick="limpiarFiltrosCategoriaAdmin()">Limpiar filtros</button>
+                    </div>
+                    <div id="filtrosMarcadoresMayorAdmin" class="filtros-marcadores"></div>
+                </div>
+
+                <!-- Filtros de texto -->
+                <div class="filtros-texto-admin">
+                    <div class="filtro-grupo">
+                        <label>Fecha:</label>
+                        <input type="text" id="filtroAdminFecha" class="filtro-input" placeholder="DD/MM/YYYY" oninput="aplicarFiltrosAdminMayor()">
+                    </div>
+                    <div class="filtro-grupo filtro-ancho">
+                        <label>Leyenda:</label>
+                        <input type="text" id="filtroAdminLeyenda" class="filtro-input" placeholder="Buscar en leyenda..." oninput="aplicarFiltrosAdminMayor()">
+                    </div>
+                    <div class="filtro-grupo">
+                        <label>Importe:</label>
+                        <input type="number" id="filtroAdminImporte" class="filtro-input" placeholder="Monto exacto" step="0.01" oninput="aplicarFiltrosAdminMayor()">
+                    </div>
+                </div>
+
+                <!-- Acción masiva de asignación -->
+                <div class="accion-masiva-categoria">
+                    <span class="accion-label">Asignar categoría a filtrados:</span>
+                    <select id="selectCategoriaAsignar" class="select-categoria-asignar">
+                        <!-- Se llena dinámicamente -->
+                    </select>
+                    <button class="btn-asignar-categoria" onclick="asignarCategoriaFiltrados()">
+                        🏷️ Asignar a filtrados
+                    </button>
+                </div>
+
+                <!-- Contador de resultados -->
+                <div class="contador-admin">
+                    Mostrando <span id="countMayorAdmin">(0)</span> movimientos
+                </div>
+
+                <!-- Tabla de administración del mayor -->
+                <div class="table-wrapper table-admin-mayor">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Nº Asiento</th>
+                                <th>Leyenda</th>
+                                <th class="text-right">Importe</th>
+                                <th>Categoría</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaMayorAdmin">
+                            <tr><td colspan="5" class="text-muted" style="text-align:center;padding:20px;">Cargue un archivo del Mayor para administrarlo</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Nota informativa -->
+                <div class="nota-etiquetas">
+                    <span class="nota-icono">💡</span>
+                    <div class="nota-texto">
+                        <strong>Tip:</strong> Los movimientos con etiqueta solo se conciliarán automáticamente con movimientos del extracto que tengan la misma etiqueta.
+                        Los movimientos sin etiqueta pueden conciliarse con cualquier movimiento del extracto.
+                        La conciliación manual no tiene esta restricción.
+                    </div>
+                </div>
+            </div>
+
             <!-- Paso 3: Configuración de tolerancias -->
             <div class="step hidden" id="step-tolerancias">
                 <h2 class="step-title">

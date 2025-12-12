@@ -25,8 +25,31 @@ let state = {
     clienteSeleccionado: null,
     cuentaSeleccionada: null,
     extractosAuditoria: [], // Extractos cargados desde auditoría
-    rangoExtractos: { desde: null, hasta: null }
+    rangoExtractos: { desde: null, hasta: null },
+    // Administración del mayor
+    mayorAdministrado: false, // Si el usuario ha revisado/administrado el mayor
+    filtrosMayorAdmin: {}, // Filtros aplicados en administración del mayor
+    filtroCategoriaMayorAdmin: [] // Categorías seleccionadas para filtrar
 };
+
+// Categorías predefinidas por defecto (se cargan desde BD o localStorage)
+const CATEGORIAS_DEFAULT = [
+    { id: 'comisiones', nombre: 'Comisiones', color: '#f59e0b', orden: 1 },
+    { id: 'iva', nombre: 'IVA', color: '#8b5cf6', orden: 2 },
+    { id: 'gastos_bancarios', nombre: 'Gastos Bancarios', color: '#ef4444', orden: 3 },
+    { id: 'transferencias', nombre: 'Transferencias', color: '#3b82f6', orden: 4 },
+    { id: 'impuestos', nombre: 'Impuestos', color: '#ec4899', orden: 5 },
+    { id: 'servicios', nombre: 'Servicios', color: '#14b8a6', orden: 6 },
+    { id: 'proveedores', nombre: 'Proveedores', color: '#f97316', orden: 7 },
+    { id: 'sueldos', nombre: 'Sueldos', color: '#06b6d4', orden: 8 },
+    { id: 'ventas', nombre: 'Ventas', color: '#22c55e', orden: 9 },
+    { id: 'otros', nombre: 'Otros', color: '#64748b', orden: 10 }
+];
+
+// Categorías dinámicas (se cargan al inicio)
+let CATEGORIAS_MOVIMIENTO = [
+    { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' }
+];
 
 // Cache de datos de auditoría
 let auditoriaCache = {
@@ -281,6 +304,9 @@ function init() {
 
     // Inicializar integración con auditoría
     initAuditoriaIntegration();
+
+    // Cargar categorías para etiquetado del mayor
+    cargarCategoriasConciliador();
 }
 
 // ========== SELECCIÓN DE TIPO ==========
@@ -763,6 +789,376 @@ function actualizarEstadoAuditoria(tipo, mensaje) {
     status.classList.remove('hidden');
 }
 
+// ========== CATEGORÍAS PARA ETIQUETADO DEL MAYOR ==========
+
+/**
+ * Cargar categorías desde Supabase o usar las predefinidas
+ */
+async function cargarCategoriasConciliador() {
+    try {
+        let categorias = [];
+
+        // Esperar a que Supabase esté disponible
+        let supabaseClient = null;
+
+        if (typeof waitForSupabase === 'function') {
+            supabaseClient = await waitForSupabase();
+        } else {
+            // Fallback: esperar a que la variable global supabase esté disponible
+            for (let i = 0; i < 50; i++) {
+                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
+                    supabaseClient = supabase;
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        if (supabaseClient) {
+            const { data, error } = await supabaseClient
+                .from('categorias_movimientos')
+                .select('*')
+                .order('orden');
+
+            if (error) {
+                // Si la tabla no existe, usar las predefinidas
+                if (error.code === '42P01' || error.message.includes('does not exist')) {
+                    console.warn('Tabla categorias_movimientos no existe, usando predefinidas');
+                    categorias = CATEGORIAS_DEFAULT;
+                } else {
+                    throw error;
+                }
+            } else {
+                categorias = data || [];
+            }
+        }
+
+        // Si no hay categorías en BD, usar las predefinidas
+        if (categorias.length === 0) {
+            categorias = CATEGORIAS_DEFAULT;
+        }
+
+        // Construir CATEGORIAS_MOVIMIENTO con "Sin categoría" al inicio
+        CATEGORIAS_MOVIMIENTO = [
+            { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' },
+            ...categorias
+        ];
+
+        console.log('✅ Categorías cargadas en conciliador:', CATEGORIAS_MOVIMIENTO.length);
+    } catch (error) {
+        console.error('Error cargando categorías:', error);
+        // Usar predefinidas en caso de error
+        CATEGORIAS_MOVIMIENTO = [
+            { id: '', nombre: '-- Sin categoría --', color: '#94a3b8' },
+            ...CATEGORIAS_DEFAULT
+        ];
+    }
+}
+
+/**
+ * Obtener categoría por ID
+ */
+function obtenerCategoria(id) {
+    return CATEGORIAS_MOVIMIENTO.find(c => c.id === (id || '')) || CATEGORIAS_MOVIMIENTO[0];
+}
+
+// ========== ADMINISTRACIÓN DEL MAYOR ==========
+
+/**
+ * Mostrar el panel de administración del mayor después de cargarlo
+ */
+function mostrarAdminMayor() {
+    const stepAdminMayor = document.getElementById('step-admin-mayor');
+    if (stepAdminMayor) {
+        stepAdminMayor.classList.remove('hidden');
+        renderizarTablaMayorAdmin();
+        inicializarFiltrosCategoriasMayor();
+    }
+}
+
+/**
+ * Ocultar el panel de administración del mayor
+ */
+function ocultarAdminMayor() {
+    const stepAdminMayor = document.getElementById('step-admin-mayor');
+    if (stepAdminMayor) {
+        stepAdminMayor.classList.add('hidden');
+    }
+}
+
+/**
+ * Inicializar los controles de filtros por categoría
+ */
+function inicializarFiltrosCategoriasMayor() {
+    const container = document.getElementById('filtrosMarcadoresMayorAdmin');
+    if (!container) return;
+
+    container.innerHTML = CATEGORIAS_MOVIMIENTO.map(c => {
+        const isActive = state.filtroCategoriaMayorAdmin.includes(c.id);
+        return `
+            <button class="filtro-marcador ${isActive ? 'active' : ''}"
+                    data-categoria="${c.id}"
+                    style="--color-cat: ${c.color}"
+                    onclick="toggleFiltroCategoriaAdmin('${c.id}')">
+                <span class="marcador-color" style="background-color: ${c.color}"></span>
+                <span class="marcador-nombre">${c.nombre}</span>
+            </button>
+        `;
+    }).join('');
+
+    // También llenar el select de categorías para asignar en batch
+    const selectAsignar = document.getElementById('selectCategoriaAsignar');
+    if (selectAsignar) {
+        selectAsignar.innerHTML = CATEGORIAS_MOVIMIENTO.map(c =>
+            `<option value="${c.id}">${c.nombre}</option>`
+        ).join('');
+    }
+}
+
+/**
+ * Alternar filtro por categoría en administración del mayor
+ */
+function toggleFiltroCategoriaAdmin(categoriaId) {
+    const idx = state.filtroCategoriaMayorAdmin.indexOf(categoriaId);
+    if (idx === -1) {
+        state.filtroCategoriaMayorAdmin.push(categoriaId);
+    } else {
+        state.filtroCategoriaMayorAdmin.splice(idx, 1);
+    }
+    inicializarFiltrosCategoriasMayor();
+    renderizarTablaMayorAdmin();
+}
+
+/**
+ * Limpiar todos los filtros de categoría
+ */
+function limpiarFiltrosCategoriaAdmin() {
+    state.filtroCategoriaMayorAdmin = [];
+    inicializarFiltrosCategoriasMayor();
+    renderizarTablaMayorAdmin();
+}
+
+/**
+ * Renderizar tabla de administración del mayor con filtros y categorías
+ */
+function renderizarTablaMayorAdmin() {
+    const tbody = document.getElementById('tablaMayorAdmin');
+    if (!tbody) return;
+
+    // Aplicar filtros
+    let movimientos = [...state.datosMayor];
+
+    // Filtro por categorías
+    if (state.filtroCategoriaMayorAdmin.length > 0) {
+        movimientos = movimientos.filter(m =>
+            state.filtroCategoriaMayorAdmin.includes(m.categoria || '')
+        );
+    }
+
+    // Filtros de texto
+    const filtroFecha = document.getElementById('filtroAdminFecha')?.value || '';
+    const filtroLeyenda = document.getElementById('filtroAdminLeyenda')?.value?.toLowerCase() || '';
+    const filtroImporte = document.getElementById('filtroAdminImporte')?.value || '';
+
+    if (filtroFecha) {
+        movimientos = movimientos.filter(m => {
+            const fechaStr = formatearFecha(m.fecha);
+            return fechaStr.includes(filtroFecha);
+        });
+    }
+
+    if (filtroLeyenda) {
+        movimientos = movimientos.filter(m =>
+            (m.leyenda || '').toLowerCase().includes(filtroLeyenda)
+        );
+    }
+
+    if (filtroImporte) {
+        const importeNum = parseFloat(filtroImporte);
+        if (!isNaN(importeNum)) {
+            movimientos = movimientos.filter(m =>
+                Math.abs(m.debe - importeNum) < 1 || Math.abs(m.haber - importeNum) < 1
+            );
+        }
+    }
+
+    // Actualizar contador
+    const countEl = document.getElementById('countMayorAdmin');
+    if (countEl) {
+        countEl.textContent = `(${movimientos.length} de ${state.datosMayor.length})`;
+    }
+
+    // Generar HTML de la tabla
+    let html = '';
+    movimientos.forEach(m => {
+        const categoria = obtenerCategoria(m.categoria);
+        const importe = m.debe > 0 ? m.debe : m.haber;
+        const tipoImporte = m.debe > 0 ? 'debe' : 'haber';
+
+        html += `
+            <tr data-id="${m.id}">
+                <td>${formatearFecha(m.fecha)}</td>
+                <td>${m.numeroAsiento || ''}</td>
+                <td title="${m.leyenda}">${truncar(m.leyenda, 45)}</td>
+                <td class="text-right ${tipoImporte === 'debe' ? 'text-green' : 'text-red'}">
+                    ${formatearNumero(importe)}
+                </td>
+                <td class="col-categoria">
+                    <select class="select-categoria" onchange="cambiarCategoriaMayor('${m.id}', this.value)"
+                            style="border-left: 4px solid ${categoria.color}">
+                        ${CATEGORIAS_MOVIMIENTO.map(c =>
+                            `<option value="${c.id}" ${c.id === (m.categoria || '') ? 'selected' : ''}>
+                                ${c.nombre}
+                            </option>`
+                        ).join('')}
+                    </select>
+                </td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = html || '<tr><td colspan="5" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos cargados</td></tr>';
+
+    // Actualizar estadísticas
+    actualizarEstadisticasCategoriasMayor();
+}
+
+/**
+ * Cambiar la categoría de un movimiento del mayor
+ */
+function cambiarCategoriaMayor(id, categoriaId) {
+    const mov = state.datosMayor.find(m => m.id === id);
+    if (mov) {
+        mov.categoria = categoriaId;
+        renderizarTablaMayorAdmin();
+    }
+}
+
+/**
+ * Asignar categoría a todos los movimientos filtrados
+ */
+function asignarCategoriaFiltrados() {
+    const selectCategoria = document.getElementById('selectCategoriaAsignar');
+    if (!selectCategoria) return;
+
+    const categoriaId = selectCategoria.value;
+
+    // Obtener movimientos actualmente visibles (filtrados)
+    let movimientos = [...state.datosMayor];
+
+    // Aplicar los mismos filtros
+    if (state.filtroCategoriaMayorAdmin.length > 0) {
+        movimientos = movimientos.filter(m =>
+            state.filtroCategoriaMayorAdmin.includes(m.categoria || '')
+        );
+    }
+
+    const filtroFecha = document.getElementById('filtroAdminFecha')?.value || '';
+    const filtroLeyenda = document.getElementById('filtroAdminLeyenda')?.value?.toLowerCase() || '';
+
+    if (filtroFecha) {
+        movimientos = movimientos.filter(m => {
+            const fechaStr = formatearFecha(m.fecha);
+            return fechaStr.includes(filtroFecha);
+        });
+    }
+
+    if (filtroLeyenda) {
+        movimientos = movimientos.filter(m =>
+            (m.leyenda || '').toLowerCase().includes(filtroLeyenda)
+        );
+    }
+
+    if (movimientos.length === 0) {
+        alert('No hay movimientos filtrados para asignar categoría');
+        return;
+    }
+
+    const categoria = obtenerCategoria(categoriaId);
+    if (!confirm(`¿Asignar la categoría "${categoria.nombre}" a ${movimientos.length} movimientos?`)) {
+        return;
+    }
+
+    // Asignar categoría
+    movimientos.forEach(m => {
+        const movOriginal = state.datosMayor.find(orig => orig.id === m.id);
+        if (movOriginal) {
+            movOriginal.categoria = categoriaId;
+        }
+    });
+
+    renderizarTablaMayorAdmin();
+    mostrarMensaje(`Categoría asignada a ${movimientos.length} movimientos`, 'success');
+}
+
+/**
+ * Actualizar estadísticas de categorías del mayor
+ */
+function actualizarEstadisticasCategoriasMayor() {
+    const container = document.getElementById('estadisticasCategoriasMayor');
+    if (!container) return;
+
+    // Contar por categoría
+    const conteo = {};
+    let sinCategoria = 0;
+    let total = state.datosMayor.length;
+
+    state.datosMayor.forEach(m => {
+        if (!m.categoria) {
+            sinCategoria++;
+        } else {
+            conteo[m.categoria] = (conteo[m.categoria] || 0) + 1;
+        }
+    });
+
+    const clasificados = total - sinCategoria;
+    const porcentaje = total > 0 ? Math.round((clasificados / total) * 100) : 0;
+
+    container.innerHTML = `
+        <div class="estadistica-item">
+            <span class="estadistica-label">Clasificados:</span>
+            <span class="estadistica-valor">${clasificados} de ${total} (${porcentaje}%)</span>
+        </div>
+        <div class="estadistica-item">
+            <span class="estadistica-label">Sin categoría:</span>
+            <span class="estadistica-valor">${sinCategoria}</span>
+        </div>
+    `;
+}
+
+/**
+ * Confirmar administración del mayor y continuar
+ */
+function confirmarAdminMayor() {
+    state.mayorAdministrado = true;
+    mostrarMensaje('Mayor administrado correctamente', 'success');
+    actualizarBotonConciliar();
+}
+
+/**
+ * Aplicar filtros de texto en administración del mayor
+ */
+function aplicarFiltrosAdminMayor() {
+    renderizarTablaMayorAdmin();
+}
+
+/**
+ * Limpiar filtros de texto en administración del mayor
+ */
+function limpiarFiltrosAdminMayor() {
+    const filtroFecha = document.getElementById('filtroAdminFecha');
+    const filtroLeyenda = document.getElementById('filtroAdminLeyenda');
+    const filtroImporte = document.getElementById('filtroAdminImporte');
+
+    if (filtroFecha) filtroFecha.value = '';
+    if (filtroLeyenda) filtroLeyenda.value = '';
+    if (filtroImporte) filtroImporte.value = '';
+
+    state.filtroCategoriaMayorAdmin = [];
+    inicializarFiltrosCategoriasMayor();
+    renderizarTablaMayorAdmin();
+}
+
 // ========== CARGA DE ARCHIVOS ==========
 
 function setupFileUpload(dropZone, fileInput, tipo) {
@@ -805,6 +1201,8 @@ async function procesarArchivo(file, tipo) {
             elements.recordCountMayor.textContent = `${state.datosMayor.length} registros`;
             elements.previewMayor.classList.remove('hidden');
             elements.dropZoneMayor.style.display = 'none';
+            // Mostrar panel de administración del mayor para asignar etiquetas
+            mostrarAdminMayor();
         } else {
             state.datosExtracto = parsearExtracto(data);
             elements.fileNameExtracto.textContent = file.name;
@@ -1332,7 +1730,10 @@ async function conciliar(mayor, extracto) {
             movMayor.importe,
             movMayor.fecha,
             extractoNoConciliado,
-            5 // máximo 5 movimientos
+            5, // máximo 5 movimientos
+            false,
+            null,
+            movMayor.categoria || '' // Categoría del mayor para filtrar extractos compatibles
         );
 
         if (combinacion) {
@@ -1385,7 +1786,8 @@ async function conciliar(mayor, extracto) {
             mayorNoConciliado,
             5,
             true, // Validar que los movimientos sean de la misma entidad
-            movExtracto.descripcion || movExtracto.concepto || '' // Descripción del extracto para validar coincidencia de texto
+            movExtracto.descripcion || movExtracto.concepto || '', // Descripción del extracto para validar coincidencia de texto
+            movExtracto.categoria || '' // Categoría del extracto para filtrar mayores compatibles
         );
 
         if (combinacion) {
@@ -1431,6 +1833,11 @@ function buscarCoincidenciaExacta(movMayor, listaExtracto) {
     for (let i = 0; i < listaExtracto.length; i++) {
         const movExtracto = listaExtracto[i];
 
+        // Verificar compatibilidad de etiquetas
+        // Si el movimiento del mayor tiene etiqueta, el extracto debe tener la misma etiqueta o estar sin etiquetar
+        // Si el movimiento del mayor no tiene etiqueta, puede conciliarse con cualquier movimiento
+        if (!verificarCompatibilidadEtiquetas(movMayor, movExtracto)) continue;
+
         // Verificar tolerancia de importe
         const difImporte = Math.abs(movMayor.importe - movExtracto.importe);
 
@@ -1451,6 +1858,30 @@ function buscarCoincidenciaExacta(movMayor, listaExtracto) {
 }
 
 /**
+ * Verifica si dos movimientos son compatibles según sus etiquetas.
+ * Reglas:
+ * - Si el movimiento del mayor tiene etiqueta, el extracto debe tener la MISMA etiqueta
+ * - Si el movimiento del mayor NO tiene etiqueta, puede conciliarse con cualquier movimiento
+ * - Los movimientos sin etiqueta son "comodines" y pueden conciliarse con cualquiera
+ *
+ * @param {Object} movMayor - Movimiento del mayor
+ * @param {Object} movExtracto - Movimiento del extracto
+ * @returns {boolean} true si son compatibles
+ */
+function verificarCompatibilidadEtiquetas(movMayor, movExtracto) {
+    const categoriaMayor = movMayor.categoria || '';
+    const categoriaExtracto = movExtracto.categoria || '';
+
+    // Si el mayor no tiene etiqueta, es compatible con cualquier extracto
+    if (!categoriaMayor) {
+        return true;
+    }
+
+    // Si el mayor tiene etiqueta, el extracto debe tener la misma etiqueta
+    return categoriaMayor === categoriaExtracto;
+}
+
+/**
  * Busca una combinación de movimientos que sumen el importe objetivo.
  *
  * @param {number} importeObjetivo - Importe a alcanzar
@@ -1459,17 +1890,27 @@ function buscarCoincidenciaExacta(movMayor, listaExtracto) {
  * @param {number} maxElementos - Máximo de elementos a combinar
  * @param {boolean} validarEntidades - Si es true, valida que todos los movimientos sean de la misma entidad
  * @param {string} descripcionExtracto - Descripción del extracto para validar coincidencia de texto (opcional)
+ * @param {string} categoriaRef - Categoría de referencia para filtrar por etiqueta (opcional)
  * @returns {Array|null} Combinación encontrada o null
  */
-function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos, validarEntidades = false, descripcionExtracto = null) {
+function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos, validarEntidades = false, descripcionExtracto = null, categoriaRef = '') {
     // Filtrar por fecha primero
-    const candidatos = lista.filter(m => fechaDentroTolerancia(fechaRef, m.fecha));
+    let candidatos = lista.filter(m => fechaDentroTolerancia(fechaRef, m.fecha));
+
+    if (candidatos.length === 0) return null;
+
+    // Filtrar por etiqueta: solo incluir movimientos compatibles con la categoría de referencia
+    // Si la categoría de referencia está vacía, todos los movimientos son candidatos
+    // Si la categoría tiene valor, solo incluir movimientos con esa misma categoría
+    if (categoriaRef) {
+        candidatos = candidatos.filter(m => (m.categoria || '') === categoriaRef);
+    }
 
     if (candidatos.length === 0) return null;
 
     // Buscar combinaciones de 2 a maxElementos elementos
     for (let n = 2; n <= Math.min(maxElementos, candidatos.length); n++) {
-        const resultado = encontrarCombinacion(candidatos, importeObjetivo, n, validarEntidades, descripcionExtracto);
+        const resultado = encontrarCombinacion(candidatos, importeObjetivo, n, validarEntidades, descripcionExtracto, categoriaRef);
         if (resultado) return resultado;
     }
 
@@ -1479,14 +1920,15 @@ function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos
 /**
  * Busca una combinación de n elementos que sume el importe objetivo.
  *
- * @param {Array} lista - Lista de movimientos candidatos
+ * @param {Array} lista - Lista de movimientos candidatos (ya filtrados por categoría)
  * @param {number} objetivo - Importe objetivo a alcanzar
  * @param {number} n - Cantidad exacta de elementos a combinar
  * @param {boolean} validarEntidades - Si es true, valida que todos los movimientos sean de la misma entidad
  * @param {string} descripcionExtracto - Descripción del extracto para validar coincidencia de texto (opcional)
+ * @param {string} categoriaRef - Categoría de referencia (no usada, el filtrado ya se hizo)
  * @returns {Array|null} Combinación encontrada o null
  */
-function encontrarCombinacion(lista, objetivo, n, validarEntidades = false, descripcionExtracto = null) {
+function encontrarCombinacion(lista, objetivo, n, validarEntidades = false, descripcionExtracto = null, categoriaRef = '') {
     const indices = [];
 
     function buscar(start, suma, count) {
@@ -4253,8 +4695,15 @@ function reiniciar() {
         clienteSeleccionado: null,
         cuentaSeleccionada: null,
         extractosAuditoria: [],
-        rangoExtractos: { desde: null, hasta: null }
+        rangoExtractos: { desde: null, hasta: null },
+        // Administración del mayor
+        mayorAdministrado: false,
+        filtrosMayorAdmin: {},
+        filtroCategoriaMayorAdmin: []
     };
+
+    // Ocultar panel de administración del mayor
+    ocultarAdminMayor();
 
     // Resetear selección y contador
     seleccion = { mayor: [], extracto: [] };
@@ -4630,7 +5079,10 @@ async function conciliarReproceso(mayor, extracto) {
             movMayor.importe,
             movMayor.fecha,
             extractoNoConciliado,
-            5
+            5,
+            false,
+            null,
+            movMayor.categoria || '' // Categoría del mayor para filtrar extractos compatibles
         );
 
         if (combinacion) {
@@ -4668,7 +5120,8 @@ async function conciliarReproceso(mayor, extracto) {
             mayorNoConciliado,
             5,
             true, // Validar que los movimientos sean de la misma entidad
-            movExtracto.descripcion || movExtracto.concepto || '' // Descripción del extracto para validar coincidencia de texto
+            movExtracto.descripcion || movExtracto.concepto || '', // Descripción del extracto para validar coincidencia de texto
+            movExtracto.categoria || '' // Categoría del extracto para filtrar mayores compatibles
         );
 
         if (combinacion) {
