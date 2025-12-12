@@ -1484,6 +1484,43 @@ body {
     opacity: 1;
 }
 
+/* Panel de filtros Conciliados - secciones */
+.filtros-conciliados-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.filtros-seccion {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.filtros-seccion-titulo {
+    margin: 0 0 12px 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #475569;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 8px;
+}
+
+.filtros-seccion .filtros-grid {
+    margin: 0;
+}
+
+.filtros-seccion-importe {
+    background: #fef7ed;
+    border-color: #fed7aa;
+}
+
+.filtros-seccion-importe .filtros-seccion-titulo {
+    color: #c2410c;
+    border-bottom-color: #fed7aa;
+}
+
 /* Responsive filtros */
 @media (max-width: 768px) {
     .filtros-grid {
