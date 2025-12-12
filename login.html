@@ -204,7 +204,7 @@
         </form>
 
         <div class="info-box">
-            <p>🔒 Esta es una aplicación de desarrollo. La sesión expirará al cerrar el navegador.</p>
+            <p>🔒 Esta es una aplicación de desarrollo. La sesión se mantiene activa entre pestañas.</p>
         </div>
     </div>
 
@@ -215,7 +215,7 @@
         const errorMessage = document.getElementById('errorMessage');
 
         // Verificar si ya está autenticado
-        if (sessionStorage.getItem('herramientas_auth') === 'authenticated') {
+        if (localStorage.getItem('herramientas_auth') === 'authenticated') {
             window.location.href = 'index.html';
         }
 
@@ -225,8 +225,8 @@
             const enteredPassword = passwordInput.value;
 
             if (enteredPassword === CORRECT_PASSWORD) {
-                // Autenticación exitosa
-                sessionStorage.setItem('herramientas_auth', 'authenticated');
+                // Autenticación exitosa - usar localStorage para compartir entre pestañas
+                localStorage.setItem('herramientas_auth', 'authenticated');
 
                 // También guardar email del usuario para la app de comprobantes
                 localStorage.setItem('user_email', 'dev@herramientas.com');
@@ -237,9 +237,9 @@
 
                 setTimeout(() => {
                     // Redirigir a la URL guardada o a index.html por defecto
-                    const returnUrl = sessionStorage.getItem('return_url');
+                    const returnUrl = localStorage.getItem('return_url');
                     if (returnUrl) {
-                        sessionStorage.removeItem('return_url');
+                        localStorage.removeItem('return_url');
                         window.location.href = returnUrl;
                     } else {
                         window.location.href = 'index.html';
