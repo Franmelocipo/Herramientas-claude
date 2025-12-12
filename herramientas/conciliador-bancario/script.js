@@ -1365,7 +1365,8 @@ async function conciliar(mayor, extracto) {
             movExtracto.fecha,
             mayorNoConciliado,
             5,
-            true // Validar que los movimientos sean de la misma entidad
+            true, // Validar que los movimientos sean de la misma entidad
+            movExtracto.descripcion || movExtracto.concepto || '' // Descripción del extracto para validar coincidencia de texto
         );
 
         if (combinacion) {
@@ -1438,9 +1439,10 @@ function buscarCoincidenciaExacta(movMayor, listaExtracto) {
  * @param {Array} lista - Lista de movimientos candidatos
  * @param {number} maxElementos - Máximo de elementos a combinar
  * @param {boolean} validarEntidades - Si es true, valida que todos los movimientos sean de la misma entidad
+ * @param {string} descripcionExtracto - Descripción del extracto para validar coincidencia de texto (opcional)
  * @returns {Array|null} Combinación encontrada o null
  */
-function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos, validarEntidades = false) {
+function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos, validarEntidades = false, descripcionExtracto = null) {
     // Filtrar por fecha primero
     const candidatos = lista.filter(m => fechaDentroTolerancia(fechaRef, m.fecha));
 
@@ -1448,7 +1450,7 @@ function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos
 
     // Buscar combinaciones de 2 a maxElementos elementos
     for (let n = 2; n <= Math.min(maxElementos, candidatos.length); n++) {
-        const resultado = encontrarCombinacion(candidatos, importeObjetivo, n, validarEntidades);
+        const resultado = encontrarCombinacion(candidatos, importeObjetivo, n, validarEntidades, descripcionExtracto);
         if (resultado) return resultado;
     }
 
@@ -1462,9 +1464,10 @@ function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos
  * @param {number} objetivo - Importe objetivo a alcanzar
  * @param {number} n - Cantidad exacta de elementos a combinar
  * @param {boolean} validarEntidades - Si es true, valida que todos los movimientos sean de la misma entidad
+ * @param {string} descripcionExtracto - Descripción del extracto para validar coincidencia de texto (opcional)
  * @returns {Array|null} Combinación encontrada o null
  */
-function encontrarCombinacion(lista, objetivo, n, validarEntidades = false) {
+function encontrarCombinacion(lista, objetivo, n, validarEntidades = false, descripcionExtracto = null) {
     const indices = [];
 
     function buscar(start, suma, count) {
@@ -1478,6 +1481,13 @@ function encontrarCombinacion(lista, objetivo, n, validarEntidades = false) {
                 // los movimientos sean de la misma entidad/cliente
                 if (validarEntidades && !validarMismaEntidad(combinacion)) {
                     return null; // Rechazar combinación de diferentes entidades
+                }
+
+                // Si se proporciona descripción del extracto, validar que haya
+                // coincidencia parcial de texto entre las leyendas y la descripción
+                // Esto evita matches incorrectos donde la suma coincide por casualidad
+                if (descripcionExtracto && !validarCoincidenciaDescripcionExtracto(combinacion, descripcionExtracto)) {
+                    return null; // Rechazar si no hay coincidencia de texto
                 }
 
                 return combinacion;
@@ -1642,9 +1652,9 @@ function validarMismaEntidad(movimientos) {
     const entidadBase = entidades[0];
 
     // Umbral de similitud requerido para considerar que son la misma entidad
-    // Usamos un umbral relativamente bajo (0.3) porque los nombres pueden variar
-    // pero debe haber al menos algo en común
-    const UMBRAL_SIMILITUD = 0.3;
+    // Usamos un umbral moderado (0.5) para ser más restrictivos y evitar
+    // matcheos incorrectos de clientes diferentes
+    const UMBRAL_SIMILITUD = 0.5;
 
     for (let i = 1; i < entidades.length; i++) {
         const similitud = calcularSimilitudEntidades(entidadBase, entidades[i]);
@@ -1657,6 +1667,98 @@ function validarMismaEntidad(movimientos) {
     }
 
     return true;
+}
+
+/**
+ * Valida que haya coincidencia parcial de texto entre la descripción del extracto
+ * y las leyendas de los movimientos del mayor. Esta validación es crucial para
+ * evitar matches múltiples incorrectos donde la suma coincide por casualidad pero
+ * los movimientos no están relacionados.
+ *
+ * @param {Array} movimientosMayor - Array de movimientos del mayor a validar
+ * @param {string} descripcionExtracto - Descripción del movimiento del extracto bancario
+ * @returns {boolean} true si hay coincidencia parcial de texto
+ */
+function validarCoincidenciaDescripcionExtracto(movimientosMayor, descripcionExtracto) {
+    if (!descripcionExtracto || typeof descripcionExtracto !== 'string') return false;
+    if (!movimientosMayor || movimientosMayor.length === 0) return false;
+
+    // Normalizar descripción del extracto
+    const extractoNormalizado = descripcionExtracto
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+
+    // Extraer palabras significativas del extracto (mínimo 3 caracteres)
+    const palabrasExtracto = extractoNormalizado
+        .split(/[\s\.\-_\/\|,;:]+/)
+        .filter(p => p.length >= 3);
+
+    // Si el extracto no tiene palabras significativas, no podemos validar
+    // (ej: "CR.DEBIN" -> palabras cortas)
+    if (palabrasExtracto.length === 0) {
+        // Intentar con palabras de 2+ caracteres como fallback
+        const palabrasCortas = extractoNormalizado
+            .split(/[\s\.\-_\/\|,;:]+/)
+            .filter(p => p.length >= 2);
+
+        if (palabrasCortas.length === 0) return false;
+
+        // Verificar si alguna palabra del extracto aparece en alguna leyenda
+        for (const mov of movimientosMayor) {
+            const leyendaNormalizada = (mov.leyenda || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase();
+
+            for (const palabra of palabrasCortas) {
+                if (leyendaNormalizada.includes(palabra)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Palabras genéricas que no sirven para identificar coincidencias
+    const palabrasIgnorar = new Set([
+        'por', 'caj', 'aut', 'trf', 'cta', 'cte', 'bco', 'banco',
+        'transferencia', 'deposito', 'pago', 'cobro', 'credito', 'debito',
+        'recibo', 'factura', 'nota', 'srl', 'sas', 'sca', 'sociedad'
+    ]);
+
+    // Filtrar palabras genéricas
+    const palabrasRelevantes = palabrasExtracto.filter(p => !palabrasIgnorar.has(p));
+
+    // Verificar coincidencia en al menos una leyenda del mayor
+    for (const mov of movimientosMayor) {
+        const leyenda = mov.leyenda || '';
+        const leyendaNormalizada = leyenda
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
+
+        // Buscar coincidencia de palabras relevantes
+        for (const palabra of palabrasRelevantes) {
+            if (leyendaNormalizada.includes(palabra)) {
+                return true;
+            }
+        }
+
+        // También extraer palabras de la leyenda y buscar coincidencia inversa
+        const palabrasLeyenda = leyendaNormalizada
+            .split(/[\s\.\-_\/\|,;:\(\)]+/)
+            .filter(p => p.length >= 3 && !palabrasIgnorar.has(p));
+
+        for (const palabra of palabrasLeyenda) {
+            if (extractoNormalizado.includes(palabra)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 // ========== MOSTRAR RESULTADOS ==========
@@ -4068,6 +4170,8 @@ async function conciliarReproceso(mayor, extracto) {
     }
 
     // Paso 3: Buscar coincidencias muchos a 1
+    // IMPORTANTE: Para este tipo de conciliación, validamos que todos los movimientos
+    // del mayor sean de la misma entidad y que haya coincidencia de texto con el extracto
     for (let i = extractoNoConciliado.length - 1; i >= 0; i--) {
         const movExtracto = extractoNoConciliado[i];
 
@@ -4075,7 +4179,9 @@ async function conciliarReproceso(mayor, extracto) {
             movExtracto.importe,
             movExtracto.fecha,
             mayorNoConciliado,
-            5
+            5,
+            true, // Validar que los movimientos sean de la misma entidad
+            movExtracto.descripcion || movExtracto.concepto || '' // Descripción del extracto para validar coincidencia de texto
         );
 
         if (combinacion) {
