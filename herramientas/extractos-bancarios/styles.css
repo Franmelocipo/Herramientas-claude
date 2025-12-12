@@ -1572,7 +1572,15 @@ tr.row-selected:hover {
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     width: 100%;
     max-width: 550px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
+}
+
+.modal-auditoria .modal-body {
+    flex: 1;
+    overflow-y: auto;
 }
 
 .modal-select {
