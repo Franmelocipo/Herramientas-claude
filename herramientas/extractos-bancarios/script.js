@@ -2341,17 +2341,23 @@ function parseLaPampaWithPositions(linesWithPositions) {
         return parseFloat(importeStr.trim());
     };
 
-    // Parsear saldos del BDLP (formato: 68,428615.16 - coma separa millones, punto es decimal)
+    // Parsear saldos del BDLP (formato: 68,428615.16 o -2,965669.21 - coma separa millones, punto es decimal)
     const parseSaldoBDLP = (saldoStr) => {
         if (!saldoStr || saldoStr.trim() === '') return 0;
         let cleaned = saldoStr.trim();
+        // Detectar si es negativo ANTES de limpiar
+        const isNegative = cleaned.startsWith('-');
+        if (isNegative) {
+            cleaned = cleaned.substring(1); // Quitar el signo para procesar
+        }
         // Si tiene coma, es separador de millones (formato BDLP)
         // Ejemplo: "68,428615.16" -> "68428615.16"
         if (cleaned.includes(',')) {
             cleaned = cleaned.replace(/,/g, '');
         }
         // Ahora el punto es decimal
-        return parseFloat(cleaned);
+        const result = parseFloat(cleaned);
+        return isNegative ? -result : result;
     };
 
     // Convertir número a formato argentino para mostrar/almacenar
@@ -2365,8 +2371,8 @@ function parseLaPampaWithPositions(linesWithPositions) {
 
     // Regex para detectar importes del BDLP (punto como decimal)
     // Formato débito/crédito: 27165.83, 1142.31, 10388.35
-    // Formato saldo: 68,428615.16 o 400307.02
-    const bdlpImporteRegex = /^\d+(?:,\d+)?\.\d{2}$/;
+    // Formato saldo: 68,428615.16 o 400307.02 o -2,965669.21 (negativos)
+    const bdlpImporteRegex = /^-?\d+(?:,\d+)?\.\d{2}$/;
 
     console.log('='.repeat(80));
     console.log('PROCESANDO EXTRACTO BANCO DE LA PAMPA');
@@ -2503,18 +2509,12 @@ function parseLaPampaWithPositions(linesWithPositions) {
             puedeProcesamoMovimientos = true;
             console.log('SALDO ANTERIOR encontrado - habilitando procesamiento de movimientos');
 
-            // Extraer el saldo de esta línea
-            const saldoMatches = text.match(/\d+(?:,\d+)?\.\d{2}/g);
+            // Extraer el saldo de esta línea (incluye negativos)
+            const saldoMatches = text.match(/-?\d+(?:,\d+)?\.\d{2}/g);
             if (saldoMatches && saldoMatches.length > 0) {
                 const saldoRaw = saldoMatches[saldoMatches.length - 1];
-                // Parsear saldo BDLP (coma = millones, punto = decimal)
-                let saldoNumerico;
-                if (saldoRaw.includes(',')) {
-                    saldoNumerico = parseFloat(saldoRaw.replace(/,/g, ''));
-                } else {
-                    saldoNumerico = parseFloat(saldoRaw);
-                }
-                saldoAnterior = saldoNumerico;
+                // Usar la función parseSaldoBDLP que ya maneja negativos y comas
+                saldoAnterior = parseSaldoBDLP(saldoRaw);
                 console.log('Saldo inicial/anterior detectado:', saldoAnterior);
             }
             continue;
@@ -2589,12 +2589,13 @@ function parseLaPampaWithPositions(linesWithPositions) {
                     // Verificar si es un importe en formato BDLP:
                     // - Débito/Crédito: 27165.83, 1142.31 (número con punto decimal)
                     // - Saldo: 68,428615.16 o 400307.02 (opcionalmente con coma de millones)
-                    if (/^\d+(?:,\d+)?\.\d{2}$/.test(itemText)) {
+                    if (/^-?\d+(?:,\d+)?\.\d{2}$/.test(itemText)) {
                         amountsWithPositions.push({
                             value: itemText,
                             x: item.x,
-                            // Marcar si es probablemente un saldo (tiene coma de millones)
-                            esSaldo: itemText.includes(',')
+                            // Marcar si es probablemente un saldo (tiene coma de millones O es negativo)
+                            // Los números negativos son siempre saldos, nunca débitos/créditos individuales
+                            esSaldo: itemText.includes(',') || itemText.startsWith('-')
                         });
                     }
                 }
@@ -2622,8 +2623,8 @@ function parseLaPampaWithPositions(linesWithPositions) {
                 // Si no encontramos concepto, usar texto sin fecha ni números
                 if (!concepto) {
                     concepto = textAfterDate
-                        // Limpiar importes en formato BDLP (con punto decimal y opcionalmente coma de millones)
-                        .replace(/\d+(?:,\d+)?\.\d{2}/g, '')
+                        // Limpiar importes en formato BDLP (con punto decimal, opcionalmente coma de millones y/o negativos)
+                        .replace(/-?\d+(?:,\d+)?\.\d{2}/g, '')
                         .replace(/\d{6,}/g, '')
                         .trim();
                 }
@@ -3147,18 +3148,25 @@ async function processLaPampaPDF(pdfFile) {
         for (const lineData of linesWithPositions) {
             // Buscar línea con "Saldo anterior" o "Saldo inicial"
             if (/Saldo\s+(anterior|inicial)/i.test(lineData.text)) {
-                // Formato BDLP: saldos con punto decimal y opcionalmente coma de millones
-                // Ejemplo: 68,428615.16 o 400307.02
-                const amounts = lineData.text.match(/\d+(?:,\d+)?\.\d{2}/g);
+                // Formato BDLP: saldos con punto decimal, opcionalmente coma de millones y/o negativos
+                // Ejemplo: 68,428615.16 o 400307.02 o -2,965669.21
+                const amounts = lineData.text.match(/-?\d+(?:,\d+)?\.\d{2}/g);
                 if (amounts && amounts.length >= 1) {
                     // Parsear y convertir a formato argentino
                     const saldoRaw = amounts[amounts.length - 1];
+                    // Detectar si es negativo
+                    const isNegative = saldoRaw.startsWith('-');
+                    let cleanedSaldo = isNegative ? saldoRaw.substring(1) : saldoRaw;
                     let saldoNumerico;
-                    if (saldoRaw.includes(',')) {
+                    if (cleanedSaldo.includes(',')) {
                         // Formato con coma de millones: "68,428615.16" -> 68428615.16
-                        saldoNumerico = parseFloat(saldoRaw.replace(/,/g, ''));
+                        saldoNumerico = parseFloat(cleanedSaldo.replace(/,/g, ''));
                     } else {
-                        saldoNumerico = parseFloat(saldoRaw);
+                        saldoNumerico = parseFloat(cleanedSaldo);
+                    }
+                    // Aplicar signo negativo si corresponde
+                    if (isNegative) {
+                        saldoNumerico = -saldoNumerico;
                     }
                     state.saldoInicial = saldoNumerico.toLocaleString('es-AR', {
                         minimumFractionDigits: 2,
