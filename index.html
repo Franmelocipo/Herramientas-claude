@@ -8,42 +8,13 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="css/buttons.css">
     <link rel="stylesheet" href="index-styles.css">
+    <link rel="stylesheet" href="shared/globalNav.css">
 </head>
 <body>
     <script src="check-auth.js"></script>
 
-    <!-- Menú superior de bases de datos compartidas -->
-    <div class="data-menu">
-        <div class="data-menu-container">
-            <div class="data-menu-title">
-                <span class="data-menu-icon">🗄️</span>
-                <span>Bases de Datos Compartidas</span>
-            </div>
-            <div class="data-menu-buttons">
-                <button id="btnClients" class="data-btn">
-                    <span>👥</span>
-                    <span>Clientes</span>
-                </button>
-                <div class="data-dropdown">
-                    <button id="btnTablas" class="data-btn">
-                        <span>📋</span>
-                        <span>Tablas</span>
-                        <span class="dropdown-arrow">▼</span>
-                    </button>
-                    <div class="dropdown-menu" id="tablasDropdown">
-                        <button class="dropdown-item" id="btnTaxes">
-                            <span>📊</span>
-                            <span>Impuestos, conceptos y Subconceptos ARCA</span>
-                        </button>
-                    </div>
-                </div>
-                <button id="btnStorage" class="data-btn">
-                    <span>💾</span>
-                    <span>Almacenamiento</span>
-                </button>
-            </div>
-        </div>
-    </div>
+    <!-- Navegación Global - Inyectada por globalNav.js -->
+    <div class="data-menu" id="globalNavPlaceholder"></div>
 
     <div class="container">
         <div class="header">
@@ -618,6 +589,9 @@
     <!-- Módulos compartidos -->
     <script src="shared/dataStore.js"></script>
     <script src="shared/taxManager.js"></script>
+
+    <!-- Navegación Global -->
+    <script src="shared/globalNav.js"></script>
 
     <!-- Script principal -->
     <script src="index-script.js"></script>
