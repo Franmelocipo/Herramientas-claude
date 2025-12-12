@@ -870,6 +870,9 @@ async function conciliar(mayor, extracto) {
     }
 
     // Paso 3b: Buscar coincidencias muchos a 1 (suma de Mayor vs Extracto)
+    // IMPORTANTE: Para este tipo de conciliación, validamos que todos los movimientos
+    // del mayor sean de la misma entidad/cliente para evitar agrupar movimientos
+    // de diferentes clientes solo porque la suma coincide
     actualizarPaso(3, 'Buscando coincidencias múltiples (N a 1)...');
     actualizarProgreso(70);
     await sleep(50);
@@ -882,7 +885,8 @@ async function conciliar(mayor, extracto) {
             movExtracto.importe,
             movExtracto.fecha,
             mayorNoConciliado,
-            5
+            5,
+            true // Validar que los movimientos sean de la misma entidad
         );
 
         if (combinacion) {
@@ -947,7 +951,17 @@ function buscarCoincidenciaExacta(movMayor, listaExtracto) {
     return -1;
 }
 
-function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos) {
+/**
+ * Busca una combinación de movimientos que sumen el importe objetivo.
+ *
+ * @param {number} importeObjetivo - Importe a alcanzar
+ * @param {Date} fechaRef - Fecha de referencia para filtrar por tolerancia
+ * @param {Array} lista - Lista de movimientos candidatos
+ * @param {number} maxElementos - Máximo de elementos a combinar
+ * @param {boolean} validarEntidades - Si es true, valida que todos los movimientos sean de la misma entidad
+ * @returns {Array|null} Combinación encontrada o null
+ */
+function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos, validarEntidades = false) {
     // Filtrar por fecha primero
     const candidatos = lista.filter(m => fechaDentroTolerancia(fechaRef, m.fecha));
 
@@ -955,14 +969,23 @@ function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos
 
     // Buscar combinaciones de 2 a maxElementos elementos
     for (let n = 2; n <= Math.min(maxElementos, candidatos.length); n++) {
-        const resultado = encontrarCombinacion(candidatos, importeObjetivo, n);
+        const resultado = encontrarCombinacion(candidatos, importeObjetivo, n, validarEntidades);
         if (resultado) return resultado;
     }
 
     return null;
 }
 
-function encontrarCombinacion(lista, objetivo, n) {
+/**
+ * Busca una combinación de n elementos que sume el importe objetivo.
+ *
+ * @param {Array} lista - Lista de movimientos candidatos
+ * @param {number} objetivo - Importe objetivo a alcanzar
+ * @param {number} n - Cantidad exacta de elementos a combinar
+ * @param {boolean} validarEntidades - Si es true, valida que todos los movimientos sean de la misma entidad
+ * @returns {Array|null} Combinación encontrada o null
+ */
+function encontrarCombinacion(lista, objetivo, n, validarEntidades = false) {
     const indices = [];
 
     function buscar(start, suma, count) {
@@ -970,7 +993,15 @@ function encontrarCombinacion(lista, objetivo, n) {
         if (count === n) {
             const diferencia = Math.abs(suma - objetivo);
             if (diferencia <= state.toleranciaImporte) {
-                return indices.map(i => lista[i]);
+                const combinacion = indices.map(i => lista[i]);
+
+                // Si se requiere validación de entidades, verificar que todos
+                // los movimientos sean de la misma entidad/cliente
+                if (validarEntidades && !validarMismaEntidad(combinacion)) {
+                    return null; // Rechazar combinación de diferentes entidades
+                }
+
+                return combinacion;
             }
             return null;
         }
@@ -1015,6 +1046,138 @@ function fechaDentroTolerancia(fecha1, fecha2) {
     }
 
     return diffDias <= state.toleranciaFecha;
+}
+
+// ========== VALIDACIÓN DE ENTIDADES PARA CONCILIACIONES N:1 ==========
+
+/**
+ * Extrae el nombre de la entidad/cliente de una leyenda del mayor.
+ * La función normaliza el texto y extrae las primeras palabras significativas
+ * que generalmente corresponden al nombre del cliente/proveedor.
+ *
+ * @param {string} texto - Leyenda del movimiento
+ * @returns {string} Nombre de entidad normalizado
+ */
+function extraerEntidad(texto) {
+    if (!texto || typeof texto !== 'string') return '';
+
+    // Normalizar: quitar acentos, convertir a minúsculas
+    let normalizado = texto
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+
+    // Eliminar prefijos comunes que no identifican la entidad
+    const prefijosIgnorar = [
+        /^rec\.?\s*/i,           // Rec. o Rec
+        /^recibo\s*/i,           // Recibo
+        /^pago\s*/i,             // Pago
+        /^cobro\s*/i,            // Cobro
+        /^fact\.?\s*/i,          // Fact. o Factura
+        /^factura\s*/i,
+        /^nota\s+de\s+credito\s*/i,
+        /^nc\s*/i,               // NC (Nota de Crédito)
+        /^nd\s*/i,               // ND (Nota de Débito)
+        /^op\s*/i,               // OP (Orden de Pago)
+        /^transferencia\s*/i,
+        /^trf\.?\s*/i,
+        /^dep\.?\s*/i,           // Dep. o Depósito
+        /^deposito\s*/i,
+        /^cheque\s*/i,
+        /^ch\.?\s*/i,
+    ];
+
+    for (const prefijo of prefijosIgnorar) {
+        normalizado = normalizado.replace(prefijo, '');
+    }
+
+    // Eliminar números de documento/recibo al final o paréntesis con info adicional
+    normalizado = normalizado
+        .replace(/\s*\(.*\)\s*$/g, '')      // (info adicional)
+        .replace(/\s*n[º°]?\s*\d+.*$/gi, '') // Nº 12345...
+        .replace(/\s+\d{4,}.*$/g, '')        // números largos al final
+        .replace(/\s+-\s+.*$/g, '')          // - info adicional
+        .trim();
+
+    // Extraer las primeras palabras significativas (máximo 4 palabras para el nombre)
+    const palabras = normalizado.split(/\s+/).filter(p => p.length > 1);
+
+    // Si quedan menos de 1 palabra significativa, retornar el texto original normalizado
+    if (palabras.length === 0) {
+        return texto.toLowerCase().trim().substring(0, 30);
+    }
+
+    // Retornar las primeras 4 palabras como identificador de entidad
+    return palabras.slice(0, 4).join(' ');
+}
+
+/**
+ * Calcula la similitud entre dos entidades usando el coeficiente de Jaccard
+ * sobre los tokens (palabras) de cada nombre.
+ *
+ * @param {string} entidad1 - Primera entidad
+ * @param {string} entidad2 - Segunda entidad
+ * @returns {number} Coeficiente de similitud entre 0 y 1
+ */
+function calcularSimilitudEntidades(entidad1, entidad2) {
+    if (!entidad1 || !entidad2) return 0;
+
+    // Si son exactamente iguales
+    if (entidad1 === entidad2) return 1;
+
+    // Tokenizar ambas entidades
+    const tokens1 = new Set(entidad1.split(/\s+/).filter(t => t.length > 1));
+    const tokens2 = new Set(entidad2.split(/\s+/).filter(t => t.length > 1));
+
+    if (tokens1.size === 0 || tokens2.size === 0) return 0;
+
+    // Calcular intersección
+    const interseccion = new Set([...tokens1].filter(t => tokens2.has(t)));
+
+    // Coeficiente de Jaccard: |A ∩ B| / |A ∪ B|
+    const union = new Set([...tokens1, ...tokens2]);
+    const jaccard = interseccion.size / union.size;
+
+    // También verificar si una entidad contiene a la otra (para casos como "Juan" vs "Juan Perez")
+    const contieneBonus = (entidad1.includes(entidad2) || entidad2.includes(entidad1)) ? 0.3 : 0;
+
+    return Math.min(1, jaccard + contieneBonus);
+}
+
+/**
+ * Valida que todos los movimientos de una combinación correspondan a la misma entidad.
+ * Esta función es crítica para evitar conciliaciones incorrectas donde se agrupan
+ * movimientos de diferentes clientes solo porque la suma de importes coincide.
+ *
+ * @param {Array} movimientos - Array de movimientos del mayor
+ * @returns {boolean} true si todos los movimientos son de la misma entidad
+ */
+function validarMismaEntidad(movimientos) {
+    if (!movimientos || movimientos.length < 2) return true;
+
+    // Extraer entidades de cada movimiento
+    const entidades = movimientos.map(m => extraerEntidad(m.leyenda || ''));
+
+    // Verificar que todas las entidades sean similares a la primera
+    const entidadBase = entidades[0];
+
+    // Umbral de similitud requerido para considerar que son la misma entidad
+    // Usamos un umbral relativamente bajo (0.3) porque los nombres pueden variar
+    // pero debe haber al menos algo en común
+    const UMBRAL_SIMILITUD = 0.3;
+
+    for (let i = 1; i < entidades.length; i++) {
+        const similitud = calcularSimilitudEntidades(entidadBase, entidades[i]);
+
+        if (similitud < UMBRAL_SIMILITUD) {
+            // Las entidades son muy diferentes - no permitir esta combinación
+            // console.log(`Entidades diferentes detectadas: "${entidadBase}" vs "${entidades[i]}" (similitud: ${similitud.toFixed(2)})`);
+            return false;
+        }
+    }
+
+    return true;
 }
 
 // ========== MOSTRAR RESULTADOS ==========
