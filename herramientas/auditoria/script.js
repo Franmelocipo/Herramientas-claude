@@ -1715,6 +1715,42 @@ function cambiarCategoria(movId, categoriaId) {
 }
 
 /**
+ * Calcular los IDs de movimientos filtrados por texto basándose en los valores actuales del DOM
+ * Esta función recalcula los filtros para asegurar sincronización correcta
+ */
+function calcularMovimientosFiltradosPorTexto() {
+    // Leer filtros directamente del DOM para asegurar valores actuales
+    const filtroFecha = (document.getElementById('filtroFecha')?.value || '').toLowerCase();
+    const filtroDescripcion = (document.getElementById('filtroDescripcion')?.value || '').toLowerCase();
+    const filtroOrigen = (document.getElementById('filtroOrigen')?.value || '').toLowerCase();
+
+    let movimientos = [...state.movimientosEditados];
+
+    // Aplicar filtro de fecha
+    if (filtroFecha) {
+        movimientos = movimientos.filter(m =>
+            m.fecha.toLowerCase().includes(filtroFecha)
+        );
+    }
+
+    // Aplicar filtro de descripción
+    if (filtroDescripcion) {
+        movimientos = movimientos.filter(m =>
+            m.descripcion.toLowerCase().includes(filtroDescripcion)
+        );
+    }
+
+    // Aplicar filtro de origen
+    if (filtroOrigen) {
+        movimientos = movimientos.filter(m =>
+            m.origen.toLowerCase().includes(filtroOrigen)
+        );
+    }
+
+    return movimientos.map(m => m.id);
+}
+
+/**
  * Asignar marcador a todos los movimientos filtrados por texto
  */
 function asignarMarcadorFiltrados() {
@@ -1726,7 +1762,9 @@ function asignarMarcadorFiltrados() {
         return;
     }
 
-    const idsFiltrados = state.movimientosFiltradosTexto || [];
+    // Recalcular movimientos filtrados basándose en los filtros actuales del DOM
+    // para asegurar sincronización correcta con lo que el usuario ve
+    const idsFiltrados = calcularMovimientosFiltradosPorTexto();
 
     if (idsFiltrados.length === 0) {
         alert('No hay movimientos filtrados para asignar');
@@ -1755,7 +1793,8 @@ function asignarMarcadorFiltrados() {
  * Quitar categoría de todos los movimientos filtrados
  */
 function quitarMarcadorFiltrados() {
-    const idsFiltrados = state.movimientosFiltradosTexto || [];
+    // Recalcular movimientos filtrados basándose en los filtros actuales del DOM
+    const idsFiltrados = calcularMovimientosFiltradosPorTexto();
 
     if (idsFiltrados.length === 0) {
         alert('No hay movimientos filtrados');
