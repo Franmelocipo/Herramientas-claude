@@ -176,6 +176,35 @@
                         </div>
                     </div>
 
+                    <!-- Filtro de movimientos con importes cero -->
+                    <div class="filter-container">
+                        <button id="btnFiltroImportes" class="toolbar-btn filter-btn" title="Filtrar por importes (débito y crédito)">
+                            <span class="toolbar-icon">💰</span>
+                            <span>Filtrar Importes</span>
+                            <span id="filterImportesBadge" class="filter-badge hidden">!</span>
+                        </button>
+                        <div id="filterImportesDropdown" class="filter-dropdown filter-dropdown-small hidden">
+                            <div class="filter-importes-options">
+                                <label class="filter-radio-item">
+                                    <input type="radio" name="filtroImportes" value="todos" checked>
+                                    <span>Mostrar todos los movimientos</span>
+                                </label>
+                                <label class="filter-radio-item">
+                                    <input type="radio" name="filtroImportes" value="ambos_cero">
+                                    <span>Débito = 0 <strong>Y</strong> Crédito = 0</span>
+                                </label>
+                                <label class="filter-radio-item">
+                                    <input type="radio" name="filtroImportes" value="ambos_distintos_cero">
+                                    <span>Débito ≠ 0 <strong>Y</strong> Crédito ≠ 0</span>
+                                </label>
+                            </div>
+                            <div class="filter-footer">
+                                <button id="btnAplicarFiltroImportes" class="filter-apply-btn">Aplicar</button>
+                                <button id="btnLimpiarFiltroImportes" class="filter-clear-btn">Limpiar</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Botón limpiar filtros (visible en toolbar) -->
                     <button id="btnLimpiarFiltrosGlobal" class="toolbar-btn toolbar-btn-clear hidden" title="Limpiar todos los filtros">
                         <span class="toolbar-icon">✖</span>

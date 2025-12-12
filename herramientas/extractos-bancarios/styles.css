@@ -409,6 +409,8 @@ body {
 
 .table-wrapper {
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: 500px;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
     margin-bottom: 16px;
@@ -422,6 +424,9 @@ table {
 
 thead {
     background: #f9fafb;
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 th {
@@ -430,6 +435,7 @@ th {
     font-weight: 600;
     color: #374151;
     border-bottom: 2px solid #e5e7eb;
+    background: #f9fafb;
 }
 
 th.text-right {
@@ -1088,6 +1094,54 @@ tbody tr:hover {
 .filter-clear-btn:hover {
     background: #f3f4f6;
     color: #374151;
+}
+
+/* ============================================ */
+/* FILTRO DE IMPORTES */
+/* ============================================ */
+
+.filter-dropdown-small {
+    width: 280px;
+    max-height: auto;
+}
+
+.filter-importes-options {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.filter-radio-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.filter-radio-item:hover {
+    background: #f3f4f6;
+}
+
+.filter-radio-item input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #2c5282;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.filter-radio-item span {
+    font-size: 13px;
+    color: #374151;
+}
+
+.filter-radio-item span strong {
+    color: #2c5282;
+    font-weight: 600;
 }
 
 /* ============================================ */

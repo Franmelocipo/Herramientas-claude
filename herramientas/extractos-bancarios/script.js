@@ -4321,10 +4321,13 @@ function hideCombinarMessages() {
 const filterState = {
     selectedDescriptions: new Set(),        // Descripciones seleccionadas para mostrar
     allDescriptions: [],                    // Todas las descripciones únicas con su conteo
-    isFilterActive: false,                  // Si hay un filtro activo
+    isFilterActive: false,                  // Si hay un filtro activo (descripción)
     filteredData: [],                       // Datos filtrados actuales
     searchCurrentIndex: -1,                 // Índice actual de búsqueda
-    searchMatches: []                       // Coincidencias de búsqueda
+    searchMatches: [],                      // Coincidencias de búsqueda
+    // Estado para filtro de importes
+    importesFilterType: 'todos',            // 'todos', 'ambos_cero', 'ambos_distintos_cero'
+    isImportesFilterActive: false           // Si hay un filtro de importes activo
 };
 
 // Elementos DOM para buscar/reemplazar y filtros
@@ -4349,7 +4352,13 @@ const filterElements = {
     coincidenciasCount: null,
     btnBuscarSiguiente: null,
     btnReemplazarUno: null,
-    btnReemplazarTodos: null
+    btnReemplazarTodos: null,
+    // Elementos para filtro de importes
+    btnFiltroImportes: null,
+    filterImportesDropdown: null,
+    filterImportesBadge: null,
+    btnAplicarFiltroImportes: null,
+    btnLimpiarFiltroImportes: null
 };
 
 // Inicializar elementos de filtro después de que el DOM esté listo
@@ -4375,6 +4384,12 @@ function initFilterElements() {
     filterElements.btnBuscarSiguiente = document.getElementById('btnBuscarSiguiente');
     filterElements.btnReemplazarUno = document.getElementById('btnReemplazarUno');
     filterElements.btnReemplazarTodos = document.getElementById('btnReemplazarTodos');
+    // Elementos para filtro de importes
+    filterElements.btnFiltroImportes = document.getElementById('btnFiltroImportes');
+    filterElements.filterImportesDropdown = document.getElementById('filterImportesDropdown');
+    filterElements.filterImportesBadge = document.getElementById('filterImportesBadge');
+    filterElements.btnAplicarFiltroImportes = document.getElementById('btnAplicarFiltroImportes');
+    filterElements.btnLimpiarFiltroImportes = document.getElementById('btnLimpiarFiltroImportes');
 
     attachFilterEventListeners();
 }
@@ -4468,6 +4483,31 @@ function attachFilterEventListeners() {
                 !filterElements.filterDropdown.classList.contains('hidden')) {
                 filterElements.filterDropdown.classList.add('hidden');
             }
+            if (filterElements.filterImportesDropdown &&
+                !filterElements.filterImportesDropdown.classList.contains('hidden')) {
+                filterElements.filterImportesDropdown.classList.add('hidden');
+            }
+        }
+    });
+
+    // Event listeners para filtro de importes
+    if (filterElements.btnFiltroImportes) {
+        filterElements.btnFiltroImportes.addEventListener('click', toggleImportesFilterDropdown);
+    }
+    if (filterElements.btnAplicarFiltroImportes) {
+        filterElements.btnAplicarFiltroImportes.addEventListener('click', applyImportesFilter);
+    }
+    if (filterElements.btnLimpiarFiltroImportes) {
+        filterElements.btnLimpiarFiltroImportes.addEventListener('click', clearImportesFilter);
+    }
+
+    // Cerrar dropdown de importes al hacer clic fuera
+    document.addEventListener('click', (e) => {
+        if (filterElements.filterImportesDropdown &&
+            !filterElements.filterImportesDropdown.classList.contains('hidden') &&
+            !filterElements.filterImportesDropdown.contains(e.target) &&
+            !filterElements.btnFiltroImportes.contains(e.target)) {
+            filterElements.filterImportesDropdown.classList.add('hidden');
         }
     });
 }
@@ -4620,16 +4660,95 @@ function clearFilter() {
     renderPreviewWithFilter();
 }
 
+// ============================================
+// FUNCIONES DE FILTRO DE IMPORTES
+// ============================================
+
+function toggleImportesFilterDropdown() {
+    if (filterElements.filterImportesDropdown.classList.contains('hidden')) {
+        // Restaurar la selección actual en los radio buttons
+        const radioValue = filterState.importesFilterType || 'todos';
+        const radio = document.querySelector(`input[name="filtroImportes"][value="${radioValue}"]`);
+        if (radio) radio.checked = true;
+
+        filterElements.filterImportesDropdown.classList.remove('hidden');
+    } else {
+        filterElements.filterImportesDropdown.classList.add('hidden');
+    }
+}
+
+function applyImportesFilter() {
+    const selectedRadio = document.querySelector('input[name="filtroImportes"]:checked');
+    filterState.importesFilterType = selectedRadio ? selectedRadio.value : 'todos';
+    filterState.isImportesFilterActive = filterState.importesFilterType !== 'todos';
+
+    // Actualizar badge
+    if (filterState.isImportesFilterActive) {
+        filterElements.filterImportesBadge.textContent = '!';
+        filterElements.filterImportesBadge.classList.remove('hidden');
+    } else {
+        filterElements.filterImportesBadge.classList.add('hidden');
+    }
+
+    // Cerrar dropdown
+    filterElements.filterImportesDropdown.classList.add('hidden');
+
+    // Re-renderizar la vista previa con filtro
+    renderPreviewWithFilter();
+}
+
+function clearImportesFilter() {
+    filterState.importesFilterType = 'todos';
+    filterState.isImportesFilterActive = false;
+    filterElements.filterImportesBadge.classList.add('hidden');
+
+    // Resetear radio buttons
+    const radioTodos = document.querySelector('input[name="filtroImportes"][value="todos"]');
+    if (radioTodos) radioTodos.checked = true;
+
+    // Cerrar dropdown
+    filterElements.filterImportesDropdown.classList.add('hidden');
+
+    // Re-renderizar sin filtro
+    renderPreviewWithFilter();
+}
+
+// Función auxiliar para aplicar el filtro de importes
+function applyImportesFilterToData(data) {
+    if (!filterState.isImportesFilterActive || filterState.importesFilterType === 'todos') {
+        return data;
+    }
+
+    return data.filter(row => {
+        const debito = parseArgentineNumber(row.debito);
+        const credito = parseArgentineNumber(row.credito);
+
+        if (filterState.importesFilterType === 'ambos_cero') {
+            // Mostrar solo movimientos donde débito = 0 Y crédito = 0
+            return debito === 0 && credito === 0;
+        } else if (filterState.importesFilterType === 'ambos_distintos_cero') {
+            // Mostrar solo movimientos donde débito ≠ 0 Y crédito ≠ 0
+            return debito !== 0 && credito !== 0;
+        }
+
+        return true;
+    });
+}
+
 function renderPreviewWithFilter() {
     elements.previewSection.classList.remove('hidden');
 
-    // Filtrar datos si hay filtro activo
+    // Filtrar datos si hay filtro de descripción activo
     let dataToShow = state.extractedData;
     if (filterState.isFilterActive) {
         dataToShow = state.extractedData.filter(row =>
             filterState.selectedDescriptions.has(row.descripcion || '')
         );
     }
+
+    // Aplicar filtro de importes si está activo
+    dataToShow = applyImportesFilterToData(dataToShow);
+
     filterState.filteredData = dataToShow;
 
     // Renderizar encabezados según el tipo
@@ -5114,13 +5233,20 @@ function eliminarMovimientosSeleccionados() {
 
 // Limpiar todos los filtros
 function limpiarTodosLosFiltros() {
-    // Resetear estado de filtro
+    // Resetear estado de filtro de descripción
     filterState.isFilterActive = false;
     filterState.selectedDescriptions = new Set(filterState.allDescriptions.map(d => d.description));
 
-    // Ocultar badge y botón de limpiar
+    // Resetear estado de filtro de importes
+    filterState.isImportesFilterActive = false;
+    filterState.importesFilterType = 'todos';
+
+    // Ocultar badges y botón de limpiar
     if (filterElements.filterBadge) {
         filterElements.filterBadge.classList.add('hidden');
+    }
+    if (filterElements.filterImportesBadge) {
+        filterElements.filterImportesBadge.classList.add('hidden');
     }
     if (selectionElements.btnLimpiarFiltrosGlobal) {
         selectionElements.btnLimpiarFiltrosGlobal.classList.add('hidden');
@@ -5131,6 +5257,10 @@ function limpiarTodosLosFiltros() {
         filterElements.filterSearchInput.value = '';
     }
 
+    // Resetear radio buttons de importes
+    const radioTodos = document.querySelector('input[name="filtroImportes"][value="todos"]');
+    if (radioTodos) radioTodos.checked = true;
+
     // Re-renderizar
     renderPreviewWithFilter();
 }
@@ -5138,7 +5268,8 @@ function limpiarTodosLosFiltros() {
 // Mostrar/ocultar botón de limpiar filtros global
 function actualizarBotonLimpiarFiltrosGlobal() {
     if (selectionElements.btnLimpiarFiltrosGlobal) {
-        if (filterState.isFilterActive) {
+        // Mostrar si hay algún filtro activo (descripción o importes)
+        if (filterState.isFilterActive || filterState.isImportesFilterActive) {
             selectionElements.btnLimpiarFiltrosGlobal.classList.remove('hidden');
         } else {
             selectionElements.btnLimpiarFiltrosGlobal.classList.add('hidden');
@@ -5157,13 +5288,17 @@ const _originalRenderPreviewWithFilter = renderPreviewWithFilter;
 renderPreviewWithFilter = function() {
     elements.previewSection.classList.remove('hidden');
 
-    // Preparar datos filtrados
+    // Preparar datos filtrados por descripción
     let dataToShow = state.extractedData;
     if (filterState.isFilterActive) {
         dataToShow = state.extractedData.filter(row =>
             filterState.selectedDescriptions.has(row.descripcion || '')
         );
     }
+
+    // Aplicar filtro de importes si está activo
+    dataToShow = applyImportesFilterToData(dataToShow);
+
     filterState.filteredData = dataToShow;
 
     // Actualizar botón de limpiar filtros global
@@ -5224,9 +5359,9 @@ renderPreviewWithFilter = function() {
         }
     }
 
-    // Renderizar filas con checkboxes
-    const maxRows = filterState.isFilterActive ? 50 : 10;
-    const rowsToShow = dataToShow.slice(0, maxRows);
+    // Renderizar TODAS las filas con checkboxes (sin límite)
+    // El scroll vertical permite ver todos los movimientos
+    const rowsToShow = dataToShow;
 
     elements.previewBody.innerHTML = rowsToShow.map((row, displayIdx) => {
         // Encontrar el índice original en extractedData
@@ -5272,17 +5407,12 @@ renderPreviewWithFilter = function() {
 
     // Footer con información
     const totalCount = dataToShow.length;
-    const showingCount = Math.min(maxRows, totalCount);
+    const hayFiltroActivo = filterState.isFilterActive || filterState.isImportesFilterActive;
 
-    if (totalCount > maxRows) {
-        const totalText = filterState.isFilterActive
-            ? `Mostrando ${showingCount} de ${totalCount} movimientos filtrados (${state.extractedData.length} totales)`
-            : `... y ${totalCount - showingCount} movimientos más`;
-        elements.previewFooter.textContent = totalText;
+    if (hayFiltroActivo) {
+        elements.previewFooter.textContent = `${totalCount} movimientos coinciden con el filtro (${state.extractedData.length} totales)`;
     } else {
-        elements.previewFooter.textContent = filterState.isFilterActive
-            ? `${totalCount} movimientos coinciden con el filtro (${state.extractedData.length} totales)`
-            : '';
+        elements.previewFooter.textContent = `${totalCount} movimientos`;
     }
 
     elements.rowCount.textContent = state.extractedData.length;
