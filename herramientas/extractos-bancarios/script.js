@@ -4967,3 +4967,1003 @@ renderPreview = function() {
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(initFilterElements, 100);
 });
+
+// ============================================
+// FUNCIONALIDAD: SELECCIÓN Y ELIMINACIÓN DE MOVIMIENTOS
+// ============================================
+
+const selectionState = {
+    selectedIndices: new Set(),  // Índices de movimientos seleccionados
+    selectAllChecked: false
+};
+
+// Elementos DOM para selección
+const selectionElements = {
+    btnEliminarSeleccionados: null,
+    contadorSeleccionados: null,
+    btnLimpiarFiltrosGlobal: null
+};
+
+// Inicializar elementos de selección
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        selectionElements.btnEliminarSeleccionados = document.getElementById('btnEliminarSeleccionados');
+        selectionElements.contadorSeleccionados = document.getElementById('contadorSeleccionados');
+        selectionElements.btnLimpiarFiltrosGlobal = document.getElementById('btnLimpiarFiltrosGlobal');
+
+        // Event listeners
+        if (selectionElements.btnEliminarSeleccionados) {
+            selectionElements.btnEliminarSeleccionados.addEventListener('click', eliminarMovimientosSeleccionados);
+        }
+
+        if (selectionElements.btnLimpiarFiltrosGlobal) {
+            selectionElements.btnLimpiarFiltrosGlobal.addEventListener('click', limpiarTodosLosFiltros);
+        }
+    }, 100);
+});
+
+// Toggle selección de un movimiento
+function toggleMovimientoSeleccionado(index, checkbox) {
+    if (checkbox.checked) {
+        selectionState.selectedIndices.add(index);
+    } else {
+        selectionState.selectedIndices.delete(index);
+    }
+
+    actualizarUISeleccion();
+    actualizarEstiloFilaSeleccionada(index, checkbox.checked);
+}
+
+// Toggle seleccionar todos (solo los visibles/filtrados)
+function toggleSeleccionarTodos(checkbox) {
+    const dataToShow = filterState.isFilterActive ? filterState.filteredData : state.extractedData;
+
+    selectionState.selectAllChecked = checkbox.checked;
+
+    if (checkbox.checked) {
+        // Seleccionar todos los visibles
+        dataToShow.forEach((_, idx) => {
+            const originalIndex = filterState.isFilterActive
+                ? state.extractedData.indexOf(dataToShow[idx])
+                : idx;
+            selectionState.selectedIndices.add(originalIndex);
+        });
+    } else {
+        // Deseleccionar todos
+        selectionState.selectedIndices.clear();
+    }
+
+    actualizarUISeleccion();
+    actualizarCheckboxesFilas();
+}
+
+// Actualizar UI de selección
+function actualizarUISeleccion() {
+    const count = selectionState.selectedIndices.size;
+
+    if (selectionElements.contadorSeleccionados) {
+        selectionElements.contadorSeleccionados.textContent = count;
+    }
+
+    if (selectionElements.btnEliminarSeleccionados) {
+        if (count > 0) {
+            selectionElements.btnEliminarSeleccionados.classList.remove('hidden');
+        } else {
+            selectionElements.btnEliminarSeleccionados.classList.add('hidden');
+        }
+    }
+}
+
+// Actualizar estilo de fila seleccionada
+function actualizarEstiloFilaSeleccionada(index, selected) {
+    const row = document.querySelector(`tr[data-index="${index}"]`);
+    if (row) {
+        if (selected) {
+            row.classList.add('row-selected');
+        } else {
+            row.classList.remove('row-selected');
+        }
+    }
+}
+
+// Actualizar todos los checkboxes de filas
+function actualizarCheckboxesFilas() {
+    document.querySelectorAll('.mov-checkbox').forEach(cb => {
+        const index = parseInt(cb.dataset.index);
+        cb.checked = selectionState.selectedIndices.has(index);
+        actualizarEstiloFilaSeleccionada(index, cb.checked);
+    });
+}
+
+// Eliminar movimientos seleccionados
+function eliminarMovimientosSeleccionados() {
+    const count = selectionState.selectedIndices.size;
+
+    if (count === 0) return;
+
+    if (!confirm(`¿Está seguro de eliminar ${count} movimiento${count !== 1 ? 's' : ''}?\n\nEsta acción no se puede deshacer.`)) {
+        return;
+    }
+
+    // Ordenar índices de mayor a menor para eliminar sin afectar índices anteriores
+    const indicesToDelete = Array.from(selectionState.selectedIndices).sort((a, b) => b - a);
+
+    // Eliminar de extractedData
+    indicesToDelete.forEach(index => {
+        state.extractedData.splice(index, 1);
+    });
+
+    // Limpiar selección
+    selectionState.selectedIndices.clear();
+    selectionState.selectAllChecked = false;
+
+    // Recalcular saldos
+    recalcularSaldosMovimientos();
+
+    // Actualizar vista
+    actualizarUISeleccion();
+    renderPreviewWithFilter();
+
+    // Actualizar contador en botón de descarga
+    if (elements.rowCount) {
+        elements.rowCount.textContent = state.extractedData.length;
+    }
+
+    showSuccess(`${count} movimiento${count !== 1 ? 's' : ''} eliminado${count !== 1 ? 's' : ''}`);
+}
+
+// Limpiar todos los filtros
+function limpiarTodosLosFiltros() {
+    // Resetear estado de filtro
+    filterState.isFilterActive = false;
+    filterState.selectedDescriptions = new Set(filterState.allDescriptions.map(d => d.description));
+
+    // Ocultar badge y botón de limpiar
+    if (filterElements.filterBadge) {
+        filterElements.filterBadge.classList.add('hidden');
+    }
+    if (selectionElements.btnLimpiarFiltrosGlobal) {
+        selectionElements.btnLimpiarFiltrosGlobal.classList.add('hidden');
+    }
+
+    // Limpiar búsqueda en filtro
+    if (filterElements.filterSearchInput) {
+        filterElements.filterSearchInput.value = '';
+    }
+
+    // Re-renderizar
+    renderPreviewWithFilter();
+}
+
+// Mostrar/ocultar botón de limpiar filtros global
+function actualizarBotonLimpiarFiltrosGlobal() {
+    if (selectionElements.btnLimpiarFiltrosGlobal) {
+        if (filterState.isFilterActive) {
+            selectionElements.btnLimpiarFiltrosGlobal.classList.remove('hidden');
+        } else {
+            selectionElements.btnLimpiarFiltrosGlobal.classList.add('hidden');
+        }
+    }
+}
+
+// ============================================
+// MODIFICAR renderPreviewWithFilter PARA INCLUIR CHECKBOXES
+// ============================================
+
+// Guardar referencia a la función original
+const _originalRenderPreviewWithFilter = renderPreviewWithFilter;
+
+// Sobrescribir la función para incluir checkboxes
+renderPreviewWithFilter = function() {
+    elements.previewSection.classList.remove('hidden');
+
+    // Preparar datos filtrados
+    let dataToShow = state.extractedData;
+    if (filterState.isFilterActive) {
+        dataToShow = state.extractedData.filter(row =>
+            filterState.selectedDescriptions.has(row.descripcion || '')
+        );
+    }
+    filterState.filteredData = dataToShow;
+
+    // Actualizar botón de limpiar filtros global
+    actualizarBotonLimpiarFiltrosGlobal();
+
+    // Renderizar encabezados según el tipo
+    if (state.selectedType === 'inversiones') {
+        elements.previewHeader.innerHTML = `
+            <tr>
+                <th class="checkbox-col">
+                    <input type="checkbox" class="select-all-checkbox"
+                           onclick="toggleSeleccionarTodos(this)"
+                           ${selectionState.selectAllChecked ? 'checked' : ''}>
+                </th>
+                <th>Fecha</th>
+                <th>Descripción</th>
+                <th class="text-right">Cantidad</th>
+                <th class="text-right">Monto</th>
+            </tr>
+        `;
+        if (elements.resumenSaldos) {
+            elements.resumenSaldos.classList.add('hidden');
+        }
+    } else {
+        elements.previewHeader.innerHTML = `
+            <tr>
+                <th class="checkbox-col">
+                    <input type="checkbox" class="select-all-checkbox"
+                           onclick="toggleSeleccionarTodos(this)"
+                           ${selectionState.selectAllChecked ? 'checked' : ''}>
+                </th>
+                <th>Fecha</th>
+                <th>Descripción</th>
+                <th>Origen</th>
+                <th class="text-right">Crédito</th>
+                <th class="text-right">Débito</th>
+                <th class="text-right">Saldo</th>
+            </tr>
+        `;
+
+        // Mostrar panel de saldos
+        if (elements.resumenSaldos && state.extractedData.length > 0) {
+            elements.resumenSaldos.classList.remove('hidden');
+
+            const primerMov = state.extractedData[0];
+            const saldoPrimerMov = parseArgentineNumber(primerMov.saldo);
+            const creditoPrimerMov = parseArgentineNumber(primerMov.credito);
+            const debitoPrimerMov = parseArgentineNumber(primerMov.debito);
+            const saldoInicialPeriodo = saldoPrimerMov - creditoPrimerMov + debitoPrimerMov;
+
+            const ultimoMov = state.extractedData[state.extractedData.length - 1];
+            const saldoCierrePeriodo = parseArgentineNumber(ultimoMov.saldo);
+
+            elements.saldoInicialPeriodo.textContent = '$ ' + formatearNumeroArgentino(saldoInicialPeriodo);
+            elements.saldoCierrePeriodo.textContent = '$ ' + formatearNumeroArgentino(saldoCierrePeriodo);
+        } else if (elements.resumenSaldos) {
+            elements.resumenSaldos.classList.add('hidden');
+        }
+    }
+
+    // Renderizar filas con checkboxes
+    const maxRows = filterState.isFilterActive ? 50 : 10;
+    const rowsToShow = dataToShow.slice(0, maxRows);
+
+    elements.previewBody.innerHTML = rowsToShow.map((row, displayIdx) => {
+        // Encontrar el índice original en extractedData
+        const originalIndex = state.extractedData.indexOf(row);
+        const isSelected = selectionState.selectedIndices.has(originalIndex);
+        const selectedClass = isSelected ? 'row-selected' : '';
+
+        if (state.selectedType === 'inversiones') {
+            const monto = row.credito !== '0' ? row.credito : row.debito;
+            return `
+                <tr data-index="${originalIndex}" class="${selectedClass}">
+                    <td class="checkbox-col">
+                        <input type="checkbox" class="mov-checkbox"
+                               data-index="${originalIndex}"
+                               onclick="toggleMovimientoSeleccionado(${originalIndex}, this)"
+                               ${isSelected ? 'checked' : ''}>
+                    </td>
+                    <td>${row.fecha}</td>
+                    <td>${row.descripcion}</td>
+                    <td class="text-right">${row.origen}</td>
+                    <td class="text-right">${monto}</td>
+                </tr>
+            `;
+        } else {
+            return `
+                <tr data-index="${originalIndex}" class="${selectedClass}">
+                    <td class="checkbox-col">
+                        <input type="checkbox" class="mov-checkbox"
+                               data-index="${originalIndex}"
+                               onclick="toggleMovimientoSeleccionado(${originalIndex}, this)"
+                               ${isSelected ? 'checked' : ''}>
+                    </td>
+                    <td>${row.fecha}</td>
+                    <td>${row.descripcion}</td>
+                    <td>${row.origen}</td>
+                    <td class="text-right text-green">${row.credito}</td>
+                    <td class="text-right text-red">${row.debito}</td>
+                    <td class="text-right">${row.saldo}</td>
+                </tr>
+            `;
+        }
+    }).join('');
+
+    // Footer con información
+    const totalCount = dataToShow.length;
+    const showingCount = Math.min(maxRows, totalCount);
+
+    if (totalCount > maxRows) {
+        const totalText = filterState.isFilterActive
+            ? `Mostrando ${showingCount} de ${totalCount} movimientos filtrados (${state.extractedData.length} totales)`
+            : `... y ${totalCount - showingCount} movimientos más`;
+        elements.previewFooter.textContent = totalText;
+    } else {
+        elements.previewFooter.textContent = filterState.isFilterActive
+            ? `${totalCount} movimientos coinciden con el filtro (${state.extractedData.length} totales)`
+            : '';
+    }
+
+    elements.rowCount.textContent = state.extractedData.length;
+};
+
+// ============================================
+// FUNCIONALIDAD: ENVIAR A AUDITORÍA
+// ============================================
+
+const auditoriaState = {
+    currentStep: 1,
+    clientes: [],
+    cuentas: [],
+    clienteSeleccionado: null,
+    cuentaSeleccionada: null,
+    existeExtracto: false,
+    extractoExistente: null,
+    creandoCuenta: false
+};
+
+// Elementos DOM para auditoría
+const auditoriaElements = {
+    modal: null,
+    btnEnviar: null,
+    step1: null,
+    step2: null,
+    step3: null,
+    progress: null,
+    result: null,
+    selectCliente: null,
+    selectCuenta: null,
+    selectMes: null,
+    selectAnio: null,
+    btnNext: null,
+    btnBack: null,
+    btnEnviarFinal: null,
+    btnCancelar: null,
+    btnCerrar: null,
+    btnNuevaCuenta: null,
+    movCount: null,
+    existingCount: null,
+    periodoExistente: null
+};
+
+// Inicializar modal de auditoría
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        auditoriaElements.modal = document.getElementById('modalEnviarAuditoria');
+        auditoriaElements.btnEnviar = document.getElementById('btnEnviarAuditoria');
+        auditoriaElements.step1 = document.getElementById('auditoriaStep1');
+        auditoriaElements.step2 = document.getElementById('auditoriaStep2');
+        auditoriaElements.step3 = document.getElementById('auditoriaStep3');
+        auditoriaElements.progress = document.getElementById('auditoriaProgress');
+        auditoriaElements.result = document.getElementById('auditoriaResult');
+        auditoriaElements.selectCliente = document.getElementById('auditoriaCliente');
+        auditoriaElements.selectCuenta = document.getElementById('auditoriaCuenta');
+        auditoriaElements.selectMes = document.getElementById('auditoriaMes');
+        auditoriaElements.selectAnio = document.getElementById('auditoriaAnio');
+        auditoriaElements.btnNext = document.getElementById('btnAuditoriaNext');
+        auditoriaElements.btnBack = document.getElementById('btnAuditoriaBack');
+        auditoriaElements.btnEnviarFinal = document.getElementById('btnAuditoriaEnviar');
+        auditoriaElements.btnCancelar = document.getElementById('btnAuditoriaCancelar');
+        auditoriaElements.btnCerrar = document.getElementById('btnAuditoriaCerrar');
+        auditoriaElements.btnNuevaCuenta = document.getElementById('btnNuevaCuentaAuditoria');
+        auditoriaElements.movCount = document.getElementById('auditoriaMovCount');
+        auditoriaElements.existingCount = document.getElementById('auditoriaExistingCount');
+        auditoriaElements.periodoExistente = document.getElementById('auditoriaPeriodoExistente');
+
+        // Event listeners
+        if (auditoriaElements.btnEnviar) {
+            auditoriaElements.btnEnviar.addEventListener('click', abrirModalAuditoria);
+        }
+
+        if (document.getElementById('btnCerrarModalAuditoria')) {
+            document.getElementById('btnCerrarModalAuditoria').addEventListener('click', cerrarModalAuditoria);
+        }
+
+        if (auditoriaElements.btnCancelar) {
+            auditoriaElements.btnCancelar.addEventListener('click', cerrarModalAuditoria);
+        }
+
+        if (auditoriaElements.btnCerrar) {
+            auditoriaElements.btnCerrar.addEventListener('click', cerrarModalAuditoria);
+        }
+
+        if (auditoriaElements.btnNext) {
+            auditoriaElements.btnNext.addEventListener('click', verificarPeriodoAuditoria);
+        }
+
+        if (auditoriaElements.btnBack) {
+            auditoriaElements.btnBack.addEventListener('click', volverPasoAnterior);
+        }
+
+        if (auditoriaElements.btnEnviarFinal) {
+            auditoriaElements.btnEnviarFinal.addEventListener('click', enviarMovimientosAuditoria);
+        }
+
+        if (auditoriaElements.selectCliente) {
+            auditoriaElements.selectCliente.addEventListener('change', cargarCuentasCliente);
+        }
+
+        if (auditoriaElements.btnNuevaCuenta) {
+            auditoriaElements.btnNuevaCuenta.addEventListener('click', mostrarFormularioNuevaCuenta);
+        }
+
+        // Click fuera del modal para cerrar
+        if (auditoriaElements.modal) {
+            auditoriaElements.modal.addEventListener('click', (e) => {
+                if (e.target === auditoriaElements.modal) {
+                    cerrarModalAuditoria();
+                }
+            });
+        }
+    }, 100);
+});
+
+// Abrir modal de auditoría
+async function abrirModalAuditoria() {
+    if (state.extractedData.length === 0) {
+        showError('No hay movimientos para enviar. Primero convierta un extracto.');
+        return;
+    }
+
+    // Resetear estado
+    auditoriaState.currentStep = 1;
+    auditoriaState.existeExtracto = false;
+    auditoriaState.extractoExistente = null;
+    auditoriaState.creandoCuenta = false;
+
+    // Mostrar modal
+    auditoriaElements.modal.classList.remove('hidden');
+
+    // Mostrar paso 1, ocultar otros
+    auditoriaElements.step1.classList.remove('hidden');
+    auditoriaElements.step2.classList.add('hidden');
+    auditoriaElements.step3.classList.add('hidden');
+    auditoriaElements.progress.classList.add('hidden');
+    auditoriaElements.result.classList.add('hidden');
+
+    // Mostrar botones correctos
+    auditoriaElements.btnCancelar.classList.remove('hidden');
+    auditoriaElements.btnNext.classList.remove('hidden');
+    auditoriaElements.btnBack.classList.add('hidden');
+    auditoriaElements.btnEnviarFinal.classList.add('hidden');
+    auditoriaElements.btnCerrar.classList.add('hidden');
+    auditoriaElements.btnNuevaCuenta.classList.add('hidden');
+
+    // Cargar clientes
+    await cargarClientesAuditoria();
+
+    // Pre-seleccionar cliente si ya hay uno seleccionado en el conversor
+    if (clienteSeleccionadoId) {
+        auditoriaElements.selectCliente.value = clienteSeleccionadoId;
+        await cargarCuentasCliente();
+    }
+
+    // Detectar período de los movimientos
+    detectarPeriodoMovimientos();
+
+    // Actualizar contador de movimientos
+    auditoriaElements.movCount.textContent = state.extractedData.length;
+}
+
+// Cerrar modal de auditoría
+function cerrarModalAuditoria() {
+    auditoriaElements.modal.classList.add('hidden');
+}
+
+// Cargar clientes para el modal de auditoría
+async function cargarClientesAuditoria() {
+    const select = auditoriaElements.selectCliente;
+    select.innerHTML = '<option value="">-- Cargando clientes... --</option>';
+
+    try {
+        let supabaseClient = null;
+
+        if (typeof waitForSupabase === 'function') {
+            supabaseClient = await waitForSupabase();
+        } else if (typeof supabase !== 'undefined' && supabase) {
+            supabaseClient = supabase;
+        }
+
+        if (!supabaseClient) {
+            select.innerHTML = '<option value="">-- Error: Supabase no disponible --</option>';
+            return;
+        }
+
+        const { data: clientes, error } = await supabaseClient
+            .from('clientes')
+            .select('id, razon_social')
+            .order('razon_social');
+
+        if (error) throw error;
+
+        auditoriaState.clientes = clientes || [];
+
+        select.innerHTML = '<option value="">-- Seleccione un cliente --</option>' +
+            clientes.map(c => `<option value="${c.id}">${c.razon_social}</option>`).join('');
+
+    } catch (error) {
+        console.error('Error cargando clientes:', error);
+        select.innerHTML = '<option value="">-- Error cargando clientes --</option>';
+    }
+}
+
+// Cargar cuentas del cliente seleccionado
+async function cargarCuentasCliente() {
+    const clienteId = auditoriaElements.selectCliente.value;
+    const selectCuenta = auditoriaElements.selectCuenta;
+
+    if (!clienteId) {
+        selectCuenta.innerHTML = '<option value="">-- Seleccione un cliente primero --</option>';
+        selectCuenta.disabled = true;
+        auditoriaElements.btnNuevaCuenta.classList.add('hidden');
+        return;
+    }
+
+    selectCuenta.innerHTML = '<option value="">-- Cargando cuentas... --</option>';
+    selectCuenta.disabled = true;
+
+    try {
+        let supabaseClient = typeof supabase !== 'undefined' ? supabase : null;
+
+        if (!supabaseClient) {
+            selectCuenta.innerHTML = '<option value="">-- Error: Supabase no disponible --</option>';
+            return;
+        }
+
+        const { data: cuentas, error } = await supabaseClient
+            .from('cuentas_bancarias')
+            .select('*')
+            .eq('cliente_id', clienteId)
+            .order('banco');
+
+        if (error) throw error;
+
+        auditoriaState.cuentas = cuentas || [];
+
+        if (cuentas.length === 0) {
+            selectCuenta.innerHTML = '<option value="">-- No hay cuentas configuradas --</option>';
+        } else {
+            selectCuenta.innerHTML = '<option value="">-- Seleccione una cuenta --</option>' +
+                cuentas.map(c => {
+                    const label = `${c.banco} - ${c.tipo_cuenta}${c.numero_cuenta ? ` (${c.numero_cuenta})` : ''}`;
+                    return `<option value="${c.id}">${label}</option>`;
+                }).join('');
+        }
+
+        selectCuenta.disabled = false;
+        auditoriaElements.btnNuevaCuenta.classList.remove('hidden');
+
+    } catch (error) {
+        console.error('Error cargando cuentas:', error);
+        selectCuenta.innerHTML = '<option value="">-- Error cargando cuentas --</option>';
+    }
+}
+
+// Detectar período de los movimientos
+function detectarPeriodoMovimientos() {
+    if (state.extractedData.length === 0) return;
+
+    // Intentar extraer mes/año de las fechas
+    const fechas = state.extractedData.map(m => {
+        const fecha = m.fecha || '';
+        const parts = fecha.split('/');
+        if (parts.length >= 2) {
+            return {
+                dia: parseInt(parts[0]),
+                mes: parseInt(parts[1]),
+                anio: parts[2] ? parseInt(parts[2]) : new Date().getFullYear()
+            };
+        }
+        return null;
+    }).filter(f => f !== null);
+
+    if (fechas.length > 0) {
+        // Encontrar el mes más frecuente
+        const mesesCount = {};
+        fechas.forEach(f => {
+            const key = `${f.mes}-${f.anio}`;
+            mesesCount[key] = (mesesCount[key] || 0) + 1;
+        });
+
+        const mesMax = Object.entries(mesesCount)
+            .sort((a, b) => b[1] - a[1])[0];
+
+        if (mesMax) {
+            const [mesPeriodo, anioPeriodo] = mesMax[0].split('-').map(Number);
+            auditoriaElements.selectMes.value = mesPeriodo;
+
+            // Llenar años
+            const anioActual = new Date().getFullYear();
+            let anioFinal = anioPeriodo;
+
+            // Corregir año de 2 dígitos
+            if (anioFinal < 100) {
+                anioFinal = anioFinal < 50 ? 2000 + anioFinal : 1900 + anioFinal;
+            }
+
+            auditoriaElements.selectAnio.innerHTML = '';
+            for (let a = anioActual + 1; a >= anioActual - 5; a--) {
+                const selected = a === anioFinal ? 'selected' : '';
+                auditoriaElements.selectAnio.innerHTML += `<option value="${a}" ${selected}>${a}</option>`;
+            }
+        }
+    } else {
+        // Por defecto usar mes/año actual
+        const hoy = new Date();
+        auditoriaElements.selectMes.value = hoy.getMonth() + 1;
+
+        const anioActual = hoy.getFullYear();
+        auditoriaElements.selectAnio.innerHTML = '';
+        for (let a = anioActual + 1; a >= anioActual - 5; a--) {
+            const selected = a === anioActual ? 'selected' : '';
+            auditoriaElements.selectAnio.innerHTML += `<option value="${a}" ${selected}>${a}</option>`;
+        }
+    }
+}
+
+// Verificar si existe extracto para el período
+async function verificarPeriodoAuditoria() {
+    const clienteId = auditoriaElements.selectCliente.value;
+    const cuentaId = auditoriaElements.selectCuenta.value;
+    const mes = parseInt(auditoriaElements.selectMes.value);
+    const anio = parseInt(auditoriaElements.selectAnio.value);
+
+    // Validaciones
+    if (!clienteId) {
+        showError('Por favor seleccione un cliente');
+        return;
+    }
+
+    if (!cuentaId) {
+        showError('Por favor seleccione una cuenta bancaria');
+        return;
+    }
+
+    // Mostrar progreso
+    auditoriaElements.step1.classList.add('hidden');
+    auditoriaElements.progress.classList.remove('hidden');
+    document.getElementById('auditoriaProgressText').textContent = 'Verificando período...';
+
+    try {
+        let supabaseClient = typeof supabase !== 'undefined' ? supabase : null;
+
+        if (!supabaseClient) {
+            throw new Error('Supabase no disponible');
+        }
+
+        // Verificar si existe extracto para ese período
+        const { data: existente, error } = await supabaseClient
+            .from('extractos_mensuales')
+            .select('id, data')
+            .eq('cuenta_id', cuentaId)
+            .eq('mes', mes)
+            .eq('anio', anio)
+            .single();
+
+        auditoriaElements.progress.classList.add('hidden');
+
+        if (existente && !error) {
+            // Ya existe - mostrar paso 2 con advertencia
+            auditoriaState.existeExtracto = true;
+            auditoriaState.extractoExistente = existente;
+
+            const meses = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                          'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+            auditoriaElements.existingCount.textContent = existente.data?.length || 0;
+            auditoriaElements.periodoExistente.textContent = `${meses[mes]} ${anio}`;
+
+            auditoriaElements.step2.classList.remove('hidden');
+            auditoriaElements.btnNext.classList.add('hidden');
+            auditoriaElements.btnBack.classList.remove('hidden');
+            auditoriaElements.btnEnviarFinal.classList.remove('hidden');
+
+            auditoriaState.currentStep = 2;
+        } else {
+            // No existe - enviar directamente
+            auditoriaState.existeExtracto = false;
+            auditoriaState.extractoExistente = null;
+            await enviarMovimientosAuditoria();
+        }
+
+    } catch (error) {
+        console.error('Error verificando período:', error);
+        auditoriaElements.progress.classList.add('hidden');
+        auditoriaElements.step1.classList.remove('hidden');
+
+        // Si es error de "no encontrado", significa que no existe el extracto
+        if (error.code === 'PGRST116') {
+            auditoriaState.existeExtracto = false;
+            auditoriaState.extractoExistente = null;
+            await enviarMovimientosAuditoria();
+        } else {
+            showError('Error al verificar el período: ' + error.message);
+        }
+    }
+}
+
+// Volver al paso anterior
+function volverPasoAnterior() {
+    if (auditoriaState.creandoCuenta) {
+        // Volver de crear cuenta a paso 1
+        auditoriaElements.step3.classList.add('hidden');
+        auditoriaElements.step1.classList.remove('hidden');
+        auditoriaState.creandoCuenta = false;
+        auditoriaElements.btnNext.classList.remove('hidden');
+        auditoriaElements.btnEnviarFinal.classList.add('hidden');
+        auditoriaElements.btnBack.classList.add('hidden');
+    } else if (auditoriaState.currentStep === 2) {
+        // Volver de advertencia a paso 1
+        auditoriaElements.step2.classList.add('hidden');
+        auditoriaElements.step1.classList.remove('hidden');
+        auditoriaElements.btnNext.classList.remove('hidden');
+        auditoriaElements.btnBack.classList.add('hidden');
+        auditoriaElements.btnEnviarFinal.classList.add('hidden');
+        auditoriaState.currentStep = 1;
+    }
+}
+
+// Mostrar formulario para nueva cuenta
+function mostrarFormularioNuevaCuenta() {
+    auditoriaState.creandoCuenta = true;
+
+    auditoriaElements.step1.classList.add('hidden');
+    auditoriaElements.step3.classList.remove('hidden');
+
+    auditoriaElements.btnNext.classList.add('hidden');
+    auditoriaElements.btnBack.classList.remove('hidden');
+    auditoriaElements.btnEnviarFinal.textContent = 'Crear cuenta';
+    auditoriaElements.btnEnviarFinal.classList.remove('hidden');
+
+    // Limpiar formulario
+    document.getElementById('nuevaCuentaBanco').value = '';
+    document.getElementById('nuevaCuentaTipo').value = 'Cuenta Corriente';
+    document.getElementById('nuevaCuentaNumero').value = '';
+    document.getElementById('nuevaCuentaAlias').value = '';
+
+    // Pre-llenar banco si conocemos el banco del extracto
+    if (state.selectedBank) {
+        const bancoNames = {
+            'galicia': 'Banco Galicia',
+            'bbva': 'Banco BBVA',
+            'bpn': 'BPN (Banco Provincia Neuquén)',
+            'santander': 'Banco Santander',
+            'macro': 'Banco Macro',
+            'nacion': 'Banco Nación',
+            'lapampa': 'Banco de La Pampa'
+        };
+        document.getElementById('nuevaCuentaBanco').value = bancoNames[state.selectedBank] || '';
+    }
+}
+
+// Enviar movimientos a auditoría
+async function enviarMovimientosAuditoria() {
+    // Si estamos creando cuenta, primero crear la cuenta
+    if (auditoriaState.creandoCuenta) {
+        await crearNuevaCuentaYEnviar();
+        return;
+    }
+
+    const cuentaId = auditoriaElements.selectCuenta.value;
+    const mes = parseInt(auditoriaElements.selectMes.value);
+    const anio = parseInt(auditoriaElements.selectAnio.value);
+
+    // Obtener acción seleccionada si existe extracto
+    let accion = 'replace';
+    if (auditoriaState.existeExtracto) {
+        const accionRadio = document.querySelector('input[name="auditoriaAction"]:checked');
+        accion = accionRadio ? accionRadio.value : 'replace';
+
+        if (accion === 'cancel') {
+            cerrarModalAuditoria();
+            return;
+        }
+    }
+
+    // Mostrar progreso
+    auditoriaElements.step1.classList.add('hidden');
+    auditoriaElements.step2.classList.add('hidden');
+    auditoriaElements.progress.classList.remove('hidden');
+    document.getElementById('auditoriaProgressText').textContent = 'Enviando movimientos...';
+
+    auditoriaElements.btnCancelar.classList.add('hidden');
+    auditoriaElements.btnBack.classList.add('hidden');
+    auditoriaElements.btnNext.classList.add('hidden');
+    auditoriaElements.btnEnviarFinal.classList.add('hidden');
+
+    try {
+        let supabaseClient = typeof supabase !== 'undefined' ? supabase : null;
+
+        if (!supabaseClient) {
+            throw new Error('Supabase no disponible');
+        }
+
+        // Preparar datos de movimientos
+        const movimientosParaEnviar = state.extractedData.map((mov, idx) => ({
+            id: idx + 1,
+            fecha: mov.fecha,
+            descripcion: mov.descripcion,
+            origen: mov.origen || '',
+            credito: parseArgentineNumber(mov.credito),
+            debito: parseArgentineNumber(mov.debito),
+            saldo: parseArgentineNumber(mov.saldo),
+            categoria: '',
+            notas: ''
+        }));
+
+        let datosFinales = movimientosParaEnviar;
+
+        // Si hay que combinar con datos existentes
+        if (auditoriaState.existeExtracto && accion === 'merge') {
+            const existentes = auditoriaState.extractoExistente.data || [];
+            // Asignar IDs únicos a los nuevos
+            const maxId = existentes.length > 0 ? Math.max(...existentes.map(m => m.id || 0)) : 0;
+            movimientosParaEnviar.forEach((m, idx) => {
+                m.id = maxId + idx + 1;
+            });
+            datosFinales = [...existentes, ...movimientosParaEnviar];
+        }
+
+        // Eliminar extracto existente si existe
+        if (auditoriaState.existeExtracto && accion === 'replace') {
+            await supabaseClient
+                .from('extractos_mensuales')
+                .delete()
+                .eq('id', auditoriaState.extractoExistente.id);
+        }
+
+        // Insertar o actualizar
+        if (auditoriaState.existeExtracto && accion === 'merge') {
+            const { error } = await supabaseClient
+                .from('extractos_mensuales')
+                .update({
+                    data: datosFinales,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', auditoriaState.extractoExistente.id);
+
+            if (error) throw error;
+        } else {
+            const { error } = await supabaseClient
+                .from('extractos_mensuales')
+                .insert([{
+                    cuenta_id: cuentaId,
+                    mes: mes,
+                    anio: anio,
+                    data: datosFinales
+                }]);
+
+            if (error) throw error;
+        }
+
+        // Mostrar resultado exitoso
+        auditoriaElements.progress.classList.add('hidden');
+        auditoriaElements.result.classList.remove('hidden');
+        auditoriaElements.result.classList.remove('error');
+        auditoriaElements.result.classList.add('success');
+
+        document.getElementById('auditoriaResultTitle').textContent = '¡Movimientos enviados correctamente!';
+        document.getElementById('auditoriaResultMessage').textContent =
+            `Se enviaron ${movimientosParaEnviar.length} movimientos a la herramienta de Auditoría.`;
+
+        auditoriaElements.btnCerrar.classList.remove('hidden');
+
+    } catch (error) {
+        console.error('Error enviando movimientos:', error);
+
+        auditoriaElements.progress.classList.add('hidden');
+        auditoriaElements.result.classList.remove('hidden');
+        auditoriaElements.result.classList.remove('success');
+        auditoriaElements.result.classList.add('error');
+
+        document.getElementById('auditoriaResultTitle').textContent = 'Error al enviar movimientos';
+        document.getElementById('auditoriaResultMessage').textContent = error.message;
+
+        auditoriaElements.btnCerrar.classList.remove('hidden');
+    }
+}
+
+// Crear nueva cuenta y enviar movimientos
+async function crearNuevaCuentaYEnviar() {
+    const clienteId = auditoriaElements.selectCliente.value;
+    const banco = document.getElementById('nuevaCuentaBanco').value.trim();
+    const tipo = document.getElementById('nuevaCuentaTipo').value;
+    const numero = document.getElementById('nuevaCuentaNumero').value.trim();
+    const alias = document.getElementById('nuevaCuentaAlias').value.trim();
+
+    if (!banco) {
+        showError('El nombre del banco es obligatorio');
+        return;
+    }
+
+    // Mostrar progreso
+    auditoriaElements.step3.classList.add('hidden');
+    auditoriaElements.progress.classList.remove('hidden');
+    document.getElementById('auditoriaProgressText').textContent = 'Creando cuenta bancaria...';
+
+    auditoriaElements.btnCancelar.classList.add('hidden');
+    auditoriaElements.btnBack.classList.add('hidden');
+    auditoriaElements.btnEnviarFinal.classList.add('hidden');
+
+    try {
+        let supabaseClient = typeof supabase !== 'undefined' ? supabase : null;
+
+        if (!supabaseClient) {
+            throw new Error('Supabase no disponible');
+        }
+
+        // Crear cuenta
+        const { data: nuevaCuenta, error: errorCuenta } = await supabaseClient
+            .from('cuentas_bancarias')
+            .insert([{
+                cliente_id: clienteId,
+                banco: banco,
+                tipo_cuenta: tipo,
+                numero_cuenta: numero,
+                alias: alias
+            }])
+            .select()
+            .single();
+
+        if (errorCuenta) throw errorCuenta;
+
+        // Actualizar selección de cuenta
+        auditoriaElements.selectCuenta.value = nuevaCuenta.id;
+        auditoriaState.creandoCuenta = false;
+
+        document.getElementById('auditoriaProgressText').textContent = 'Enviando movimientos...';
+
+        // Ahora enviar los movimientos
+        const mes = parseInt(auditoriaElements.selectMes.value);
+        const anio = parseInt(auditoriaElements.selectAnio.value);
+
+        const movimientosParaEnviar = state.extractedData.map((mov, idx) => ({
+            id: idx + 1,
+            fecha: mov.fecha,
+            descripcion: mov.descripcion,
+            origen: mov.origen || '',
+            credito: parseArgentineNumber(mov.credito),
+            debito: parseArgentineNumber(mov.debito),
+            saldo: parseArgentineNumber(mov.saldo),
+            categoria: '',
+            notas: ''
+        }));
+
+        const { error: errorExtracto } = await supabaseClient
+            .from('extractos_mensuales')
+            .insert([{
+                cuenta_id: nuevaCuenta.id,
+                mes: mes,
+                anio: anio,
+                data: movimientosParaEnviar
+            }]);
+
+        if (errorExtracto) throw errorExtracto;
+
+        // Mostrar resultado exitoso
+        auditoriaElements.progress.classList.add('hidden');
+        auditoriaElements.result.classList.remove('hidden');
+        auditoriaElements.result.classList.remove('error');
+        auditoriaElements.result.classList.add('success');
+
+        document.getElementById('auditoriaResultTitle').textContent = '¡Cuenta creada y movimientos enviados!';
+        document.getElementById('auditoriaResultMessage').textContent =
+            `Se creó la cuenta "${banco} - ${tipo}" y se enviaron ${movimientosParaEnviar.length} movimientos.`;
+
+        auditoriaElements.btnCerrar.classList.remove('hidden');
+
+    } catch (error) {
+        console.error('Error creando cuenta:', error);
+
+        auditoriaElements.progress.classList.add('hidden');
+        auditoriaElements.result.classList.remove('hidden');
+        auditoriaElements.result.classList.remove('success');
+        auditoriaElements.result.classList.add('error');
+
+        document.getElementById('auditoriaResultTitle').textContent = 'Error al crear cuenta';
+        document.getElementById('auditoriaResultMessage').textContent = error.message;
+
+        auditoriaElements.btnCerrar.classList.remove('hidden');
+    }
+}
