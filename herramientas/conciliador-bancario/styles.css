@@ -3506,3 +3506,117 @@ body {
 .extracto-preview-info.hidden {
     display: none;
 }
+
+/* ========== GUARDADO DE CONCILIACIONES ========== */
+
+.results-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    border: none;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #16a34a, #15803d);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
+}
+
+.btn-success:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Sección de conciliaciones guardadas */
+.conciliaciones-guardadas-section {
+    margin-top: 20px;
+    padding: 16px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.conciliaciones-guardadas-section.hidden {
+    display: none;
+}
+
+.conciliaciones-guardadas-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.conciliaciones-guardadas-header h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+}
+
+.lista-conciliaciones-guardadas {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.item-conciliacion-guardada {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+}
+
+.item-conciliacion-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.item-conciliacion-tipo {
+    font-weight: 500;
+    color: #374151;
+}
+
+.item-conciliacion-fecha {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.item-conciliacion-rango {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.btn-cargar-conciliacion {
+    background: #3b82f6;
+    border: none;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-cargar-conciliacion:hover {
+    background: #2563eb;
+}

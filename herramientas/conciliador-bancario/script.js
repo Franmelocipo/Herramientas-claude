@@ -5266,6 +5266,196 @@ function descargarReporte() {
     XLSX.writeFile(wb, `Conciliacion_${tipo}_${fecha}.xlsx`);
 }
 
+// ========== GUARDADO DE CONCILIACIONES ==========
+
+/**
+ * Guardar la conciliación actual en Supabase
+ */
+async function guardarConciliacion() {
+    if (!state.resultados) {
+        mostrarMensaje('No hay resultados para guardar', 'error');
+        return;
+    }
+
+    if (!state.clienteSeleccionado || !state.cuentaSeleccionada) {
+        mostrarMensaje('Debe seleccionar cliente y cuenta para guardar', 'error');
+        return;
+    }
+
+    const btnGuardar = document.getElementById('btnGuardarConciliacion');
+    if (btnGuardar) {
+        btnGuardar.disabled = true;
+        btnGuardar.innerHTML = '⏳ Guardando...';
+    }
+
+    try {
+        // Preparar datos para guardar
+        const datosAGuardar = {
+            cliente_id: state.clienteSeleccionado.id,
+            cuenta_bancaria_id: state.cuentaSeleccionada.id,
+            tipo: state.tipoConciliacion,
+            rango_desde: state.rangoExtractos?.desde || null,
+            rango_hasta: state.rangoExtractos?.hasta || null,
+            tolerancia_fecha: state.toleranciaFecha,
+            tolerancia_importe: state.toleranciaImporte,
+            datos: {
+                conciliados: state.resultados.conciliados.map(c => ({
+                    id: c.id,
+                    tipo: c.tipo,
+                    diferencia: c.diferencia,
+                    manual: c.manual || false,
+                    coincidenciaOverride: c.coincidenciaOverride,
+                    mayor: c.mayor.map(m => ({
+                        id: m.id,
+                        fecha: m.fecha,
+                        numeroAsiento: m.numeroAsiento,
+                        leyenda: m.leyenda,
+                        importe: m.importe
+                    })),
+                    extracto: c.extracto.map(e => ({
+                        id: e.id,
+                        fecha: e.fecha,
+                        descripcion: e.descripcion,
+                        origen: e.origen,
+                        importe: e.importe
+                    }))
+                })),
+                mayorNoConciliado: state.resultados.mayorNoConciliado.map(m => ({
+                    id: m.id,
+                    fecha: m.fecha,
+                    numeroAsiento: m.numeroAsiento,
+                    leyenda: m.leyenda,
+                    importe: m.importe
+                })),
+                extractoNoConciliado: state.resultados.extractoNoConciliado.map(e => ({
+                    id: e.id,
+                    fecha: e.fecha,
+                    descripcion: e.descripcion,
+                    origen: e.origen,
+                    importe: e.importe
+                })),
+                eliminados: state.eliminados
+            },
+            historial_procesamiento: historialProcesamiento,
+            fecha_conciliacion: new Date().toISOString()
+        };
+
+        // Verificar si ya existe una conciliación para este cliente/cuenta/tipo
+        const { data: existente, error: errorBusqueda } = await supabase
+            .from('conciliaciones_guardadas')
+            .select('id')
+            .eq('cliente_id', state.clienteSeleccionado.id)
+            .eq('cuenta_bancaria_id', state.cuentaSeleccionada.id)
+            .eq('tipo', state.tipoConciliacion)
+            .single();
+
+        let resultado;
+        if (existente && !errorBusqueda) {
+            // Actualizar existente
+            const { error } = await supabase
+                .from('conciliaciones_guardadas')
+                .update(datosAGuardar)
+                .eq('id', existente.id);
+
+            if (error) throw error;
+            mostrarMensaje('Conciliación actualizada correctamente', 'success');
+        } else {
+            // Crear nueva
+            const { error } = await supabase
+                .from('conciliaciones_guardadas')
+                .insert([datosAGuardar]);
+
+            if (error) throw error;
+            mostrarMensaje('Conciliación guardada correctamente', 'success');
+        }
+
+    } catch (error) {
+        console.error('Error guardando conciliación:', error);
+        mostrarMensaje('Error al guardar: ' + (error.message || 'Error desconocido'), 'error');
+    } finally {
+        if (btnGuardar) {
+            btnGuardar.disabled = false;
+            btnGuardar.innerHTML = '💾 Guardar Conciliación';
+        }
+    }
+}
+
+/**
+ * Cargar conciliaciones guardadas para el cliente/cuenta actual
+ */
+async function cargarConciliacionesGuardadas() {
+    if (!state.clienteSeleccionado || !state.cuentaSeleccionada) return [];
+
+    try {
+        const { data, error } = await supabase
+            .from('conciliaciones_guardadas')
+            .select('*')
+            .eq('cliente_id', state.clienteSeleccionado.id)
+            .eq('cuenta_bancaria_id', state.cuentaSeleccionada.id)
+            .order('fecha_conciliacion', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('Error cargando conciliaciones guardadas:', error);
+        return [];
+    }
+}
+
+/**
+ * Cargar una conciliación guardada específica
+ */
+async function cargarConciliacionGuardada(conciliacionId) {
+    try {
+        const { data, error } = await supabase
+            .from('conciliaciones_guardadas')
+            .select('*')
+            .eq('id', conciliacionId)
+            .single();
+
+        if (error) throw error;
+
+        if (data) {
+            // Restaurar estado
+            state.tipoConciliacion = data.tipo;
+            state.toleranciaFecha = data.tolerancia_fecha;
+            state.toleranciaImporte = data.tolerancia_importe;
+            state.rangoExtractos = {
+                desde: data.rango_desde,
+                hasta: data.rango_hasta
+            };
+
+            // Restaurar resultados
+            if (data.datos) {
+                state.resultados = {
+                    conciliados: data.datos.conciliados || [],
+                    mayorNoConciliado: data.datos.mayorNoConciliado || [],
+                    extractoNoConciliado: data.datos.extractoNoConciliado || []
+                };
+                state.eliminados = data.datos.eliminados || [];
+            }
+
+            // Restaurar historial
+            historialProcesamiento = data.historial_procesamiento || [];
+
+            // Actualizar UI
+            elements.tipoButtons.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tipo === data.tipo);
+            });
+            elements.toleranciaFecha.value = data.tolerancia_fecha;
+            elements.toleranciaImporte.value = data.tolerancia_importe;
+
+            // Mostrar resultados
+            mostrarResultados(state.resultados);
+
+            mostrarMensaje('Conciliación cargada correctamente', 'success');
+        }
+    } catch (error) {
+        console.error('Error cargando conciliación:', error);
+        mostrarMensaje('Error al cargar la conciliación', 'error');
+    }
+}
+
 // ========== UTILIDADES ==========
 
 function formatearFecha(fecha) {
