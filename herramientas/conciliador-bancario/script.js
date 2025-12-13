@@ -491,10 +491,9 @@ async function cargarExtractosDisponiblesPrincipal() {
 
     try {
         const { data: extractos, error } = await supabase
-            .from('extractos_bancarios')
-            .select('id, mes, anio')
-            .eq('cliente_id', state.clienteSeleccionado.id)
-            .eq('cuenta_bancaria_id', state.cuentaSeleccionada.id)
+            .from('extractos_mensuales')
+            .select('id, mes, anio, data')
+            .eq('cuenta_id', state.cuentaSeleccionada.id)
             .order('anio', { ascending: false })
             .order('mes', { ascending: false });
 
@@ -590,25 +589,32 @@ async function actualizarExtractosSeleccionados() {
             return;
         }
 
-        const extractoIds = extractosEnRango.map(e => e.id);
-
-        // Cargar movimientos de los extractos
-        const { data: movimientos, error } = await supabase
-            .from('movimientos_extracto')
-            .select('*')
-            .in('extracto_id', extractoIds);
-
-        if (error) throw error;
+        // Obtener movimientos del campo data de los extractos cargados
+        const movimientos = [];
+        extractosEnRango.forEach(ext => {
+            if (ext.data && Array.isArray(ext.data)) {
+                ext.data.forEach((mov, idx) => {
+                    movimientos.push({
+                        id: `${ext.id}_${idx}`,
+                        fecha: mov.fecha,
+                        descripcion: mov.descripcion || mov.concepto || '',
+                        origen: mov.origen || '',
+                        debito: parseFloat(mov.debito) || 0,
+                        credito: parseFloat(mov.credito) || 0
+                    });
+                });
+            }
+        });
 
         // Procesar movimientos
-        state.datosExtracto = (movimientos || []).map(mov => ({
+        state.datosExtracto = movimientos.map(mov => ({
             id: mov.id,
             fecha: new Date(mov.fecha),
             descripcion: mov.descripcion,
             origen: mov.origen,
-            debito: parseFloat(mov.debito) || 0,
-            credito: parseFloat(mov.credito) || 0,
-            importe: parseFloat(mov.credito) || parseFloat(mov.debito) || 0
+            debito: mov.debito,
+            credito: mov.credito,
+            importe: mov.credito || mov.debito || 0
         }));
 
         // Mostrar info de extractos cargados
