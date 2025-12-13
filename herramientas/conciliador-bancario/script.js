@@ -5746,8 +5746,10 @@ async function confirmarCargarConciliacionSeleccionada() {
         return;
     }
 
+    // Guardar el ID antes de cerrar el modal (cerrar resetea la variable a null)
+    const idACargar = conciliacionSeleccionadaId;
     cerrarModalConciliacionGuardada();
-    await cargarConciliacionGuardada(conciliacionSeleccionadaId);
+    await cargarConciliacionGuardada(idACargar);
 }
 
 /**
