@@ -4839,8 +4839,8 @@ function actualizarContadoresGrupos() {
     });
 
     // Actualizar contadores en headers
-    const countVerdesEl = document.getElementById('countVerdes');
-    const countNaranjasEl = document.getElementById('countNaranjas');
+    const countVerdesEl = document.getElementById('countVerdesFiltrados');
+    const countNaranjasEl = document.getElementById('countNaranjasFiltrados');
 
     if (countVerdesEl) countVerdesEl.textContent = `(${countVerdes})`;
     if (countNaranjasEl) countNaranjasEl.textContent = `(${countNaranjas})`;
@@ -5141,6 +5141,9 @@ function renderizarConciliadosPorGrupos() {
 
     // Actualizar contadores
     actualizarContadoresGrupos();
+
+    // Actualizar visibilidad de secciones y botones
+    actualizarVistaGruposConciliados();
 
     // Actualizar contador total
     const countTab = document.getElementById('countConciliadosTab');
