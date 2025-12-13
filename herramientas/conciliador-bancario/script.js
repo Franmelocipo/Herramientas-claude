@@ -6070,6 +6070,10 @@ async function cargarConciliacionGuardada(conciliacionId) {
             // Mostrar resultados
             mostrarResultados(state.resultados);
 
+            // Actualizar panel de reprocesamiento y historial
+            actualizarPanelReproceso();
+            actualizarHistorial();
+
             console.log('✅ Conciliación cargada - Conciliados:', state.resultados.conciliados.length,
                         'Mayor pendiente:', state.resultados.mayorNoConciliado.length,
                         'Extracto pendiente:', state.resultados.extractoNoConciliado.length);
