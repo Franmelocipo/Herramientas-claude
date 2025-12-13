@@ -5472,9 +5472,16 @@ async function guardarConciliacion() {
  * Cargar conciliaciones guardadas para el cliente/cuenta actual
  */
 async function cargarConciliacionesGuardadas() {
-    if (!state.clienteSeleccionado || !state.cuentaSeleccionada) return [];
+    if (!state.clienteSeleccionado || !state.cuentaSeleccionada) {
+        console.log('⚠️ cargarConciliacionesGuardadas: No hay cliente o cuenta seleccionada');
+        return [];
+    }
 
     try {
+        console.log('🔄 Consultando conciliaciones_guardadas en Supabase...');
+        console.log('   Filtro cliente_id:', state.clienteSeleccionado.id);
+        console.log('   Filtro cuenta_bancaria_id:', state.cuentaSeleccionada.id);
+
         const { data, error } = await supabase
             .from('conciliaciones_guardadas')
             .select('*')
@@ -5482,7 +5489,12 @@ async function cargarConciliacionesGuardadas() {
             .eq('cuenta_bancaria_id', state.cuentaSeleccionada.id)
             .order('fecha_conciliacion', { ascending: false });
 
-        if (error) throw error;
+        if (error) {
+            console.error('❌ Error en consulta:', error);
+            throw error;
+        }
+
+        console.log('📊 Resultado de consulta:', data);
         return data || [];
     } catch (error) {
         console.error('Error cargando conciliaciones guardadas:', error);
@@ -5582,12 +5594,21 @@ let conciliacionGuardadaPendiente = null;
  * Verificar si hay conciliaciones guardadas para el cliente/cuenta actual
  */
 async function verificarConciliacionesGuardadas() {
+    console.log('🔍 Verificando conciliaciones guardadas...');
+    console.log('   Cliente ID:', state.clienteSeleccionado?.id);
+    console.log('   Cuenta ID:', state.cuentaSeleccionada?.id);
+
     const conciliaciones = await cargarConciliacionesGuardadas();
+
+    console.log('📋 Conciliaciones encontradas:', conciliaciones?.length || 0, conciliaciones);
 
     if (conciliaciones && conciliaciones.length > 0) {
         // Tomar la más reciente
         conciliacionGuardadaPendiente = conciliaciones[0];
+        console.log('✅ Mostrando modal con conciliación:', conciliacionGuardadaPendiente);
         mostrarModalConciliacionGuardada(conciliacionGuardadaPendiente);
+    } else {
+        console.log('ℹ️ No hay conciliaciones guardadas para esta cuenta');
     }
 }
 
