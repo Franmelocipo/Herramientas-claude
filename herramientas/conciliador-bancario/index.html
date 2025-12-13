@@ -383,123 +383,230 @@
                     <div class="panel-header-pendiente">
                         <h3>Conciliados <span id="countConciliadosTab">(0)</span></h3>
                         <div class="header-actions">
+                            <button id="btnToggleVerdes" class="btn-toggle-grupo btn-toggle-verdes" onclick="toggleGrupoVerdes()">
+                                🟢 Ocultar verdes
+                            </button>
+                            <button id="btnToggleNaranjas" class="btn-toggle-grupo btn-toggle-naranjas" onclick="toggleGrupoNaranjas()">
+                                🟠 Ocultar naranjas
+                            </button>
                             <button id="btnCambiarColorMasivo" class="btn-cambiar-color-masivo hidden" onclick="mostrarMenuCambioColorMasivo()">
                                 🎨 Cambiar color (<span id="countConciliadosSeleccionados">0</span>)
-                            </button>
-                            <button class="btn-filtros" id="btnFiltrosConciliados" onclick="toggleFiltros('conciliados')">
-                                🔍 Filtros ▼
                             </button>
                         </div>
                     </div>
 
-                    <!-- Panel de filtros Conciliados -->
-                    <div id="filtros-conciliados" class="filtros-panel hidden">
-                        <div class="filtros-conciliados-container">
-                            <!-- Filtros Mayor Contable -->
-                            <div class="filtros-seccion">
-                                <h4 class="filtros-seccion-titulo">Mayor Contable</h4>
-                                <div class="filtros-grid">
+                    <!-- ========== SECCIÓN VERDES (con coincidencia) ========== -->
+                    <div id="seccion-conciliados-verdes" class="seccion-grupo-conciliados seccion-verdes">
+                        <div class="grupo-header grupo-header-verdes">
+                            <h4>🟢 Con coincidencia de descripción <span id="countVerdesFiltrados">(0)</span></h4>
+                            <button class="btn-filtros btn-filtros-grupo" id="btnFiltrosVerdes" onclick="toggleFiltrosGrupo('verdes')">
+                                🔍 Filtros ▼
+                            </button>
+                        </div>
+
+                        <!-- Panel de filtros Verdes -->
+                        <div id="filtros-conciliados-verdes" class="filtros-panel filtros-panel-grupo hidden">
+                            <div class="filtros-grid-compacto">
+                                <div class="filtros-fila">
                                     <div class="filtro-grupo">
-                                        <label>Fecha desde:</label>
-                                        <input type="date" id="filtroConciliadosMayorFechaDesde" class="filtro-input">
+                                        <label>Tipo:</label>
+                                        <select id="filtroVerdesTipoConciliacion" class="filtro-select">
+                                            <option value="">Todos</option>
+                                            <option value="1:1">1 a 1</option>
+                                            <option value="multiple">1 a N / N a 1</option>
+                                        </select>
                                     </div>
                                     <div class="filtro-grupo">
-                                        <label>Fecha hasta:</label>
-                                        <input type="date" id="filtroConciliadosMayorFechaHasta" class="filtro-input">
+                                        <label>Fecha Mayor desde:</label>
+                                        <input type="date" id="filtroVerdesMayorFechaDesde" class="filtro-input">
+                                    </div>
+                                    <div class="filtro-grupo">
+                                        <label>Fecha Mayor hasta:</label>
+                                        <input type="date" id="filtroVerdesMayorFechaHasta" class="filtro-input">
                                     </div>
                                     <div class="filtro-grupo">
                                         <label>Nº Asiento:</label>
-                                        <input type="text" id="filtroConciliadosNumeroAsiento" class="filtro-input" placeholder="Buscar...">
+                                        <input type="text" id="filtroVerdesNumeroAsiento" class="filtro-input" placeholder="Buscar...">
                                     </div>
-                                    <div class="filtro-grupo filtro-ancho">
+                                    <div class="filtro-grupo">
                                         <label>Leyenda:</label>
-                                        <input type="text" id="filtroConciliadosLeyenda" class="filtro-input" placeholder="Buscar en leyenda...">
+                                        <input type="text" id="filtroVerdesLeyenda" class="filtro-input" placeholder="Buscar...">
                                     </div>
                                 </div>
-                            </div>
-                            <!-- Filtros Extracto Bancario -->
-                            <div class="filtros-seccion">
-                                <h4 class="filtros-seccion-titulo">Extracto Bancario</h4>
-                                <div class="filtros-grid">
+                                <div class="filtros-fila">
                                     <div class="filtro-grupo">
-                                        <label>Fecha desde:</label>
-                                        <input type="date" id="filtroConciliadosExtractoFechaDesde" class="filtro-input">
+                                        <label>Fecha Extracto desde:</label>
+                                        <input type="date" id="filtroVerdesExtractoFechaDesde" class="filtro-input">
                                     </div>
                                     <div class="filtro-grupo">
-                                        <label>Fecha hasta:</label>
-                                        <input type="date" id="filtroConciliadosExtractoFechaHasta" class="filtro-input">
+                                        <label>Fecha Extracto hasta:</label>
+                                        <input type="date" id="filtroVerdesExtractoFechaHasta" class="filtro-input">
                                     </div>
                                     <div class="filtro-grupo">
                                         <label>Origen:</label>
-                                        <input type="text" id="filtroConciliadosOrigen" class="filtro-input" placeholder="Buscar...">
+                                        <input type="text" id="filtroVerdesOrigen" class="filtro-input" placeholder="Buscar...">
                                     </div>
-                                    <div class="filtro-grupo filtro-ancho">
+                                    <div class="filtro-grupo">
                                         <label>Descripción:</label>
-                                        <input type="text" id="filtroConciliadosDescripcion" class="filtro-input" placeholder="Buscar en descripción...">
+                                        <input type="text" id="filtroVerdesDescripcion" class="filtro-input" placeholder="Buscar...">
                                     </div>
-                                </div>
-                            </div>
-                            <!-- Filtro de Importe (común) -->
-                            <div class="filtros-seccion filtros-seccion-importe">
-                                <h4 class="filtros-seccion-titulo">Importe</h4>
-                                <div class="filtros-grid">
-                                    <div class="filtro-grupo filtro-importe">
+                                    <div class="filtro-grupo filtro-importe-compacto">
+                                        <label>Importe:</label>
                                         <div class="filtro-importe-wrapper">
-                                            <select id="filtroConciliadosImporteTipo" class="filtro-select" onchange="toggleSegundoImporte('conciliados')">
-                                                <option value="">-- Seleccionar --</option>
-                                                <option value="mayor">Mayor que</option>
-                                                <option value="menor">Menor que</option>
-                                                <option value="igual">Igual a</option>
+                                            <select id="filtroVerdesImporteTipo" class="filtro-select filtro-select-sm" onchange="toggleSegundoImporteGrupo('verdes')">
+                                                <option value="">--</option>
+                                                <option value="mayor">></option>
+                                                <option value="menor"><</option>
+                                                <option value="igual">=</option>
                                                 <option value="entre">Entre</option>
                                             </select>
-                                            <input type="number" id="filtroConciliadosImporteValor" class="filtro-input filtro-numero" placeholder="Monto" step="0.01">
-                                            <input type="number" id="filtroConciliadosImporteValor2" class="filtro-input filtro-numero hidden" placeholder="Monto máx" step="0.01">
+                                            <input type="number" id="filtroVerdesImporteValor" class="filtro-input filtro-numero-sm" placeholder="$" step="0.01">
+                                            <input type="number" id="filtroVerdesImporteValor2" class="filtro-input filtro-numero-sm hidden" placeholder="$" step="0.01">
                                         </div>
                                     </div>
                                 </div>
                             </div>
+                            <div class="filtros-acciones filtros-acciones-compactas">
+                                <button class="btn-aplicar-filtro btn-sm" onclick="aplicarFiltrosVerdes()">Aplicar</button>
+                                <button class="btn-limpiar-filtro btn-sm" onclick="limpiarFiltrosVerdes()">Limpiar</button>
+                            </div>
                         </div>
-                        <div class="filtros-acciones">
-                            <button class="btn-aplicar-filtro" onclick="aplicarFiltrosConciliados()">Aplicar Filtros</button>
-                            <button class="btn-limpiar-filtro" onclick="limpiarFiltrosConciliados()">Limpiar</button>
+
+                        <div class="table-wrapper">
+                            <table class="results-table table-selectable">
+                                <thead>
+                                    <tr>
+                                        <th class="col-checkbox" rowspan="2"><input type="checkbox" id="selectAllConciliadosVerdes" title="Seleccionar todos" onchange="seleccionarTodosConciliadosGrupo('verdes', this.checked)"></th>
+                                        <th colspan="4" class="header-group mayor">MAYOR CONTABLE</th>
+                                        <th class="separator"></th>
+                                        <th colspan="4" class="header-group extracto">EXTRACTO BANCARIO</th>
+                                        <th class="header-diff">Dif.</th>
+                                        <th class="header-action">Acción</th>
+                                    </tr>
+                                    <tr>
+                                        <th class="col-fecha">Fecha</th>
+                                        <th class="col-numero">Nº</th>
+                                        <th class="col-leyenda">Leyenda</th>
+                                        <th class="col-importe">Importe</th>
+                                        <th class="separator"></th>
+                                        <th class="col-fecha">Fecha</th>
+                                        <th class="col-descripcion">Descripción</th>
+                                        <th class="col-origen">Origen</th>
+                                        <th class="col-importe">Importe</th>
+                                        <th class="col-diferencia">$</th>
+                                        <th class="header-action">Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaConciliadosVerdes"></tbody>
+                            </table>
                         </div>
                     </div>
 
-                    <!-- Contador de resultados filtrados -->
-                    <div id="filtrosConciliadosResultado" class="filtros-resultado hidden">
-                        Mostrando <span id="filtrosConciliadosMostrados">0</span> de <span id="filtrosConciliadosTotal">0</span> conciliaciones
-                    </div>
+                    <!-- ========== SECCIÓN NARANJAS (sin coincidencia) ========== -->
+                    <div id="seccion-conciliados-naranjas" class="seccion-grupo-conciliados seccion-naranjas">
+                        <div class="grupo-header grupo-header-naranjas">
+                            <h4>🟠 Sin coincidencia de descripción <span id="countNaranjasFiltrados">(0)</span></h4>
+                            <button class="btn-filtros btn-filtros-grupo" id="btnFiltrosNaranjas" onclick="toggleFiltrosGrupo('naranjas')">
+                                🔍 Filtros ▼
+                            </button>
+                        </div>
 
-                    <!-- Badges de filtros activos -->
-                    <div id="filtrosConciliadosActivos" class="filtros-activos hidden"></div>
+                        <!-- Panel de filtros Naranjas -->
+                        <div id="filtros-conciliados-naranjas" class="filtros-panel filtros-panel-grupo hidden">
+                            <div class="filtros-grid-compacto">
+                                <div class="filtros-fila">
+                                    <div class="filtro-grupo">
+                                        <label>Tipo:</label>
+                                        <select id="filtroNaranjasTipoConciliacion" class="filtro-select">
+                                            <option value="">Todos</option>
+                                            <option value="1:1">1 a 1</option>
+                                            <option value="multiple">1 a N / N a 1</option>
+                                        </select>
+                                    </div>
+                                    <div class="filtro-grupo">
+                                        <label>Fecha Mayor desde:</label>
+                                        <input type="date" id="filtroNaranjasMayorFechaDesde" class="filtro-input">
+                                    </div>
+                                    <div class="filtro-grupo">
+                                        <label>Fecha Mayor hasta:</label>
+                                        <input type="date" id="filtroNaranjasMayorFechaHasta" class="filtro-input">
+                                    </div>
+                                    <div class="filtro-grupo">
+                                        <label>Nº Asiento:</label>
+                                        <input type="text" id="filtroNaranjasNumeroAsiento" class="filtro-input" placeholder="Buscar...">
+                                    </div>
+                                    <div class="filtro-grupo">
+                                        <label>Leyenda:</label>
+                                        <input type="text" id="filtroNaranjasLeyenda" class="filtro-input" placeholder="Buscar...">
+                                    </div>
+                                </div>
+                                <div class="filtros-fila">
+                                    <div class="filtro-grupo">
+                                        <label>Fecha Extracto desde:</label>
+                                        <input type="date" id="filtroNaranjasExtractoFechaDesde" class="filtro-input">
+                                    </div>
+                                    <div class="filtro-grupo">
+                                        <label>Fecha Extracto hasta:</label>
+                                        <input type="date" id="filtroNaranjasExtractoFechaHasta" class="filtro-input">
+                                    </div>
+                                    <div class="filtro-grupo">
+                                        <label>Origen:</label>
+                                        <input type="text" id="filtroNaranjasOrigen" class="filtro-input" placeholder="Buscar...">
+                                    </div>
+                                    <div class="filtro-grupo">
+                                        <label>Descripción:</label>
+                                        <input type="text" id="filtroNaranjasDescripcion" class="filtro-input" placeholder="Buscar...">
+                                    </div>
+                                    <div class="filtro-grupo filtro-importe-compacto">
+                                        <label>Importe:</label>
+                                        <div class="filtro-importe-wrapper">
+                                            <select id="filtroNaranjasImporteTipo" class="filtro-select filtro-select-sm" onchange="toggleSegundoImporteGrupo('naranjas')">
+                                                <option value="">--</option>
+                                                <option value="mayor">></option>
+                                                <option value="menor"><</option>
+                                                <option value="igual">=</option>
+                                                <option value="entre">Entre</option>
+                                            </select>
+                                            <input type="number" id="filtroNaranjasImporteValor" class="filtro-input filtro-numero-sm" placeholder="$" step="0.01">
+                                            <input type="number" id="filtroNaranjasImporteValor2" class="filtro-input filtro-numero-sm hidden" placeholder="$" step="0.01">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="filtros-acciones filtros-acciones-compactas">
+                                <button class="btn-aplicar-filtro btn-sm" onclick="aplicarFiltrosNaranjas()">Aplicar</button>
+                                <button class="btn-limpiar-filtro btn-sm" onclick="limpiarFiltrosNaranjas()">Limpiar</button>
+                            </div>
+                        </div>
 
-                    <div class="table-wrapper">
-                        <table class="results-table table-selectable">
-                            <thead>
-                                <tr>
-                                    <th class="col-checkbox" rowspan="2"><input type="checkbox" id="selectAllConciliados" title="Seleccionar todos" onchange="seleccionarTodosConciliados(this.checked)"></th>
-                                    <th colspan="4" class="header-group mayor">MAYOR CONTABLE</th>
-                                    <th class="separator"></th>
-                                    <th colspan="4" class="header-group extracto">EXTRACTO BANCARIO</th>
-                                    <th class="header-diff">Dif.</th>
-                                    <th class="header-action">Acción</th>
-                                </tr>
-                                <tr>
-                                    <th class="col-fecha">Fecha</th>
-                                    <th class="col-numero">Nº</th>
-                                    <th class="col-leyenda">Leyenda</th>
-                                    <th class="col-importe">Importe</th>
-                                    <th class="separator"></th>
-                                    <th class="col-fecha">Fecha</th>
-                                    <th class="col-descripcion">Descripción</th>
-                                    <th class="col-origen">Origen</th>
-                                    <th class="col-importe">Importe</th>
-                                    <th class="col-diferencia">$</th>
-                                    <th class="header-action">Acción</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tablaConciliados"></tbody>
-                        </table>
+                        <div class="table-wrapper">
+                            <table class="results-table table-selectable">
+                                <thead>
+                                    <tr>
+                                        <th class="col-checkbox" rowspan="2"><input type="checkbox" id="selectAllConciliadosNaranjas" title="Seleccionar todos" onchange="seleccionarTodosConciliadosGrupo('naranjas', this.checked)"></th>
+                                        <th colspan="4" class="header-group mayor">MAYOR CONTABLE</th>
+                                        <th class="separator"></th>
+                                        <th colspan="4" class="header-group extracto">EXTRACTO BANCARIO</th>
+                                        <th class="header-diff">Dif.</th>
+                                        <th class="header-action">Acción</th>
+                                    </tr>
+                                    <tr>
+                                        <th class="col-fecha">Fecha</th>
+                                        <th class="col-numero">Nº</th>
+                                        <th class="col-leyenda">Leyenda</th>
+                                        <th class="col-importe">Importe</th>
+                                        <th class="separator"></th>
+                                        <th class="col-fecha">Fecha</th>
+                                        <th class="col-descripcion">Descripción</th>
+                                        <th class="col-origen">Origen</th>
+                                        <th class="col-importe">Importe</th>
+                                        <th class="col-diferencia">$</th>
+                                        <th class="header-action">Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaConciliadosNaranjas"></tbody>
+                            </table>
+                        </div>
                     </div>
 
                     <!-- Overlay y Menu de cambio de color masivo -->

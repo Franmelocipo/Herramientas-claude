@@ -100,7 +100,7 @@ let filtrosExtracto = {
     origen: ''
 };
 
-// Estado de filtros para Conciliados
+// Estado de filtros para Conciliados (panel unificado - legacy)
 let filtrosConciliados = {
     // Mayor
     fechaMayorDesde: null,
@@ -116,6 +116,44 @@ let filtrosConciliados = {
     importeTipo: '',
     importeValor: null,
     importeValor2: null
+};
+
+// Estado de visibilidad de grupos de conciliados (verde/naranja)
+let gruposConciliados = {
+    verdesVisible: true,
+    naranjasVisible: true
+};
+
+// Estado de filtros para Conciliados Verdes
+let filtrosConciliadosVerdes = {
+    fechaMayorDesde: null,
+    fechaMayorHasta: null,
+    numeroAsiento: '',
+    leyenda: '',
+    fechaExtractoDesde: null,
+    fechaExtractoHasta: null,
+    descripcion: '',
+    origen: '',
+    importeTipo: '',
+    importeValor: null,
+    importeValor2: null,
+    tipoConciliacion: '' // '1:1', '1:N', 'N:1', '' (todos)
+};
+
+// Estado de filtros para Conciliados Naranjas
+let filtrosConciliadosNaranjas = {
+    fechaMayorDesde: null,
+    fechaMayorHasta: null,
+    numeroAsiento: '',
+    leyenda: '',
+    fechaExtractoDesde: null,
+    fechaExtractoHasta: null,
+    descripcion: '',
+    origen: '',
+    importeTipo: '',
+    importeValor: null,
+    importeValor2: null,
+    tipoConciliacion: '' // '1:1', '1:N', 'N:1', '' (todos)
 };
 
 // Datos filtrados (para mantener la lista original intacta)
@@ -2684,130 +2722,8 @@ function mostrarResultados() {
 }
 
 function llenarTablaConciliados(conciliados) {
-    let html = '';
-
-    // Ordenar por color: verdes (con coincidencia) arriba, naranjas (sin coincidencia) abajo
-    const conciliadosOrdenados = [...conciliados].sort((a, b) => {
-        const tieneCoincidenciaA = a.coincidenciaOverride !== undefined
-            ? a.coincidenciaOverride
-            : matchTieneCoincidenciaDescripcion(a);
-        const tieneCoincidenciaB = b.coincidenciaOverride !== undefined
-            ? b.coincidenciaOverride
-            : matchTieneCoincidenciaDescripcion(b);
-
-        // Verdes (true) primero, naranjas (false) después
-        if (tieneCoincidenciaA === tieneCoincidenciaB) return 0;
-        return tieneCoincidenciaA ? -1 : 1;
-    });
-
-    conciliadosOrdenados.forEach((match, idx) => {
-        const maxRows = Math.max(match.mayor.length, match.extracto.length);
-
-        // Determinar clase según coincidencia de descripción
-        // Si hay override manual, usar ese valor; sino, calcular automáticamente
-        const tieneCoincidencia = match.coincidenciaOverride !== undefined
-            ? match.coincidenciaOverride
-            : matchTieneCoincidenciaDescripcion(match);
-        const coincidenciaClass = tieneCoincidencia ? ' row-coincidencia-descripcion' : ' row-sin-coincidencia';
-        const isSelected = seleccionConciliados.includes(match.id);
-        const selectedClass = isSelected ? ' row-conciliado-selected' : '';
-
-        for (let i = 0; i < maxRows; i++) {
-            const m = match.mayor[i];
-            const e = match.extracto[i];
-            const isFirst = i === 0;
-            const isSubRow = i > 0;
-            const manualClass = match.manual ? ' row-manual' : '';
-
-            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}${coincidenciaClass}${selectedClass}" data-conciliacion-id="${match.id}">`;
-
-            // Checkbox de selección (solo en primera fila)
-            if (isFirst) {
-                const checked = isSelected ? 'checked' : '';
-                html += `<td class="col-checkbox" rowspan="${maxRows}">
-                    <input type="checkbox" class="checkbox-conciliado" data-id="${match.id}" ${checked} onchange="toggleSeleccionConciliado('${match.id}', this.checked)">
-                </td>`;
-            }
-
-            // Columnas Mayor
-            if (m) {
-                html += `
-                    <td class="col-fecha">${formatearFecha(m.fecha)}</td>
-                    <td class="col-numero">${m.numeroAsiento}</td>
-                    <td class="col-leyenda" title="${m.leyenda}">${truncar(m.leyenda, 30)}</td>
-                    <td class="col-importe">${formatearNumero(m.importe)}</td>
-                `;
-            } else {
-                html += '<td class="col-fecha"></td><td class="col-numero"></td><td class="col-leyenda"></td><td class="col-importe"></td>';
-            }
-
-            // Separador
-            html += '<td class="separator"></td>';
-
-            // Columnas Extracto
-            if (e) {
-                html += `
-                    <td class="col-fecha">${formatearFecha(e.fecha)}</td>
-                    <td class="col-descripcion" title="${e.descripcion}">${truncar(e.descripcion, 25)}</td>
-                    <td class="col-origen">${e.origen}</td>
-                    <td class="col-importe">${formatearNumero(e.importe)}</td>
-                `;
-            } else {
-                html += '<td class="col-fecha"></td><td class="col-descripcion"></td><td class="col-origen"></td><td class="col-importe"></td>';
-            }
-
-            // Diferencia (solo en primera fila)
-            if (isFirst) {
-                const colorClass = match.diferencia > 0 ? 'text-red' : 'text-green';
-                html += `<td class="col-diferencia ${colorClass}">${match.diferencia > 0 ? formatearNumero(match.diferencia) : '-'}</td>`;
-            } else {
-                html += '<td class="col-diferencia"></td>';
-            }
-
-            // Botón de acción (solo en primera fila)
-            if (isFirst) {
-                const manualBadge = match.manual ? '<span class="badge-manual">Manual</span>' : '';
-                // Badge de reproceso con tooltip que muestra los parámetros utilizados
-                let reprocesoBadge = '';
-                if (match.reproceso && match.parametrosReproceso) {
-                    const tooltipText = `Reproceso #${match.parametrosReproceso.numeroReproceso}: ${match.parametrosReproceso.toleranciaFecha} días, $${match.parametrosReproceso.toleranciaImporte.toLocaleString('es-AR')}`;
-                    reprocesoBadge = `<span class="badge-reproceso" title="${tooltipText}">🔄 Rep</span>`;
-                }
-                // Botón para cambiar categoría de color (verde/naranja)
-                const colorBtnIcon = tieneCoincidencia ? '🟢' : '🟠';
-                const colorBtnTitle = tieneCoincidencia
-                    ? 'Marcar como sin coincidencia (naranja)'
-                    : 'Marcar como con coincidencia (verde)';
-                html += `
-                    <td class="col-action">
-                        ${manualBadge}${reprocesoBadge}
-                        <button class="btn-toggle-color" onclick="toggleColorConciliacion('${match.id}')" title="${colorBtnTitle}">
-                            ${colorBtnIcon}
-                        </button>
-                        <button class="btn-desconciliar" onclick="desconciliar('${match.id}')" title="Desconciliar">
-                            ✕
-                        </button>
-                    </td>
-                `;
-            } else {
-                html += '<td class="col-action"></td>';
-            }
-
-            html += '</tr>';
-        }
-    });
-
-    elements.tablaConciliados.innerHTML = html || '<tr><td colspan="12" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos conciliados</td></tr>';
-
-    // Actualizar contador en tab
-    const countTab = document.getElementById('countConciliadosTab');
-    if (countTab) {
-        countTab.textContent = `(${conciliados.length})`;
-    }
-
-    // Actualizar estado del checkbox "seleccionar todos" y botón de cambio masivo
-    actualizarCheckboxSeleccionarTodosConciliados();
-    actualizarBotonCambioColorMasivo();
+    // Usar el nuevo sistema de renderizado por grupos
+    renderizarConciliadosPorGrupos();
 }
 
 function llenarTablaMayorPendiente(pendientes) {
@@ -2912,17 +2828,8 @@ function toggleColorConciliacion(idConciliacion) {
     // Toggle el valor
     match.coincidenciaOverride = !match.coincidenciaOverride;
 
-    // Actualizar la tabla según si hay filtros aplicados o no
-    if (hayFiltrosActivosConciliados()) {
-        // Si hay filtros, actualizar el array filtrado también
-        const matchFiltrado = conciliadosFiltrado.find(c => c.id === idConciliacion);
-        if (matchFiltrado) {
-            matchFiltrado.coincidenciaOverride = match.coincidenciaOverride;
-        }
-        renderizarConciliadosFiltrado();
-    } else {
-        llenarTablaConciliados(state.resultados.conciliados);
-    }
+    // Re-renderizar por grupos (el elemento se moverá de verde a naranja o viceversa)
+    renderizarConciliadosPorGrupos();
 }
 
 /**
@@ -2989,6 +2896,39 @@ function seleccionarTodosConciliados(checked) {
         }
     });
 
+    actualizarBotonCambioColorMasivo();
+}
+
+/**
+ * Seleccionar/deseleccionar todos los conciliados de un grupo específico
+ */
+function seleccionarTodosConciliadosGrupo(grupo, checked) {
+    if (!state.resultados) return;
+
+    // Separar en verdes y naranjas
+    const conciliados = state.resultados.conciliados;
+    const conciliadosGrupo = conciliados.filter(match => {
+        const tieneCoincidencia = match.coincidenciaOverride !== undefined
+            ? match.coincidenciaOverride
+            : matchTieneCoincidenciaDescripcion(match);
+        return grupo === 'verdes' ? tieneCoincidencia : !tieneCoincidencia;
+    });
+
+    if (checked) {
+        // Agregar todos los IDs del grupo
+        conciliadosGrupo.forEach(match => {
+            if (!seleccionConciliados.includes(match.id)) {
+                seleccionConciliados.push(match.id);
+            }
+        });
+    } else {
+        // Remover solo los del grupo
+        const idsGrupo = conciliadosGrupo.map(m => m.id);
+        seleccionConciliados = seleccionConciliados.filter(id => !idsGrupo.includes(id));
+    }
+
+    // Re-renderizar para actualizar checkboxes
+    renderizarConciliadosPorGrupos();
     actualizarBotonCambioColorMasivo();
 }
 
@@ -3076,14 +3016,6 @@ function cambiarColorMasivo(tieneCoincidencia) {
         if (match) {
             match.coincidenciaOverride = tieneCoincidencia;
         }
-
-        // También actualizar en el array filtrado si existe
-        if (conciliadosFiltrado.length > 0) {
-            const matchFiltrado = conciliadosFiltrado.find(c => c.id === idConciliacion);
-            if (matchFiltrado) {
-                matchFiltrado.coincidenciaOverride = tieneCoincidencia;
-            }
-        }
     });
 
     // Cerrar el menú
@@ -3092,12 +3024,8 @@ function cambiarColorMasivo(tieneCoincidencia) {
     // Limpiar selección
     limpiarSeleccionConciliados();
 
-    // Re-renderizar la tabla
-    if (hayFiltrosActivosConciliados()) {
-        renderizarConciliadosFiltrado();
-    } else {
-        llenarTablaConciliados(state.resultados.conciliados);
-    }
+    // Re-renderizar por grupos
+    renderizarConciliadosPorGrupos();
 
     mostrarMensaje(`Se cambió el color de ${cantidadCambiados} conciliaciones`, 'success');
 }
@@ -4818,6 +4746,536 @@ function limpiarFiltrosConciliados() {
             countTab.textContent = `(${state.resultados.conciliados.length})`;
         }
     }
+}
+
+// ========== TOGGLE DE GRUPOS VERDES/NARANJAS ==========
+
+/**
+ * Toggle visibilidad del grupo de conciliados verdes
+ */
+function toggleGrupoVerdes() {
+    gruposConciliados.verdesVisible = !gruposConciliados.verdesVisible;
+    actualizarVistaGruposConciliados();
+}
+
+/**
+ * Toggle visibilidad del grupo de conciliados naranjas
+ */
+function toggleGrupoNaranjas() {
+    gruposConciliados.naranjasVisible = !gruposConciliados.naranjasVisible;
+    actualizarVistaGruposConciliados();
+}
+
+/**
+ * Actualiza la UI después de cambiar la visibilidad de grupos
+ */
+function actualizarVistaGruposConciliados() {
+    // Actualizar botones de toggle
+    const btnVerdes = document.getElementById('btnToggleVerdes');
+    const btnNaranjas = document.getElementById('btnToggleNaranjas');
+
+    if (btnVerdes) {
+        btnVerdes.innerHTML = gruposConciliados.verdesVisible
+            ? '🟢 Ocultar verdes'
+            : '🟢 Mostrar verdes';
+        btnVerdes.classList.toggle('btn-toggle-oculto', !gruposConciliados.verdesVisible);
+    }
+
+    if (btnNaranjas) {
+        btnNaranjas.innerHTML = gruposConciliados.naranjasVisible
+            ? '🟠 Ocultar naranjas'
+            : '🟠 Mostrar naranjas';
+        btnNaranjas.classList.toggle('btn-toggle-oculto', !gruposConciliados.naranjasVisible);
+    }
+
+    // Actualizar visibilidad de secciones
+    const seccionVerdes = document.getElementById('seccion-conciliados-verdes');
+    const seccionNaranjas = document.getElementById('seccion-conciliados-naranjas');
+
+    if (seccionVerdes) {
+        seccionVerdes.classList.toggle('hidden', !gruposConciliados.verdesVisible);
+    }
+    if (seccionNaranjas) {
+        seccionNaranjas.classList.toggle('hidden', !gruposConciliados.naranjasVisible);
+    }
+
+    // Actualizar contadores en los botones
+    actualizarContadoresGrupos();
+}
+
+/**
+ * Actualiza los contadores de cada grupo
+ */
+function actualizarContadoresGrupos() {
+    if (!state.resultados) return;
+
+    const conciliados = state.resultados.conciliados;
+    let countVerdes = 0;
+    let countNaranjas = 0;
+
+    conciliados.forEach(match => {
+        const tieneCoincidencia = match.coincidenciaOverride !== undefined
+            ? match.coincidenciaOverride
+            : matchTieneCoincidenciaDescripcion(match);
+        if (tieneCoincidencia) {
+            countVerdes++;
+        } else {
+            countNaranjas++;
+        }
+    });
+
+    // Actualizar contadores en headers
+    const countVerdesEl = document.getElementById('countVerdes');
+    const countNaranjasEl = document.getElementById('countNaranjas');
+
+    if (countVerdesEl) countVerdesEl.textContent = `(${countVerdes})`;
+    if (countNaranjasEl) countNaranjasEl.textContent = `(${countNaranjas})`;
+}
+
+// ========== FILTROS SEPARADOS VERDES/NARANJAS ==========
+
+/**
+ * Toggle panel de filtros para grupo específico
+ */
+function toggleFiltrosGrupo(grupo) {
+    const panelId = grupo === 'verdes' ? 'filtros-conciliados-verdes' : 'filtros-conciliados-naranjas';
+    const btnId = grupo === 'verdes' ? 'btnFiltrosVerdes' : 'btnFiltrosNaranjas';
+
+    const panel = document.getElementById(panelId);
+    const btn = document.getElementById(btnId);
+
+    if (panel && btn) {
+        const isHidden = panel.classList.contains('hidden');
+        panel.classList.toggle('hidden');
+        btn.innerHTML = isHidden ? '🔍 Filtros ▲' : '🔍 Filtros ▼';
+    }
+}
+
+/**
+ * Aplicar filtros al grupo de conciliados verdes
+ */
+function aplicarFiltrosVerdes() {
+    // Leer valores de los inputs
+    filtrosConciliadosVerdes.fechaMayorDesde = document.getElementById('filtroVerdesMayorFechaDesde')?.value || null;
+    filtrosConciliadosVerdes.fechaMayorHasta = document.getElementById('filtroVerdesMayorFechaHasta')?.value || null;
+    filtrosConciliadosVerdes.numeroAsiento = document.getElementById('filtroVerdesNumeroAsiento')?.value.trim() || '';
+    filtrosConciliadosVerdes.leyenda = document.getElementById('filtroVerdesLeyenda')?.value.trim() || '';
+    filtrosConciliadosVerdes.fechaExtractoDesde = document.getElementById('filtroVerdesExtractoFechaDesde')?.value || null;
+    filtrosConciliadosVerdes.fechaExtractoHasta = document.getElementById('filtroVerdesExtractoFechaHasta')?.value || null;
+    filtrosConciliadosVerdes.descripcion = document.getElementById('filtroVerdesDescripcion')?.value.trim() || '';
+    filtrosConciliadosVerdes.origen = document.getElementById('filtroVerdesOrigen')?.value.trim() || '';
+    filtrosConciliadosVerdes.importeTipo = document.getElementById('filtroVerdesImporteTipo')?.value || '';
+    filtrosConciliadosVerdes.importeValor = parseFloat(document.getElementById('filtroVerdesImporteValor')?.value) || null;
+    filtrosConciliadosVerdes.importeValor2 = parseFloat(document.getElementById('filtroVerdesImporteValor2')?.value) || null;
+    filtrosConciliadosVerdes.tipoConciliacion = document.getElementById('filtroVerdesTipoConciliacion')?.value || '';
+
+    renderizarConciliadosPorGrupos();
+}
+
+/**
+ * Aplicar filtros al grupo de conciliados naranjas
+ */
+function aplicarFiltrosNaranjas() {
+    // Leer valores de los inputs
+    filtrosConciliadosNaranjas.fechaMayorDesde = document.getElementById('filtroNaranjasMayorFechaDesde')?.value || null;
+    filtrosConciliadosNaranjas.fechaMayorHasta = document.getElementById('filtroNaranjasMayorFechaHasta')?.value || null;
+    filtrosConciliadosNaranjas.numeroAsiento = document.getElementById('filtroNaranjasNumeroAsiento')?.value.trim() || '';
+    filtrosConciliadosNaranjas.leyenda = document.getElementById('filtroNaranjasLeyenda')?.value.trim() || '';
+    filtrosConciliadosNaranjas.fechaExtractoDesde = document.getElementById('filtroNaranjasExtractoFechaDesde')?.value || null;
+    filtrosConciliadosNaranjas.fechaExtractoHasta = document.getElementById('filtroNaranjasExtractoFechaHasta')?.value || null;
+    filtrosConciliadosNaranjas.descripcion = document.getElementById('filtroNaranjasDescripcion')?.value.trim() || '';
+    filtrosConciliadosNaranjas.origen = document.getElementById('filtroNaranjasOrigen')?.value.trim() || '';
+    filtrosConciliadosNaranjas.importeTipo = document.getElementById('filtroNaranjasImporteTipo')?.value || '';
+    filtrosConciliadosNaranjas.importeValor = parseFloat(document.getElementById('filtroNaranjasImporteValor')?.value) || null;
+    filtrosConciliadosNaranjas.importeValor2 = parseFloat(document.getElementById('filtroNaranjasImporteValor2')?.value) || null;
+    filtrosConciliadosNaranjas.tipoConciliacion = document.getElementById('filtroNaranjasTipoConciliacion')?.value || '';
+
+    renderizarConciliadosPorGrupos();
+}
+
+/**
+ * Limpiar filtros del grupo verdes
+ */
+function limpiarFiltrosVerdes() {
+    filtrosConciliadosVerdes = {
+        fechaMayorDesde: null,
+        fechaMayorHasta: null,
+        numeroAsiento: '',
+        leyenda: '',
+        fechaExtractoDesde: null,
+        fechaExtractoHasta: null,
+        descripcion: '',
+        origen: '',
+        importeTipo: '',
+        importeValor: null,
+        importeValor2: null,
+        tipoConciliacion: ''
+    };
+
+    // Resetear inputs
+    const inputs = ['filtroVerdesMayorFechaDesde', 'filtroVerdesMayorFechaHasta', 'filtroVerdesNumeroAsiento',
+                   'filtroVerdesLeyenda', 'filtroVerdesExtractoFechaDesde', 'filtroVerdesExtractoFechaHasta',
+                   'filtroVerdesDescripcion', 'filtroVerdesOrigen', 'filtroVerdesImporteTipo',
+                   'filtroVerdesImporteValor', 'filtroVerdesImporteValor2', 'filtroVerdesTipoConciliacion'];
+    inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+
+    const importeValor2 = document.getElementById('filtroVerdesImporteValor2');
+    if (importeValor2) importeValor2.classList.add('hidden');
+
+    renderizarConciliadosPorGrupos();
+}
+
+/**
+ * Limpiar filtros del grupo naranjas
+ */
+function limpiarFiltrosNaranjas() {
+    filtrosConciliadosNaranjas = {
+        fechaMayorDesde: null,
+        fechaMayorHasta: null,
+        numeroAsiento: '',
+        leyenda: '',
+        fechaExtractoDesde: null,
+        fechaExtractoHasta: null,
+        descripcion: '',
+        origen: '',
+        importeTipo: '',
+        importeValor: null,
+        importeValor2: null,
+        tipoConciliacion: ''
+    };
+
+    // Resetear inputs
+    const inputs = ['filtroNaranjasMayorFechaDesde', 'filtroNaranjasMayorFechaHasta', 'filtroNaranjasNumeroAsiento',
+                   'filtroNaranjasLeyenda', 'filtroNaranjasExtractoFechaDesde', 'filtroNaranjasExtractoFechaHasta',
+                   'filtroNaranjasDescripcion', 'filtroNaranjasOrigen', 'filtroNaranjasImporteTipo',
+                   'filtroNaranjasImporteValor', 'filtroNaranjasImporteValor2', 'filtroNaranjasTipoConciliacion'];
+    inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+
+    const importeValor2 = document.getElementById('filtroNaranjasImporteValor2');
+    if (importeValor2) importeValor2.classList.add('hidden');
+
+    renderizarConciliadosPorGrupos();
+}
+
+/**
+ * Filtrar conciliaciones por grupo con filtros específicos
+ */
+function filtrarConciliadosGrupo(conciliaciones, filtros) {
+    return conciliaciones.filter(match => {
+        // Filtro por tipo de conciliación (1:1, 1:N, N:1)
+        if (filtros.tipoConciliacion) {
+            if (filtros.tipoConciliacion === '1:1') {
+                if (match.mayor.length !== 1 || match.extracto.length !== 1) return false;
+            } else if (filtros.tipoConciliacion === '1:N') {
+                if (match.mayor.length !== 1 || match.extracto.length <= 1) return false;
+            } else if (filtros.tipoConciliacion === 'N:1') {
+                if (match.mayor.length <= 1 || match.extracto.length !== 1) return false;
+            } else if (filtros.tipoConciliacion === 'multiple') {
+                // 1:N o N:1
+                if (match.mayor.length === 1 && match.extracto.length === 1) return false;
+            }
+        }
+
+        // Filtros para Mayor
+        const mayorMovs = match.mayor || [];
+
+        if (filtros.fechaMayorDesde) {
+            const fechaDesde = new Date(filtros.fechaMayorDesde);
+            const algunoEnRango = mayorMovs.some(m => m.fecha >= fechaDesde);
+            if (!algunoEnRango) return false;
+        }
+
+        if (filtros.fechaMayorHasta) {
+            const fechaHasta = new Date(filtros.fechaMayorHasta);
+            fechaHasta.setHours(23, 59, 59, 999);
+            const algunoEnRango = mayorMovs.some(m => m.fecha <= fechaHasta);
+            if (!algunoEnRango) return false;
+        }
+
+        if (filtros.numeroAsiento) {
+            const algunoCoincide = mayorMovs.some(m =>
+                String(m.numeroAsiento).toLowerCase().includes(filtros.numeroAsiento.toLowerCase())
+            );
+            if (!algunoCoincide) return false;
+        }
+
+        if (filtros.leyenda) {
+            const algunoCoincide = mayorMovs.some(m =>
+                m.leyenda && m.leyenda.toLowerCase().includes(filtros.leyenda.toLowerCase())
+            );
+            if (!algunoCoincide) return false;
+        }
+
+        // Filtros para Extracto
+        const extractoMovs = match.extracto || [];
+
+        if (filtros.fechaExtractoDesde) {
+            const fechaDesde = new Date(filtros.fechaExtractoDesde);
+            const algunoEnRango = extractoMovs.some(e => e.fecha >= fechaDesde);
+            if (!algunoEnRango) return false;
+        }
+
+        if (filtros.fechaExtractoHasta) {
+            const fechaHasta = new Date(filtros.fechaExtractoHasta);
+            fechaHasta.setHours(23, 59, 59, 999);
+            const algunoEnRango = extractoMovs.some(e => e.fecha <= fechaHasta);
+            if (!algunoEnRango) return false;
+        }
+
+        if (filtros.descripcion) {
+            const algunoCoincide = extractoMovs.some(e =>
+                e.descripcion && e.descripcion.toLowerCase().includes(filtros.descripcion.toLowerCase())
+            );
+            if (!algunoCoincide) return false;
+        }
+
+        if (filtros.origen) {
+            const algunoCoincide = extractoMovs.some(e =>
+                String(e.origen).toLowerCase().includes(filtros.origen.toLowerCase())
+            );
+            if (!algunoCoincide) return false;
+        }
+
+        // Filtro importe
+        if (filtros.importeTipo && filtros.importeValor !== null) {
+            const importesMayor = mayorMovs.map(m => m.importe || 0);
+            const importesExtracto = extractoMovs.map(e => e.importe || 0);
+            const todosImportes = [...importesMayor, ...importesExtracto];
+
+            let algunoCumple = false;
+            for (const importe of todosImportes) {
+                switch (filtros.importeTipo) {
+                    case 'mayor':
+                        if (importe > filtros.importeValor) algunoCumple = true;
+                        break;
+                    case 'menor':
+                        if (importe < filtros.importeValor) algunoCumple = true;
+                        break;
+                    case 'igual':
+                        if (Math.abs(importe - filtros.importeValor) <= 0.01) algunoCumple = true;
+                        break;
+                    case 'entre':
+                        if (filtros.importeValor2 !== null) {
+                            if (importe >= filtros.importeValor && importe <= filtros.importeValor2) algunoCumple = true;
+                        }
+                        break;
+                }
+                if (algunoCumple) break;
+            }
+            if (!algunoCumple) return false;
+        }
+
+        return true;
+    });
+}
+
+/**
+ * Toggle para mostrar segundo campo de importe (entre)
+ */
+function toggleSegundoImporteGrupo(grupo) {
+    const tipoId = grupo === 'verdes' ? 'filtroVerdesImporteTipo' : 'filtroNaranjasImporteTipo';
+    const valor2Id = grupo === 'verdes' ? 'filtroVerdesImporteValor2' : 'filtroNaranjasImporteValor2';
+
+    const tipo = document.getElementById(tipoId);
+    const valor2 = document.getElementById(valor2Id);
+
+    if (tipo && valor2) {
+        if (tipo.value === 'entre') {
+            valor2.classList.remove('hidden');
+        } else {
+            valor2.classList.add('hidden');
+        }
+    }
+}
+
+/**
+ * Renderizar conciliados separados por grupos (verdes/naranjas)
+ */
+function renderizarConciliadosPorGrupos() {
+    if (!state.resultados) return;
+
+    const conciliados = state.resultados.conciliados;
+
+    // Separar en verdes y naranjas
+    const verdes = [];
+    const naranjas = [];
+
+    conciliados.forEach(match => {
+        const tieneCoincidencia = match.coincidenciaOverride !== undefined
+            ? match.coincidenciaOverride
+            : matchTieneCoincidenciaDescripcion(match);
+        if (tieneCoincidencia) {
+            verdes.push(match);
+        } else {
+            naranjas.push(match);
+        }
+    });
+
+    // Aplicar filtros a cada grupo
+    const verdesFiltrados = filtrarConciliadosGrupo(verdes, filtrosConciliadosVerdes);
+    const naranjasFiltrados = filtrarConciliadosGrupo(naranjas, filtrosConciliadosNaranjas);
+
+    // Renderizar cada grupo
+    renderizarGrupoConciliados('verdes', verdesFiltrados, verdes.length);
+    renderizarGrupoConciliados('naranjas', naranjasFiltrados, naranjas.length);
+
+    // Actualizar contadores
+    actualizarContadoresGrupos();
+
+    // Actualizar contador total
+    const countTab = document.getElementById('countConciliadosTab');
+    if (countTab) {
+        countTab.textContent = `(${conciliados.length})`;
+    }
+}
+
+/**
+ * Renderizar tabla de un grupo específico de conciliados
+ */
+function renderizarGrupoConciliados(grupo, conciliadosFiltrados, totalOriginal) {
+    const tablaId = grupo === 'verdes' ? 'tablaConciliadosVerdes' : 'tablaConciliadosNaranjas';
+    const tabla = document.getElementById(tablaId);
+    if (!tabla) return;
+
+    let html = '';
+    const coincidenciaClass = grupo === 'verdes' ? ' row-coincidencia-descripcion' : ' row-sin-coincidencia';
+
+    conciliadosFiltrados.forEach((match, idx) => {
+        const maxRows = Math.max(match.mayor.length, match.extracto.length);
+        const isSelected = seleccionConciliados.includes(match.id);
+        const selectedClass = isSelected ? ' row-conciliado-selected' : '';
+
+        // Badge de tipo de conciliación
+        let tipoBadge = '';
+        if (match.mayor.length === 1 && match.extracto.length === 1) {
+            tipoBadge = '<span class="badge-tipo-conc badge-1a1">1:1</span>';
+        } else if (match.mayor.length === 1 && match.extracto.length > 1) {
+            tipoBadge = `<span class="badge-tipo-conc badge-1aN">1:${match.extracto.length}</span>`;
+        } else if (match.mayor.length > 1 && match.extracto.length === 1) {
+            tipoBadge = `<span class="badge-tipo-conc badge-Na1">${match.mayor.length}:1</span>`;
+        }
+
+        for (let i = 0; i < maxRows; i++) {
+            const m = match.mayor[i];
+            const e = match.extracto[i];
+            const isFirst = i === 0;
+            const manualClass = match.manual ? ' row-manual' : '';
+
+            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}${coincidenciaClass}${selectedClass}" data-conciliacion-id="${match.id}">`;
+
+            // Checkbox de selección (solo en primera fila)
+            if (isFirst) {
+                const checked = isSelected ? 'checked' : '';
+                html += `<td class="col-checkbox" rowspan="${maxRows}">
+                    <input type="checkbox" class="checkbox-conciliado" data-id="${match.id}" ${checked} onchange="toggleSeleccionConciliado('${match.id}', this.checked)">
+                </td>`;
+            }
+
+            // Columnas Mayor
+            if (m) {
+                html += `
+                    <td class="col-fecha">${formatearFecha(m.fecha)}</td>
+                    <td class="col-numero">${m.numeroAsiento}</td>
+                    <td class="col-leyenda" title="${m.leyenda}">${truncar(m.leyenda, 30)}</td>
+                    <td class="col-importe">${formatearNumero(m.importe)}</td>
+                `;
+            } else {
+                html += '<td class="col-fecha"></td><td class="col-numero"></td><td class="col-leyenda"></td><td class="col-importe"></td>';
+            }
+
+            // Separador
+            html += '<td class="separator"></td>';
+
+            // Columnas Extracto
+            if (e) {
+                html += `
+                    <td class="col-fecha">${formatearFecha(e.fecha)}</td>
+                    <td class="col-descripcion" title="${e.descripcion}">${truncar(e.descripcion, 25)}</td>
+                    <td class="col-origen">${e.origen}</td>
+                    <td class="col-importe">${formatearNumero(e.importe)}</td>
+                `;
+            } else {
+                html += '<td class="col-fecha"></td><td class="col-descripcion"></td><td class="col-origen"></td><td class="col-importe"></td>';
+            }
+
+            // Diferencia (solo en primera fila)
+            if (isFirst) {
+                const colorClass = match.diferencia > 0 ? 'text-red' : 'text-green';
+                html += `<td class="col-diferencia ${colorClass}">${match.diferencia > 0 ? formatearNumero(match.diferencia) : '-'}</td>`;
+            } else {
+                html += '<td class="col-diferencia"></td>';
+            }
+
+            // Botón de acción (solo en primera fila)
+            if (isFirst) {
+                const manualBadge = match.manual ? '<span class="badge-manual">Manual</span>' : '';
+                let reprocesoBadge = '';
+                if (match.reproceso && match.parametrosReproceso) {
+                    const tooltipText = `Reproceso #${match.parametrosReproceso.numeroReproceso}: ${match.parametrosReproceso.toleranciaFecha} días, $${match.parametrosReproceso.toleranciaImporte.toLocaleString('es-AR')}`;
+                    reprocesoBadge = `<span class="badge-reproceso" title="${tooltipText}">🔄 Rep</span>`;
+                }
+                const tieneCoincidencia = grupo === 'verdes';
+                const colorBtnIcon = tieneCoincidencia ? '🟢' : '🟠';
+                const colorBtnTitle = tieneCoincidencia
+                    ? 'Marcar como sin coincidencia (naranja)'
+                    : 'Marcar como con coincidencia (verde)';
+                html += `
+                    <td class="col-action">
+                        ${tipoBadge}${manualBadge}${reprocesoBadge}
+                        <button class="btn-toggle-color" onclick="toggleColorConciliacion('${match.id}')" title="${colorBtnTitle}">
+                            ${colorBtnIcon}
+                        </button>
+                        <button class="btn-desconciliar" onclick="desconciliar('${match.id}')" title="Desconciliar">
+                            ✕
+                        </button>
+                    </td>
+                `;
+            } else {
+                html += '<td class="col-action"></td>';
+            }
+
+            html += '</tr>';
+        }
+    });
+
+    const emptyMsg = grupo === 'verdes'
+        ? 'No hay conciliaciones verdes que coincidan con los filtros'
+        : 'No hay conciliaciones naranjas que coincidan con los filtros';
+
+    tabla.innerHTML = html || `<tr><td colspan="12" class="text-muted" style="text-align:center;padding:20px;">${emptyMsg}</td></tr>`;
+
+    // Actualizar contador del grupo
+    const countEl = grupo === 'verdes' ? document.getElementById('countVerdesFiltrados') : document.getElementById('countNaranjasFiltrados');
+    if (countEl) {
+        const hayFiltros = grupo === 'verdes' ? hayFiltrosActivosGrupo(filtrosConciliadosVerdes) : hayFiltrosActivosGrupo(filtrosConciliadosNaranjas);
+        if (hayFiltros) {
+            countEl.textContent = `(${conciliadosFiltrados.length} de ${totalOriginal})`;
+        } else {
+            countEl.textContent = `(${totalOriginal})`;
+        }
+    }
+}
+
+/**
+ * Verificar si hay filtros activos en un grupo
+ */
+function hayFiltrosActivosGrupo(filtros) {
+    return filtros.fechaMayorDesde ||
+           filtros.fechaMayorHasta ||
+           filtros.numeroAsiento ||
+           filtros.leyenda ||
+           filtros.fechaExtractoDesde ||
+           filtros.fechaExtractoHasta ||
+           filtros.descripcion ||
+           filtros.origen ||
+           filtros.tipoConciliacion ||
+           (filtros.importeTipo && filtros.importeValor !== null);
 }
 
 /**
