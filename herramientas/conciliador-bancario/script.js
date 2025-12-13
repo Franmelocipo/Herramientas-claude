@@ -64,6 +64,9 @@ let seleccion = {
     extracto: []    // IDs de movimientos del Extracto seleccionados
 };
 
+// Estado de selección para cambio de color masivo en conciliados
+let seleccionConciliados = [];  // IDs de conciliaciones seleccionadas
+
 // Contador para IDs únicos de conciliaciones
 let conciliacionIdCounter = 0;
 
@@ -2283,6 +2286,8 @@ function llenarTablaConciliados(conciliados) {
             ? match.coincidenciaOverride
             : matchTieneCoincidenciaDescripcion(match);
         const coincidenciaClass = tieneCoincidencia ? ' row-coincidencia-descripcion' : ' row-sin-coincidencia';
+        const isSelected = seleccionConciliados.includes(match.id);
+        const selectedClass = isSelected ? ' row-conciliado-selected' : '';
 
         for (let i = 0; i < maxRows; i++) {
             const m = match.mayor[i];
@@ -2291,7 +2296,15 @@ function llenarTablaConciliados(conciliados) {
             const isSubRow = i > 0;
             const manualClass = match.manual ? ' row-manual' : '';
 
-            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}${coincidenciaClass}">`;
+            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}${coincidenciaClass}${selectedClass}" data-conciliacion-id="${match.id}">`;
+
+            // Checkbox de selección (solo en primera fila)
+            if (isFirst) {
+                const checked = isSelected ? 'checked' : '';
+                html += `<td class="col-checkbox" rowspan="${maxRows}">
+                    <input type="checkbox" class="checkbox-conciliado" data-id="${match.id}" ${checked} onchange="toggleSeleccionConciliado('${match.id}', this.checked)">
+                </td>`;
+            }
 
             // Columnas Mayor
             if (m) {
@@ -2361,13 +2374,17 @@ function llenarTablaConciliados(conciliados) {
         }
     });
 
-    elements.tablaConciliados.innerHTML = html || '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos conciliados</td></tr>';
+    elements.tablaConciliados.innerHTML = html || '<tr><td colspan="12" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos conciliados</td></tr>';
 
     // Actualizar contador en tab
     const countTab = document.getElementById('countConciliadosTab');
     if (countTab) {
         countTab.textContent = `(${conciliados.length})`;
     }
+
+    // Actualizar estado del checkbox "seleccionar todos" y botón de cambio masivo
+    actualizarCheckboxSeleccionarTodosConciliados();
+    actualizarBotonCambioColorMasivo();
 }
 
 function llenarTablaMayorPendiente(pendientes) {
@@ -2472,8 +2489,222 @@ function toggleColorConciliacion(idConciliacion) {
     // Toggle el valor
     match.coincidenciaOverride = !match.coincidenciaOverride;
 
-    // Actualizar la tabla
-    llenarTablaConciliados(state.resultados.conciliados);
+    // Actualizar la tabla según si hay filtros aplicados o no
+    if (hayFiltrosActivosConciliados()) {
+        // Si hay filtros, actualizar el array filtrado también
+        const matchFiltrado = conciliadosFiltrado.find(c => c.id === idConciliacion);
+        if (matchFiltrado) {
+            matchFiltrado.coincidenciaOverride = match.coincidenciaOverride;
+        }
+        renderizarConciliadosFiltrado();
+    } else {
+        llenarTablaConciliados(state.resultados.conciliados);
+    }
+}
+
+/**
+ * Toggle selección de una conciliación para cambio masivo de color
+ */
+function toggleSeleccionConciliado(idConciliacion, checked) {
+    if (checked) {
+        if (!seleccionConciliados.includes(idConciliacion)) {
+            seleccionConciliados.push(idConciliacion);
+        }
+    } else {
+        seleccionConciliados = seleccionConciliados.filter(id => id !== idConciliacion);
+    }
+
+    // Actualizar visual de la fila
+    const filas = document.querySelectorAll(`tr[data-conciliacion-id="${idConciliacion}"]`);
+    filas.forEach(fila => {
+        if (checked) {
+            fila.classList.add('row-conciliado-selected');
+        } else {
+            fila.classList.remove('row-conciliado-selected');
+        }
+    });
+
+    actualizarBotonCambioColorMasivo();
+
+    // Actualizar checkbox "seleccionar todos"
+    actualizarCheckboxSeleccionarTodosConciliados();
+}
+
+/**
+ * Seleccionar/deseleccionar todos los conciliados visibles
+ */
+function seleccionarTodosConciliados(checked) {
+    // Obtener los conciliados visibles (filtrados o todos)
+    const conciliadosVisibles = hayFiltrosActivosConciliados()
+        ? conciliadosFiltrado
+        : (state.resultados ? state.resultados.conciliados : []);
+
+    if (checked) {
+        // Agregar todos los IDs de conciliados visibles
+        conciliadosVisibles.forEach(match => {
+            if (!seleccionConciliados.includes(match.id)) {
+                seleccionConciliados.push(match.id);
+            }
+        });
+    } else {
+        // Remover solo los que están visibles
+        const idsVisibles = conciliadosVisibles.map(m => m.id);
+        seleccionConciliados = seleccionConciliados.filter(id => !idsVisibles.includes(id));
+    }
+
+    // Actualizar todos los checkboxes y clases de fila
+    const checkboxes = document.querySelectorAll('.checkbox-conciliado');
+    checkboxes.forEach(cb => {
+        cb.checked = checked;
+        const fila = cb.closest('tr');
+        if (fila) {
+            if (checked) {
+                fila.classList.add('row-conciliado-selected');
+            } else {
+                fila.classList.remove('row-conciliado-selected');
+            }
+        }
+    });
+
+    actualizarBotonCambioColorMasivo();
+}
+
+/**
+ * Actualizar estado del checkbox "seleccionar todos" basado en la selección actual
+ */
+function actualizarCheckboxSeleccionarTodosConciliados() {
+    const checkboxAll = document.getElementById('selectAllConciliados');
+    if (!checkboxAll) return;
+
+    const conciliadosVisibles = hayFiltrosActivosConciliados()
+        ? conciliadosFiltrado
+        : (state.resultados ? state.resultados.conciliados : []);
+
+    if (conciliadosVisibles.length === 0) {
+        checkboxAll.checked = false;
+        checkboxAll.indeterminate = false;
+        return;
+    }
+
+    const todosSeleccionados = conciliadosVisibles.every(m => seleccionConciliados.includes(m.id));
+    const algunoSeleccionado = conciliadosVisibles.some(m => seleccionConciliados.includes(m.id));
+
+    checkboxAll.checked = todosSeleccionados;
+    checkboxAll.indeterminate = algunoSeleccionado && !todosSeleccionados;
+}
+
+/**
+ * Actualizar visibilidad y contador del botón de cambio de color masivo
+ */
+function actualizarBotonCambioColorMasivo() {
+    const btn = document.getElementById('btnCambiarColorMasivo');
+    const countSpan = document.getElementById('countConciliadosSeleccionados');
+
+    if (!btn || !countSpan) return;
+
+    const count = seleccionConciliados.length;
+    countSpan.textContent = count;
+
+    if (count > 0) {
+        btn.classList.remove('hidden');
+    } else {
+        btn.classList.add('hidden');
+    }
+}
+
+/**
+ * Mostrar menú de cambio de color masivo
+ */
+function mostrarMenuCambioColorMasivo() {
+    if (seleccionConciliados.length === 0) return;
+
+    const overlay = document.getElementById('overlayCambioColor');
+    const menu = document.getElementById('menuCambioColorMasivo');
+    const countSpan = document.getElementById('menuCambioColorCount');
+
+    if (overlay) overlay.classList.remove('hidden');
+    if (menu) menu.classList.remove('hidden');
+    if (countSpan) countSpan.textContent = seleccionConciliados.length;
+}
+
+/**
+ * Cerrar menú de cambio de color masivo
+ */
+function cerrarMenuCambioColorMasivo() {
+    const overlay = document.getElementById('overlayCambioColor');
+    const menu = document.getElementById('menuCambioColorMasivo');
+
+    if (overlay) overlay.classList.add('hidden');
+    if (menu) menu.classList.add('hidden');
+}
+
+/**
+ * Cambiar el color de todas las conciliaciones seleccionadas
+ * @param {boolean} tieneCoincidencia - true para verde, false para naranja
+ */
+function cambiarColorMasivo(tieneCoincidencia) {
+    if (!state.resultados || seleccionConciliados.length === 0) return;
+
+    const cantidadCambiados = seleccionConciliados.length;
+
+    // Actualizar el coincidenciaOverride de cada conciliación seleccionada
+    seleccionConciliados.forEach(idConciliacion => {
+        const match = state.resultados.conciliados.find(c => c.id === idConciliacion);
+        if (match) {
+            match.coincidenciaOverride = tieneCoincidencia;
+        }
+
+        // También actualizar en el array filtrado si existe
+        if (conciliadosFiltrado.length > 0) {
+            const matchFiltrado = conciliadosFiltrado.find(c => c.id === idConciliacion);
+            if (matchFiltrado) {
+                matchFiltrado.coincidenciaOverride = tieneCoincidencia;
+            }
+        }
+    });
+
+    // Cerrar el menú
+    cerrarMenuCambioColorMasivo();
+
+    // Limpiar selección
+    limpiarSeleccionConciliados();
+
+    // Re-renderizar la tabla
+    if (hayFiltrosActivosConciliados()) {
+        renderizarConciliadosFiltrado();
+    } else {
+        llenarTablaConciliados(state.resultados.conciliados);
+    }
+
+    mostrarMensaje(`Se cambió el color de ${cantidadCambiados} conciliaciones`, 'success');
+}
+
+/**
+ * Limpiar selección de conciliados
+ */
+function limpiarSeleccionConciliados() {
+    seleccionConciliados = [];
+
+    // Actualizar todos los checkboxes
+    const checkboxes = document.querySelectorAll('.checkbox-conciliado');
+    checkboxes.forEach(cb => {
+        cb.checked = false;
+    });
+
+    // Quitar clases de selección
+    const filasSeleccionadas = document.querySelectorAll('.row-conciliado-selected');
+    filasSeleccionadas.forEach(fila => {
+        fila.classList.remove('row-conciliado-selected');
+    });
+
+    // Actualizar checkbox "seleccionar todos"
+    const checkboxAll = document.getElementById('selectAllConciliados');
+    if (checkboxAll) {
+        checkboxAll.checked = false;
+        checkboxAll.indeterminate = false;
+    }
+
+    actualizarBotonCambioColorMasivo();
 }
 
 /**
@@ -3904,8 +4135,30 @@ function filtrarConciliados(conciliaciones) {
 function renderizarConciliadosFiltrado() {
     let html = '';
 
-    conciliadosFiltrado.forEach((match, idx) => {
+    // Ordenar por color: verdes (con coincidencia) arriba, naranjas (sin coincidencia) abajo
+    const conciliadosOrdenados = [...conciliadosFiltrado].sort((a, b) => {
+        const tieneCoincidenciaA = a.coincidenciaOverride !== undefined
+            ? a.coincidenciaOverride
+            : matchTieneCoincidenciaDescripcion(a);
+        const tieneCoincidenciaB = b.coincidenciaOverride !== undefined
+            ? b.coincidenciaOverride
+            : matchTieneCoincidenciaDescripcion(b);
+
+        // Verdes (true) primero, naranjas (false) después
+        if (tieneCoincidenciaA === tieneCoincidenciaB) return 0;
+        return tieneCoincidenciaA ? -1 : 1;
+    });
+
+    conciliadosOrdenados.forEach((match, idx) => {
         const maxRows = Math.max(match.mayor.length, match.extracto.length);
+
+        // Determinar clase según coincidencia de descripción
+        const tieneCoincidencia = match.coincidenciaOverride !== undefined
+            ? match.coincidenciaOverride
+            : matchTieneCoincidenciaDescripcion(match);
+        const coincidenciaClass = tieneCoincidencia ? ' row-coincidencia-descripcion' : ' row-sin-coincidencia';
+        const isSelected = seleccionConciliados.includes(match.id);
+        const selectedClass = isSelected ? ' row-conciliado-selected' : '';
 
         for (let i = 0; i < maxRows; i++) {
             const m = match.mayor[i];
@@ -3914,7 +4167,15 @@ function renderizarConciliadosFiltrado() {
             const isSubRow = i > 0;
             const manualClass = match.manual ? ' row-manual' : '';
 
-            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}">`;
+            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}${coincidenciaClass}${selectedClass}" data-conciliacion-id="${match.id}">`;
+
+            // Checkbox de selección (solo en primera fila)
+            if (isFirst) {
+                const checked = isSelected ? 'checked' : '';
+                html += `<td class="col-checkbox" rowspan="${maxRows}">
+                    <input type="checkbox" class="checkbox-conciliado" data-id="${match.id}" ${checked} onchange="toggleSeleccionConciliado('${match.id}', this.checked)">
+                </td>`;
+            }
 
             // Columnas Mayor
             if (m) {
@@ -3959,9 +4220,17 @@ function renderizarConciliadosFiltrado() {
                     const tooltipText = `Reproceso #${match.parametrosReproceso.numeroReproceso}: ${match.parametrosReproceso.toleranciaFecha} días, $${match.parametrosReproceso.toleranciaImporte.toLocaleString('es-AR')}`;
                     reprocesoBadge = `<span class="badge-reproceso" title="${tooltipText}">🔄 Rep</span>`;
                 }
+                // Botón para cambiar categoría de color (verde/naranja)
+                const colorBtnIcon = tieneCoincidencia ? '🟢' : '🟠';
+                const colorBtnTitle = tieneCoincidencia
+                    ? 'Marcar como sin coincidencia (naranja)'
+                    : 'Marcar como con coincidencia (verde)';
                 html += `
                     <td class="col-action">
                         ${manualBadge}${reprocesoBadge}
+                        <button class="btn-toggle-color" onclick="toggleColorConciliacion('${match.id}')" title="${colorBtnTitle}">
+                            ${colorBtnIcon}
+                        </button>
                         <button class="btn-desconciliar" onclick="desconciliar('${match.id}')" title="Desconciliar">
                             ✕
                         </button>
@@ -3975,13 +4244,17 @@ function renderizarConciliadosFiltrado() {
         }
     });
 
-    elements.tablaConciliados.innerHTML = html || '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:20px;">No hay conciliaciones que coincidan con los filtros</td></tr>';
+    elements.tablaConciliados.innerHTML = html || '<tr><td colspan="12" class="text-muted" style="text-align:center;padding:20px;">No hay conciliaciones que coincidan con los filtros</td></tr>';
 
     // Actualizar contador en tab
     const countTab = document.getElementById('countConciliadosTab');
     if (countTab) {
         countTab.textContent = `(${conciliadosFiltrado.length})`;
     }
+
+    // Actualizar estado del checkbox "seleccionar todos" y botón de cambio masivo
+    actualizarCheckboxSeleccionarTodosConciliados();
+    actualizarBotonCambioColorMasivo();
 }
 
 /**
@@ -4743,6 +5016,7 @@ function reiniciar() {
 
     // Resetear selección y contador
     seleccion = { mayor: [], extracto: [] };
+    seleccionConciliados = [];
     conciliacionIdCounter = 0;
 
     // Resetear filtros

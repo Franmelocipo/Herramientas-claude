@@ -3230,3 +3230,145 @@ body {
         width: 100%;
     }
 }
+
+/* ========== CAMBIO DE COLOR MASIVO ========== */
+
+.btn-cambiar-color-masivo {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-cambiar-color-masivo:hover {
+    background: linear-gradient(135deg, #d97706, #b45309);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.4);
+}
+
+.btn-cambiar-color-masivo.hidden {
+    display: none;
+}
+
+/* Menu de cambio de color */
+.menu-cambio-color {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    padding: 24px;
+    z-index: 1000;
+    min-width: 350px;
+}
+
+.menu-cambio-color.hidden {
+    display: none;
+}
+
+.menu-cambio-color-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.menu-cambio-color-header span {
+    font-size: 16px;
+    color: #374151;
+}
+
+.btn-cerrar-menu {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+}
+
+.btn-cerrar-menu:hover {
+    color: #374151;
+}
+
+.menu-cambio-color-opciones {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.btn-color-opcion {
+    padding: 14px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 2px solid transparent;
+}
+
+.btn-color-verde {
+    background: #f0fdf4;
+    color: #166534;
+    border-color: #86efac;
+}
+
+.btn-color-verde:hover {
+    background: #dcfce7;
+    border-color: #22c55e;
+}
+
+.btn-color-naranja {
+    background: #fff7ed;
+    color: #9a3412;
+    border-color: #fdba74;
+}
+
+.btn-color-naranja:hover {
+    background: #ffedd5;
+    border-color: #f97316;
+}
+
+/* Overlay para el menu */
+.overlay-cambio-color {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+.overlay-cambio-color.hidden {
+    display: none;
+}
+
+/* Checkbox en filas de conciliados */
+.checkbox-conciliado {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+/* Fila seleccionada en conciliados */
+.row-conciliado-selected {
+    outline: 2px solid #3b82f6;
+    outline-offset: -2px;
+}

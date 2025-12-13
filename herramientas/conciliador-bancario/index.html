@@ -334,9 +334,14 @@
                 <div class="tab-content active" id="tab-conciliados">
                     <div class="panel-header-pendiente">
                         <h3>Conciliados <span id="countConciliadosTab">(0)</span></h3>
-                        <button class="btn-filtros" id="btnFiltrosConciliados" onclick="toggleFiltros('conciliados')">
-                            🔍 Filtros ▼
-                        </button>
+                        <div class="header-actions">
+                            <button id="btnCambiarColorMasivo" class="btn-cambiar-color-masivo hidden" onclick="mostrarMenuCambioColorMasivo()">
+                                🎨 Cambiar color (<span id="countConciliadosSeleccionados">0</span>)
+                            </button>
+                            <button class="btn-filtros" id="btnFiltrosConciliados" onclick="toggleFiltros('conciliados')">
+                                🔍 Filtros ▼
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Panel de filtros Conciliados -->
@@ -421,9 +426,10 @@
                     <div id="filtrosConciliadosActivos" class="filtros-activos hidden"></div>
 
                     <div class="table-wrapper">
-                        <table class="results-table">
+                        <table class="results-table table-selectable">
                             <thead>
                                 <tr>
+                                    <th class="col-checkbox" rowspan="2"><input type="checkbox" id="selectAllConciliados" title="Seleccionar todos" onchange="seleccionarTodosConciliados(this.checked)"></th>
                                     <th colspan="4" class="header-group mayor">MAYOR CONTABLE</th>
                                     <th class="separator"></th>
                                     <th colspan="4" class="header-group extracto">EXTRACTO BANCARIO</th>
@@ -446,6 +452,23 @@
                             </thead>
                             <tbody id="tablaConciliados"></tbody>
                         </table>
+                    </div>
+
+                    <!-- Overlay y Menu de cambio de color masivo -->
+                    <div id="overlayCambioColor" class="overlay-cambio-color hidden" onclick="cerrarMenuCambioColorMasivo()"></div>
+                    <div id="menuCambioColorMasivo" class="menu-cambio-color hidden">
+                        <div class="menu-cambio-color-header">
+                            <span>Cambiar color de <strong id="menuCambioColorCount">0</strong> conciliaciones</span>
+                            <button class="btn-cerrar-menu" onclick="cerrarMenuCambioColorMasivo()">✕</button>
+                        </div>
+                        <div class="menu-cambio-color-opciones">
+                            <button class="btn-color-opcion btn-color-verde" onclick="cambiarColorMasivo(true)">
+                                🟢 Marcar como verde (con coincidencia)
+                            </button>
+                            <button class="btn-color-opcion btn-color-naranja" onclick="cambiarColorMasivo(false)">
+                                🟠 Marcar como naranja (sin coincidencia)
+                            </button>
+                        </div>
                     </div>
                 </div>
 
