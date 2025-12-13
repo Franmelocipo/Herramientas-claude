@@ -151,10 +151,27 @@ let toleranciasIniciales = {
 // Elementos del DOM
 const elements = {
     // Pasos
+    stepCliente: document.getElementById('step-cliente'),
+    stepCuenta: document.getElementById('step-cuenta'),
+    stepMayor: document.getElementById('step-mayor'),
     stepTipo: document.getElementById('step-tipo'),
     stepArchivos: document.getElementById('step-archivos'),
     stepTolerancias: document.getElementById('step-tolerancias'),
     stepEjecutar: document.getElementById('step-ejecutar'),
+
+    // Selección de cliente
+    clienteSearchPrincipal: document.getElementById('clienteSearchPrincipal'),
+    clienteSelectPrincipal: document.getElementById('clienteSelectPrincipal'),
+    clienteSeleccionadoInfo: document.getElementById('clienteSeleccionadoInfo'),
+    clienteInfoNombre: document.getElementById('clienteInfoNombre'),
+
+    // Selección de cuenta
+    cuentaSelectPrincipal: document.getElementById('cuentaSelectPrincipal'),
+    cuentaSeleccionadaInfo: document.getElementById('cuentaSeleccionadaInfo'),
+    cuentaInfoNombre: document.getElementById('cuentaInfoNombre'),
+    rangoExtractosSection: document.getElementById('rangoExtractosSection'),
+    extractoPreviewInfo: document.getElementById('extractoPreviewInfo'),
+    extractoMovimientosCount: document.getElementById('extractoMovimientosCount'),
 
     // Botones de tipo
     tipoButtons: document.querySelectorAll('.type-btn'),
@@ -312,6 +329,326 @@ function init() {
     cargarCategoriasConciliador();
 }
 
+// ========== NUEVO FLUJO: CLIENTE -> CUENTA -> MAYOR -> TIPO ==========
+
+/**
+ * Filtrar clientes en el selector principal basándose en la búsqueda
+ */
+function filtrarClientesPrincipal() {
+    const search = elements.clienteSearchPrincipal.value.toLowerCase().trim();
+    const select = elements.clienteSelectPrincipal;
+
+    // Limpiar opciones
+    select.innerHTML = '<option value="">-- Seleccione un cliente --</option>';
+
+    // Filtrar y agregar clientes que coincidan
+    const clientesFiltrados = auditoriaData.clientes.filter(cliente => {
+        const nombre = (cliente.nombre || '').toLowerCase();
+        const cuit = (cliente.cuit || '').toLowerCase();
+        return nombre.includes(search) || cuit.includes(search);
+    });
+
+    clientesFiltrados.forEach(cliente => {
+        const option = document.createElement('option');
+        option.value = cliente.id;
+        option.textContent = cliente.nombre + (cliente.cuit ? ` (${cliente.cuit})` : '');
+        select.appendChild(option);
+    });
+}
+
+/**
+ * Seleccionar cliente desde el selector principal
+ */
+async function seleccionarClientePrincipal() {
+    const clienteId = elements.clienteSelectPrincipal.value;
+
+    if (!clienteId) {
+        // Si se deselecciona, ocultar pasos siguientes
+        ocultarPasosDesde('cuenta');
+        return;
+    }
+
+    const cliente = auditoriaData.clientes.find(c => c.id === clienteId);
+    if (!cliente) return;
+
+    state.clienteSeleccionado = cliente;
+
+    // Mostrar info del cliente seleccionado
+    elements.clienteInfoNombre.textContent = cliente.nombre + (cliente.cuit ? ` (${cliente.cuit})` : '');
+    elements.clienteSeleccionadoInfo.classList.remove('hidden');
+
+    // Cargar cuentas del cliente
+    await cargarCuentasClientePrincipal(clienteId);
+
+    // Mostrar paso de cuenta
+    elements.stepCuenta.classList.remove('hidden');
+}
+
+/**
+ * Cambiar cliente (volver al paso 1)
+ */
+function cambiarCliente() {
+    // Ocultar info y pasos siguientes
+    elements.clienteSeleccionadoInfo.classList.add('hidden');
+    ocultarPasosDesde('cuenta');
+
+    // Limpiar estado
+    state.clienteSeleccionado = null;
+    state.cuentaSeleccionada = null;
+    state.datosExtracto = [];
+
+    // Limpiar selección
+    elements.clienteSelectPrincipal.value = '';
+    elements.clienteSearchPrincipal.value = '';
+    filtrarClientesPrincipal();
+}
+
+/**
+ * Cargar cuentas del cliente seleccionado
+ */
+async function cargarCuentasClientePrincipal(clienteId) {
+    const select = elements.cuentaSelectPrincipal;
+    select.innerHTML = '<option value="">Cargando cuentas...</option>';
+
+    try {
+        // Usar la misma lógica que cargarCuentasCliente pero para el selector principal
+        const { data: cuentas, error } = await supabase
+            .from('cuentas_bancarias')
+            .select('*')
+            .eq('cliente_id', clienteId)
+            .order('banco');
+
+        if (error) throw error;
+
+        auditoriaData.cuentas = cuentas || [];
+
+        select.innerHTML = '<option value="">-- Seleccione una cuenta --</option>';
+
+        if (cuentas && cuentas.length > 0) {
+            cuentas.forEach(cuenta => {
+                const option = document.createElement('option');
+                option.value = cuenta.id;
+                option.textContent = `${cuenta.banco} - ${cuenta.numero_cuenta}`;
+                select.appendChild(option);
+            });
+        } else {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No hay cuentas registradas';
+            option.disabled = true;
+            select.appendChild(option);
+        }
+    } catch (error) {
+        console.error('Error cargando cuentas:', error);
+        select.innerHTML = '<option value="">Error cargando cuentas</option>';
+    }
+}
+
+/**
+ * Seleccionar cuenta bancaria desde el selector principal
+ */
+async function seleccionarCuentaPrincipal() {
+    const cuentaId = elements.cuentaSelectPrincipal.value;
+
+    if (!cuentaId) {
+        // Si se deselecciona, ocultar pasos siguientes
+        ocultarPasosDesde('mayor');
+        elements.cuentaSeleccionadaInfo.classList.add('hidden');
+        return;
+    }
+
+    const cuenta = auditoriaData.cuentas.find(c => c.id === cuentaId);
+    if (!cuenta) return;
+
+    state.cuentaSeleccionada = cuenta;
+
+    // Mostrar info de cuenta seleccionada
+    elements.cuentaInfoNombre.textContent = `${cuenta.banco} - ${cuenta.numero_cuenta}`;
+    elements.cuentaSeleccionadaInfo.classList.remove('hidden');
+
+    // Cargar extractos disponibles para el rango de fechas
+    await cargarExtractosDisponiblesPrincipal();
+
+    // Mostrar paso de mayor
+    elements.stepMayor.classList.remove('hidden');
+}
+
+/**
+ * Cargar extractos disponibles para la cuenta seleccionada
+ */
+async function cargarExtractosDisponiblesPrincipal() {
+    if (!state.clienteSeleccionado || !state.cuentaSeleccionada) return;
+
+    try {
+        const { data: extractos, error } = await supabase
+            .from('extractos_bancarios')
+            .select('id, mes, anio')
+            .eq('cliente_id', state.clienteSeleccionado.id)
+            .eq('cuenta_bancaria_id', state.cuentaSeleccionada.id)
+            .order('anio', { ascending: false })
+            .order('mes', { ascending: false });
+
+        if (error) throw error;
+
+        auditoriaData.extractosDisponibles = extractos || [];
+
+        if (extractos && extractos.length > 0) {
+            // Poblar selectores de rango
+            poblarSelectoresRango(extractos);
+            elements.rangoExtractosSection.classList.remove('hidden');
+
+            // Auto-seleccionar todo el rango disponible
+            const rangoDesde = document.getElementById('rangoDesde');
+            const rangoHasta = document.getElementById('rangoHasta');
+            if (rangoDesde.options.length > 1) {
+                rangoDesde.value = rangoDesde.options[rangoDesde.options.length - 1].value;
+            }
+            if (rangoHasta.options.length > 1) {
+                rangoHasta.value = rangoHasta.options[1].value;
+            }
+
+            // Cargar extractos automáticamente
+            await actualizarExtractosSeleccionados();
+        } else {
+            elements.rangoExtractosSection.classList.add('hidden');
+            mostrarMensaje('No hay extractos cargados para esta cuenta. Puede cargar un extracto manualmente.', 'info');
+        }
+    } catch (error) {
+        console.error('Error cargando extractos:', error);
+    }
+}
+
+/**
+ * Poblar selectores de rango de fechas
+ */
+function poblarSelectoresRango(extractos) {
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+    const rangoDesde = document.getElementById('rangoDesde');
+    const rangoHasta = document.getElementById('rangoHasta');
+
+    rangoDesde.innerHTML = '<option value="">-- Mes/Año --</option>';
+    rangoHasta.innerHTML = '<option value="">-- Mes/Año --</option>';
+
+    extractos.forEach(ext => {
+        const label = `${meses[ext.mes - 1]} ${ext.anio}`;
+        const value = `${ext.anio}-${String(ext.mes).padStart(2, '0')}`;
+
+        const optionDesde = document.createElement('option');
+        optionDesde.value = value;
+        optionDesde.textContent = label;
+        rangoDesde.appendChild(optionDesde);
+
+        const optionHasta = document.createElement('option');
+        optionHasta.value = value;
+        optionHasta.textContent = label;
+        rangoHasta.appendChild(optionHasta);
+    });
+}
+
+/**
+ * Actualizar extractos seleccionados según el rango de fechas
+ */
+async function actualizarExtractosSeleccionados() {
+    if (!state.clienteSeleccionado || !state.cuentaSeleccionada) return;
+
+    const rangoDesde = document.getElementById('rangoDesde').value;
+    const rangoHasta = document.getElementById('rangoHasta').value;
+
+    if (!rangoDesde || !rangoHasta) {
+        elements.extractoPreviewInfo.classList.add('hidden');
+        return;
+    }
+
+    try {
+        const [anioDesde, mesDesde] = rangoDesde.split('-').map(Number);
+        const [anioHasta, mesHasta] = rangoHasta.split('-').map(Number);
+
+        // Obtener IDs de extractos en el rango
+        const extractosEnRango = auditoriaData.extractosDisponibles.filter(ext => {
+            const extValue = ext.anio * 100 + ext.mes;
+            const desdeValue = anioDesde * 100 + mesDesde;
+            const hastaValue = anioHasta * 100 + mesHasta;
+            return extValue >= desdeValue && extValue <= hastaValue;
+        });
+
+        if (extractosEnRango.length === 0) {
+            elements.extractoPreviewInfo.classList.add('hidden');
+            return;
+        }
+
+        const extractoIds = extractosEnRango.map(e => e.id);
+
+        // Cargar movimientos de los extractos
+        const { data: movimientos, error } = await supabase
+            .from('movimientos_extracto')
+            .select('*')
+            .in('extracto_id', extractoIds);
+
+        if (error) throw error;
+
+        // Procesar movimientos
+        state.datosExtracto = (movimientos || []).map(mov => ({
+            id: mov.id,
+            fecha: new Date(mov.fecha),
+            descripcion: mov.descripcion,
+            origen: mov.origen,
+            debito: parseFloat(mov.debito) || 0,
+            credito: parseFloat(mov.credito) || 0,
+            importe: parseFloat(mov.credito) || parseFloat(mov.debito) || 0
+        }));
+
+        // Mostrar info de extractos cargados
+        elements.extractoMovimientosCount.textContent =
+            `${state.datosExtracto.length} movimientos cargados`;
+        elements.extractoPreviewInfo.classList.remove('hidden');
+
+        // Guardar rango seleccionado
+        state.rangoExtractos = { desde: rangoDesde, hasta: rangoHasta };
+
+        // Actualizar botón de conciliar
+        actualizarBotonConciliar();
+
+    } catch (error) {
+        console.error('Error cargando movimientos:', error);
+    }
+}
+
+/**
+ * Ocultar pasos desde un punto específico
+ */
+function ocultarPasosDesde(desde) {
+    const pasos = ['cuenta', 'mayor', 'tipo', 'tolerancias', 'ejecutar'];
+    const desdeIndex = pasos.indexOf(desde);
+
+    if (desdeIndex < 0) return;
+
+    for (let i = desdeIndex; i < pasos.length; i++) {
+        const paso = pasos[i];
+        const element = elements[`step${paso.charAt(0).toUpperCase() + paso.slice(1)}`];
+        if (element) {
+            element.classList.add('hidden');
+        }
+    }
+
+    // Limpiar estados relacionados
+    if (desdeIndex <= pasos.indexOf('cuenta')) {
+        state.cuentaSeleccionada = null;
+        elements.cuentaSelectPrincipal.value = '';
+        elements.cuentaSeleccionadaInfo.classList.add('hidden');
+        elements.rangoExtractosSection.classList.add('hidden');
+    }
+    if (desdeIndex <= pasos.indexOf('mayor')) {
+        state.datosMayor = [];
+        elements.previewMayor.classList.add('hidden');
+    }
+    if (desdeIndex <= pasos.indexOf('tipo')) {
+        state.tipoConciliacion = null;
+        elements.tipoButtons.forEach(btn => btn.classList.remove('active'));
+    }
+}
+
 // ========== SELECCIÓN DE TIPO ==========
 
 function seleccionarTipo(tipo) {
@@ -322,8 +659,7 @@ function seleccionarTipo(tipo) {
         btn.classList.toggle('active', btn.dataset.tipo === tipo);
     });
 
-    // Mostrar siguiente paso
-    elements.stepArchivos.classList.remove('hidden');
+    // Mostrar siguientes pasos
     elements.stepTolerancias.classList.remove('hidden');
 
     actualizarBotonConciliar();
@@ -375,9 +711,6 @@ function cambiarFuenteExtracto() {
  * Cargar clientes desde Supabase para el selector
  */
 async function cargarClientesAuditoria() {
-    const select = document.getElementById('clienteSelect');
-    if (!select) return;
-
     try {
         let supabaseClient = null;
 
@@ -399,9 +732,20 @@ async function cargarClientesAuditoria() {
 
         if (error) throw error;
 
+        // Guardar en ambos caches para compatibilidad
+        const clientesFormateados = (data || []).map(c => ({
+            id: c.id,
+            nombre: c.razon_social,
+            cuit: c.cuit
+        }));
         auditoriaCache.clientes = data || [];
+        auditoriaData.clientes = clientesFormateados;
+
+        // Renderizar en selector legado y en selector principal
         renderizarSelectClientes(auditoriaCache.clientes);
-        console.log('Clientes de auditoría cargados:', auditoriaCache.clientes.length);
+        poblarSelectorClientesPrincipal(clientesFormateados);
+
+        console.log('Clientes de auditoría cargados:', clientesFormateados.length);
     } catch (error) {
         console.error('Error cargando clientes:', error);
         actualizarEstadoAuditoria('error', 'Error al cargar clientes');
@@ -409,7 +753,23 @@ async function cargarClientesAuditoria() {
 }
 
 /**
- * Renderizar opciones del selector de clientes
+ * Poblar el selector principal de clientes (paso 1)
+ */
+function poblarSelectorClientesPrincipal(clientes) {
+    const select = elements.clienteSelectPrincipal;
+    if (!select) return;
+
+    select.innerHTML = '<option value="">-- Seleccione un cliente --</option>';
+    clientes.forEach(cliente => {
+        const option = document.createElement('option');
+        option.value = cliente.id;
+        option.textContent = cliente.nombre + (cliente.cuit ? ` (${cliente.cuit})` : '');
+        select.appendChild(option);
+    });
+}
+
+/**
+ * Renderizar opciones del selector de clientes (legado)
  */
 function renderizarSelectClientes(clientes) {
     const select = document.getElementById('clienteSelect');
@@ -1582,7 +1942,10 @@ function sleep(ms) {
 // ========== CONCILIACIÓN ==========
 
 function actualizarBotonConciliar() {
-    const habilitado = state.tipoConciliacion &&
+    // Nuevo flujo: Cliente -> Cuenta -> Mayor -> Tipo
+    const habilitado = state.clienteSeleccionado &&
+                       state.cuentaSeleccionada &&
+                       state.tipoConciliacion &&
                        state.datosMayor.length > 0 &&
                        state.datosExtracto.length > 0;
 
@@ -1590,6 +1953,11 @@ function actualizarBotonConciliar() {
 
     if (habilitado) {
         elements.stepEjecutar.classList.remove('hidden');
+    }
+
+    // Mostrar paso de tipo cuando hay mayor cargado
+    if (state.datosMayor.length > 0 && state.datosExtracto.length > 0) {
+        elements.stepTipo.classList.remove('hidden');
     }
 }
 
@@ -5027,11 +5395,44 @@ function reiniciar() {
 
     // Resetear UI
     elements.tipoButtons.forEach(btn => btn.classList.remove('active'));
+
+    // Ocultar todos los pasos excepto el primero (cliente)
+    elements.stepCuenta.classList.add('hidden');
+    elements.stepMayor.classList.add('hidden');
+    elements.stepTipo.classList.add('hidden');
     elements.stepArchivos.classList.add('hidden');
     elements.stepTolerancias.classList.add('hidden');
     elements.stepEjecutar.classList.add('hidden');
     elements.resultados.classList.add('hidden');
     elements.selectionBar.classList.add('hidden');
+
+    // Resetear selectores de cliente y cuenta
+    if (elements.clienteSelectPrincipal) {
+        elements.clienteSelectPrincipal.value = '';
+    }
+    if (elements.clienteSearchPrincipal) {
+        elements.clienteSearchPrincipal.value = '';
+    }
+    if (elements.clienteSeleccionadoInfo) {
+        elements.clienteSeleccionadoInfo.classList.add('hidden');
+    }
+    if (elements.cuentaSelectPrincipal) {
+        elements.cuentaSelectPrincipal.value = '';
+    }
+    if (elements.cuentaSeleccionadaInfo) {
+        elements.cuentaSeleccionadaInfo.classList.add('hidden');
+    }
+    if (elements.rangoExtractosSection) {
+        elements.rangoExtractosSection.classList.add('hidden');
+    }
+    if (elements.extractoPreviewInfo) {
+        elements.extractoPreviewInfo.classList.add('hidden');
+    }
+
+    // Re-poblar selector de clientes
+    if (auditoriaData.clientes.length > 0) {
+        poblarSelectorClientesPrincipal(auditoriaData.clientes);
+    }
 
     // Resetear archivos
     eliminarArchivo('mayor');

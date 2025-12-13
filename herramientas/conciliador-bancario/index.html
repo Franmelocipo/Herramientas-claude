@@ -30,34 +30,77 @@
                 <p class="subtitle">Compara movimientos del Mayor Contable con Extractos Bancarios</p>
             </div>
 
-            <!-- Paso 1: Selección de tipo de conciliación -->
-            <div class="step" id="step-tipo">
+            <!-- Paso 1: Selección de cliente -->
+            <div class="step" id="step-cliente">
                 <h2 class="step-title">
                     <span class="step-number">1</span>
-                    ¿Qué desea conciliar?
+                    Seleccionar cliente
                 </h2>
-                <div class="type-grid">
-                    <button class="type-btn" data-tipo="creditos">
-                        <div class="type-btn-icon">💰</div>
-                        <div class="type-btn-title">Créditos</div>
-                        <div class="type-btn-subtitle">Entradas de dinero (Haber del Mayor = Crédito del Extracto)</div>
-                    </button>
-                    <button class="type-btn" data-tipo="debitos">
-                        <div class="type-btn-icon">💸</div>
-                        <div class="type-btn-title">Débitos</div>
-                        <div class="type-btn-subtitle">Salidas de dinero (Debe del Mayor = Débito del Extracto)</div>
-                    </button>
+                <div class="selector-cliente-wrapper">
+                    <div class="search-select-wrapper">
+                        <input type="text" id="clienteSearchPrincipal" placeholder="Buscar cliente por nombre o CUIT..." class="search-input search-input-large" oninput="filtrarClientesPrincipal()">
+                        <select id="clienteSelectPrincipal" class="select-large" onchange="seleccionarClientePrincipal()">
+                            <option value="">-- Seleccione un cliente --</option>
+                        </select>
+                    </div>
+                    <div id="clienteSeleccionadoInfo" class="cliente-seleccionado-info hidden">
+                        <span class="cliente-info-icon">✅</span>
+                        <span class="cliente-info-nombre" id="clienteInfoNombre"></span>
+                        <button class="btn-cambiar-cliente" onclick="cambiarCliente()">Cambiar</button>
+                    </div>
                 </div>
             </div>
 
-            <!-- Paso 2: Carga de archivos -->
-            <div class="step hidden" id="step-archivos">
+            <!-- Paso 2: Selección de cuenta bancaria -->
+            <div class="step hidden" id="step-cuenta">
                 <h2 class="step-title">
                     <span class="step-number">2</span>
-                    Cargar archivos
+                    Seleccionar cuenta bancaria
                 </h2>
+                <div class="selector-cuenta-wrapper">
+                    <select id="cuentaSelectPrincipal" class="select-large" onchange="seleccionarCuentaPrincipal()">
+                        <option value="">-- Seleccione una cuenta --</option>
+                    </select>
+                    <div id="cuentaSeleccionadaInfo" class="cuenta-seleccionada-info hidden">
+                        <div class="cuenta-info-header">
+                            <span class="cuenta-info-icon">🏦</span>
+                            <span class="cuenta-info-nombre" id="cuentaInfoNombre"></span>
+                        </div>
+                        <div class="extracto-auto-info" id="extractoAutoInfo">
+                            <span class="extracto-auto-icon">📋</span>
+                            <span class="extracto-auto-text">Los extractos se cargarán automáticamente de Auditoría</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Rango de fechas para extractos -->
+                <div id="rangoExtractosSection" class="rango-extractos-section hidden">
+                    <h4>Período a conciliar:</h4>
+                    <div class="rango-fechas-inputs">
+                        <div class="rango-input">
+                            <label for="rangoDesde">Desde:</label>
+                            <select id="rangoDesde" onchange="actualizarExtractosSeleccionados()">
+                                <option value="">-- Mes/Año --</option>
+                            </select>
+                        </div>
+                        <div class="rango-input">
+                            <label for="rangoHasta">Hasta:</label>
+                            <select id="rangoHasta" onchange="actualizarExtractosSeleccionados()">
+                                <option value="">-- Mes/Año --</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="extractoPreviewInfo" class="extracto-preview-info hidden">
+                        <span id="extractoMovimientosCount"></span>
+                    </div>
+                </div>
+            </div>
 
-                <!-- Mayor Contable -->
+            <!-- Paso 3: Carga de Mayor Contable -->
+            <div class="step hidden" id="step-mayor">
+                <h2 class="step-title">
+                    <span class="step-number">3</span>
+                    Cargar Mayor Contable
+                </h2>
                 <div class="file-section">
                     <div class="file-header">
                         <h3>📒 Mayor Contable</h3>
@@ -76,6 +119,34 @@
                         <button class="btn-remove" id="btnRemoveMayor">✕</button>
                     </div>
                 </div>
+            </div>
+
+            <!-- Paso 4: Selección de tipo de conciliación -->
+            <div class="step hidden" id="step-tipo">
+                <h2 class="step-title">
+                    <span class="step-number">4</span>
+                    ¿Qué desea conciliar?
+                </h2>
+                <div class="type-grid">
+                    <button class="type-btn" data-tipo="creditos">
+                        <div class="type-btn-icon">💰</div>
+                        <div class="type-btn-title">Créditos</div>
+                        <div class="type-btn-subtitle">Entradas de dinero (Haber del Mayor = Crédito del Extracto)</div>
+                    </button>
+                    <button class="type-btn" data-tipo="debitos">
+                        <div class="type-btn-icon">💸</div>
+                        <div class="type-btn-title">Débitos</div>
+                        <div class="type-btn-subtitle">Salidas de dinero (Debe del Mayor = Débito del Extracto)</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Paso 5 (antes 2): Carga de archivos - Solo visible para carga manual de extracto -->
+            <div class="step hidden" id="step-archivos">
+                <h2 class="step-title">
+                    <span class="step-number">5</span>
+                    Cargar Extracto Bancario (opcional)
+                </h2>
 
                 <!-- Extracto Bancario -->
                 <div class="file-section">
@@ -84,24 +155,12 @@
                         <button class="btn-template" id="btnPlantillaExtracto">📥 Descargar Plantilla</button>
                     </div>
 
-                    <!-- Selector de fuente del extracto -->
-                    <div class="fuente-extracto-selector">
-                        <label class="fuente-option">
-                            <input type="radio" name="fuenteExtracto" value="archivo" checked onchange="cambiarFuenteExtracto()">
-                            <span class="fuente-label">📄 Cargar archivo Excel</span>
-                        </label>
-                        <label class="fuente-option">
-                            <input type="radio" name="fuenteExtracto" value="auditoria" onchange="cambiarFuenteExtracto()">
-                            <span class="fuente-label">🔗 Usar extractos de Auditoría</span>
-                        </label>
-                    </div>
-
                     <!-- Opción: Cargar archivo Excel -->
                     <div id="extractoArchivoSection">
                         <div class="file-drop-zone" id="dropZoneExtracto">
                             <div class="upload-icon">📤</div>
                             <div class="upload-text">Haz clic para seleccionar un archivo Excel</div>
-                            <div class="upload-subtext">o arrastra tu archivo aquí</div>
+                            <div class="upload-subtext">o arrastra tu archivo aquí (reemplaza los extractos de auditoría)</div>
                             <input type="file" id="fileExtracto" accept=".xlsx,.xls" style="display: none;">
                         </div>
                         <div id="previewExtracto" class="file-preview hidden">
@@ -111,78 +170,13 @@
                             <button class="btn-remove" id="btnRemoveExtracto">✕</button>
                         </div>
                     </div>
-
-                    <!-- Opción: Extractos de Auditoría -->
-                    <div id="extractoAuditoriaSection" class="hidden">
-                        <div class="auditoria-selectors">
-                            <!-- Selector de cliente -->
-                            <div class="selector-group">
-                                <label for="clienteSelect">Cliente:</label>
-                                <div class="search-select-wrapper">
-                                    <input type="text" id="clienteSearch" placeholder="Buscar cliente..." class="search-input" oninput="filtrarClientesConciliador()">
-                                    <select id="clienteSelect" onchange="cargarCuentasCliente()">
-                                        <option value="">-- Seleccione un cliente --</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <!-- Selector de cuenta -->
-                            <div class="selector-group">
-                                <label for="cuentaSelect">Cuenta Bancaria:</label>
-                                <select id="cuentaSelect" onchange="cargarExtractosDisponibles()" disabled>
-                                    <option value="">-- Seleccione una cuenta --</option>
-                                </select>
-                            </div>
-
-                            <!-- Rango de fechas -->
-                            <div class="rango-fechas-group">
-                                <label>Período a conciliar:</label>
-                                <div class="rango-fechas-inputs">
-                                    <div class="rango-input">
-                                        <label for="rangoDesde">Desde:</label>
-                                        <select id="rangoDesde" onchange="actualizarExtractosSeleccionados()" disabled>
-                                            <option value="">-- Mes/Año --</option>
-                                        </select>
-                                    </div>
-                                    <div class="rango-input">
-                                        <label for="rangoHasta">Hasta:</label>
-                                        <select id="rangoHasta" onchange="actualizarExtractosSeleccionados()" disabled>
-                                            <option value="">-- Mes/Año --</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Preview de extractos seleccionados -->
-                        <div id="previewExtractoAuditoria" class="extracto-auditoria-preview hidden">
-                            <div class="preview-header">
-                                <span class="preview-icon">✅</span>
-                                <span class="preview-info">
-                                    <span id="extractoClienteNombre"></span>
-                                    <span id="extractoCuentaNombre"></span>
-                                </span>
-                            </div>
-                            <div class="preview-detalles">
-                                <span id="extractoPeriodo"></span>
-                                <span class="record-count" id="recordCountExtractoAuditoria"></span>
-                            </div>
-                            <button class="btn-remove" id="btnRemoveExtractoAuditoria" onclick="limpiarExtractoAuditoria()">✕</button>
-                        </div>
-
-                        <!-- Mensaje de estado -->
-                        <div id="extractoAuditoriaStatus" class="auditoria-status">
-                            <span class="status-icon">ℹ️</span>
-                            <span class="status-text">Seleccione un cliente y cuenta para cargar los extractos disponibles</span>
-                        </div>
-                    </div>
                 </div>
             </div>
 
-            <!-- Paso 3: Configuración de tolerancias -->
+            <!-- Paso 5: Configuración de tolerancias -->
             <div class="step hidden" id="step-tolerancias">
                 <h2 class="step-title">
-                    <span class="step-number">3</span>
+                    <span class="step-number">5</span>
                     Configuración de tolerancias
                 </h2>
                 <div class="tolerance-grid">
@@ -199,10 +193,10 @@
                 </div>
             </div>
 
-            <!-- Paso 4: Ejecutar conciliación -->
+            <!-- Paso 6: Ejecutar conciliación -->
             <div class="step hidden" id="step-ejecutar">
                 <h2 class="step-title">
-                    <span class="step-number">4</span>
+                    <span class="step-number">6</span>
                     Ejecutar conciliación
                 </h2>
                 <button id="btnConciliar" class="btn-conciliar">

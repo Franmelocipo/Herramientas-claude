@@ -3372,3 +3372,137 @@ body {
     outline: 2px solid #3b82f6;
     outline-offset: -2px;
 }
+
+/* ========== NUEVO FLUJO: SELECCIÓN DE CLIENTE Y CUENTA ========== */
+
+.selector-cliente-wrapper,
+.selector-cuenta-wrapper {
+    max-width: 600px;
+}
+
+.search-input-large {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 15px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.search-input-large:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.select-large {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 15px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+}
+
+.select-large:focus {
+    outline: none;
+    border-color: #3b82f6;
+}
+
+.cliente-seleccionado-info,
+.cuenta-seleccionada-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-top: 12px;
+}
+
+.cliente-seleccionado-info.hidden,
+.cuenta-seleccionada-info.hidden {
+    display: none;
+}
+
+.cliente-info-icon,
+.cuenta-info-icon {
+    font-size: 20px;
+}
+
+.cliente-info-nombre,
+.cuenta-info-nombre {
+    flex: 1;
+    font-weight: 500;
+    color: #166534;
+}
+
+.btn-cambiar-cliente {
+    background: transparent;
+    border: 1px solid #166534;
+    color: #166534;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-cambiar-cliente:hover {
+    background: #166534;
+    color: white;
+}
+
+.cuenta-seleccionada-info {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.cuenta-info-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.extracto-auto-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #166534;
+    margin-top: 8px;
+}
+
+.rango-extractos-section {
+    margin-top: 20px;
+    padding: 16px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.rango-extractos-section.hidden {
+    display: none;
+}
+
+.rango-extractos-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+}
+
+.extracto-preview-info {
+    margin-top: 12px;
+    padding: 10px;
+    background: #ecfdf5;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #166534;
+}
+
+.extracto-preview-info.hidden {
+    display: none;
+}
