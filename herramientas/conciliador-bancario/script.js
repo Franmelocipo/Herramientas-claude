@@ -5663,8 +5663,8 @@ function mostrarModalConciliacionGuardada(conciliacion) {
         ${eliminados > 0 ? `<div style="margin-bottom: 10px;"><strong>🗑️ Eliminados:</strong> ${eliminados} movimientos</div>` : ''}
     `;
 
-    overlay.classList.add('show');
-    modal.classList.add('show');
+    overlay.classList.add('visible');
+    modal.classList.add('visible');
 }
 
 /**
@@ -5674,8 +5674,8 @@ function cerrarModalConciliacionGuardada() {
     const overlay = document.getElementById('overlay-conciliacion-guardada');
     const modal = document.getElementById('modal-conciliacion-guardada');
 
-    overlay.classList.remove('show');
-    modal.classList.remove('show');
+    overlay.classList.remove('visible');
+    modal.classList.remove('visible');
 
     conciliacionGuardadaPendiente = null;
 }
