@@ -5680,7 +5680,7 @@ function mostrarModalConciliacionGuardada(conciliaciones) {
         const nombre = conciliacion.nombre || `Conciliación ${conciliacion.tipo}`;
 
         return `
-            <div class="conciliacion-seleccion-item" onclick="seleccionarConciliacionParaCargar(${conciliacion.id}, this)">
+            <div class="conciliacion-seleccion-item" onclick="seleccionarConciliacionParaCargar('${conciliacion.id}', this)">
                 <input type="radio" name="conciliacion-seleccion" value="${conciliacion.id}">
                 <div class="conciliacion-seleccion-info">
                     <div class="conciliacion-seleccion-titulo">
@@ -5797,7 +5797,7 @@ async function abrirGestionConciliaciones() {
 
             return `
                 <div class="conciliacion-item">
-                    <div class="conciliacion-info" onclick="cargarConciliacionDesdeGestion(${conciliacion.id})">
+                    <div class="conciliacion-info" onclick="cargarConciliacionDesdeGestion('${conciliacion.id}')">
                         <div class="conciliacion-nombre">
                             ${nombre}
                             <span class="conciliacion-tipo-badge ${conciliacion.tipo}">${conciliacion.tipo === 'creditos' ? 'Créditos' : 'Débitos'}</span>
@@ -5811,10 +5811,10 @@ async function abrirGestionConciliaciones() {
                         </div>
                     </div>
                     <div class="conciliacion-acciones">
-                        <button class="btn-cargar-conciliacion" onclick="cargarConciliacionDesdeGestion(${conciliacion.id})">
+                        <button class="btn-cargar-conciliacion" onclick="cargarConciliacionDesdeGestion('${conciliacion.id}')">
                             📂 Cargar
                         </button>
-                        <button class="btn-eliminar-conciliacion" onclick="confirmarEliminarConciliacion(${conciliacion.id})">
+                        <button class="btn-eliminar-conciliacion" onclick="confirmarEliminarConciliacion('${conciliacion.id}')">
                             🗑️
                         </button>
                     </div>
