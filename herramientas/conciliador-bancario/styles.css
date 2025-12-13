@@ -2384,6 +2384,50 @@ body {
     line-height: 1.4;
 }
 
+/* Info de desconciliaciones manuales */
+.desconciliaciones-info {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.desconciliaciones-info.hidden {
+    display: none;
+}
+
+.desconciliaciones-icono {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.desconciliaciones-texto {
+    font-size: 13px;
+    color: #991b1b;
+    flex: 1;
+}
+
+.btn-limpiar-desconciliaciones {
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-limpiar-desconciliaciones:hover {
+    background: #fecaca;
+    border-color: #f87171;
+}
+
 .reproceso-acciones {
     text-align: center;
 }

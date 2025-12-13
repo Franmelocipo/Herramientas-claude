@@ -34,6 +34,10 @@ let state = {
     filtroCategoriaMayorAdmin: [] // Categorías seleccionadas para filtrar
 };
 
+// Memoria de desconciliaciones manuales - pares de IDs que no deben volver a conciliarse automáticamente
+// Formato: [{ mayorIds: ['id1', 'id2'], extractoIds: ['id3', 'id4'] }, ...]
+let desconciliacionesManuales = [];
+
 // Categorías predefinidas por defecto (se cargan desde BD o localStorage)
 const CATEGORIAS_DEFAULT = [
     { id: 'comisiones', nombre: 'Comisiones', color: '#f59e0b', orden: 1 },
@@ -2838,16 +2842,23 @@ function toggleColorConciliacion(idConciliacion) {
  * Toggle selección de una conciliación para cambio masivo de color
  */
 function toggleSeleccionConciliado(idConciliacion, checked) {
+    console.log('toggleSeleccionConciliado llamado:', { idConciliacion, checked, tipo: typeof idConciliacion });
+
+    // Convertir a string para consistencia
+    const idStr = String(idConciliacion);
+
     if (checked) {
-        if (!seleccionConciliados.includes(idConciliacion)) {
-            seleccionConciliados.push(idConciliacion);
+        if (!seleccionConciliados.includes(idStr)) {
+            seleccionConciliados.push(idStr);
         }
     } else {
-        seleccionConciliados = seleccionConciliados.filter(id => id !== idConciliacion);
+        seleccionConciliados = seleccionConciliados.filter(id => String(id) !== idStr);
     }
 
+    console.log('seleccionConciliados después:', seleccionConciliados);
+
     // Actualizar visual de la fila
-    const filas = document.querySelectorAll(`tr[data-conciliacion-id="${idConciliacion}"]`);
+    const filas = document.querySelectorAll(`tr[data-conciliacion-id="${idStr}"]`);
     filas.forEach(fila => {
         if (checked) {
             fila.classList.add('row-conciliado-selected');
@@ -3008,15 +3019,26 @@ function cerrarMenuCambioColorMasivo() {
  * @param {boolean} tieneCoincidencia - true para verde, false para naranja
  */
 function cambiarColorMasivo(tieneCoincidencia) {
-    if (!state.resultados || seleccionConciliados.length === 0) return;
+    console.log('cambiarColorMasivo llamado:', { tieneCoincidencia, seleccionados: seleccionConciliados });
+
+    if (!state.resultados || seleccionConciliados.length === 0) {
+        console.warn('cambiarColorMasivo: No hay resultados o selección vacía');
+        return;
+    }
 
     const cantidadCambiados = seleccionConciliados.length;
+    let cambiosRealizados = 0;
 
     // Actualizar el coincidenciaOverride de cada conciliación seleccionada
     seleccionConciliados.forEach(idConciliacion => {
-        const match = state.resultados.conciliados.find(c => c.id === idConciliacion);
+        const idStr = String(idConciliacion);
+        const match = state.resultados.conciliados.find(c => String(c.id) === idStr);
         if (match) {
             match.coincidenciaOverride = tieneCoincidencia;
+            cambiosRealizados++;
+            console.log('Cambiado color de:', idStr, 'a', tieneCoincidencia ? 'verde' : 'naranja');
+        } else {
+            console.warn('No se encontró conciliación con ID:', idStr);
         }
     });
 
@@ -3029,7 +3051,7 @@ function cambiarColorMasivo(tieneCoincidencia) {
     // Re-renderizar por grupos
     renderizarConciliadosPorGrupos();
 
-    mostrarMensaje(`Se cambió el color de ${cantidadCambiados} conciliaciones`, 'success');
+    mostrarMensaje(`Se cambió el color de ${cambiosRealizados} conciliaciones`, 'success');
 }
 
 /**
@@ -3066,35 +3088,95 @@ function limpiarSeleccionConciliados() {
 function desconciliar(idConciliacion) {
     if (!state.resultados) return;
 
-    const grupo = state.resultados.conciliados.find(c => c.id === idConciliacion);
+    const grupo = state.resultados.conciliados.find(c => String(c.id) === String(idConciliacion));
     if (!grupo) {
         console.warn('No se encontró la conciliación:', idConciliacion);
         return;
     }
 
-    // Mostrar confirmación
+    // Mostrar confirmación con opción de recordar
     const cantMayor = grupo.mayor.length;
     const cantExtracto = grupo.extracto.length;
     const mensaje = `¿Desea desconciliar estos movimientos?\n\n` +
                    `• ${cantMayor} movimiento(s) del Mayor\n` +
-                   `• ${cantExtracto} movimiento(s) del Extracto`;
+                   `• ${cantExtracto} movimiento(s) del Extracto\n\n` +
+                   `Estos movimientos no se volverán a conciliar automáticamente en futuros reprocesos.`;
 
     if (!confirm(mensaje)) return;
+
+    // Guardar los IDs de los movimientos para evitar que se vuelvan a conciliar automáticamente
+    const mayorIds = grupo.mayor.map(m => String(m.id));
+    const extractoIds = grupo.extracto.map(e => String(e.id));
+
+    // Solo guardar si la conciliación no fue manual (las manuales fueron intencionales)
+    if (!grupo.manual) {
+        desconciliacionesManuales.push({
+            mayorIds: mayorIds,
+            extractoIds: extractoIds,
+            fechaDesconciliacion: new Date().toISOString(),
+            idConciliacionOriginal: String(idConciliacion)
+        });
+        console.log('Desconciliación registrada:', { mayorIds, extractoIds });
+    }
 
     // Mover movimientos a las listas de pendientes
     state.resultados.mayorNoConciliado.push(...grupo.mayor);
     state.resultados.extractoNoConciliado.push(...grupo.extracto);
 
     // Eliminar de conciliados
-    state.resultados.conciliados = state.resultados.conciliados.filter(c => c.id !== idConciliacion);
+    state.resultados.conciliados = state.resultados.conciliados.filter(c => String(c.id) !== String(idConciliacion));
 
     // Actualizar vistas
     llenarTablaConciliados(state.resultados.conciliados);
     llenarTablaMayorPendiente(state.resultados.mayorNoConciliado);
     llenarTablaExtractoPendiente(state.resultados.extractoNoConciliado);
     actualizarTotalesYContadores();
+    actualizarPanelReproceso();
 
-    mostrarMensaje('Movimientos desconciliados correctamente', 'success');
+    mostrarMensaje('Movimientos desconciliados correctamente. No se volverán a conciliar automáticamente.', 'success');
+}
+
+/**
+ * Verifica si un par de movimientos fue desconciliado manualmente
+ * @param {Array} mayorIds - IDs de movimientos del Mayor
+ * @param {Array} extractoIds - IDs de movimientos del Extracto
+ * @returns {boolean} true si este par fue desconciliado manualmente
+ */
+function fueDesconciliadoManualmente(mayorIds, extractoIds) {
+    const mayorIdsStr = mayorIds.map(id => String(id));
+    const extractoIdsStr = extractoIds.map(id => String(id));
+
+    return desconciliacionesManuales.some(desc => {
+        // Verificar si hay coincidencia de IDs
+        const coincideMayor = mayorIdsStr.some(id => desc.mayorIds.includes(id));
+        const coincideExtracto = extractoIdsStr.some(id => desc.extractoIds.includes(id));
+        return coincideMayor && coincideExtracto;
+    });
+}
+
+/**
+ * Obtiene el número de desconciliaciones manuales registradas
+ * @returns {number} Cantidad de desconciliaciones manuales
+ */
+function getCountDesconciliacionesManuales() {
+    return desconciliacionesManuales.length;
+}
+
+/**
+ * Limpia todas las desconciliaciones manuales (permite que se vuelvan a conciliar automáticamente)
+ */
+function limpiarDesconciliacionesManuales() {
+    const count = desconciliacionesManuales.length;
+    if (count === 0) {
+        mostrarMensaje('No hay desconciliaciones manuales registradas', 'info');
+        return;
+    }
+
+    if (confirm(`¿Está seguro de limpiar ${count} desconciliación(es) manual(es)?\n\nEsto permitirá que estos movimientos se vuelvan a conciliar automáticamente en futuros reprocesos.`)) {
+        desconciliacionesManuales = [];
+        actualizarInfoDesconciliaciones();
+        mostrarMensaje(`Se limpiaron ${count} desconciliaciones manuales. Los movimientos podrán conciliarse automáticamente.`, 'success');
+    }
 }
 
 /**
@@ -4758,7 +4840,7 @@ function limpiarFiltrosConciliados() {
 function toggleGrupoVerdes() {
     console.log('toggleGrupoVerdes llamado, estado actual:', gruposConciliados.verdesVisible);
     gruposConciliados.verdesVisible = !gruposConciliados.verdesVisible;
-    console.log('nuevo estado:', gruposConciliados.verdesVisible);
+    console.log('nuevo estado verdes:', gruposConciliados.verdesVisible);
     actualizarVistaGruposConciliados();
 }
 
@@ -4768,7 +4850,7 @@ function toggleGrupoVerdes() {
 function toggleGrupoNaranjas() {
     console.log('toggleGrupoNaranjas llamado, estado actual:', gruposConciliados.naranjasVisible);
     gruposConciliados.naranjasVisible = !gruposConciliados.naranjasVisible;
-    console.log('nuevo estado:', gruposConciliados.naranjasVisible);
+    console.log('nuevo estado naranjas:', gruposConciliados.naranjasVisible);
     actualizarVistaGruposConciliados();
 }
 
@@ -4776,13 +4858,11 @@ function toggleGrupoNaranjas() {
  * Actualiza la UI después de cambiar la visibilidad de grupos
  */
 function actualizarVistaGruposConciliados() {
-    console.log('actualizarVistaGruposConciliados llamado');
+    console.log('actualizarVistaGruposConciliados - verdes:', gruposConciliados.verdesVisible, 'naranjas:', gruposConciliados.naranjasVisible);
 
     // Actualizar botones de toggle
     const btnVerdes = document.getElementById('btnToggleVerdes');
     const btnNaranjas = document.getElementById('btnToggleNaranjas');
-
-    console.log('btnVerdes:', btnVerdes, 'btnNaranjas:', btnNaranjas);
 
     if (btnVerdes) {
         btnVerdes.innerHTML = gruposConciliados.verdesVisible
@@ -4798,19 +4878,30 @@ function actualizarVistaGruposConciliados() {
         btnNaranjas.classList.toggle('btn-toggle-oculto', !gruposConciliados.naranjasVisible);
     }
 
-    // Actualizar visibilidad de secciones
+    // Actualizar visibilidad de secciones usando style.display directamente para mayor confiabilidad
     const seccionVerdes = document.getElementById('seccion-conciliados-verdes');
     const seccionNaranjas = document.getElementById('seccion-conciliados-naranjas');
 
-    console.log('seccionVerdes:', seccionVerdes, 'seccionNaranjas:', seccionNaranjas);
-
     if (seccionVerdes) {
-        seccionVerdes.classList.toggle('hidden', !gruposConciliados.verdesVisible);
-        console.log('seccionVerdes hidden:', seccionVerdes.classList.contains('hidden'));
+        if (gruposConciliados.verdesVisible) {
+            seccionVerdes.classList.remove('hidden');
+            seccionVerdes.style.display = '';
+        } else {
+            seccionVerdes.classList.add('hidden');
+            seccionVerdes.style.display = 'none';
+        }
+        console.log('seccionVerdes display:', seccionVerdes.style.display, 'hidden class:', seccionVerdes.classList.contains('hidden'));
     }
+
     if (seccionNaranjas) {
-        seccionNaranjas.classList.toggle('hidden', !gruposConciliados.naranjasVisible);
-        console.log('seccionNaranjas hidden:', seccionNaranjas.classList.contains('hidden'));
+        if (gruposConciliados.naranjasVisible) {
+            seccionNaranjas.classList.remove('hidden');
+            seccionNaranjas.style.display = '';
+        } else {
+            seccionNaranjas.classList.add('hidden');
+            seccionNaranjas.style.display = 'none';
+        }
+        console.log('seccionNaranjas display:', seccionNaranjas.style.display, 'hidden class:', seccionNaranjas.classList.contains('hidden'));
     }
 
     // Actualizar contadores en los botones
@@ -5927,7 +6018,9 @@ async function guardarConciliacion() {
                     credito: e.credito,
                     importe: e.importe
                 })),
-                eliminados: state.eliminados
+                eliminados: state.eliminados,
+                // Guardar desconciliaciones manuales para que no se vuelvan a conciliar en reprocesos
+                desconciliacionesManuales: desconciliacionesManuales
             },
             historial_procesamiento: historialProcesamiento,
             fecha_conciliacion: new Date().toISOString()
@@ -6038,6 +6131,10 @@ async function cargarConciliacionGuardada(conciliacionId) {
                     extractoNoConciliado: data.datos.extractoNoConciliado || []
                 };
                 state.eliminados = data.datos.eliminados || [];
+
+                // Restaurar desconciliaciones manuales
+                desconciliacionesManuales = data.datos.desconciliacionesManuales || [];
+                console.log('Desconciliaciones manuales restauradas:', desconciliacionesManuales.length);
             }
 
             // Restaurar historial
@@ -6994,8 +7091,30 @@ function actualizarPanelReproceso() {
         elements.btnReprocesar.title = '';
     }
 
+    // Actualizar info de desconciliaciones manuales
+    actualizarInfoDesconciliaciones();
+
     // Mostrar panel si hay resultados
     elements.panelReproceso.classList.remove('hidden');
+}
+
+/**
+ * Actualiza la UI con información de desconciliaciones manuales
+ */
+function actualizarInfoDesconciliaciones() {
+    const infoDiv = document.getElementById('desconciliaciones-info');
+    const countSpan = document.getElementById('countDesconciliaciones');
+
+    if (!infoDiv || !countSpan) return;
+
+    const count = desconciliacionesManuales.length;
+
+    if (count > 0) {
+        countSpan.textContent = count;
+        infoDiv.classList.remove('hidden');
+    } else {
+        infoDiv.classList.add('hidden');
+    }
 }
 
 /**
@@ -7173,11 +7292,14 @@ async function reprocesarPendientes() {
 /**
  * Versión simplificada de conciliar para reprocesamiento
  * No actualiza la UI con tanta frecuencia ya que los conjuntos son más pequeños
+ * IMPORTANTE: Respeta las desconciliaciones manuales previas
  */
 async function conciliarReproceso(mayor, extracto) {
     const conciliados = [];
     const mayorNoConciliado = [...mayor];
     const extractoNoConciliado = [...extracto];
+
+    console.log('conciliarReproceso - desconciliaciones manuales a respetar:', desconciliacionesManuales.length);
 
     // Paso 1: Buscar coincidencias exactas (1 a 1)
     for (let i = mayorNoConciliado.length - 1; i >= 0; i--) {
@@ -7186,6 +7308,13 @@ async function conciliarReproceso(mayor, extracto) {
 
         if (idxCoincidencia !== -1) {
             const movExtracto = extractoNoConciliado[idxCoincidencia];
+
+            // Verificar si este par fue desconciliado manualmente
+            if (fueDesconciliadoManualmente([movMayor.id], [movExtracto.id])) {
+                console.log('Omitiendo conciliación 1:1 por desconciliación manual previa:', movMayor.id, movExtracto.id);
+                continue;
+            }
+
             const diferencia = Math.abs(movMayor.importe - movExtracto.importe);
 
             conciliados.push({
@@ -7220,6 +7349,13 @@ async function conciliarReproceso(mayor, extracto) {
         );
 
         if (combinacion) {
+            // Verificar si este par fue desconciliado manualmente
+            const extractoIds = combinacion.map(e => e.id);
+            if (fueDesconciliadoManualmente([movMayor.id], extractoIds)) {
+                console.log('Omitiendo conciliación 1:N por desconciliación manual previa:', movMayor.id, extractoIds);
+                continue;
+            }
+
             const sumaExtracto = combinacion.reduce((sum, m) => sum + m.importe, 0);
             const diferencia = Math.abs(movMayor.importe - sumaExtracto);
 
@@ -7259,6 +7395,13 @@ async function conciliarReproceso(mayor, extracto) {
         );
 
         if (combinacion) {
+            // Verificar si este par fue desconciliado manualmente
+            const mayorIds = combinacion.map(m => m.id);
+            if (fueDesconciliadoManualmente(mayorIds, [movExtracto.id])) {
+                console.log('Omitiendo conciliación N:1 por desconciliación manual previa:', mayorIds, movExtracto.id);
+                continue;
+            }
+
             const sumaMayor = combinacion.reduce((sum, m) => sum + m.importe, 0);
             const diferencia = Math.abs(sumaMayor - movExtracto.importe);
 
