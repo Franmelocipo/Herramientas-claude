@@ -521,10 +521,12 @@ async function cargarExtractosDisponiblesPrincipal() {
             await actualizarExtractosSeleccionados();
         } else {
             elements.rangoExtractosSection.classList.add('hidden');
-            mostrarMensaje('No hay extractos cargados para esta cuenta. Puede cargar un extracto manualmente.', 'info');
+            mostrarMensaje('No hay extractos cargados para esta cuenta en Auditoría. Puede cargar un extracto manualmente en el paso 5.', 'info');
         }
     } catch (error) {
         console.error('Error cargando extractos:', error);
+        elements.rangoExtractosSection.classList.add('hidden');
+        mostrarMensaje('No se pudieron cargar extractos de Auditoría. Puede cargar un extracto manualmente en el paso 5.', 'info');
     }
 }
 
@@ -1984,6 +1986,14 @@ function actualizarBotonConciliar() {
 
     if (habilitado) {
         elements.stepEjecutar.classList.remove('hidden');
+    } else {
+        elements.stepEjecutar.classList.add('hidden');
+    }
+
+    // Mostrar paso de archivos cuando hay mayor cargado (para permitir carga manual de extractos)
+    if (state.datosMayor.length > 0) {
+        elements.stepArchivos.classList.remove('hidden');
+        elements.stepTipo.classList.remove('hidden');
     }
 
     // Mostrar paso de tipo cuando hay mayor cargado
