@@ -5397,7 +5397,11 @@ async function guardarConciliacion() {
                         id: m.id,
                         fecha: m.fecha,
                         numeroAsiento: m.numeroAsiento,
+                        ce: m.ce,
+                        tipoAsiento: m.tipoAsiento,
                         leyenda: m.leyenda,
+                        debe: m.debe,
+                        haber: m.haber,
                         importe: m.importe
                     })),
                     extracto: c.extracto.map(e => ({
@@ -5405,6 +5409,8 @@ async function guardarConciliacion() {
                         fecha: e.fecha,
                         descripcion: e.descripcion,
                         origen: e.origen,
+                        debito: e.debito,
+                        credito: e.credito,
                         importe: e.importe
                     }))
                 })),
@@ -5412,7 +5418,11 @@ async function guardarConciliacion() {
                     id: m.id,
                     fecha: m.fecha,
                     numeroAsiento: m.numeroAsiento,
+                    ce: m.ce,
+                    tipoAsiento: m.tipoAsiento,
                     leyenda: m.leyenda,
+                    debe: m.debe,
+                    haber: m.haber,
                     importe: m.importe
                 })),
                 extractoNoConciliado: state.resultados.extractoNoConciliado.map(e => ({
@@ -5420,6 +5430,8 @@ async function guardarConciliacion() {
                     fecha: e.fecha,
                     descripcion: e.descripcion,
                     origen: e.origen,
+                    debito: e.debito,
+                    credito: e.credito,
                     importe: e.importe
                 })),
                 eliminados: state.eliminados
