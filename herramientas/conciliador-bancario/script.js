@@ -5686,8 +5686,11 @@ function cerrarModalConciliacionGuardada() {
 async function confirmarCargarConciliacion() {
     if (!conciliacionGuardadaPendiente) return;
 
+    // Guardar el ID antes de cerrar el modal (que limpia la variable)
+    const conciliacionId = conciliacionGuardadaPendiente.id;
+
     cerrarModalConciliacionGuardada();
-    await cargarConciliacionGuardada(conciliacionGuardadaPendiente.id);
+    await cargarConciliacionGuardada(conciliacionId);
 }
 
 // ========== ACTUALIZAR MAYOR CONTABLE ==========
