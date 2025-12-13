@@ -3989,3 +3989,268 @@ body {
     width: 100%;
     justify-content: center;
 }
+
+/* ========== GRUPOS DE CONCILIADOS (VERDES/NARANJAS) ========== */
+
+/* Botones de toggle para mostrar/ocultar grupos */
+.btn-toggle-grupo {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid;
+}
+
+.btn-toggle-verdes {
+    background: #f0fdf4;
+    border-color: #86efac;
+    color: #166534;
+}
+
+.btn-toggle-verdes:hover {
+    background: #dcfce7;
+}
+
+.btn-toggle-verdes.btn-toggle-oculto {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: #64748b;
+}
+
+.btn-toggle-naranjas {
+    background: #fff7ed;
+    border-color: #fdba74;
+    color: #c2410c;
+}
+
+.btn-toggle-naranjas:hover {
+    background: #ffedd5;
+}
+
+.btn-toggle-naranjas.btn-toggle-oculto {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: #64748b;
+}
+
+/* Secciones de grupos */
+.seccion-grupo-conciliados {
+    margin-top: 20px;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.seccion-grupo-conciliados.hidden {
+    display: none;
+}
+
+/* Headers de grupo */
+.grupo-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-radius: 8px 8px 0 0;
+}
+
+.grupo-header h4 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.grupo-header-verdes {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border: 1px solid #86efac;
+    border-bottom: none;
+    color: #166534;
+}
+
+.grupo-header-naranjas {
+    background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+    border: 1px solid #fdba74;
+    border-bottom: none;
+    color: #c2410c;
+}
+
+/* Botón de filtros de grupo */
+.btn-filtros-grupo {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+/* Panel de filtros de grupo */
+.filtros-panel-grupo {
+    border-radius: 0;
+    margin: 0;
+    border-top: none;
+}
+
+.seccion-verdes .filtros-panel-grupo {
+    border: 1px solid #86efac;
+    border-top: 1px dashed #86efac;
+    background: #f0fdf4;
+}
+
+.seccion-naranjas .filtros-panel-grupo {
+    border: 1px solid #fdba74;
+    border-top: 1px dashed #fdba74;
+    background: #fff7ed;
+}
+
+/* Grid compacto de filtros */
+.filtros-grid-compacto {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.filtros-fila {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.filtros-fila .filtro-grupo {
+    flex: 1;
+    min-width: 140px;
+}
+
+.filtros-fila .filtro-grupo label {
+    font-size: 11px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.filtros-fila .filtro-input,
+.filtros-fila .filtro-select {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 12px;
+}
+
+/* Filtro de importe compacto */
+.filtro-importe-compacto {
+    min-width: 200px !important;
+}
+
+.filtro-importe-compacto .filtro-importe-wrapper {
+    display: flex;
+    gap: 4px;
+}
+
+.filtro-select-sm {
+    width: 60px !important;
+    flex-shrink: 0;
+}
+
+.filtro-numero-sm {
+    width: 70px !important;
+}
+
+/* Acciones de filtros compactas */
+.filtros-acciones-compactas {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed rgba(0,0,0,0.1);
+}
+
+.btn-sm {
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+}
+
+/* Tablas dentro de secciones de grupo */
+.seccion-verdes .table-wrapper {
+    border: 1px solid #86efac;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+}
+
+.seccion-naranjas .table-wrapper {
+    border: 1px solid #fdba74;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+}
+
+/* Badge de tipo de conciliación */
+.badge-tipo-conc {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+.badge-1a1 {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.badge-1aN {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.badge-Na1 {
+    background: #fce7f3;
+    color: #9d174d;
+}
+
+/* Responsive para grupos */
+@media (max-width: 1024px) {
+    .filtros-fila {
+        flex-wrap: wrap;
+    }
+
+    .filtros-fila .filtro-grupo {
+        min-width: calc(50% - 6px);
+    }
+
+    .filtro-importe-compacto {
+        min-width: 100% !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-actions {
+        flex-wrap: wrap;
+    }
+
+    .btn-toggle-grupo {
+        flex: 1;
+        min-width: 120px;
+        text-align: center;
+        font-size: 12px;
+        padding: 6px 10px;
+    }
+
+    .grupo-header {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+    }
+
+    .grupo-header h4 {
+        font-size: 13px;
+    }
+
+    .btn-filtros-grupo {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .filtros-fila .filtro-grupo {
+        min-width: 100%;
+    }
+}
