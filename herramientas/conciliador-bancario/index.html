@@ -346,6 +346,16 @@
                             <span class="advertencia-icono">⚠️</span>
                             <span>Solo se procesarán los movimientos NO conciliados. Los movimientos ya conciliados no serán afectados.</span>
                         </div>
+                        <!-- Info de desconciliaciones manuales -->
+                        <div id="desconciliaciones-info" class="desconciliaciones-info hidden">
+                            <span class="desconciliaciones-icono">🚫</span>
+                            <span class="desconciliaciones-texto">
+                                <span id="countDesconciliaciones">0</span> par(es) de movimientos excluidos de conciliación automática
+                            </span>
+                            <button id="btnLimpiarDesconciliaciones" class="btn-limpiar-desconciliaciones" onclick="limpiarDesconciliacionesManuales()" title="Permitir que estos movimientos se vuelvan a conciliar">
+                                🗑️ Limpiar
+                            </button>
+                        </div>
                         <div class="reproceso-acciones">
                             <button id="btnReprocesar" class="btn-reprocesar" onclick="reprocesarPendientes()">
                                 🔄 Reprocesar Pendientes
