@@ -5456,6 +5456,252 @@ async function cargarConciliacionGuardada(conciliacionId) {
     }
 }
 
+// ========== ACTUALIZAR MAYOR CONTABLE ==========
+
+// Variables para almacenar los movimientos del archivo de actualización
+let movimientosArchivoActualizar = [];
+let movimientosNuevosDetectados = [];
+
+/**
+ * Mostrar el modal para actualizar el mayor contable
+ */
+function mostrarModalActualizarMayor() {
+    const modal = document.getElementById('modalActualizarMayor');
+    const dropZone = document.getElementById('dropZoneActualizarMayor');
+    const fileInput = document.getElementById('fileActualizarMayor');
+    const preview = document.getElementById('previewActualizarMayor');
+
+    // Reiniciar estado del modal
+    movimientosArchivoActualizar = [];
+    movimientosNuevosDetectados = [];
+    preview.classList.add('hidden');
+    dropZone.style.display = 'flex';
+
+    // Configurar eventos de carga de archivo
+    if (!dropZone.dataset.initialized) {
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                procesarArchivoActualizarMayor(e.target.files[0]);
+            }
+        });
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                procesarArchivoActualizarMayor(e.dataTransfer.files[0]);
+            }
+        });
+
+        dropZone.dataset.initialized = 'true';
+    }
+
+    modal.classList.remove('hidden');
+}
+
+/**
+ * Cerrar el modal de actualizar mayor
+ */
+function cerrarModalActualizarMayor() {
+    const modal = document.getElementById('modalActualizarMayor');
+    const fileInput = document.getElementById('fileActualizarMayor');
+
+    modal.classList.add('hidden');
+    fileInput.value = '';
+    movimientosArchivoActualizar = [];
+    movimientosNuevosDetectados = [];
+}
+
+/**
+ * Procesar el archivo subido para actualizar el mayor
+ */
+async function procesarArchivoActualizarMayor(file) {
+    const dropZone = document.getElementById('dropZoneActualizarMayor');
+    const preview = document.getElementById('previewActualizarMayor');
+    const btnConfirmar = document.getElementById('btnConfirmarActualizarMayor');
+
+    try {
+        // Leer y parsear el archivo Excel
+        const data = await leerExcel(file);
+        movimientosArchivoActualizar = parsearMayor(data);
+
+        // Obtener los números de asiento existentes
+        const numerosAsientoExistentes = new Set();
+
+        // Desde los conciliados
+        if (state.resultados && state.resultados.conciliados) {
+            state.resultados.conciliados.forEach(c => {
+                if (c.mayor && Array.isArray(c.mayor)) {
+                    c.mayor.forEach(m => {
+                        if (m.numeroAsiento) {
+                            numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
+                        }
+                    });
+                }
+            });
+        }
+
+        // Desde el mayor no conciliado
+        if (state.resultados && state.resultados.mayorNoConciliado) {
+            state.resultados.mayorNoConciliado.forEach(m => {
+                if (m.numeroAsiento) {
+                    numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
+                }
+            });
+        }
+
+        // Desde los datos originales del mayor
+        if (state.datosMayor) {
+            state.datosMayor.forEach(m => {
+                if (m.numeroAsiento) {
+                    numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
+                }
+            });
+        }
+
+        // Filtrar movimientos nuevos (que no existen por número de asiento)
+        movimientosNuevosDetectados = movimientosArchivoActualizar.filter(m => {
+            const numAsiento = String(m.numeroAsiento || '').trim();
+            return numAsiento && !numerosAsientoExistentes.has(numAsiento);
+        });
+
+        // Calcular estadísticas
+        const totalMovimientos = movimientosArchivoActualizar.length;
+        const nuevos = movimientosNuevosDetectados.length;
+        const existentes = totalMovimientos - nuevos;
+
+        // Actualizar UI
+        document.getElementById('totalMovimientosArchivo').textContent = totalMovimientos;
+        document.getElementById('movimientosNuevos').textContent = nuevos;
+        document.getElementById('movimientosExistentes').textContent = existentes;
+
+        // Mostrar/ocultar botón según si hay nuevos
+        if (nuevos > 0) {
+            btnConfirmar.disabled = false;
+            btnConfirmar.textContent = `✅ Agregar ${nuevos} movimiento${nuevos > 1 ? 's' : ''} nuevo${nuevos > 1 ? 's' : ''}`;
+        } else {
+            btnConfirmar.disabled = true;
+            btnConfirmar.textContent = 'No hay movimientos nuevos para agregar';
+        }
+
+        // Mostrar preview y ocultar dropzone
+        dropZone.style.display = 'none';
+        preview.classList.remove('hidden');
+
+    } catch (error) {
+        console.error('Error procesando archivo:', error);
+        mostrarMensaje('Error al procesar el archivo: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Confirmar y agregar los movimientos nuevos al mayor no conciliado
+ */
+function confirmarActualizarMayor() {
+    if (movimientosNuevosDetectados.length === 0) {
+        mostrarMensaje('No hay movimientos nuevos para agregar', 'error');
+        return;
+    }
+
+    // Filtrar según el tipo de conciliación actual (débitos o créditos)
+    let movimientosFiltrados;
+    if (state.tipoConciliacion === 'debitos') {
+        // Para débitos: movimientos con Debe > 0 (esDebe = true)
+        movimientosFiltrados = movimientosNuevosDetectados.filter(m => m.esDebe);
+    } else {
+        // Para créditos: movimientos con Haber > 0 (esDebe = false)
+        movimientosFiltrados = movimientosNuevosDetectados.filter(m => !m.esDebe);
+    }
+
+    if (movimientosFiltrados.length === 0) {
+        mostrarMensaje(`No hay movimientos nuevos de ${state.tipoConciliacion} para agregar`, 'error');
+        cerrarModalActualizarMayor();
+        return;
+    }
+
+    // Generar IDs únicos para los nuevos movimientos
+    const maxIdActual = obtenerMaxIdMayor();
+    movimientosFiltrados = movimientosFiltrados.map((m, index) => ({
+        ...m,
+        id: `M${maxIdActual + index + 1}`,
+        usado: false
+    }));
+
+    // Agregar al mayor no conciliado
+    if (!state.resultados) {
+        state.resultados = {
+            conciliados: [],
+            mayorNoConciliado: [],
+            extractoNoConciliado: []
+        };
+    }
+
+    state.resultados.mayorNoConciliado = [
+        ...state.resultados.mayorNoConciliado,
+        ...movimientosFiltrados
+    ];
+
+    // También agregar a datosMayor para futuras referencias
+    if (state.datosMayor) {
+        state.datosMayor = [...state.datosMayor, ...movimientosFiltrados];
+    }
+
+    // Actualizar UI
+    mostrarResultados(state.resultados);
+
+    // Cerrar modal y mostrar mensaje
+    cerrarModalActualizarMayor();
+    mostrarMensaje(`Se agregaron ${movimientosFiltrados.length} movimientos nuevos al mayor no conciliado`, 'success');
+}
+
+/**
+ * Obtener el máximo ID numérico del mayor existente
+ */
+function obtenerMaxIdMayor() {
+    let maxId = 0;
+
+    const extraerId = (id) => {
+        if (typeof id === 'string' && id.startsWith('M')) {
+            const num = parseInt(id.substring(1), 10);
+            if (!isNaN(num) && num > maxId) {
+                maxId = num;
+            }
+        }
+    };
+
+    // Revisar conciliados
+    if (state.resultados && state.resultados.conciliados) {
+        state.resultados.conciliados.forEach(c => {
+            if (c.mayor && Array.isArray(c.mayor)) {
+                c.mayor.forEach(m => extraerId(m.id));
+            }
+        });
+    }
+
+    // Revisar mayor no conciliado
+    if (state.resultados && state.resultados.mayorNoConciliado) {
+        state.resultados.mayorNoConciliado.forEach(m => extraerId(m.id));
+    }
+
+    // Revisar datos originales
+    if (state.datosMayor) {
+        state.datosMayor.forEach(m => extraerId(m.id));
+    }
+
+    return maxId;
+}
+
 // ========== UTILIDADES ==========
 
 function formatearFecha(fecha) {

@@ -213,12 +213,56 @@
                 <div class="results-header">
                     <h2 class="results-title">📊 Resultados de Conciliación</h2>
                     <div class="results-actions">
+                        <button id="btnActualizarMayor" class="btn-secondary" onclick="mostrarModalActualizarMayor()">
+                            📤 Actualizar Mayor
+                        </button>
                         <button id="btnGuardarConciliacion" class="btn-success" onclick="guardarConciliacion()">
                             💾 Guardar Conciliación
                         </button>
                         <button id="btnNuevaConciliacion" class="btn-primary">
                             🔄 Nueva Conciliación
                         </button>
+                    </div>
+
+                    <!-- Modal para actualizar mayor -->
+                    <div id="modalActualizarMayor" class="modal-overlay hidden">
+                        <div class="modal-content modal-actualizar-mayor">
+                            <div class="modal-header">
+                                <h3>📤 Actualizar Mayor Contable</h3>
+                                <button class="btn-cerrar-modal" onclick="cerrarModalActualizarMayor()">✕</button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="modal-descripcion">
+                                    Sube un nuevo archivo de Mayor Contable. La herramienta detectará
+                                    automáticamente los movimientos nuevos basándose en el número de asiento.
+                                </p>
+                                <div class="file-drop-zone" id="dropZoneActualizarMayor">
+                                    <div class="upload-icon">📤</div>
+                                    <div class="upload-text">Haz clic para seleccionar el archivo</div>
+                                    <div class="upload-subtext">o arrastra tu archivo aquí</div>
+                                    <input type="file" id="fileActualizarMayor" accept=".xlsx,.xls" style="display: none;">
+                                </div>
+                                <div id="previewActualizarMayor" class="actualizar-mayor-preview hidden">
+                                    <div class="preview-stats">
+                                        <div class="stat-item">
+                                            <span class="stat-label">Total movimientos en archivo:</span>
+                                            <span class="stat-value" id="totalMovimientosArchivo">0</span>
+                                        </div>
+                                        <div class="stat-item stat-success">
+                                            <span class="stat-label">Movimientos nuevos a agregar:</span>
+                                            <span class="stat-value" id="movimientosNuevos">0</span>
+                                        </div>
+                                        <div class="stat-item stat-warning">
+                                            <span class="stat-label">Movimientos ya existentes:</span>
+                                            <span class="stat-value" id="movimientosExistentes">0</span>
+                                        </div>
+                                    </div>
+                                    <button id="btnConfirmarActualizarMayor" class="btn-primary btn-confirmar-actualizar" onclick="confirmarActualizarMayor()">
+                                        ✅ Agregar movimientos nuevos
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
