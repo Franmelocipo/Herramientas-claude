@@ -5366,6 +5366,23 @@ async function guardarConciliacion() {
         return;
     }
 
+    // Mostrar prompt para el nombre de la conciliación
+    const fechaActual = new Date();
+    const fechaFormateada = fechaActual.toLocaleDateString('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+    const tipoTexto = state.tipoConciliacion === 'creditos' ? 'Créditos' : 'Débitos';
+    const nombreSugerido = `${tipoTexto} - ${fechaFormateada}`;
+
+    const nombreConciliacion = prompt('Ingrese un nombre para identificar esta conciliación:', nombreSugerido);
+
+    if (nombreConciliacion === null) {
+        // El usuario canceló
+        return;
+    }
+
     const btnGuardar = document.getElementById('btnGuardarConciliacion');
     if (btnGuardar) {
         btnGuardar.disabled = true;
@@ -5382,6 +5399,7 @@ async function guardarConciliacion() {
             cliente_id: state.clienteSeleccionado.id,
             cuenta_bancaria_id: state.cuentaSeleccionada.id,
             tipo: state.tipoConciliacion,
+            nombre: nombreConciliacion.trim() || nombreSugerido,
             rango_desde: rangoDesde,
             rango_hasta: rangoHasta,
             tolerancia_fecha: state.toleranciaFecha,
@@ -5440,34 +5458,19 @@ async function guardarConciliacion() {
             fecha_conciliacion: new Date().toISOString()
         };
 
-        // Verificar si ya existe una conciliación para este cliente/cuenta/tipo
-        const { data: existente, error: errorBusqueda } = await supabase
+        // Siempre crear una nueva conciliación (ya no sobrescribimos)
+        const { error } = await supabase
             .from('conciliaciones_guardadas')
-            .select('id')
-            .eq('cliente_id', state.clienteSeleccionado.id)
-            .eq('cuenta_bancaria_id', state.cuentaSeleccionada.id)
-            .eq('tipo', state.tipoConciliacion)
-            .single();
+            .insert([datosAGuardar]);
 
-        let resultado;
-        if (existente && !errorBusqueda) {
-            // Actualizar existente
-            const { error } = await supabase
-                .from('conciliaciones_guardadas')
-                .update(datosAGuardar)
-                .eq('id', existente.id);
+        if (error) throw error;
 
-            if (error) throw error;
-            mostrarMensaje('Conciliación actualizada correctamente', 'success');
-        } else {
-            // Crear nueva
-            const { error } = await supabase
-                .from('conciliaciones_guardadas')
-                .insert([datosAGuardar]);
+        mostrarMensaje('Conciliación guardada correctamente', 'success');
 
-            if (error) throw error;
-            mostrarMensaje('Conciliación guardada correctamente', 'success');
-        }
+        // Actualizar lista de conciliaciones guardadas
+        const conciliaciones = await cargarConciliacionesGuardadas();
+        conciliacionesGuardadasLista = conciliaciones || [];
+        actualizarBotonGestionConciliaciones();
 
     } catch (error) {
         console.error('Error guardando conciliación:', error);
@@ -5599,8 +5602,10 @@ async function cargarConciliacionGuardada(conciliacionId) {
     }
 }
 
-// Variable para almacenar la conciliación guardada pendiente de cargar
-let conciliacionGuardadaPendiente = null;
+// Variables para almacenar las conciliaciones guardadas
+let conciliacionesGuardadasLista = [];
+let conciliacionSeleccionadaId = null;
+let conciliacionAEliminar = null;
 
 /**
  * Verificar si hay conciliaciones guardadas para el cliente/cuenta actual
@@ -5611,72 +5616,124 @@ async function verificarConciliacionesGuardadas() {
     console.log('   Cuenta ID:', state.cuentaSeleccionada?.id);
 
     const conciliaciones = await cargarConciliacionesGuardadas();
+    conciliacionesGuardadasLista = conciliaciones || [];
 
-    console.log('📋 Conciliaciones encontradas:', conciliaciones?.length || 0, conciliaciones);
+    console.log('📋 Conciliaciones encontradas:', conciliacionesGuardadasLista.length, conciliacionesGuardadasLista);
 
-    if (conciliaciones && conciliaciones.length > 0) {
-        // Tomar la más reciente
-        conciliacionGuardadaPendiente = conciliaciones[0];
-        console.log('✅ Mostrando modal con conciliación:', conciliacionGuardadaPendiente);
-        mostrarModalConciliacionGuardada(conciliacionGuardadaPendiente);
+    // Actualizar estado del botón de gestión
+    actualizarBotonGestionConciliaciones();
+
+    if (conciliacionesGuardadasLista.length > 0) {
+        console.log('✅ Mostrando modal con conciliaciones');
+        mostrarModalConciliacionGuardada(conciliacionesGuardadasLista);
     } else {
         console.log('ℹ️ No hay conciliaciones guardadas para esta cuenta');
     }
 }
 
 /**
- * Mostrar modal de conciliación guardada encontrada
+ * Actualizar estado del botón de gestión de conciliaciones
  */
-function mostrarModalConciliacionGuardada(conciliacion) {
+function actualizarBotonGestionConciliaciones() {
+    const btn = document.getElementById('btnGestionConciliaciones');
+    if (btn) {
+        btn.disabled = conciliacionesGuardadasLista.length === 0;
+        if (conciliacionesGuardadasLista.length > 0) {
+            btn.innerHTML = `<span>📂</span> Gestionar Conciliaciones (${conciliacionesGuardadasLista.length})`;
+        } else {
+            btn.innerHTML = `<span>📂</span> Gestionar Conciliaciones Guardadas`;
+        }
+    }
+}
+
+/**
+ * Mostrar modal de conciliaciones guardadas con lista seleccionable
+ */
+function mostrarModalConciliacionGuardada(conciliaciones) {
     const overlay = document.getElementById('overlay-conciliacion-guardada');
     const modal = document.getElementById('modal-conciliacion-guardada');
-    const detalles = document.getElementById('conciliacion-guardada-detalles');
+    const lista = document.getElementById('conciliaciones-seleccion-lista');
+    const btnCargar = document.getElementById('btnConfirmarCargarConciliacion');
 
-    // Formatear fecha
-    const fechaGuardado = new Date(conciliacion.fecha_conciliacion);
-    const fechaFormateada = fechaGuardado.toLocaleDateString('es-AR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+    // Resetear selección
+    conciliacionSeleccionadaId = null;
+    if (btnCargar) btnCargar.disabled = true;
 
-    // Contar movimientos
-    const datos = conciliacion.datos || {};
-    const totalConciliados = (datos.conciliados || []).length;
-    const mayorPendiente = (datos.mayorNoConciliado || []).length;
-    const extractoPendiente = (datos.extractoNoConciliado || []).length;
-    const eliminados = (datos.eliminados || []).length;
+    // Generar lista de conciliaciones
+    lista.innerHTML = conciliaciones.map(conciliacion => {
+        const fechaGuardado = new Date(conciliacion.fecha_conciliacion);
+        const fechaFormateada = fechaGuardado.toLocaleDateString('es-AR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
 
-    // Formatear rango
-    const rangoDesde = conciliacion.rango_desde || 'N/A';
-    const rangoHasta = conciliacion.rango_hasta || 'N/A';
+        const datos = conciliacion.datos || {};
+        const totalConciliados = (datos.conciliados || []).length;
+        const mayorPendiente = (datos.mayorNoConciliado || []).length;
+        const extractoPendiente = (datos.extractoNoConciliado || []).length;
 
-    detalles.innerHTML = `
-        <div style="margin-bottom: 10px;">
-            <strong>📅 Guardada:</strong> ${fechaFormateada}
-        </div>
-        <div style="margin-bottom: 10px;">
-            <strong>📊 Tipo:</strong> ${conciliacion.tipo === 'creditos' ? 'Créditos' : 'Débitos'}
-        </div>
-        <div style="margin-bottom: 10px;">
-            <strong>📆 Período:</strong> ${rangoDesde} a ${rangoHasta}
-        </div>
-        <div style="margin-bottom: 10px;">
-            <strong>✅ Conciliados:</strong> ${totalConciliados} movimientos
-        </div>
-        <div style="margin-bottom: 10px;">
-            <strong>📋 Mayor pendiente:</strong> ${mayorPendiente} movimientos
-        </div>
-        <div style="margin-bottom: 10px;">
-            <strong>🏦 Extracto pendiente:</strong> ${extractoPendiente} movimientos
-        </div>
-        ${eliminados > 0 ? `<div style="margin-bottom: 10px;"><strong>🗑️ Eliminados:</strong> ${eliminados} movimientos</div>` : ''}
-    `;
+        const rangoDesde = conciliacion.rango_desde || 'N/A';
+        const rangoHasta = conciliacion.rango_hasta || 'N/A';
+        const nombre = conciliacion.nombre || `Conciliación ${conciliacion.tipo}`;
+
+        return `
+            <div class="conciliacion-seleccion-item" onclick="seleccionarConciliacionParaCargar(${conciliacion.id}, this)">
+                <input type="radio" name="conciliacion-seleccion" value="${conciliacion.id}">
+                <div class="conciliacion-seleccion-info">
+                    <div class="conciliacion-seleccion-titulo">
+                        ${nombre}
+                        <span class="conciliacion-tipo-badge ${conciliacion.tipo}">${conciliacion.tipo === 'creditos' ? 'Créditos' : 'Débitos'}</span>
+                    </div>
+                    <div class="conciliacion-seleccion-detalles">
+                        <span>📅 ${fechaFormateada}</span>
+                        <span>📆 ${rangoDesde} a ${rangoHasta}</span>
+                        <span>✅ ${totalConciliados} conc.</span>
+                        <span>📋 ${mayorPendiente} pend.</span>
+                        <span>🏦 ${extractoPendiente} ext.</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
 
     overlay.classList.add('visible');
     modal.classList.add('visible');
+}
+
+/**
+ * Seleccionar una conciliación para cargar
+ */
+function seleccionarConciliacionParaCargar(conciliacionId, elemento) {
+    // Quitar selección anterior
+    document.querySelectorAll('.conciliacion-seleccion-item').forEach(item => {
+        item.classList.remove('selected');
+        item.querySelector('input[type="radio"]').checked = false;
+    });
+
+    // Marcar selección actual
+    elemento.classList.add('selected');
+    elemento.querySelector('input[type="radio"]').checked = true;
+    conciliacionSeleccionadaId = conciliacionId;
+
+    // Habilitar botón
+    const btnCargar = document.getElementById('btnConfirmarCargarConciliacion');
+    if (btnCargar) btnCargar.disabled = false;
+}
+
+/**
+ * Confirmar carga de conciliación seleccionada
+ */
+async function confirmarCargarConciliacionSeleccionada() {
+    if (!conciliacionSeleccionadaId) {
+        mostrarMensaje('Por favor, seleccione una conciliación', 'error');
+        return;
+    }
+
+    cerrarModalConciliacionGuardada();
+    await cargarConciliacionGuardada(conciliacionSeleccionadaId);
 }
 
 /**
@@ -5689,20 +5746,206 @@ function cerrarModalConciliacionGuardada() {
     overlay.classList.remove('visible');
     modal.classList.remove('visible');
 
-    conciliacionGuardadaPendiente = null;
+    conciliacionSeleccionadaId = null;
+}
+
+// ========== GESTIÓN DE CONCILIACIONES ==========
+
+/**
+ * Abrir modal de gestión de conciliaciones
+ */
+async function abrirGestionConciliaciones() {
+    if (!state.clienteSeleccionado || !state.cuentaSeleccionada) {
+        mostrarMensaje('Debe seleccionar cliente y cuenta primero', 'error');
+        return;
+    }
+
+    // Recargar lista de conciliaciones
+    const conciliaciones = await cargarConciliacionesGuardadas();
+    conciliacionesGuardadasLista = conciliaciones || [];
+
+    const overlay = document.getElementById('overlay-gestion-conciliaciones');
+    const modal = document.getElementById('modal-gestion-conciliaciones');
+    const lista = document.getElementById('gestion-conciliaciones-lista');
+
+    if (conciliacionesGuardadasLista.length === 0) {
+        lista.innerHTML = `
+            <div class="conciliaciones-vacio">
+                <div class="conciliaciones-vacio-icon">📂</div>
+                <p>No hay conciliaciones guardadas para esta cuenta</p>
+            </div>
+        `;
+    } else {
+        lista.innerHTML = conciliacionesGuardadasLista.map(conciliacion => {
+            const fechaGuardado = new Date(conciliacion.fecha_conciliacion);
+            const fechaFormateada = fechaGuardado.toLocaleDateString('es-AR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            const datos = conciliacion.datos || {};
+            const totalConciliados = (datos.conciliados || []).length;
+            const mayorPendiente = (datos.mayorNoConciliado || []).length;
+            const extractoPendiente = (datos.extractoNoConciliado || []).length;
+
+            const rangoDesde = conciliacion.rango_desde || 'N/A';
+            const rangoHasta = conciliacion.rango_hasta || 'N/A';
+            const nombre = conciliacion.nombre || `Conciliación ${conciliacion.tipo}`;
+
+            return `
+                <div class="conciliacion-item">
+                    <div class="conciliacion-info" onclick="cargarConciliacionDesdeGestion(${conciliacion.id})">
+                        <div class="conciliacion-nombre">
+                            ${nombre}
+                            <span class="conciliacion-tipo-badge ${conciliacion.tipo}">${conciliacion.tipo === 'creditos' ? 'Créditos' : 'Débitos'}</span>
+                        </div>
+                        <div class="conciliacion-meta">
+                            <span class="conciliacion-meta-item">📅 ${fechaFormateada}</span>
+                            <span class="conciliacion-meta-item">📆 ${rangoDesde} a ${rangoHasta}</span>
+                            <span class="conciliacion-meta-item">✅ ${totalConciliados} conc.</span>
+                            <span class="conciliacion-meta-item">📋 ${mayorPendiente} pend.</span>
+                            <span class="conciliacion-meta-item">🏦 ${extractoPendiente} ext.</span>
+                        </div>
+                    </div>
+                    <div class="conciliacion-acciones">
+                        <button class="btn-cargar-conciliacion" onclick="cargarConciliacionDesdeGestion(${conciliacion.id})">
+                            📂 Cargar
+                        </button>
+                        <button class="btn-eliminar-conciliacion" onclick="confirmarEliminarConciliacion(${conciliacion.id})">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    overlay.classList.add('visible');
+    modal.classList.add('visible');
 }
 
 /**
- * Confirmar carga de conciliación guardada
+ * Cerrar modal de gestión de conciliaciones
  */
-async function confirmarCargarConciliacion() {
-    if (!conciliacionGuardadaPendiente) return;
+function cerrarGestionConciliaciones() {
+    const overlay = document.getElementById('overlay-gestion-conciliaciones');
+    const modal = document.getElementById('modal-gestion-conciliaciones');
 
-    // Guardar el ID antes de cerrar el modal (que limpia la variable)
-    const conciliacionId = conciliacionGuardadaPendiente.id;
+    overlay.classList.remove('visible');
+    modal.classList.remove('visible');
+}
 
-    cerrarModalConciliacionGuardada();
+/**
+ * Cargar una conciliación desde el modal de gestión
+ */
+async function cargarConciliacionDesdeGestion(conciliacionId) {
+    cerrarGestionConciliaciones();
     await cargarConciliacionGuardada(conciliacionId);
+}
+
+/**
+ * Mostrar confirmación para eliminar una conciliación
+ */
+function confirmarEliminarConciliacion(conciliacionId) {
+    const conciliacion = conciliacionesGuardadasLista.find(c => c.id === conciliacionId);
+    if (!conciliacion) return;
+
+    conciliacionAEliminar = conciliacion;
+
+    const overlay = document.getElementById('overlay-confirmar-eliminar-conciliacion');
+    const modal = document.getElementById('modal-confirmar-eliminar-conciliacion');
+    const detalles = document.getElementById('eliminar-conciliacion-detalles');
+
+    const fechaGuardado = new Date(conciliacion.fecha_conciliacion);
+    const fechaFormateada = fechaGuardado.toLocaleDateString('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+
+    const datos = conciliacion.datos || {};
+    const totalConciliados = (datos.conciliados || []).length;
+    const nombre = conciliacion.nombre || `Conciliación ${conciliacion.tipo}`;
+
+    detalles.innerHTML = `
+        <div class="eliminar-item-info">
+            <div class="eliminar-info-row">
+                <span class="eliminar-label">Nombre:</span>
+                <span class="eliminar-value">${nombre}</span>
+            </div>
+            <div class="eliminar-info-row">
+                <span class="eliminar-label">Tipo:</span>
+                <span class="eliminar-value">${conciliacion.tipo === 'creditos' ? 'Créditos' : 'Débitos'}</span>
+            </div>
+            <div class="eliminar-info-row">
+                <span class="eliminar-label">Fecha guardada:</span>
+                <span class="eliminar-value">${fechaFormateada}</span>
+            </div>
+            <div class="eliminar-info-row">
+                <span class="eliminar-label">Movimientos conciliados:</span>
+                <span class="eliminar-value">${totalConciliados}</span>
+            </div>
+        </div>
+    `;
+
+    overlay.classList.add('visible');
+    modal.classList.add('visible');
+}
+
+/**
+ * Cerrar modal de confirmación de eliminación
+ */
+function cerrarConfirmarEliminarConciliacion() {
+    const overlay = document.getElementById('overlay-confirmar-eliminar-conciliacion');
+    const modal = document.getElementById('modal-confirmar-eliminar-conciliacion');
+
+    overlay.classList.remove('visible');
+    modal.classList.remove('visible');
+
+    conciliacionAEliminar = null;
+}
+
+/**
+ * Ejecutar eliminación de conciliación
+ */
+async function ejecutarEliminarConciliacion() {
+    if (!conciliacionAEliminar) return;
+
+    try {
+        const { error } = await supabase
+            .from('conciliaciones_guardadas')
+            .delete()
+            .eq('id', conciliacionAEliminar.id);
+
+        if (error) throw error;
+
+        mostrarMensaje('Conciliación eliminada correctamente', 'success');
+
+        // Actualizar lista
+        conciliacionesGuardadasLista = conciliacionesGuardadasLista.filter(
+            c => c.id !== conciliacionAEliminar.id
+        );
+
+        cerrarConfirmarEliminarConciliacion();
+
+        // Actualizar botón de gestión
+        actualizarBotonGestionConciliaciones();
+
+        // Si el modal de gestión está abierto, refrescarlo
+        const modalGestion = document.getElementById('modal-gestion-conciliaciones');
+        if (modalGestion.classList.contains('visible')) {
+            abrirGestionConciliaciones();
+        }
+
+    } catch (error) {
+        console.error('Error eliminando conciliación:', error);
+        mostrarMensaje('Error al eliminar la conciliación: ' + (error.message || 'Error desconocido'), 'error');
+    }
 }
 
 // ========== ACTUALIZAR MAYOR CONTABLE ==========
