@@ -2154,6 +2154,76 @@ body {
     border-color: #dc2626;
 }
 
+/* Wrapper de conciliación cargada */
+.conciliacion-cargada-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-top: 10px;
+    gap: 12px;
+}
+
+.conciliacion-cargada-wrapper.hidden {
+    display: none;
+}
+
+.conciliacion-cargada-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.conciliacion-cargada-icon {
+    font-size: 18px;
+}
+
+.conciliacion-cargada-label {
+    font-size: 12px;
+    color: #92400e;
+}
+
+.conciliacion-cargada-nombre {
+    font-size: 13px;
+    font-weight: 600;
+    color: #78350f;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+.btn-eliminar-cargada {
+    background: #fee2e2;
+    border: 1px solid #ef4444;
+    color: #b91c1c;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-eliminar-cargada:hover {
+    background: #ef4444;
+    color: white;
+    border-color: #dc2626;
+}
+
+.eliminar-advertencia {
+    color: #92400e;
+    background: #fef3c7;
+    padding: 10px;
+    border-radius: 6px;
+    margin-top: 12px;
+    font-size: 13px;
+}
+
 .conciliaciones-vacio {
     text-align: center;
     padding: 40px;

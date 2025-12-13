@@ -514,6 +514,11 @@ async function seleccionarCuentaPrincipal() {
     const cuenta = auditoriaData.cuentas.find(c => c.id === cuentaId);
     if (!cuenta) return;
 
+    // Limpiar referencia a conciliación cargada al cambiar de cuenta
+    conciliacionCargadaId = null;
+    nombreConciliacionCargada = null;
+    actualizarBotonEliminarConciliacionCargada();
+
     state.cuentaSeleccionada = cuenta;
 
     // Mostrar info de cuenta seleccionada
@@ -2885,13 +2890,13 @@ function seleccionarTodosConciliados(checked) {
     if (checked) {
         // Agregar todos los IDs de conciliados visibles
         conciliadosVisibles.forEach(match => {
-            if (!seleccionConciliados.includes(match.id)) {
-                seleccionConciliados.push(match.id);
+            if (!seleccionConciliados.includes(String(match.id))) {
+                seleccionConciliados.push(String(match.id));
             }
         });
     } else {
         // Remover solo los que están visibles
-        const idsVisibles = conciliadosVisibles.map(m => m.id);
+        const idsVisibles = conciliadosVisibles.map(m => String(m.id));
         seleccionConciliados = seleccionConciliados.filter(id => !idsVisibles.includes(id));
     }
 
@@ -2930,13 +2935,13 @@ function seleccionarTodosConciliadosGrupo(grupo, checked) {
     if (checked) {
         // Agregar todos los IDs del grupo
         conciliadosGrupo.forEach(match => {
-            if (!seleccionConciliados.includes(match.id)) {
-                seleccionConciliados.push(match.id);
+            if (!seleccionConciliados.includes(String(match.id))) {
+                seleccionConciliados.push(String(match.id));
             }
         });
     } else {
         // Remover solo los del grupo
-        const idsGrupo = conciliadosGrupo.map(m => m.id);
+        const idsGrupo = conciliadosGrupo.map(m => String(m.id));
         seleccionConciliados = seleccionConciliados.filter(id => !idsGrupo.includes(id));
     }
 
@@ -2962,8 +2967,8 @@ function actualizarCheckboxSeleccionarTodosConciliados() {
         return;
     }
 
-    const todosSeleccionados = conciliadosVisibles.every(m => seleccionConciliados.includes(m.id));
-    const algunoSeleccionado = conciliadosVisibles.some(m => seleccionConciliados.includes(m.id));
+    const todosSeleccionados = conciliadosVisibles.every(m => seleccionConciliados.includes(String(m.id)));
+    const algunoSeleccionado = conciliadosVisibles.some(m => seleccionConciliados.includes(String(m.id)));
 
     checkboxAll.checked = todosSeleccionados;
     checkboxAll.indeterminate = algunoSeleccionado && !todosSeleccionados;
@@ -4592,7 +4597,7 @@ function renderizarConciliadosFiltrado() {
             ? match.coincidenciaOverride
             : matchTieneCoincidenciaDescripcion(match);
         const coincidenciaClass = tieneCoincidencia ? ' row-coincidencia-descripcion' : ' row-sin-coincidencia';
-        const isSelected = seleccionConciliados.includes(match.id);
+        const isSelected = seleccionConciliados.includes(String(match.id));
         const selectedClass = isSelected ? ' row-conciliado-selected' : '';
 
         for (let i = 0; i < maxRows; i++) {
@@ -5256,7 +5261,7 @@ function renderizarGrupoConciliados(grupo, conciliadosFiltrados, totalOriginal) 
 
     conciliadosFiltrados.forEach((match, idx) => {
         const maxRows = Math.max(match.mayor.length, match.extracto.length);
-        const isSelected = seleccionConciliados.includes(match.id);
+        const isSelected = seleccionConciliados.includes(String(match.id));
         const selectedClass = isSelected ? ' row-conciliado-selected' : '';
 
         // Badge de tipo de conciliación
@@ -6178,6 +6183,13 @@ async function cargarConciliacionGuardada(conciliacionId) {
                         'Mayor pendiente:', state.resultados.mayorNoConciliado.length,
                         'Extracto pendiente:', state.resultados.extractoNoConciliado.length);
 
+            // Guardar referencia a la conciliación cargada
+            conciliacionCargadaId = data.id;
+            nombreConciliacionCargada = data.nombre || `Conciliación ${data.tipo}`;
+
+            // Mostrar botón de eliminar conciliación cargada
+            actualizarBotonEliminarConciliacionCargada();
+
             mostrarMensaje('Conciliación cargada correctamente', 'success');
         }
     } catch (error) {
@@ -6190,6 +6202,8 @@ async function cargarConciliacionGuardada(conciliacionId) {
 let conciliacionesGuardadasLista = [];
 let conciliacionSeleccionadaId = null;
 let conciliacionAEliminar = null;
+let conciliacionCargadaId = null; // ID de la conciliación actualmente cargada
+let nombreConciliacionCargada = null; // Nombre de la conciliación actualmente cargada
 
 /**
  * Verificar si hay conciliaciones guardadas para el cliente/cuenta actual
@@ -6538,6 +6552,149 @@ async function ejecutarEliminarConciliacion() {
         console.error('Error eliminando conciliación:', error);
         mostrarMensaje('Error al eliminar la conciliación: ' + (error.message || 'Error desconocido'), 'error');
     }
+}
+
+// ========== ELIMINAR CONCILIACIÓN CARGADA ==========
+
+/**
+ * Actualizar visibilidad del botón de eliminar conciliación cargada
+ */
+function actualizarBotonEliminarConciliacionCargada() {
+    const wrapper = document.getElementById('conciliacionCargadaWrapper');
+    const nombreSpan = document.getElementById('nombreConciliacionCargada');
+
+    if (wrapper && nombreSpan) {
+        if (conciliacionCargadaId) {
+            wrapper.classList.remove('hidden');
+            nombreSpan.textContent = nombreConciliacionCargada || 'Conciliación sin nombre';
+        } else {
+            wrapper.classList.add('hidden');
+        }
+    }
+}
+
+/**
+ * Mostrar confirmación para eliminar la conciliación cargada
+ */
+function confirmarEliminarConciliacionCargada() {
+    if (!conciliacionCargadaId) {
+        mostrarMensaje('No hay conciliación cargada para eliminar', 'error');
+        return;
+    }
+
+    const overlay = document.getElementById('overlay-confirmar-eliminar-cargada');
+    const modal = document.getElementById('modal-confirmar-eliminar-cargada');
+    const detalles = document.getElementById('eliminar-cargada-detalles');
+
+    if (!modal || !overlay) return;
+
+    const totalConciliados = state.resultados ? state.resultados.conciliados.length : 0;
+
+    detalles.innerHTML = `
+        <div class="eliminar-item-info">
+            <div class="eliminar-info-row">
+                <span class="eliminar-label">Nombre:</span>
+                <span class="eliminar-value">${nombreConciliacionCargada}</span>
+            </div>
+            <div class="eliminar-info-row">
+                <span class="eliminar-label">Tipo:</span>
+                <span class="eliminar-value">${state.tipoConciliacion === 'creditos' ? 'Créditos' : 'Débitos'}</span>
+            </div>
+            <div class="eliminar-info-row">
+                <span class="eliminar-label">Movimientos conciliados:</span>
+                <span class="eliminar-value">${totalConciliados}</span>
+            </div>
+        </div>
+        <p class="eliminar-advertencia">⚠️ Esta acción no se puede deshacer. Se eliminarán todos los datos de esta conciliación.</p>
+    `;
+
+    overlay.classList.add('visible');
+    modal.classList.add('visible');
+}
+
+/**
+ * Cerrar modal de confirmar eliminación de conciliación cargada
+ */
+function cerrarConfirmarEliminarCargada() {
+    const overlay = document.getElementById('overlay-confirmar-eliminar-cargada');
+    const modal = document.getElementById('modal-confirmar-eliminar-cargada');
+
+    if (overlay) overlay.classList.remove('visible');
+    if (modal) modal.classList.remove('visible');
+}
+
+/**
+ * Ejecutar eliminación de la conciliación cargada
+ */
+async function ejecutarEliminarConciliacionCargada() {
+    if (!conciliacionCargadaId) return;
+
+    try {
+        const { error } = await supabase
+            .from('conciliaciones_guardadas')
+            .delete()
+            .eq('id', conciliacionCargadaId);
+
+        if (error) throw error;
+
+        mostrarMensaje('Conciliación eliminada correctamente', 'success');
+
+        // Actualizar lista local
+        conciliacionesGuardadasLista = conciliacionesGuardadasLista.filter(
+            c => c.id !== conciliacionCargadaId
+        );
+
+        // Limpiar referencia
+        const idEliminado = conciliacionCargadaId;
+        conciliacionCargadaId = null;
+        nombreConciliacionCargada = null;
+
+        cerrarConfirmarEliminarCargada();
+
+        // Ocultar botón de eliminar
+        actualizarBotonEliminarConciliacionCargada();
+
+        // Actualizar botón de gestión
+        actualizarBotonGestionConciliaciones();
+
+        // Limpiar la vista y reiniciar el proceso
+        limpiarVistaConciliacion();
+
+        mostrarMensaje('Conciliación eliminada. Puede iniciar una nueva conciliación o cargar otra guardada.', 'info');
+
+    } catch (error) {
+        console.error('Error eliminando conciliación:', error);
+        mostrarMensaje('Error al eliminar la conciliación: ' + (error.message || 'Error desconocido'), 'error');
+    }
+}
+
+/**
+ * Limpiar la vista de conciliación después de eliminar
+ */
+function limpiarVistaConciliacion() {
+    // Limpiar resultados
+    state.resultados = null;
+    state.eliminados = [];
+
+    // Ocultar sección de resultados
+    const resultsSection = document.getElementById('resultsSection');
+    if (resultsSection) {
+        resultsSection.classList.add('hidden');
+    }
+
+    // Limpiar tablas
+    const tablaConciliadosVerdes = document.getElementById('tablaConciliadosVerdes');
+    const tablaConciliadosNaranjas = document.getElementById('tablaConciliadosNaranjas');
+    const tablaMayorPendiente = document.getElementById('tablaMayorPendiente');
+    const tablaExtractoPendiente = document.getElementById('tablaExtractoPendiente');
+
+    if (tablaConciliadosVerdes) tablaConciliadosVerdes.innerHTML = '';
+    if (tablaConciliadosNaranjas) tablaConciliadosNaranjas.innerHTML = '';
+    if (tablaMayorPendiente) tablaMayorPendiente.innerHTML = '';
+    if (tablaExtractoPendiente) tablaExtractoPendiente.innerHTML = '';
+
+    // Actualizar contadores
+    actualizarContadoresGrupos();
 }
 
 // ========== ACTUALIZAR MAYOR CONTABLE ==========
