@@ -341,8 +341,12 @@ function init() {
  * Filtrar clientes en el selector principal basándose en la búsqueda
  */
 function filtrarClientesPrincipal() {
-    const search = elements.clienteSearchPrincipal.value.toLowerCase().trim();
-    const select = elements.clienteSelectPrincipal;
+    const searchInput = document.getElementById('clienteSearchPrincipal');
+    const select = document.getElementById('clienteSelectPrincipal');
+
+    if (!searchInput || !select) return;
+
+    const search = searchInput.value.toLowerCase().trim();
 
     // Limpiar opciones
     select.innerHTML = '<option value="">-- Seleccione un cliente --</option>';
@@ -720,14 +724,24 @@ async function cargarClientesAuditoria() {
     try {
         let supabaseClient = null;
 
+        // Intentar usar waitForSupabase si está disponible
         if (typeof waitForSupabase === 'function') {
             supabaseClient = await waitForSupabase();
-        } else if (typeof supabase !== 'undefined' && supabase) {
-            supabaseClient = supabase;
+        }
+
+        // Fallback: esperar a que la variable global supabase esté disponible
+        if (!supabaseClient) {
+            for (let i = 0; i < 50; i++) {
+                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
+                    supabaseClient = supabase;
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
         }
 
         if (!supabaseClient) {
-            console.warn('Supabase no disponible');
+            console.warn('Supabase no disponible después de esperar');
             return;
         }
 
@@ -762,8 +776,14 @@ async function cargarClientesAuditoria() {
  * Poblar el selector principal de clientes (paso 1)
  */
 function poblarSelectorClientesPrincipal(clientes) {
-    const select = elements.clienteSelectPrincipal;
-    if (!select) return;
+    // Buscar el elemento directamente para evitar problemas de timing
+    const select = document.getElementById('clienteSelectPrincipal');
+    if (!select) {
+        console.warn('Elemento clienteSelectPrincipal no encontrado');
+        return;
+    }
+
+    console.log('Poblando selector con', clientes.length, 'clientes');
 
     select.innerHTML = '<option value="">-- Seleccione un cliente --</option>';
     clientes.forEach(cliente => {
@@ -772,6 +792,11 @@ function poblarSelectorClientesPrincipal(clientes) {
         option.textContent = cliente.nombre + (cliente.cuit ? ` (${cliente.cuit})` : '');
         select.appendChild(option);
     });
+
+    // Actualizar también la referencia en elements
+    if (!elements.clienteSelectPrincipal) {
+        elements.clienteSelectPrincipal = select;
+    }
 }
 
 /**
