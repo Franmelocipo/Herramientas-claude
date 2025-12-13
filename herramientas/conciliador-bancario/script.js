@@ -2837,6 +2837,18 @@ function llenarTablaExtractoPendiente(pendientes) {
 // ========== CONCILIACIÓN MANUAL ==========
 
 /**
+ * Pre-bloquear toggles al hacer mousedown en botón de color
+ * Esto se ejecuta ANTES que cualquier onclick
+ */
+function preBloquearToggle(event) {
+    bloqueandoToggleGrupos = true;
+    console.log('PRE-Bloqueando toggles de grupo (mousedown)');
+    if (event) {
+        event.stopPropagation();
+    }
+}
+
+/**
  * Cambiar la categoría de color de una conciliación (verde/naranja)
  * Verde = coincidencia de descripción, Naranja = sin coincidencia
  */
@@ -2847,9 +2859,8 @@ function toggleColorConciliacion(idConciliacion, event) {
         event.preventDefault();
     }
 
-    // Bloquear toggles de grupo mientras procesamos el cambio de color
+    // Asegurar que el bloqueo esté activo (por si no se llamó desde mousedown)
     bloqueandoToggleGrupos = true;
-    console.log('Bloqueando toggles de grupo');
 
     if (!state.resultados) {
         bloqueandoToggleGrupos = false;
@@ -2891,7 +2902,7 @@ function toggleColorConciliacion(idConciliacion, event) {
     setTimeout(() => {
         bloqueandoToggleGrupos = false;
         console.log('Desbloqueando toggles de grupo');
-    }, 100);
+    }, 150);
 }
 
 /**
@@ -4730,7 +4741,7 @@ function renderizarConciliadosFiltrado() {
                 html += `
                     <td class="col-action">
                         ${manualBadge}${reprocesoBadge}
-                        <button class="btn-toggle-color" onclick="toggleColorConciliacion('${match.id}', event)" title="${colorBtnTitle}">
+                        <button class="btn-toggle-color" onmousedown="preBloquearToggle(event)" onclick="toggleColorConciliacion('${match.id}', event)" title="${colorBtnTitle}">
                             ${colorBtnIcon}
                         </button>
                         <button class="btn-desconciliar" onclick="desconciliar('${match.id}')" title="Desconciliar">
@@ -5427,7 +5438,7 @@ function renderizarGrupoConciliados(grupo, conciliadosFiltrados, totalOriginal) 
                 html += `
                     <td class="col-action">
                         ${tipoBadge}${manualBadge}${reprocesoBadge}
-                        <button class="btn-toggle-color" onclick="toggleColorConciliacion('${match.id}', event)" title="${colorBtnTitle}">
+                        <button class="btn-toggle-color" onmousedown="preBloquearToggle(event)" onclick="toggleColorConciliacion('${match.id}', event)" title="${colorBtnTitle}">
                             ${colorBtnIcon}
                         </button>
                         <button class="btn-desconciliar" onclick="desconciliar('${match.id}')" title="Desconciliar">
