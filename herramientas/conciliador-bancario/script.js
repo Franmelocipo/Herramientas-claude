@@ -5521,6 +5521,14 @@ async function cargarConciliacionesGuardadas() {
  * Cargar una conciliación guardada específica
  */
 async function cargarConciliacionGuardada(conciliacionId) {
+    console.log('🔄 cargarConciliacionGuardada llamada con ID:', conciliacionId, 'tipo:', typeof conciliacionId);
+
+    if (!conciliacionId || conciliacionId === 'null' || conciliacionId === 'undefined') {
+        console.error('❌ ID de conciliación inválido:', conciliacionId);
+        mostrarMensaje('Error: ID de conciliación inválido', 'error');
+        return;
+    }
+
     try {
         const { data, error } = await supabase
             .from('conciliaciones_guardadas')
@@ -5707,6 +5715,8 @@ function mostrarModalConciliacionGuardada(conciliaciones) {
  * Seleccionar una conciliación para cargar
  */
 function seleccionarConciliacionParaCargar(conciliacionId, elemento) {
+    console.log('🎯 seleccionarConciliacionParaCargar llamada con ID:', conciliacionId, 'tipo:', typeof conciliacionId);
+
     // Quitar selección anterior
     document.querySelectorAll('.conciliacion-seleccion-item').forEach(item => {
         item.classList.remove('selected');
@@ -5718,6 +5728,8 @@ function seleccionarConciliacionParaCargar(conciliacionId, elemento) {
     elemento.querySelector('input[type="radio"]').checked = true;
     conciliacionSeleccionadaId = conciliacionId;
 
+    console.log('✅ conciliacionSeleccionadaId establecido:', conciliacionSeleccionadaId);
+
     // Habilitar botón
     const btnCargar = document.getElementById('btnConfirmarCargarConciliacion');
     if (btnCargar) btnCargar.disabled = false;
@@ -5727,6 +5739,8 @@ function seleccionarConciliacionParaCargar(conciliacionId, elemento) {
  * Confirmar carga de conciliación seleccionada
  */
 async function confirmarCargarConciliacionSeleccionada() {
+    console.log('📂 confirmarCargarConciliacionSeleccionada - ID actual:', conciliacionSeleccionadaId, 'tipo:', typeof conciliacionSeleccionadaId);
+
     if (!conciliacionSeleccionadaId) {
         mostrarMensaje('Por favor, seleccione una conciliación', 'error');
         return;
