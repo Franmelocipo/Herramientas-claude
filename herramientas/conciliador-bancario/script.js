@@ -11,6 +11,8 @@
  * - Haber del Mayor (salida de dinero) = Débito del Extracto
  */
 
+console.log('=== script.js cargado correctamente ===');
+
 // Estado de la aplicación
 let state = {
     tipoConciliacion: null, // 'creditos' o 'debitos'
@@ -4754,7 +4756,9 @@ function limpiarFiltrosConciliados() {
  * Toggle visibilidad del grupo de conciliados verdes
  */
 function toggleGrupoVerdes() {
+    console.log('toggleGrupoVerdes llamado, estado actual:', gruposConciliados.verdesVisible);
     gruposConciliados.verdesVisible = !gruposConciliados.verdesVisible;
+    console.log('nuevo estado:', gruposConciliados.verdesVisible);
     actualizarVistaGruposConciliados();
 }
 
@@ -4762,7 +4766,9 @@ function toggleGrupoVerdes() {
  * Toggle visibilidad del grupo de conciliados naranjas
  */
 function toggleGrupoNaranjas() {
+    console.log('toggleGrupoNaranjas llamado, estado actual:', gruposConciliados.naranjasVisible);
     gruposConciliados.naranjasVisible = !gruposConciliados.naranjasVisible;
+    console.log('nuevo estado:', gruposConciliados.naranjasVisible);
     actualizarVistaGruposConciliados();
 }
 
@@ -4770,9 +4776,13 @@ function toggleGrupoNaranjas() {
  * Actualiza la UI después de cambiar la visibilidad de grupos
  */
 function actualizarVistaGruposConciliados() {
+    console.log('actualizarVistaGruposConciliados llamado');
+
     // Actualizar botones de toggle
     const btnVerdes = document.getElementById('btnToggleVerdes');
     const btnNaranjas = document.getElementById('btnToggleNaranjas');
+
+    console.log('btnVerdes:', btnVerdes, 'btnNaranjas:', btnNaranjas);
 
     if (btnVerdes) {
         btnVerdes.innerHTML = gruposConciliados.verdesVisible
@@ -4792,11 +4802,15 @@ function actualizarVistaGruposConciliados() {
     const seccionVerdes = document.getElementById('seccion-conciliados-verdes');
     const seccionNaranjas = document.getElementById('seccion-conciliados-naranjas');
 
+    console.log('seccionVerdes:', seccionVerdes, 'seccionNaranjas:', seccionNaranjas);
+
     if (seccionVerdes) {
         seccionVerdes.classList.toggle('hidden', !gruposConciliados.verdesVisible);
+        console.log('seccionVerdes hidden:', seccionVerdes.classList.contains('hidden'));
     }
     if (seccionNaranjas) {
         seccionNaranjas.classList.toggle('hidden', !gruposConciliados.naranjasVisible);
+        console.log('seccionNaranjas hidden:', seccionNaranjas.classList.contains('hidden'));
     }
 
     // Actualizar contadores en los botones
