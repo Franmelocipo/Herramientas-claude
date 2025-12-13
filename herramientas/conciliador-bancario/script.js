@@ -130,6 +130,9 @@ let gruposConciliados = {
     naranjasVisible: true
 };
 
+// Flag para bloquear toggles durante cambio de color (evita conflictos de eventos)
+let bloqueandoToggleGrupos = false;
+
 // Estado de filtros para Conciliados Verdes
 let filtrosConciliadosVerdes = {
     fechaMayorDesde: null,
@@ -2829,13 +2832,21 @@ function toggleColorConciliacion(idConciliacion, event) {
         event.preventDefault();
     }
 
-    if (!state.resultados) return;
+    // Bloquear toggles de grupo mientras procesamos el cambio de color
+    bloqueandoToggleGrupos = true;
+    console.log('Bloqueando toggles de grupo');
+
+    if (!state.resultados) {
+        bloqueandoToggleGrupos = false;
+        return;
+    }
 
     // Usar String() para consistencia en la comparación
     const idStr = String(idConciliacion);
     const match = state.resultados.conciliados.find(c => String(c.id) === idStr);
     if (!match) {
         console.warn('No se encontró la conciliación:', idConciliacion);
+        bloqueandoToggleGrupos = false;
         return;
     }
 
@@ -2860,6 +2871,12 @@ function toggleColorConciliacion(idConciliacion, event) {
 
     // Re-renderizar por grupos (el elemento se moverá de verde a naranja o viceversa)
     renderizarConciliadosPorGrupos();
+
+    // Desbloquear después de un pequeño delay para asegurar que los eventos pendientes se ignoren
+    setTimeout(() => {
+        bloqueandoToggleGrupos = false;
+        console.log('Desbloqueando toggles de grupo');
+    }, 100);
 }
 
 /**
@@ -4878,8 +4895,14 @@ function toggleGrupoVerdes(event) {
         event.stopPropagation();
         event.preventDefault();
     }
+
+    // Verificar si estamos bloqueados por un cambio de color en progreso
+    if (bloqueandoToggleGrupos) {
+        console.log('toggleGrupoVerdes BLOQUEADO - cambio de color en progreso');
+        return;
+    }
+
     console.log('toggleGrupoVerdes llamado, estado actual:', gruposConciliados.verdesVisible);
-    console.trace('Stack trace de toggleGrupoVerdes');
     gruposConciliados.verdesVisible = !gruposConciliados.verdesVisible;
     console.log('nuevo estado verdes:', gruposConciliados.verdesVisible);
     actualizarVistaGruposConciliados();
@@ -4894,6 +4917,13 @@ function toggleGrupoNaranjas(event) {
         event.stopPropagation();
         event.preventDefault();
     }
+
+    // Verificar si estamos bloqueados por un cambio de color en progreso
+    if (bloqueandoToggleGrupos) {
+        console.log('toggleGrupoNaranjas BLOQUEADO - cambio de color en progreso');
+        return;
+    }
+
     console.log('toggleGrupoNaranjas llamado, estado actual:', gruposConciliados.naranjasVisible);
     gruposConciliados.naranjasVisible = !gruposConciliados.naranjasVisible;
     console.log('nuevo estado naranjas:', gruposConciliados.naranjasVisible);
