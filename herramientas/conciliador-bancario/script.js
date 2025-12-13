@@ -479,6 +479,9 @@ async function seleccionarCuentaPrincipal() {
     // Cargar extractos disponibles para el rango de fechas
     await cargarExtractosDisponiblesPrincipal();
 
+    // Verificar si hay conciliaciones guardadas para esta cuenta
+    await verificarConciliacionesGuardadas();
+
     // Mostrar paso de mayor
     elements.stepMayor.classList.remove('hidden');
 }
@@ -5501,13 +5504,20 @@ async function cargarConciliacionGuardada(conciliacionId) {
         if (error) throw error;
 
         if (data) {
+            console.log('✅ Cargando conciliación guardada:', data);
+
             // Restaurar estado
             state.tipoConciliacion = data.tipo;
             state.toleranciaFecha = data.tolerancia_fecha;
             state.toleranciaImporte = data.tolerancia_importe;
+
+            // Convertir fechas de YYYY-MM-DD a YYYY-MM para los selectores
+            const rangoDesdeSelector = data.rango_desde ? data.rango_desde.substring(0, 7) : null;
+            const rangoHastaSelector = data.rango_hasta ? data.rango_hasta.substring(0, 7) : null;
+
             state.rangoExtractos = {
-                desde: data.rango_desde,
-                hasta: data.rango_hasta
+                desde: rangoDesdeSelector,
+                hasta: rangoHastaSelector
             };
 
             // Restaurar resultados
@@ -5523,15 +5533,39 @@ async function cargarConciliacionGuardada(conciliacionId) {
             // Restaurar historial
             historialProcesamiento = data.historial_procesamiento || [];
 
-            // Actualizar UI
+            // Actualizar UI - Tipo de conciliación
             elements.tipoButtons.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.tipo === data.tipo);
             });
+
+            // Actualizar UI - Tolerancias
             elements.toleranciaFecha.value = data.tolerancia_fecha;
             elements.toleranciaImporte.value = data.tolerancia_importe;
 
+            // Actualizar UI - Selectores de rango
+            const rangoDesdeSelect = document.getElementById('rangoDesde');
+            const rangoHastaSelect = document.getElementById('rangoHasta');
+            if (rangoDesdeSelect && rangoDesdeSelector) {
+                rangoDesdeSelect.value = rangoDesdeSelector;
+            }
+            if (rangoHastaSelect && rangoHastaSelector) {
+                rangoHastaSelect.value = rangoHastaSelector;
+            }
+
+            // Mostrar pasos de configuración si no están visibles
+            if (elements.stepExtracto) {
+                elements.stepExtracto.classList.remove('hidden');
+            }
+            if (elements.stepConciliacion) {
+                elements.stepConciliacion.classList.remove('hidden');
+            }
+
             // Mostrar resultados
             mostrarResultados(state.resultados);
+
+            console.log('✅ Conciliación cargada - Conciliados:', state.resultados.conciliados.length,
+                        'Mayor pendiente:', state.resultados.mayorNoConciliado.length,
+                        'Extracto pendiente:', state.resultados.extractoNoConciliado.length);
 
             mostrarMensaje('Conciliación cargada correctamente', 'success');
         }
@@ -5539,6 +5573,100 @@ async function cargarConciliacionGuardada(conciliacionId) {
         console.error('Error cargando conciliación:', error);
         mostrarMensaje('Error al cargar la conciliación', 'error');
     }
+}
+
+// Variable para almacenar la conciliación guardada pendiente de cargar
+let conciliacionGuardadaPendiente = null;
+
+/**
+ * Verificar si hay conciliaciones guardadas para el cliente/cuenta actual
+ */
+async function verificarConciliacionesGuardadas() {
+    const conciliaciones = await cargarConciliacionesGuardadas();
+
+    if (conciliaciones && conciliaciones.length > 0) {
+        // Tomar la más reciente
+        conciliacionGuardadaPendiente = conciliaciones[0];
+        mostrarModalConciliacionGuardada(conciliacionGuardadaPendiente);
+    }
+}
+
+/**
+ * Mostrar modal de conciliación guardada encontrada
+ */
+function mostrarModalConciliacionGuardada(conciliacion) {
+    const overlay = document.getElementById('overlay-conciliacion-guardada');
+    const modal = document.getElementById('modal-conciliacion-guardada');
+    const detalles = document.getElementById('conciliacion-guardada-detalles');
+
+    // Formatear fecha
+    const fechaGuardado = new Date(conciliacion.fecha_conciliacion);
+    const fechaFormateada = fechaGuardado.toLocaleDateString('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+
+    // Contar movimientos
+    const datos = conciliacion.datos || {};
+    const totalConciliados = (datos.conciliados || []).length;
+    const mayorPendiente = (datos.mayorNoConciliado || []).length;
+    const extractoPendiente = (datos.extractoNoConciliado || []).length;
+    const eliminados = (datos.eliminados || []).length;
+
+    // Formatear rango
+    const rangoDesde = conciliacion.rango_desde || 'N/A';
+    const rangoHasta = conciliacion.rango_hasta || 'N/A';
+
+    detalles.innerHTML = `
+        <div style="margin-bottom: 10px;">
+            <strong>📅 Guardada:</strong> ${fechaFormateada}
+        </div>
+        <div style="margin-bottom: 10px;">
+            <strong>📊 Tipo:</strong> ${conciliacion.tipo === 'creditos' ? 'Créditos' : 'Débitos'}
+        </div>
+        <div style="margin-bottom: 10px;">
+            <strong>📆 Período:</strong> ${rangoDesde} a ${rangoHasta}
+        </div>
+        <div style="margin-bottom: 10px;">
+            <strong>✅ Conciliados:</strong> ${totalConciliados} movimientos
+        </div>
+        <div style="margin-bottom: 10px;">
+            <strong>📋 Mayor pendiente:</strong> ${mayorPendiente} movimientos
+        </div>
+        <div style="margin-bottom: 10px;">
+            <strong>🏦 Extracto pendiente:</strong> ${extractoPendiente} movimientos
+        </div>
+        ${eliminados > 0 ? `<div style="margin-bottom: 10px;"><strong>🗑️ Eliminados:</strong> ${eliminados} movimientos</div>` : ''}
+    `;
+
+    overlay.classList.add('show');
+    modal.classList.add('show');
+}
+
+/**
+ * Cerrar modal de conciliación guardada
+ */
+function cerrarModalConciliacionGuardada() {
+    const overlay = document.getElementById('overlay-conciliacion-guardada');
+    const modal = document.getElementById('modal-conciliacion-guardada');
+
+    overlay.classList.remove('show');
+    modal.classList.remove('show');
+
+    conciliacionGuardadaPendiente = null;
+}
+
+/**
+ * Confirmar carga de conciliación guardada
+ */
+async function confirmarCargarConciliacion() {
+    if (!conciliacionGuardadaPendiente) return;
+
+    cerrarModalConciliacionGuardada();
+    await cargarConciliacionGuardada(conciliacionGuardadaPendiente.id);
 }
 
 // ========== ACTUALIZAR MAYOR CONTABLE ==========

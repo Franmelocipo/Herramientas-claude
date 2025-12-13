@@ -788,6 +788,31 @@
         <div id="conciliados-progreso" class="conciliados-progreso"></div>
     </div>
 
+    <!-- Modal de conciliaciones guardadas -->
+    <div id="overlay-conciliacion-guardada" class="overlay-eliminar"></div>
+    <div id="modal-conciliacion-guardada" class="modal-eliminar" style="max-width: 500px;">
+        <div class="modal-eliminar-header">
+            <h3>📂 Conciliación Guardada Encontrada</h3>
+            <button class="modal-close-btn" onclick="cerrarModalConciliacionGuardada()">✕</button>
+        </div>
+        <div class="modal-eliminar-body">
+            <p class="modal-eliminar-pregunta">Se encontró una conciliación guardada para esta cuenta. ¿Desea cargarla?</p>
+
+            <div id="conciliacion-guardada-detalles" class="eliminar-detalles" style="text-align: left;">
+                <!-- Contenido dinámico -->
+            </div>
+
+            <div class="eliminar-aviso">
+                <span class="aviso-icono">💡</span>
+                <span>Al cargar la conciliación, se restaurarán todos los movimientos conciliados y pendientes.</span>
+            </div>
+        </div>
+        <div class="modal-eliminar-footer">
+            <button class="btn-cancelar" onclick="cerrarModalConciliacionGuardada()">Nueva Conciliación</button>
+            <button class="btn-confirmar-eliminar" style="background: #28a745;" onclick="confirmarCargarConciliacion()">📂 Cargar Guardada</button>
+        </div>
+    </div>
+
     <!-- Modal de eliminar -->
     <div id="overlay-eliminar" class="overlay-eliminar"></div>
     <div id="modal-eliminar" class="modal-eliminar">
