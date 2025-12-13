@@ -64,6 +64,9 @@ let seleccion = {
     extracto: []    // IDs de movimientos del Extracto seleccionados
 };
 
+// Estado de selección para cambio de color masivo en conciliados
+let seleccionConciliados = [];  // IDs de conciliaciones seleccionadas
+
 // Contador para IDs únicos de conciliaciones
 let conciliacionIdCounter = 0;
 
@@ -148,10 +151,27 @@ let toleranciasIniciales = {
 // Elementos del DOM
 const elements = {
     // Pasos
+    stepCliente: document.getElementById('step-cliente'),
+    stepCuenta: document.getElementById('step-cuenta'),
+    stepMayor: document.getElementById('step-mayor'),
     stepTipo: document.getElementById('step-tipo'),
     stepArchivos: document.getElementById('step-archivos'),
     stepTolerancias: document.getElementById('step-tolerancias'),
     stepEjecutar: document.getElementById('step-ejecutar'),
+
+    // Selección de cliente
+    clienteSearchPrincipal: document.getElementById('clienteSearchPrincipal'),
+    clienteSelectPrincipal: document.getElementById('clienteSelectPrincipal'),
+    clienteSeleccionadoInfo: document.getElementById('clienteSeleccionadoInfo'),
+    clienteInfoNombre: document.getElementById('clienteInfoNombre'),
+
+    // Selección de cuenta
+    cuentaSelectPrincipal: document.getElementById('cuentaSelectPrincipal'),
+    cuentaSeleccionadaInfo: document.getElementById('cuentaSeleccionadaInfo'),
+    cuentaInfoNombre: document.getElementById('cuentaInfoNombre'),
+    rangoExtractosSection: document.getElementById('rangoExtractosSection'),
+    extractoPreviewInfo: document.getElementById('extractoPreviewInfo'),
+    extractoMovimientosCount: document.getElementById('extractoMovimientosCount'),
 
     // Botones de tipo
     tipoButtons: document.querySelectorAll('.type-btn'),
@@ -309,6 +329,326 @@ function init() {
     cargarCategoriasConciliador();
 }
 
+// ========== NUEVO FLUJO: CLIENTE -> CUENTA -> MAYOR -> TIPO ==========
+
+/**
+ * Filtrar clientes en el selector principal basándose en la búsqueda
+ */
+function filtrarClientesPrincipal() {
+    const search = elements.clienteSearchPrincipal.value.toLowerCase().trim();
+    const select = elements.clienteSelectPrincipal;
+
+    // Limpiar opciones
+    select.innerHTML = '<option value="">-- Seleccione un cliente --</option>';
+
+    // Filtrar y agregar clientes que coincidan
+    const clientesFiltrados = auditoriaData.clientes.filter(cliente => {
+        const nombre = (cliente.nombre || '').toLowerCase();
+        const cuit = (cliente.cuit || '').toLowerCase();
+        return nombre.includes(search) || cuit.includes(search);
+    });
+
+    clientesFiltrados.forEach(cliente => {
+        const option = document.createElement('option');
+        option.value = cliente.id;
+        option.textContent = cliente.nombre + (cliente.cuit ? ` (${cliente.cuit})` : '');
+        select.appendChild(option);
+    });
+}
+
+/**
+ * Seleccionar cliente desde el selector principal
+ */
+async function seleccionarClientePrincipal() {
+    const clienteId = elements.clienteSelectPrincipal.value;
+
+    if (!clienteId) {
+        // Si se deselecciona, ocultar pasos siguientes
+        ocultarPasosDesde('cuenta');
+        return;
+    }
+
+    const cliente = auditoriaData.clientes.find(c => c.id === clienteId);
+    if (!cliente) return;
+
+    state.clienteSeleccionado = cliente;
+
+    // Mostrar info del cliente seleccionado
+    elements.clienteInfoNombre.textContent = cliente.nombre + (cliente.cuit ? ` (${cliente.cuit})` : '');
+    elements.clienteSeleccionadoInfo.classList.remove('hidden');
+
+    // Cargar cuentas del cliente
+    await cargarCuentasClientePrincipal(clienteId);
+
+    // Mostrar paso de cuenta
+    elements.stepCuenta.classList.remove('hidden');
+}
+
+/**
+ * Cambiar cliente (volver al paso 1)
+ */
+function cambiarCliente() {
+    // Ocultar info y pasos siguientes
+    elements.clienteSeleccionadoInfo.classList.add('hidden');
+    ocultarPasosDesde('cuenta');
+
+    // Limpiar estado
+    state.clienteSeleccionado = null;
+    state.cuentaSeleccionada = null;
+    state.datosExtracto = [];
+
+    // Limpiar selección
+    elements.clienteSelectPrincipal.value = '';
+    elements.clienteSearchPrincipal.value = '';
+    filtrarClientesPrincipal();
+}
+
+/**
+ * Cargar cuentas del cliente seleccionado
+ */
+async function cargarCuentasClientePrincipal(clienteId) {
+    const select = elements.cuentaSelectPrincipal;
+    select.innerHTML = '<option value="">Cargando cuentas...</option>';
+
+    try {
+        // Usar la misma lógica que cargarCuentasCliente pero para el selector principal
+        const { data: cuentas, error } = await supabase
+            .from('cuentas_bancarias')
+            .select('*')
+            .eq('cliente_id', clienteId)
+            .order('banco');
+
+        if (error) throw error;
+
+        auditoriaData.cuentas = cuentas || [];
+
+        select.innerHTML = '<option value="">-- Seleccione una cuenta --</option>';
+
+        if (cuentas && cuentas.length > 0) {
+            cuentas.forEach(cuenta => {
+                const option = document.createElement('option');
+                option.value = cuenta.id;
+                option.textContent = `${cuenta.banco} - ${cuenta.numero_cuenta}`;
+                select.appendChild(option);
+            });
+        } else {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No hay cuentas registradas';
+            option.disabled = true;
+            select.appendChild(option);
+        }
+    } catch (error) {
+        console.error('Error cargando cuentas:', error);
+        select.innerHTML = '<option value="">Error cargando cuentas</option>';
+    }
+}
+
+/**
+ * Seleccionar cuenta bancaria desde el selector principal
+ */
+async function seleccionarCuentaPrincipal() {
+    const cuentaId = elements.cuentaSelectPrincipal.value;
+
+    if (!cuentaId) {
+        // Si se deselecciona, ocultar pasos siguientes
+        ocultarPasosDesde('mayor');
+        elements.cuentaSeleccionadaInfo.classList.add('hidden');
+        return;
+    }
+
+    const cuenta = auditoriaData.cuentas.find(c => c.id === cuentaId);
+    if (!cuenta) return;
+
+    state.cuentaSeleccionada = cuenta;
+
+    // Mostrar info de cuenta seleccionada
+    elements.cuentaInfoNombre.textContent = `${cuenta.banco} - ${cuenta.numero_cuenta}`;
+    elements.cuentaSeleccionadaInfo.classList.remove('hidden');
+
+    // Cargar extractos disponibles para el rango de fechas
+    await cargarExtractosDisponiblesPrincipal();
+
+    // Mostrar paso de mayor
+    elements.stepMayor.classList.remove('hidden');
+}
+
+/**
+ * Cargar extractos disponibles para la cuenta seleccionada
+ */
+async function cargarExtractosDisponiblesPrincipal() {
+    if (!state.clienteSeleccionado || !state.cuentaSeleccionada) return;
+
+    try {
+        const { data: extractos, error } = await supabase
+            .from('extractos_bancarios')
+            .select('id, mes, anio')
+            .eq('cliente_id', state.clienteSeleccionado.id)
+            .eq('cuenta_bancaria_id', state.cuentaSeleccionada.id)
+            .order('anio', { ascending: false })
+            .order('mes', { ascending: false });
+
+        if (error) throw error;
+
+        auditoriaData.extractosDisponibles = extractos || [];
+
+        if (extractos && extractos.length > 0) {
+            // Poblar selectores de rango
+            poblarSelectoresRango(extractos);
+            elements.rangoExtractosSection.classList.remove('hidden');
+
+            // Auto-seleccionar todo el rango disponible
+            const rangoDesde = document.getElementById('rangoDesde');
+            const rangoHasta = document.getElementById('rangoHasta');
+            if (rangoDesde.options.length > 1) {
+                rangoDesde.value = rangoDesde.options[rangoDesde.options.length - 1].value;
+            }
+            if (rangoHasta.options.length > 1) {
+                rangoHasta.value = rangoHasta.options[1].value;
+            }
+
+            // Cargar extractos automáticamente
+            await actualizarExtractosSeleccionados();
+        } else {
+            elements.rangoExtractosSection.classList.add('hidden');
+            mostrarMensaje('No hay extractos cargados para esta cuenta. Puede cargar un extracto manualmente.', 'info');
+        }
+    } catch (error) {
+        console.error('Error cargando extractos:', error);
+    }
+}
+
+/**
+ * Poblar selectores de rango de fechas
+ */
+function poblarSelectoresRango(extractos) {
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+    const rangoDesde = document.getElementById('rangoDesde');
+    const rangoHasta = document.getElementById('rangoHasta');
+
+    rangoDesde.innerHTML = '<option value="">-- Mes/Año --</option>';
+    rangoHasta.innerHTML = '<option value="">-- Mes/Año --</option>';
+
+    extractos.forEach(ext => {
+        const label = `${meses[ext.mes - 1]} ${ext.anio}`;
+        const value = `${ext.anio}-${String(ext.mes).padStart(2, '0')}`;
+
+        const optionDesde = document.createElement('option');
+        optionDesde.value = value;
+        optionDesde.textContent = label;
+        rangoDesde.appendChild(optionDesde);
+
+        const optionHasta = document.createElement('option');
+        optionHasta.value = value;
+        optionHasta.textContent = label;
+        rangoHasta.appendChild(optionHasta);
+    });
+}
+
+/**
+ * Actualizar extractos seleccionados según el rango de fechas
+ */
+async function actualizarExtractosSeleccionados() {
+    if (!state.clienteSeleccionado || !state.cuentaSeleccionada) return;
+
+    const rangoDesde = document.getElementById('rangoDesde').value;
+    const rangoHasta = document.getElementById('rangoHasta').value;
+
+    if (!rangoDesde || !rangoHasta) {
+        elements.extractoPreviewInfo.classList.add('hidden');
+        return;
+    }
+
+    try {
+        const [anioDesde, mesDesde] = rangoDesde.split('-').map(Number);
+        const [anioHasta, mesHasta] = rangoHasta.split('-').map(Number);
+
+        // Obtener IDs de extractos en el rango
+        const extractosEnRango = auditoriaData.extractosDisponibles.filter(ext => {
+            const extValue = ext.anio * 100 + ext.mes;
+            const desdeValue = anioDesde * 100 + mesDesde;
+            const hastaValue = anioHasta * 100 + mesHasta;
+            return extValue >= desdeValue && extValue <= hastaValue;
+        });
+
+        if (extractosEnRango.length === 0) {
+            elements.extractoPreviewInfo.classList.add('hidden');
+            return;
+        }
+
+        const extractoIds = extractosEnRango.map(e => e.id);
+
+        // Cargar movimientos de los extractos
+        const { data: movimientos, error } = await supabase
+            .from('movimientos_extracto')
+            .select('*')
+            .in('extracto_id', extractoIds);
+
+        if (error) throw error;
+
+        // Procesar movimientos
+        state.datosExtracto = (movimientos || []).map(mov => ({
+            id: mov.id,
+            fecha: new Date(mov.fecha),
+            descripcion: mov.descripcion,
+            origen: mov.origen,
+            debito: parseFloat(mov.debito) || 0,
+            credito: parseFloat(mov.credito) || 0,
+            importe: parseFloat(mov.credito) || parseFloat(mov.debito) || 0
+        }));
+
+        // Mostrar info de extractos cargados
+        elements.extractoMovimientosCount.textContent =
+            `${state.datosExtracto.length} movimientos cargados`;
+        elements.extractoPreviewInfo.classList.remove('hidden');
+
+        // Guardar rango seleccionado
+        state.rangoExtractos = { desde: rangoDesde, hasta: rangoHasta };
+
+        // Actualizar botón de conciliar
+        actualizarBotonConciliar();
+
+    } catch (error) {
+        console.error('Error cargando movimientos:', error);
+    }
+}
+
+/**
+ * Ocultar pasos desde un punto específico
+ */
+function ocultarPasosDesde(desde) {
+    const pasos = ['cuenta', 'mayor', 'tipo', 'tolerancias', 'ejecutar'];
+    const desdeIndex = pasos.indexOf(desde);
+
+    if (desdeIndex < 0) return;
+
+    for (let i = desdeIndex; i < pasos.length; i++) {
+        const paso = pasos[i];
+        const element = elements[`step${paso.charAt(0).toUpperCase() + paso.slice(1)}`];
+        if (element) {
+            element.classList.add('hidden');
+        }
+    }
+
+    // Limpiar estados relacionados
+    if (desdeIndex <= pasos.indexOf('cuenta')) {
+        state.cuentaSeleccionada = null;
+        elements.cuentaSelectPrincipal.value = '';
+        elements.cuentaSeleccionadaInfo.classList.add('hidden');
+        elements.rangoExtractosSection.classList.add('hidden');
+    }
+    if (desdeIndex <= pasos.indexOf('mayor')) {
+        state.datosMayor = [];
+        elements.previewMayor.classList.add('hidden');
+    }
+    if (desdeIndex <= pasos.indexOf('tipo')) {
+        state.tipoConciliacion = null;
+        elements.tipoButtons.forEach(btn => btn.classList.remove('active'));
+    }
+}
+
 // ========== SELECCIÓN DE TIPO ==========
 
 function seleccionarTipo(tipo) {
@@ -319,8 +659,7 @@ function seleccionarTipo(tipo) {
         btn.classList.toggle('active', btn.dataset.tipo === tipo);
     });
 
-    // Mostrar siguiente paso
-    elements.stepArchivos.classList.remove('hidden');
+    // Mostrar siguientes pasos
     elements.stepTolerancias.classList.remove('hidden');
 
     actualizarBotonConciliar();
@@ -372,9 +711,6 @@ function cambiarFuenteExtracto() {
  * Cargar clientes desde Supabase para el selector
  */
 async function cargarClientesAuditoria() {
-    const select = document.getElementById('clienteSelect');
-    if (!select) return;
-
     try {
         let supabaseClient = null;
 
@@ -396,9 +732,20 @@ async function cargarClientesAuditoria() {
 
         if (error) throw error;
 
+        // Guardar en ambos caches para compatibilidad
+        const clientesFormateados = (data || []).map(c => ({
+            id: c.id,
+            nombre: c.razon_social,
+            cuit: c.cuit
+        }));
         auditoriaCache.clientes = data || [];
+        auditoriaData.clientes = clientesFormateados;
+
+        // Renderizar en selector legado y en selector principal
         renderizarSelectClientes(auditoriaCache.clientes);
-        console.log('Clientes de auditoría cargados:', auditoriaCache.clientes.length);
+        poblarSelectorClientesPrincipal(clientesFormateados);
+
+        console.log('Clientes de auditoría cargados:', clientesFormateados.length);
     } catch (error) {
         console.error('Error cargando clientes:', error);
         actualizarEstadoAuditoria('error', 'Error al cargar clientes');
@@ -406,7 +753,23 @@ async function cargarClientesAuditoria() {
 }
 
 /**
- * Renderizar opciones del selector de clientes
+ * Poblar el selector principal de clientes (paso 1)
+ */
+function poblarSelectorClientesPrincipal(clientes) {
+    const select = elements.clienteSelectPrincipal;
+    if (!select) return;
+
+    select.innerHTML = '<option value="">-- Seleccione un cliente --</option>';
+    clientes.forEach(cliente => {
+        const option = document.createElement('option');
+        option.value = cliente.id;
+        option.textContent = cliente.nombre + (cliente.cuit ? ` (${cliente.cuit})` : '');
+        select.appendChild(option);
+    });
+}
+
+/**
+ * Renderizar opciones del selector de clientes (legado)
  */
 function renderizarSelectClientes(clientes) {
     const select = document.getElementById('clienteSelect');
@@ -1579,7 +1942,10 @@ function sleep(ms) {
 // ========== CONCILIACIÓN ==========
 
 function actualizarBotonConciliar() {
-    const habilitado = state.tipoConciliacion &&
+    // Nuevo flujo: Cliente -> Cuenta -> Mayor -> Tipo
+    const habilitado = state.clienteSeleccionado &&
+                       state.cuentaSeleccionada &&
+                       state.tipoConciliacion &&
                        state.datosMayor.length > 0 &&
                        state.datosExtracto.length > 0;
 
@@ -1587,6 +1953,11 @@ function actualizarBotonConciliar() {
 
     if (habilitado) {
         elements.stepEjecutar.classList.remove('hidden');
+    }
+
+    // Mostrar paso de tipo cuando hay mayor cargado
+    if (state.datosMayor.length > 0 && state.datosExtracto.length > 0) {
+        elements.stepTipo.classList.remove('hidden');
     }
 }
 
@@ -2283,6 +2654,8 @@ function llenarTablaConciliados(conciliados) {
             ? match.coincidenciaOverride
             : matchTieneCoincidenciaDescripcion(match);
         const coincidenciaClass = tieneCoincidencia ? ' row-coincidencia-descripcion' : ' row-sin-coincidencia';
+        const isSelected = seleccionConciliados.includes(match.id);
+        const selectedClass = isSelected ? ' row-conciliado-selected' : '';
 
         for (let i = 0; i < maxRows; i++) {
             const m = match.mayor[i];
@@ -2291,7 +2664,15 @@ function llenarTablaConciliados(conciliados) {
             const isSubRow = i > 0;
             const manualClass = match.manual ? ' row-manual' : '';
 
-            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}${coincidenciaClass}">`;
+            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}${coincidenciaClass}${selectedClass}" data-conciliacion-id="${match.id}">`;
+
+            // Checkbox de selección (solo en primera fila)
+            if (isFirst) {
+                const checked = isSelected ? 'checked' : '';
+                html += `<td class="col-checkbox" rowspan="${maxRows}">
+                    <input type="checkbox" class="checkbox-conciliado" data-id="${match.id}" ${checked} onchange="toggleSeleccionConciliado('${match.id}', this.checked)">
+                </td>`;
+            }
 
             // Columnas Mayor
             if (m) {
@@ -2361,13 +2742,17 @@ function llenarTablaConciliados(conciliados) {
         }
     });
 
-    elements.tablaConciliados.innerHTML = html || '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos conciliados</td></tr>';
+    elements.tablaConciliados.innerHTML = html || '<tr><td colspan="12" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos conciliados</td></tr>';
 
     // Actualizar contador en tab
     const countTab = document.getElementById('countConciliadosTab');
     if (countTab) {
         countTab.textContent = `(${conciliados.length})`;
     }
+
+    // Actualizar estado del checkbox "seleccionar todos" y botón de cambio masivo
+    actualizarCheckboxSeleccionarTodosConciliados();
+    actualizarBotonCambioColorMasivo();
 }
 
 function llenarTablaMayorPendiente(pendientes) {
@@ -2472,8 +2857,222 @@ function toggleColorConciliacion(idConciliacion) {
     // Toggle el valor
     match.coincidenciaOverride = !match.coincidenciaOverride;
 
-    // Actualizar la tabla
-    llenarTablaConciliados(state.resultados.conciliados);
+    // Actualizar la tabla según si hay filtros aplicados o no
+    if (hayFiltrosActivosConciliados()) {
+        // Si hay filtros, actualizar el array filtrado también
+        const matchFiltrado = conciliadosFiltrado.find(c => c.id === idConciliacion);
+        if (matchFiltrado) {
+            matchFiltrado.coincidenciaOverride = match.coincidenciaOverride;
+        }
+        renderizarConciliadosFiltrado();
+    } else {
+        llenarTablaConciliados(state.resultados.conciliados);
+    }
+}
+
+/**
+ * Toggle selección de una conciliación para cambio masivo de color
+ */
+function toggleSeleccionConciliado(idConciliacion, checked) {
+    if (checked) {
+        if (!seleccionConciliados.includes(idConciliacion)) {
+            seleccionConciliados.push(idConciliacion);
+        }
+    } else {
+        seleccionConciliados = seleccionConciliados.filter(id => id !== idConciliacion);
+    }
+
+    // Actualizar visual de la fila
+    const filas = document.querySelectorAll(`tr[data-conciliacion-id="${idConciliacion}"]`);
+    filas.forEach(fila => {
+        if (checked) {
+            fila.classList.add('row-conciliado-selected');
+        } else {
+            fila.classList.remove('row-conciliado-selected');
+        }
+    });
+
+    actualizarBotonCambioColorMasivo();
+
+    // Actualizar checkbox "seleccionar todos"
+    actualizarCheckboxSeleccionarTodosConciliados();
+}
+
+/**
+ * Seleccionar/deseleccionar todos los conciliados visibles
+ */
+function seleccionarTodosConciliados(checked) {
+    // Obtener los conciliados visibles (filtrados o todos)
+    const conciliadosVisibles = hayFiltrosActivosConciliados()
+        ? conciliadosFiltrado
+        : (state.resultados ? state.resultados.conciliados : []);
+
+    if (checked) {
+        // Agregar todos los IDs de conciliados visibles
+        conciliadosVisibles.forEach(match => {
+            if (!seleccionConciliados.includes(match.id)) {
+                seleccionConciliados.push(match.id);
+            }
+        });
+    } else {
+        // Remover solo los que están visibles
+        const idsVisibles = conciliadosVisibles.map(m => m.id);
+        seleccionConciliados = seleccionConciliados.filter(id => !idsVisibles.includes(id));
+    }
+
+    // Actualizar todos los checkboxes y clases de fila
+    const checkboxes = document.querySelectorAll('.checkbox-conciliado');
+    checkboxes.forEach(cb => {
+        cb.checked = checked;
+        const fila = cb.closest('tr');
+        if (fila) {
+            if (checked) {
+                fila.classList.add('row-conciliado-selected');
+            } else {
+                fila.classList.remove('row-conciliado-selected');
+            }
+        }
+    });
+
+    actualizarBotonCambioColorMasivo();
+}
+
+/**
+ * Actualizar estado del checkbox "seleccionar todos" basado en la selección actual
+ */
+function actualizarCheckboxSeleccionarTodosConciliados() {
+    const checkboxAll = document.getElementById('selectAllConciliados');
+    if (!checkboxAll) return;
+
+    const conciliadosVisibles = hayFiltrosActivosConciliados()
+        ? conciliadosFiltrado
+        : (state.resultados ? state.resultados.conciliados : []);
+
+    if (conciliadosVisibles.length === 0) {
+        checkboxAll.checked = false;
+        checkboxAll.indeterminate = false;
+        return;
+    }
+
+    const todosSeleccionados = conciliadosVisibles.every(m => seleccionConciliados.includes(m.id));
+    const algunoSeleccionado = conciliadosVisibles.some(m => seleccionConciliados.includes(m.id));
+
+    checkboxAll.checked = todosSeleccionados;
+    checkboxAll.indeterminate = algunoSeleccionado && !todosSeleccionados;
+}
+
+/**
+ * Actualizar visibilidad y contador del botón de cambio de color masivo
+ */
+function actualizarBotonCambioColorMasivo() {
+    const btn = document.getElementById('btnCambiarColorMasivo');
+    const countSpan = document.getElementById('countConciliadosSeleccionados');
+
+    if (!btn || !countSpan) return;
+
+    const count = seleccionConciliados.length;
+    countSpan.textContent = count;
+
+    if (count > 0) {
+        btn.classList.remove('hidden');
+    } else {
+        btn.classList.add('hidden');
+    }
+}
+
+/**
+ * Mostrar menú de cambio de color masivo
+ */
+function mostrarMenuCambioColorMasivo() {
+    if (seleccionConciliados.length === 0) return;
+
+    const overlay = document.getElementById('overlayCambioColor');
+    const menu = document.getElementById('menuCambioColorMasivo');
+    const countSpan = document.getElementById('menuCambioColorCount');
+
+    if (overlay) overlay.classList.remove('hidden');
+    if (menu) menu.classList.remove('hidden');
+    if (countSpan) countSpan.textContent = seleccionConciliados.length;
+}
+
+/**
+ * Cerrar menú de cambio de color masivo
+ */
+function cerrarMenuCambioColorMasivo() {
+    const overlay = document.getElementById('overlayCambioColor');
+    const menu = document.getElementById('menuCambioColorMasivo');
+
+    if (overlay) overlay.classList.add('hidden');
+    if (menu) menu.classList.add('hidden');
+}
+
+/**
+ * Cambiar el color de todas las conciliaciones seleccionadas
+ * @param {boolean} tieneCoincidencia - true para verde, false para naranja
+ */
+function cambiarColorMasivo(tieneCoincidencia) {
+    if (!state.resultados || seleccionConciliados.length === 0) return;
+
+    const cantidadCambiados = seleccionConciliados.length;
+
+    // Actualizar el coincidenciaOverride de cada conciliación seleccionada
+    seleccionConciliados.forEach(idConciliacion => {
+        const match = state.resultados.conciliados.find(c => c.id === idConciliacion);
+        if (match) {
+            match.coincidenciaOverride = tieneCoincidencia;
+        }
+
+        // También actualizar en el array filtrado si existe
+        if (conciliadosFiltrado.length > 0) {
+            const matchFiltrado = conciliadosFiltrado.find(c => c.id === idConciliacion);
+            if (matchFiltrado) {
+                matchFiltrado.coincidenciaOverride = tieneCoincidencia;
+            }
+        }
+    });
+
+    // Cerrar el menú
+    cerrarMenuCambioColorMasivo();
+
+    // Limpiar selección
+    limpiarSeleccionConciliados();
+
+    // Re-renderizar la tabla
+    if (hayFiltrosActivosConciliados()) {
+        renderizarConciliadosFiltrado();
+    } else {
+        llenarTablaConciliados(state.resultados.conciliados);
+    }
+
+    mostrarMensaje(`Se cambió el color de ${cantidadCambiados} conciliaciones`, 'success');
+}
+
+/**
+ * Limpiar selección de conciliados
+ */
+function limpiarSeleccionConciliados() {
+    seleccionConciliados = [];
+
+    // Actualizar todos los checkboxes
+    const checkboxes = document.querySelectorAll('.checkbox-conciliado');
+    checkboxes.forEach(cb => {
+        cb.checked = false;
+    });
+
+    // Quitar clases de selección
+    const filasSeleccionadas = document.querySelectorAll('.row-conciliado-selected');
+    filasSeleccionadas.forEach(fila => {
+        fila.classList.remove('row-conciliado-selected');
+    });
+
+    // Actualizar checkbox "seleccionar todos"
+    const checkboxAll = document.getElementById('selectAllConciliados');
+    if (checkboxAll) {
+        checkboxAll.checked = false;
+        checkboxAll.indeterminate = false;
+    }
+
+    actualizarBotonCambioColorMasivo();
 }
 
 /**
@@ -3904,8 +4503,30 @@ function filtrarConciliados(conciliaciones) {
 function renderizarConciliadosFiltrado() {
     let html = '';
 
-    conciliadosFiltrado.forEach((match, idx) => {
+    // Ordenar por color: verdes (con coincidencia) arriba, naranjas (sin coincidencia) abajo
+    const conciliadosOrdenados = [...conciliadosFiltrado].sort((a, b) => {
+        const tieneCoincidenciaA = a.coincidenciaOverride !== undefined
+            ? a.coincidenciaOverride
+            : matchTieneCoincidenciaDescripcion(a);
+        const tieneCoincidenciaB = b.coincidenciaOverride !== undefined
+            ? b.coincidenciaOverride
+            : matchTieneCoincidenciaDescripcion(b);
+
+        // Verdes (true) primero, naranjas (false) después
+        if (tieneCoincidenciaA === tieneCoincidenciaB) return 0;
+        return tieneCoincidenciaA ? -1 : 1;
+    });
+
+    conciliadosOrdenados.forEach((match, idx) => {
         const maxRows = Math.max(match.mayor.length, match.extracto.length);
+
+        // Determinar clase según coincidencia de descripción
+        const tieneCoincidencia = match.coincidenciaOverride !== undefined
+            ? match.coincidenciaOverride
+            : matchTieneCoincidenciaDescripcion(match);
+        const coincidenciaClass = tieneCoincidencia ? ' row-coincidencia-descripcion' : ' row-sin-coincidencia';
+        const isSelected = seleccionConciliados.includes(match.id);
+        const selectedClass = isSelected ? ' row-conciliado-selected' : '';
 
         for (let i = 0; i < maxRows; i++) {
             const m = match.mayor[i];
@@ -3914,7 +4535,15 @@ function renderizarConciliadosFiltrado() {
             const isSubRow = i > 0;
             const manualClass = match.manual ? ' row-manual' : '';
 
-            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}">`;
+            html += `<tr class="${isFirst ? 'match-group' : 'sub-row'}${manualClass}${coincidenciaClass}${selectedClass}" data-conciliacion-id="${match.id}">`;
+
+            // Checkbox de selección (solo en primera fila)
+            if (isFirst) {
+                const checked = isSelected ? 'checked' : '';
+                html += `<td class="col-checkbox" rowspan="${maxRows}">
+                    <input type="checkbox" class="checkbox-conciliado" data-id="${match.id}" ${checked} onchange="toggleSeleccionConciliado('${match.id}', this.checked)">
+                </td>`;
+            }
 
             // Columnas Mayor
             if (m) {
@@ -3959,9 +4588,17 @@ function renderizarConciliadosFiltrado() {
                     const tooltipText = `Reproceso #${match.parametrosReproceso.numeroReproceso}: ${match.parametrosReproceso.toleranciaFecha} días, $${match.parametrosReproceso.toleranciaImporte.toLocaleString('es-AR')}`;
                     reprocesoBadge = `<span class="badge-reproceso" title="${tooltipText}">🔄 Rep</span>`;
                 }
+                // Botón para cambiar categoría de color (verde/naranja)
+                const colorBtnIcon = tieneCoincidencia ? '🟢' : '🟠';
+                const colorBtnTitle = tieneCoincidencia
+                    ? 'Marcar como sin coincidencia (naranja)'
+                    : 'Marcar como con coincidencia (verde)';
                 html += `
                     <td class="col-action">
                         ${manualBadge}${reprocesoBadge}
+                        <button class="btn-toggle-color" onclick="toggleColorConciliacion('${match.id}')" title="${colorBtnTitle}">
+                            ${colorBtnIcon}
+                        </button>
                         <button class="btn-desconciliar" onclick="desconciliar('${match.id}')" title="Desconciliar">
                             ✕
                         </button>
@@ -3975,13 +4612,17 @@ function renderizarConciliadosFiltrado() {
         }
     });
 
-    elements.tablaConciliados.innerHTML = html || '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:20px;">No hay conciliaciones que coincidan con los filtros</td></tr>';
+    elements.tablaConciliados.innerHTML = html || '<tr><td colspan="12" class="text-muted" style="text-align:center;padding:20px;">No hay conciliaciones que coincidan con los filtros</td></tr>';
 
     // Actualizar contador en tab
     const countTab = document.getElementById('countConciliadosTab');
     if (countTab) {
         countTab.textContent = `(${conciliadosFiltrado.length})`;
     }
+
+    // Actualizar estado del checkbox "seleccionar todos" y botón de cambio masivo
+    actualizarCheckboxSeleccionarTodosConciliados();
+    actualizarBotonCambioColorMasivo();
 }
 
 /**
@@ -4625,6 +5266,442 @@ function descargarReporte() {
     XLSX.writeFile(wb, `Conciliacion_${tipo}_${fecha}.xlsx`);
 }
 
+// ========== GUARDADO DE CONCILIACIONES ==========
+
+/**
+ * Guardar la conciliación actual en Supabase
+ */
+async function guardarConciliacion() {
+    if (!state.resultados) {
+        mostrarMensaje('No hay resultados para guardar', 'error');
+        return;
+    }
+
+    if (!state.clienteSeleccionado || !state.cuentaSeleccionada) {
+        mostrarMensaje('Debe seleccionar cliente y cuenta para guardar', 'error');
+        return;
+    }
+
+    const btnGuardar = document.getElementById('btnGuardarConciliacion');
+    if (btnGuardar) {
+        btnGuardar.disabled = true;
+        btnGuardar.innerHTML = '⏳ Guardando...';
+    }
+
+    try {
+        // Preparar datos para guardar
+        const datosAGuardar = {
+            cliente_id: state.clienteSeleccionado.id,
+            cuenta_bancaria_id: state.cuentaSeleccionada.id,
+            tipo: state.tipoConciliacion,
+            rango_desde: state.rangoExtractos?.desde || null,
+            rango_hasta: state.rangoExtractos?.hasta || null,
+            tolerancia_fecha: state.toleranciaFecha,
+            tolerancia_importe: state.toleranciaImporte,
+            datos: {
+                conciliados: state.resultados.conciliados.map(c => ({
+                    id: c.id,
+                    tipo: c.tipo,
+                    diferencia: c.diferencia,
+                    manual: c.manual || false,
+                    coincidenciaOverride: c.coincidenciaOverride,
+                    mayor: c.mayor.map(m => ({
+                        id: m.id,
+                        fecha: m.fecha,
+                        numeroAsiento: m.numeroAsiento,
+                        leyenda: m.leyenda,
+                        importe: m.importe
+                    })),
+                    extracto: c.extracto.map(e => ({
+                        id: e.id,
+                        fecha: e.fecha,
+                        descripcion: e.descripcion,
+                        origen: e.origen,
+                        importe: e.importe
+                    }))
+                })),
+                mayorNoConciliado: state.resultados.mayorNoConciliado.map(m => ({
+                    id: m.id,
+                    fecha: m.fecha,
+                    numeroAsiento: m.numeroAsiento,
+                    leyenda: m.leyenda,
+                    importe: m.importe
+                })),
+                extractoNoConciliado: state.resultados.extractoNoConciliado.map(e => ({
+                    id: e.id,
+                    fecha: e.fecha,
+                    descripcion: e.descripcion,
+                    origen: e.origen,
+                    importe: e.importe
+                })),
+                eliminados: state.eliminados
+            },
+            historial_procesamiento: historialProcesamiento,
+            fecha_conciliacion: new Date().toISOString()
+        };
+
+        // Verificar si ya existe una conciliación para este cliente/cuenta/tipo
+        const { data: existente, error: errorBusqueda } = await supabase
+            .from('conciliaciones_guardadas')
+            .select('id')
+            .eq('cliente_id', state.clienteSeleccionado.id)
+            .eq('cuenta_bancaria_id', state.cuentaSeleccionada.id)
+            .eq('tipo', state.tipoConciliacion)
+            .single();
+
+        let resultado;
+        if (existente && !errorBusqueda) {
+            // Actualizar existente
+            const { error } = await supabase
+                .from('conciliaciones_guardadas')
+                .update(datosAGuardar)
+                .eq('id', existente.id);
+
+            if (error) throw error;
+            mostrarMensaje('Conciliación actualizada correctamente', 'success');
+        } else {
+            // Crear nueva
+            const { error } = await supabase
+                .from('conciliaciones_guardadas')
+                .insert([datosAGuardar]);
+
+            if (error) throw error;
+            mostrarMensaje('Conciliación guardada correctamente', 'success');
+        }
+
+    } catch (error) {
+        console.error('Error guardando conciliación:', error);
+        mostrarMensaje('Error al guardar: ' + (error.message || 'Error desconocido'), 'error');
+    } finally {
+        if (btnGuardar) {
+            btnGuardar.disabled = false;
+            btnGuardar.innerHTML = '💾 Guardar Conciliación';
+        }
+    }
+}
+
+/**
+ * Cargar conciliaciones guardadas para el cliente/cuenta actual
+ */
+async function cargarConciliacionesGuardadas() {
+    if (!state.clienteSeleccionado || !state.cuentaSeleccionada) return [];
+
+    try {
+        const { data, error } = await supabase
+            .from('conciliaciones_guardadas')
+            .select('*')
+            .eq('cliente_id', state.clienteSeleccionado.id)
+            .eq('cuenta_bancaria_id', state.cuentaSeleccionada.id)
+            .order('fecha_conciliacion', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('Error cargando conciliaciones guardadas:', error);
+        return [];
+    }
+}
+
+/**
+ * Cargar una conciliación guardada específica
+ */
+async function cargarConciliacionGuardada(conciliacionId) {
+    try {
+        const { data, error } = await supabase
+            .from('conciliaciones_guardadas')
+            .select('*')
+            .eq('id', conciliacionId)
+            .single();
+
+        if (error) throw error;
+
+        if (data) {
+            // Restaurar estado
+            state.tipoConciliacion = data.tipo;
+            state.toleranciaFecha = data.tolerancia_fecha;
+            state.toleranciaImporte = data.tolerancia_importe;
+            state.rangoExtractos = {
+                desde: data.rango_desde,
+                hasta: data.rango_hasta
+            };
+
+            // Restaurar resultados
+            if (data.datos) {
+                state.resultados = {
+                    conciliados: data.datos.conciliados || [],
+                    mayorNoConciliado: data.datos.mayorNoConciliado || [],
+                    extractoNoConciliado: data.datos.extractoNoConciliado || []
+                };
+                state.eliminados = data.datos.eliminados || [];
+            }
+
+            // Restaurar historial
+            historialProcesamiento = data.historial_procesamiento || [];
+
+            // Actualizar UI
+            elements.tipoButtons.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tipo === data.tipo);
+            });
+            elements.toleranciaFecha.value = data.tolerancia_fecha;
+            elements.toleranciaImporte.value = data.tolerancia_importe;
+
+            // Mostrar resultados
+            mostrarResultados(state.resultados);
+
+            mostrarMensaje('Conciliación cargada correctamente', 'success');
+        }
+    } catch (error) {
+        console.error('Error cargando conciliación:', error);
+        mostrarMensaje('Error al cargar la conciliación', 'error');
+    }
+}
+
+// ========== ACTUALIZAR MAYOR CONTABLE ==========
+
+// Variables para almacenar los movimientos del archivo de actualización
+let movimientosArchivoActualizar = [];
+let movimientosNuevosDetectados = [];
+
+/**
+ * Mostrar el modal para actualizar el mayor contable
+ */
+function mostrarModalActualizarMayor() {
+    const modal = document.getElementById('modalActualizarMayor');
+    const dropZone = document.getElementById('dropZoneActualizarMayor');
+    const fileInput = document.getElementById('fileActualizarMayor');
+    const preview = document.getElementById('previewActualizarMayor');
+
+    // Reiniciar estado del modal
+    movimientosArchivoActualizar = [];
+    movimientosNuevosDetectados = [];
+    preview.classList.add('hidden');
+    dropZone.style.display = 'flex';
+
+    // Configurar eventos de carga de archivo
+    if (!dropZone.dataset.initialized) {
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                procesarArchivoActualizarMayor(e.target.files[0]);
+            }
+        });
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                procesarArchivoActualizarMayor(e.dataTransfer.files[0]);
+            }
+        });
+
+        dropZone.dataset.initialized = 'true';
+    }
+
+    modal.classList.remove('hidden');
+}
+
+/**
+ * Cerrar el modal de actualizar mayor
+ */
+function cerrarModalActualizarMayor() {
+    const modal = document.getElementById('modalActualizarMayor');
+    const fileInput = document.getElementById('fileActualizarMayor');
+
+    modal.classList.add('hidden');
+    fileInput.value = '';
+    movimientosArchivoActualizar = [];
+    movimientosNuevosDetectados = [];
+}
+
+/**
+ * Procesar el archivo subido para actualizar el mayor
+ */
+async function procesarArchivoActualizarMayor(file) {
+    const dropZone = document.getElementById('dropZoneActualizarMayor');
+    const preview = document.getElementById('previewActualizarMayor');
+    const btnConfirmar = document.getElementById('btnConfirmarActualizarMayor');
+
+    try {
+        // Leer y parsear el archivo Excel
+        const data = await leerExcel(file);
+        movimientosArchivoActualizar = parsearMayor(data);
+
+        // Obtener los números de asiento existentes
+        const numerosAsientoExistentes = new Set();
+
+        // Desde los conciliados
+        if (state.resultados && state.resultados.conciliados) {
+            state.resultados.conciliados.forEach(c => {
+                if (c.mayor && Array.isArray(c.mayor)) {
+                    c.mayor.forEach(m => {
+                        if (m.numeroAsiento) {
+                            numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
+                        }
+                    });
+                }
+            });
+        }
+
+        // Desde el mayor no conciliado
+        if (state.resultados && state.resultados.mayorNoConciliado) {
+            state.resultados.mayorNoConciliado.forEach(m => {
+                if (m.numeroAsiento) {
+                    numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
+                }
+            });
+        }
+
+        // Desde los datos originales del mayor
+        if (state.datosMayor) {
+            state.datosMayor.forEach(m => {
+                if (m.numeroAsiento) {
+                    numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
+                }
+            });
+        }
+
+        // Filtrar movimientos nuevos (que no existen por número de asiento)
+        movimientosNuevosDetectados = movimientosArchivoActualizar.filter(m => {
+            const numAsiento = String(m.numeroAsiento || '').trim();
+            return numAsiento && !numerosAsientoExistentes.has(numAsiento);
+        });
+
+        // Calcular estadísticas
+        const totalMovimientos = movimientosArchivoActualizar.length;
+        const nuevos = movimientosNuevosDetectados.length;
+        const existentes = totalMovimientos - nuevos;
+
+        // Actualizar UI
+        document.getElementById('totalMovimientosArchivo').textContent = totalMovimientos;
+        document.getElementById('movimientosNuevos').textContent = nuevos;
+        document.getElementById('movimientosExistentes').textContent = existentes;
+
+        // Mostrar/ocultar botón según si hay nuevos
+        if (nuevos > 0) {
+            btnConfirmar.disabled = false;
+            btnConfirmar.textContent = `✅ Agregar ${nuevos} movimiento${nuevos > 1 ? 's' : ''} nuevo${nuevos > 1 ? 's' : ''}`;
+        } else {
+            btnConfirmar.disabled = true;
+            btnConfirmar.textContent = 'No hay movimientos nuevos para agregar';
+        }
+
+        // Mostrar preview y ocultar dropzone
+        dropZone.style.display = 'none';
+        preview.classList.remove('hidden');
+
+    } catch (error) {
+        console.error('Error procesando archivo:', error);
+        mostrarMensaje('Error al procesar el archivo: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Confirmar y agregar los movimientos nuevos al mayor no conciliado
+ */
+function confirmarActualizarMayor() {
+    if (movimientosNuevosDetectados.length === 0) {
+        mostrarMensaje('No hay movimientos nuevos para agregar', 'error');
+        return;
+    }
+
+    // Filtrar según el tipo de conciliación actual (débitos o créditos)
+    let movimientosFiltrados;
+    if (state.tipoConciliacion === 'debitos') {
+        // Para débitos: movimientos con Debe > 0 (esDebe = true)
+        movimientosFiltrados = movimientosNuevosDetectados.filter(m => m.esDebe);
+    } else {
+        // Para créditos: movimientos con Haber > 0 (esDebe = false)
+        movimientosFiltrados = movimientosNuevosDetectados.filter(m => !m.esDebe);
+    }
+
+    if (movimientosFiltrados.length === 0) {
+        mostrarMensaje(`No hay movimientos nuevos de ${state.tipoConciliacion} para agregar`, 'error');
+        cerrarModalActualizarMayor();
+        return;
+    }
+
+    // Generar IDs únicos para los nuevos movimientos
+    const maxIdActual = obtenerMaxIdMayor();
+    movimientosFiltrados = movimientosFiltrados.map((m, index) => ({
+        ...m,
+        id: `M${maxIdActual + index + 1}`,
+        usado: false
+    }));
+
+    // Agregar al mayor no conciliado
+    if (!state.resultados) {
+        state.resultados = {
+            conciliados: [],
+            mayorNoConciliado: [],
+            extractoNoConciliado: []
+        };
+    }
+
+    state.resultados.mayorNoConciliado = [
+        ...state.resultados.mayorNoConciliado,
+        ...movimientosFiltrados
+    ];
+
+    // También agregar a datosMayor para futuras referencias
+    if (state.datosMayor) {
+        state.datosMayor = [...state.datosMayor, ...movimientosFiltrados];
+    }
+
+    // Actualizar UI
+    mostrarResultados(state.resultados);
+
+    // Cerrar modal y mostrar mensaje
+    cerrarModalActualizarMayor();
+    mostrarMensaje(`Se agregaron ${movimientosFiltrados.length} movimientos nuevos al mayor no conciliado`, 'success');
+}
+
+/**
+ * Obtener el máximo ID numérico del mayor existente
+ */
+function obtenerMaxIdMayor() {
+    let maxId = 0;
+
+    const extraerId = (id) => {
+        if (typeof id === 'string' && id.startsWith('M')) {
+            const num = parseInt(id.substring(1), 10);
+            if (!isNaN(num) && num > maxId) {
+                maxId = num;
+            }
+        }
+    };
+
+    // Revisar conciliados
+    if (state.resultados && state.resultados.conciliados) {
+        state.resultados.conciliados.forEach(c => {
+            if (c.mayor && Array.isArray(c.mayor)) {
+                c.mayor.forEach(m => extraerId(m.id));
+            }
+        });
+    }
+
+    // Revisar mayor no conciliado
+    if (state.resultados && state.resultados.mayorNoConciliado) {
+        state.resultados.mayorNoConciliado.forEach(m => extraerId(m.id));
+    }
+
+    // Revisar datos originales
+    if (state.datosMayor) {
+        state.datosMayor.forEach(m => extraerId(m.id));
+    }
+
+    return maxId;
+}
+
 // ========== UTILIDADES ==========
 
 function formatearFecha(fecha) {
@@ -4743,6 +5820,7 @@ function reiniciar() {
 
     // Resetear selección y contador
     seleccion = { mayor: [], extracto: [] };
+    seleccionConciliados = [];
     conciliacionIdCounter = 0;
 
     // Resetear filtros
@@ -4753,11 +5831,44 @@ function reiniciar() {
 
     // Resetear UI
     elements.tipoButtons.forEach(btn => btn.classList.remove('active'));
+
+    // Ocultar todos los pasos excepto el primero (cliente)
+    elements.stepCuenta.classList.add('hidden');
+    elements.stepMayor.classList.add('hidden');
+    elements.stepTipo.classList.add('hidden');
     elements.stepArchivos.classList.add('hidden');
     elements.stepTolerancias.classList.add('hidden');
     elements.stepEjecutar.classList.add('hidden');
     elements.resultados.classList.add('hidden');
     elements.selectionBar.classList.add('hidden');
+
+    // Resetear selectores de cliente y cuenta
+    if (elements.clienteSelectPrincipal) {
+        elements.clienteSelectPrincipal.value = '';
+    }
+    if (elements.clienteSearchPrincipal) {
+        elements.clienteSearchPrincipal.value = '';
+    }
+    if (elements.clienteSeleccionadoInfo) {
+        elements.clienteSeleccionadoInfo.classList.add('hidden');
+    }
+    if (elements.cuentaSelectPrincipal) {
+        elements.cuentaSelectPrincipal.value = '';
+    }
+    if (elements.cuentaSeleccionadaInfo) {
+        elements.cuentaSeleccionadaInfo.classList.add('hidden');
+    }
+    if (elements.rangoExtractosSection) {
+        elements.rangoExtractosSection.classList.add('hidden');
+    }
+    if (elements.extractoPreviewInfo) {
+        elements.extractoPreviewInfo.classList.add('hidden');
+    }
+
+    // Re-poblar selector de clientes
+    if (auditoriaData.clientes.length > 0) {
+        poblarSelectorClientesPrincipal(auditoriaData.clientes);
+    }
 
     // Resetear archivos
     eliminarArchivo('mayor');
