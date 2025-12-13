@@ -2825,7 +2825,9 @@ function llenarTablaExtractoPendiente(pendientes) {
 function toggleColorConciliacion(idConciliacion) {
     if (!state.resultados) return;
 
-    const match = state.resultados.conciliados.find(c => c.id === idConciliacion);
+    // Usar String() para consistencia en la comparación
+    const idStr = String(idConciliacion);
+    const match = state.resultados.conciliados.find(c => String(c.id) === idStr);
     if (!match) {
         console.warn('No se encontró la conciliación:', idConciliacion);
         return;
@@ -2838,6 +2840,17 @@ function toggleColorConciliacion(idConciliacion) {
 
     // Toggle el valor
     match.coincidenciaOverride = !match.coincidenciaOverride;
+    const nuevoColor = match.coincidenciaOverride ? 'verde' : 'naranja';
+    console.log('Cambiado color de:', idStr, 'a', nuevoColor);
+
+    // Mostrar automáticamente la sección destino si está oculta
+    if (match.coincidenciaOverride && !gruposConciliados.verdesVisible) {
+        gruposConciliados.verdesVisible = true;
+        console.log('Mostrando sección de verdes automáticamente');
+    } else if (!match.coincidenciaOverride && !gruposConciliados.naranjasVisible) {
+        gruposConciliados.naranjasVisible = true;
+        console.log('Mostrando sección de naranjas automáticamente');
+    }
 
     // Re-renderizar por grupos (el elemento se moverá de verde a naranja o viceversa)
     renderizarConciliadosPorGrupos();
@@ -3052,6 +3065,17 @@ function cambiarColorMasivo(tieneCoincidencia) {
 
     // Limpiar selección
     limpiarSeleccionConciliados();
+
+    // Mostrar automáticamente la sección destino si hay cambios
+    if (cambiosRealizados > 0) {
+        if (tieneCoincidencia && !gruposConciliados.verdesVisible) {
+            gruposConciliados.verdesVisible = true;
+            console.log('Mostrando sección de verdes automáticamente');
+        } else if (!tieneCoincidencia && !gruposConciliados.naranjasVisible) {
+            gruposConciliados.naranjasVisible = true;
+            console.log('Mostrando sección de naranjas automáticamente');
+        }
+    }
 
     // Re-renderizar por grupos
     renderizarConciliadosPorGrupos();
