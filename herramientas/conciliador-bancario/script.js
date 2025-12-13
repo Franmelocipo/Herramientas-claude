@@ -724,14 +724,24 @@ async function cargarClientesAuditoria() {
     try {
         let supabaseClient = null;
 
+        // Intentar usar waitForSupabase si está disponible
         if (typeof waitForSupabase === 'function') {
             supabaseClient = await waitForSupabase();
-        } else if (typeof supabase !== 'undefined' && supabase) {
-            supabaseClient = supabase;
+        }
+
+        // Fallback: esperar a que la variable global supabase esté disponible
+        if (!supabaseClient) {
+            for (let i = 0; i < 50; i++) {
+                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
+                    supabaseClient = supabase;
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
         }
 
         if (!supabaseClient) {
-            console.warn('Supabase no disponible');
+            console.warn('Supabase no disponible después de esperar');
             return;
         }
 
