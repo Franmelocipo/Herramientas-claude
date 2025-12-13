@@ -2822,7 +2822,13 @@ function llenarTablaExtractoPendiente(pendientes) {
  * Cambiar la categoría de color de una conciliación (verde/naranja)
  * Verde = coincidencia de descripción, Naranja = sin coincidencia
  */
-function toggleColorConciliacion(idConciliacion) {
+function toggleColorConciliacion(idConciliacion, event) {
+    // Detener propagación del evento para evitar que se disparen otros handlers
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+
     if (!state.resultados) return;
 
     // Usar String() para consistencia en la comparación
@@ -4692,7 +4698,7 @@ function renderizarConciliadosFiltrado() {
                 html += `
                     <td class="col-action">
                         ${manualBadge}${reprocesoBadge}
-                        <button class="btn-toggle-color" onclick="toggleColorConciliacion('${match.id}')" title="${colorBtnTitle}">
+                        <button class="btn-toggle-color" onclick="toggleColorConciliacion('${match.id}', event)" title="${colorBtnTitle}">
                             ${colorBtnIcon}
                         </button>
                         <button class="btn-desconciliar" onclick="desconciliar('${match.id}')" title="Desconciliar">
@@ -4866,8 +4872,14 @@ function limpiarFiltrosConciliados() {
 /**
  * Toggle visibilidad del grupo de conciliados verdes
  */
-function toggleGrupoVerdes() {
+function toggleGrupoVerdes(event) {
+    // Detener propagación si hay evento
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
     console.log('toggleGrupoVerdes llamado, estado actual:', gruposConciliados.verdesVisible);
+    console.trace('Stack trace de toggleGrupoVerdes');
     gruposConciliados.verdesVisible = !gruposConciliados.verdesVisible;
     console.log('nuevo estado verdes:', gruposConciliados.verdesVisible);
     actualizarVistaGruposConciliados();
@@ -4876,7 +4888,12 @@ function toggleGrupoVerdes() {
 /**
  * Toggle visibilidad del grupo de conciliados naranjas
  */
-function toggleGrupoNaranjas() {
+function toggleGrupoNaranjas(event) {
+    // Detener propagación si hay evento
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
     console.log('toggleGrupoNaranjas llamado, estado actual:', gruposConciliados.naranjasVisible);
     gruposConciliados.naranjasVisible = !gruposConciliados.naranjasVisible;
     console.log('nuevo estado naranjas:', gruposConciliados.naranjasVisible);
@@ -5365,7 +5382,7 @@ function renderizarGrupoConciliados(grupo, conciliadosFiltrados, totalOriginal) 
                 html += `
                     <td class="col-action">
                         ${tipoBadge}${manualBadge}${reprocesoBadge}
-                        <button class="btn-toggle-color" onclick="toggleColorConciliacion('${match.id}')" title="${colorBtnTitle}">
+                        <button class="btn-toggle-color" onclick="toggleColorConciliacion('${match.id}', event)" title="${colorBtnTitle}">
                             ${colorBtnIcon}
                         </button>
                         <button class="btn-desconciliar" onclick="desconciliar('${match.id}')" title="Desconciliar">
