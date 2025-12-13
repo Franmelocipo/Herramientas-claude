@@ -70,6 +70,11 @@
                             <span class="extracto-auto-icon">📋</span>
                             <span class="extracto-auto-text">Los extractos se cargarán automáticamente de Auditoría</span>
                         </div>
+                        <div class="gestion-btn-wrapper">
+                            <button id="btnGestionConciliaciones" class="btn-gestion-conciliaciones" onclick="abrirGestionConciliaciones()" disabled>
+                                <span>📂</span> Gestionar Conciliaciones Guardadas
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <!-- Rango de fechas para extractos -->
@@ -788,28 +793,72 @@
         <div id="conciliados-progreso" class="conciliados-progreso"></div>
     </div>
 
-    <!-- Modal de conciliaciones guardadas -->
+    <!-- Modal de conciliaciones guardadas - Selección -->
     <div id="overlay-conciliacion-guardada" class="overlay-eliminar"></div>
-    <div id="modal-conciliacion-guardada" class="modal-eliminar" style="max-width: 500px;">
+    <div id="modal-conciliacion-guardada" class="modal-eliminar modal-gestion-conciliaciones" style="max-width: 600px;">
         <div class="modal-eliminar-header">
-            <h3>📂 Conciliación Guardada Encontrada</h3>
+            <h3>📂 Conciliaciones Guardadas</h3>
             <button class="modal-close-btn" onclick="cerrarModalConciliacionGuardada()">✕</button>
         </div>
         <div class="modal-eliminar-body">
-            <p class="modal-eliminar-pregunta">Se encontró una conciliación guardada para esta cuenta. ¿Desea cargarla?</p>
+            <p class="modal-eliminar-pregunta">Se encontraron conciliaciones guardadas para esta cuenta. Seleccione una para cargar:</p>
 
-            <div id="conciliacion-guardada-detalles" class="eliminar-detalles" style="text-align: left;">
-                <!-- Contenido dinámico -->
+            <div id="conciliaciones-seleccion-lista" class="conciliaciones-seleccion-lista">
+                <!-- Lista dinámica de conciliaciones -->
             </div>
 
             <div class="eliminar-aviso">
                 <span class="aviso-icono">💡</span>
-                <span>Al cargar la conciliación, se restaurarán todos los movimientos conciliados y pendientes.</span>
+                <span>Al cargar una conciliación, se restaurarán todos los movimientos conciliados y pendientes.</span>
             </div>
         </div>
         <div class="modal-eliminar-footer">
             <button class="btn-cancelar" onclick="cerrarModalConciliacionGuardada()">Nueva Conciliación</button>
-            <button class="btn-confirmar-eliminar" style="background: #28a745;" onclick="confirmarCargarConciliacion()">📂 Cargar Guardada</button>
+            <button id="btnConfirmarCargarConciliacion" class="btn-confirmar-eliminar" style="background: #28a745;" onclick="confirmarCargarConciliacionSeleccionada()" disabled>📂 Cargar Seleccionada</button>
+        </div>
+    </div>
+
+    <!-- Modal de gestión de conciliaciones -->
+    <div id="overlay-gestion-conciliaciones" class="overlay-eliminar"></div>
+    <div id="modal-gestion-conciliaciones" class="modal-eliminar modal-gestion-conciliaciones">
+        <div class="modal-eliminar-header">
+            <h3>📋 Gestión de Conciliaciones Guardadas</h3>
+            <button class="modal-close-btn" onclick="cerrarGestionConciliaciones()">✕</button>
+        </div>
+        <div class="modal-eliminar-body">
+            <p class="modal-eliminar-pregunta">Administre las conciliaciones guardadas para este cliente y cuenta:</p>
+
+            <div id="gestion-conciliaciones-lista" class="conciliaciones-lista">
+                <!-- Lista dinámica de conciliaciones -->
+            </div>
+        </div>
+        <div class="modal-eliminar-footer">
+            <button class="btn-cancelar" onclick="cerrarGestionConciliaciones()">Cerrar</button>
+        </div>
+    </div>
+
+    <!-- Modal de confirmar eliminación de conciliación -->
+    <div id="overlay-confirmar-eliminar-conciliacion" class="overlay-eliminar"></div>
+    <div id="modal-confirmar-eliminar-conciliacion" class="modal-eliminar" style="max-width: 450px;">
+        <div class="modal-eliminar-header">
+            <h3>🗑️ Eliminar Conciliación</h3>
+            <button class="modal-close-btn" onclick="cerrarConfirmarEliminarConciliacion()">✕</button>
+        </div>
+        <div class="modal-eliminar-body">
+            <p class="modal-eliminar-pregunta">¿Está seguro de eliminar esta conciliación guardada?</p>
+
+            <div id="eliminar-conciliacion-detalles" class="eliminar-detalles">
+                <!-- Detalles dinámicos -->
+            </div>
+
+            <div class="eliminar-aviso">
+                <span class="aviso-icono">⚠️</span>
+                <span>Esta acción no se puede deshacer. Se perderán todos los datos de la conciliación.</span>
+            </div>
+        </div>
+        <div class="modal-eliminar-footer">
+            <button class="btn-cancelar" onclick="cerrarConfirmarEliminarConciliacion()">Cancelar</button>
+            <button class="btn-confirmar-eliminar" onclick="ejecutarEliminarConciliacion()">🗑️ Eliminar</button>
         </div>
     </div>
 
