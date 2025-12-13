@@ -75,6 +75,17 @@
                                 <span>📂</span> Gestionar Conciliaciones Guardadas
                             </button>
                         </div>
+                        <!-- Información de conciliación cargada -->
+                        <div id="conciliacionCargadaWrapper" class="conciliacion-cargada-wrapper hidden">
+                            <div class="conciliacion-cargada-info">
+                                <span class="conciliacion-cargada-icon">📄</span>
+                                <span class="conciliacion-cargada-label">Trabajando en:</span>
+                                <span id="nombreConciliacionCargada" class="conciliacion-cargada-nombre"></span>
+                            </div>
+                            <button class="btn-eliminar-cargada" onclick="confirmarEliminarConciliacionCargada()" title="Eliminar esta conciliación de la base de datos">
+                                🗑️ Eliminar
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <!-- Rango de fechas para extractos -->
@@ -976,6 +987,31 @@
         <div class="modal-eliminar-footer">
             <button class="btn-cancelar" onclick="cerrarConfirmarEliminarConciliacion()">Cancelar</button>
             <button class="btn-confirmar-eliminar" onclick="ejecutarEliminarConciliacion()">🗑️ Eliminar</button>
+        </div>
+    </div>
+
+    <!-- Modal de confirmar eliminación de conciliación cargada -->
+    <div id="overlay-confirmar-eliminar-cargada" class="overlay-eliminar"></div>
+    <div id="modal-confirmar-eliminar-cargada" class="modal-eliminar" style="max-width: 450px;">
+        <div class="modal-eliminar-header">
+            <h3>🗑️ Eliminar Conciliación Cargada</h3>
+            <button class="modal-close-btn" onclick="cerrarConfirmarEliminarCargada()">✕</button>
+        </div>
+        <div class="modal-eliminar-body">
+            <p class="modal-eliminar-pregunta">¿Está seguro de eliminar la conciliación que está trabajando?</p>
+
+            <div id="eliminar-cargada-detalles" class="eliminar-detalles">
+                <!-- Detalles dinámicos -->
+            </div>
+
+            <div class="eliminar-aviso">
+                <span class="aviso-icono">⚠️</span>
+                <span>Esta acción eliminará permanentemente los datos de la base de datos.</span>
+            </div>
+        </div>
+        <div class="modal-eliminar-footer">
+            <button class="btn-cancelar" onclick="cerrarConfirmarEliminarCargada()">Cancelar</button>
+            <button class="btn-confirmar-eliminar" onclick="ejecutarEliminarConciliacionCargada()">🗑️ Eliminar</button>
         </div>
     </div>
 
