@@ -58,6 +58,12 @@ let auditoriaCache = {
     extractosDisponibles: []
 };
 
+// Datos formateados de auditoría para los selectores
+let auditoriaData = {
+    clientes: [],
+    cuentas: []
+};
+
 // Estado de selección para conciliación manual
 let seleccion = {
     mayor: [],      // IDs de movimientos del Mayor seleccionados
