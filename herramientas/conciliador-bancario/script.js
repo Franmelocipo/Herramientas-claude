@@ -2372,6 +2372,21 @@ function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos
 
     if (candidatos.length === 0) return null;
 
+    // Limitar candidatos para evitar búsquedas exponenciales que cuelgan el navegador
+    // Con muchos candidatos (>50), la búsqueda de combinaciones de 2-5 elementos
+    // tiene complejidad O(C(n,5)) que crece exponencialmente
+    // Priorizamos los candidatos más cercanos al importe objetivo
+    const MAX_CANDIDATOS = 50;
+    if (candidatos.length > MAX_CANDIDATOS) {
+        // Ordenar por cercanía al importe objetivo y tomar los más cercanos
+        candidatos.sort((a, b) => {
+            const diffA = Math.abs(a.importe - importeObjetivo);
+            const diffB = Math.abs(b.importe - importeObjetivo);
+            return diffA - diffB;
+        });
+        candidatos = candidatos.slice(0, MAX_CANDIDATOS);
+    }
+
     // Buscar combinaciones de 2 a maxElementos elementos
     for (let n = 2; n <= Math.min(maxElementos, candidatos.length); n++) {
         const resultado = encontrarCombinacion(candidatos, importeObjetivo, n, validarEntidades, descripcionExtracto, categoriaRef);
@@ -7630,12 +7645,11 @@ async function conciliarReproceso(mayor, extracto, onProgreso = null) {
             });
         }
 
-        // Yield más frecuente en búsqueda de combinaciones (es más pesada)
-        if (i % 5 === 0) {
-            const porcentaje = mayorParaN > 0 ? Math.floor(((mayorParaN - i) / mayorParaN) * 100) : 100;
-            if (onProgreso) onProgreso(2, porcentaje, `Buscando coincidencias (1:N)... ${mayorParaN - i}/${mayorParaN}`);
-            await sleep(0);
-        }
+        // Yield en cada iteración para evitar que el navegador se cuelgue
+        // La búsqueda de combinaciones es muy costosa con muchos movimientos
+        const porcentaje = mayorParaN > 0 ? Math.floor(((mayorParaN - i) / mayorParaN) * 100) : 100;
+        if (onProgreso) onProgreso(2, porcentaje, `Buscando coincidencias (1:N)... ${mayorParaN - i}/${mayorParaN}`);
+        await sleep(0);
     }
 
     console.log('conciliarReproceso - Paso 2 completado, encontrados:', conciliados.filter(c => c.tipo === '1:N').length);
@@ -7686,12 +7700,11 @@ async function conciliarReproceso(mayor, extracto, onProgreso = null) {
             });
         }
 
-        // Yield más frecuente en búsqueda de combinaciones (es más pesada)
-        if (i % 5 === 0) {
-            const porcentaje = extractoParaN1 > 0 ? Math.floor(((extractoParaN1 - i) / extractoParaN1) * 100) : 100;
-            if (onProgreso) onProgreso(3, porcentaje, `Buscando coincidencias (N:1)... ${extractoParaN1 - i}/${extractoParaN1}`);
-            await sleep(0);
-        }
+        // Yield en cada iteración para evitar que el navegador se cuelgue
+        // La búsqueda de combinaciones es muy costosa con muchos movimientos
+        const porcentaje = extractoParaN1 > 0 ? Math.floor(((extractoParaN1 - i) / extractoParaN1) * 100) : 100;
+        if (onProgreso) onProgreso(3, porcentaje, `Buscando coincidencias (N:1)... ${extractoParaN1 - i}/${extractoParaN1}`);
+        await sleep(0);
     }
 
     console.log('conciliarReproceso - Paso 3 completado, encontrados:', conciliados.filter(c => c.tipo === 'N:1').length);
