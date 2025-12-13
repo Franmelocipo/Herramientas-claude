@@ -5321,6 +5321,35 @@ function descargarReporte() {
 // ========== GUARDADO DE CONCILIACIONES ==========
 
 /**
+ * Convierte un formato año-mes "YYYY-MM" a fecha completa "YYYY-MM-DD"
+ * @param {string} yearMonth - Formato "YYYY-MM" (ej: "2024-07")
+ * @param {boolean} endOfMonth - Si es true, devuelve el último día del mes; si es false, el primero
+ * @returns {string|null} - Fecha en formato "YYYY-MM-DD" o null si el input es inválido
+ */
+function convertirAFechaCompleta(yearMonth, endOfMonth = false) {
+    if (!yearMonth || typeof yearMonth !== 'string') return null;
+
+    // Si ya tiene formato completo YYYY-MM-DD, devolverlo tal cual
+    if (/^\d{4}-\d{2}-\d{2}$/.test(yearMonth)) return yearMonth;
+
+    // Verificar formato YYYY-MM
+    const match = yearMonth.match(/^(\d{4})-(\d{2})$/);
+    if (!match) return null;
+
+    const year = parseInt(match[1]);
+    const month = parseInt(match[2]);
+
+    if (endOfMonth) {
+        // Obtener el último día del mes
+        const lastDay = new Date(year, month, 0).getDate();
+        return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else {
+        // Primer día del mes
+        return `${year}-${String(month).padStart(2, '0')}-01`;
+    }
+}
+
+/**
  * Guardar la conciliación actual en Supabase
  */
 async function guardarConciliacion() {
@@ -5341,13 +5370,17 @@ async function guardarConciliacion() {
     }
 
     try {
+        // Convertir rangos de extractos a formato de fecha completa
+        const rangoDesde = convertirAFechaCompleta(state.rangoExtractos?.desde, false);
+        const rangoHasta = convertirAFechaCompleta(state.rangoExtractos?.hasta, true);
+
         // Preparar datos para guardar
         const datosAGuardar = {
             cliente_id: state.clienteSeleccionado.id,
             cuenta_bancaria_id: state.cuentaSeleccionada.id,
             tipo: state.tipoConciliacion,
-            rango_desde: state.rangoExtractos?.desde || null,
-            rango_hasta: state.rangoExtractos?.hasta || null,
+            rango_desde: rangoDesde,
+            rango_hasta: rangoHasta,
             tolerancia_fecha: state.toleranciaFecha,
             tolerancia_importe: state.toleranciaImporte,
             datos: {
