@@ -260,3 +260,298 @@
 .global-nav-dropdown-menu::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.4);
 }
+
+/* Botón de Notas de Desarrollo */
+.global-nav-btn.dev-notes-btn {
+    background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+    box-shadow: 0 2px 8px rgba(230, 126, 34, 0.3);
+    position: relative;
+}
+
+.global-nav-btn.dev-notes-btn:hover {
+    background: linear-gradient(135deg, #d35400 0%, #c0392b 100%);
+    box-shadow: 0 4px 12px rgba(230, 126, 34, 0.4);
+}
+
+/* Badge de notas pendientes */
+.dev-notes-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: #e74c3c;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+/* ====== Modal de Notas de Desarrollo ====== */
+.dev-notes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.dev-note-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.dev-note-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.dev-note-card.status-pendiente {
+    border-left: 4px solid #f59e0b;
+}
+
+.dev-note-card.status-en_progreso {
+    border-left: 4px solid #3b82f6;
+}
+
+.dev-note-card.status-completado {
+    border-left: 4px solid #22c55e;
+    opacity: 0.7;
+}
+
+.dev-note-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.dev-note-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1e293b;
+    margin: 0;
+}
+
+.dev-note-card.status-completado .dev-note-title {
+    text-decoration: line-through;
+    color: #64748b;
+}
+
+.dev-note-meta {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.dev-note-herramienta {
+    background: #e0e7ff;
+    color: #4338ca;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.dev-note-prioridad {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.dev-note-prioridad.alta {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.dev-note-prioridad.media {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.dev-note-prioridad.baja {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.dev-note-description {
+    font-size: 13px;
+    color: #475569;
+    margin: 8px 0;
+    line-height: 1.5;
+}
+
+.dev-note-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.dev-note-date {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.dev-note-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.dev-note-actions button {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-status {
+    background: #e0f2fe;
+    color: #0284c7;
+}
+
+.btn-status:hover {
+    background: #bae6fd;
+}
+
+.btn-delete-note {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.btn-delete-note:hover {
+    background: #fecaca;
+}
+
+/* Filtros de notas */
+.dev-notes-filters {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.dev-notes-filters button {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid #e2e8f0;
+    background: white;
+    color: #64748b;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.dev-notes-filters button:hover {
+    background: #f1f5f9;
+}
+
+.dev-notes-filters button.active {
+    background: #1a3a5c;
+    color: white;
+    border-color: #1a3a5c;
+}
+
+/* Formulario de nueva nota */
+.dev-note-form {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.dev-note-form .form-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.dev-note-form .form-row > * {
+    flex: 1;
+}
+
+.dev-note-form input,
+.dev-note-form select,
+.dev-note-form textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+}
+
+.dev-note-form textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.dev-note-form input:focus,
+.dev-note-form select:focus,
+.dev-note-form textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Stats de notas */
+.dev-notes-stats {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.dev-notes-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.dev-notes-stat-value {
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.dev-notes-stat.pendiente .dev-notes-stat-value { color: #f59e0b; }
+.dev-notes-stat.en_progreso .dev-notes-stat-value { color: #3b82f6; }
+.dev-notes-stat.completado .dev-notes-stat-value { color: #22c55e; }
+
+/* Empty state */
+.dev-notes-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #94a3b8;
+}
+
+.dev-notes-empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
