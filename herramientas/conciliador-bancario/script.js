@@ -7375,11 +7375,20 @@ async function reprocesarPendientes() {
         state.toleranciaImporte = nuevaToleranciaImporte;
 
         // Ejecutar conciliación SOLO con pendientes
-        actualizarPaso(2, 'Buscando nuevas coincidencias...');
-        actualizarProgreso(25);
+        actualizarPaso(2, 'Buscando coincidencias exactas (1:1)...');
+        actualizarProgreso(20);
         await sleep(100);
 
-        const resultadosReproceso = await conciliarReproceso(mayorPendiente, extractoPendiente);
+        // Callback para actualizar progreso durante el reproceso
+        const onProgresoReproceso = (fase, porcentaje, mensaje) => {
+            // Fase va de 1 a 3, mapeamos a progreso 20-70
+            const progresoBase = 20 + (fase - 1) * 16;
+            const progresoFinal = progresoBase + Math.floor(porcentaje * 0.16);
+            actualizarPaso(2, mensaje);
+            actualizarProgreso(Math.min(progresoFinal, 70));
+        };
+
+        const resultadosReproceso = await conciliarReproceso(mayorPendiente, extractoPendiente, onProgresoReproceso);
 
         // Restaurar tolerancias originales
         state.toleranciaFecha = toleranciaFechaOriginal;
@@ -7450,15 +7459,24 @@ async function reprocesarPendientes() {
  * Versión simplificada de conciliar para reprocesamiento
  * No actualiza la UI con tanta frecuencia ya que los conjuntos son más pequeños
  * IMPORTANTE: Respeta las desconciliaciones manuales previas
+ * @param {Array} mayor - Movimientos del mayor pendientes
+ * @param {Array} extracto - Movimientos del extracto pendientes
+ * @param {Function} onProgreso - Callback para actualizar progreso (fase, porcentaje, mensaje)
  */
-async function conciliarReproceso(mayor, extracto) {
+async function conciliarReproceso(mayor, extracto, onProgreso = null) {
     const conciliados = [];
     const mayorNoConciliado = [...mayor];
     const extractoNoConciliado = [...extracto];
 
     console.log('conciliarReproceso - desconciliaciones manuales a respetar:', desconciliacionesManuales.length);
+    console.log('conciliarReproceso - mayor pendiente:', mayorNoConciliado.length, 'extracto pendiente:', extractoNoConciliado.length);
+
+    const totalMayor = mayorNoConciliado.length;
+    const totalExtracto = extractoNoConciliado.length;
 
     // Paso 1: Buscar coincidencias exactas (1 a 1)
+    if (onProgreso) onProgreso(1, 0, 'Buscando coincidencias exactas (1:1)...');
+
     for (let i = mayorNoConciliado.length - 1; i >= 0; i--) {
         const movMayor = mayorNoConciliado[i];
         const idxCoincidencia = buscarCoincidenciaExacta(movMayor, extractoNoConciliado);
@@ -7487,11 +7505,20 @@ async function conciliarReproceso(mayor, extracto) {
             extractoNoConciliado.splice(idxCoincidencia, 1);
         }
 
-        // Yield para no bloquear UI
-        if (i % 20 === 0) await sleep(0);
+        // Yield para no bloquear UI y actualizar progreso
+        if (i % 20 === 0) {
+            const porcentaje = totalMayor > 0 ? Math.floor(((totalMayor - i) / totalMayor) * 100) : 100;
+            if (onProgreso) onProgreso(1, porcentaje, `Buscando coincidencias exactas (1:1)... ${totalMayor - i}/${totalMayor}`);
+            await sleep(0);
+        }
     }
 
+    console.log('conciliarReproceso - Paso 1 completado, encontrados:', conciliados.filter(c => c.tipo === '1:1').length);
+
     // Paso 2: Buscar coincidencias 1 a muchos
+    if (onProgreso) onProgreso(2, 0, 'Buscando coincidencias (1:N)...');
+
+    const mayorParaN = mayorNoConciliado.length;
     for (let i = mayorNoConciliado.length - 1; i >= 0; i--) {
         const movMayor = mayorNoConciliado[i];
 
@@ -7532,12 +7559,22 @@ async function conciliarReproceso(mayor, extracto) {
             });
         }
 
-        if (i % 10 === 0) await sleep(0);
+        // Yield más frecuente en búsqueda de combinaciones (es más pesada)
+        if (i % 5 === 0) {
+            const porcentaje = mayorParaN > 0 ? Math.floor(((mayorParaN - i) / mayorParaN) * 100) : 100;
+            if (onProgreso) onProgreso(2, porcentaje, `Buscando coincidencias (1:N)... ${mayorParaN - i}/${mayorParaN}`);
+            await sleep(0);
+        }
     }
+
+    console.log('conciliarReproceso - Paso 2 completado, encontrados:', conciliados.filter(c => c.tipo === '1:N').length);
 
     // Paso 3: Buscar coincidencias muchos a 1
     // IMPORTANTE: Para este tipo de conciliación, validamos que todos los movimientos
     // del mayor sean de la misma entidad y que haya coincidencia de texto con el extracto
+    if (onProgreso) onProgreso(3, 0, 'Buscando coincidencias (N:1)...');
+
+    const extractoParaN1 = extractoNoConciliado.length;
     for (let i = extractoNoConciliado.length - 1; i >= 0; i--) {
         const movExtracto = extractoNoConciliado[i];
 
@@ -7578,8 +7615,16 @@ async function conciliarReproceso(mayor, extracto) {
             });
         }
 
-        if (i % 10 === 0) await sleep(0);
+        // Yield más frecuente en búsqueda de combinaciones (es más pesada)
+        if (i % 5 === 0) {
+            const porcentaje = extractoParaN1 > 0 ? Math.floor(((extractoParaN1 - i) / extractoParaN1) * 100) : 100;
+            if (onProgreso) onProgreso(3, porcentaje, `Buscando coincidencias (N:1)... ${extractoParaN1 - i}/${extractoParaN1}`);
+            await sleep(0);
+        }
     }
+
+    console.log('conciliarReproceso - Paso 3 completado, encontrados:', conciliados.filter(c => c.tipo === 'N:1').length);
+    console.log('conciliarReproceso - Total conciliados:', conciliados.length);
 
     return {
         conciliados,
