@@ -133,6 +133,11 @@
                         <span>💾</span>
                         <span>Almacenamiento</span>
                     </button>
+                    <button id="globalNavDevNotes" class="global-nav-btn dev-notes-btn" data-action="devNotes">
+                        <span>📝</span>
+                        <span>Notas Dev</span>
+                        <span class="dev-notes-badge" id="devNotesBadge" style="display: none;">0</span>
+                    </button>
                     <div class="global-nav-dropdown herramientas-dropdown">
                         <button class="global-nav-btn herramientas-btn">
                             <span>🧮</span>
@@ -247,6 +252,45 @@
                 }
             });
         }
+
+        // Evento de Notas de Desarrollo
+        const btnDevNotes = document.querySelector('[data-action="devNotes"]');
+        if (btnDevNotes) {
+            btnDevNotes.addEventListener('click', () => {
+                if (isHome) {
+                    const modal = document.getElementById('modalDevNotes');
+                    if (modal) {
+                        modal.classList.remove('hidden');
+                        if (window.DevNotes) window.DevNotes.render();
+                    }
+                } else {
+                    window.location.href = basePath + 'index.html?action=devNotes';
+                }
+            });
+        }
+
+        // Actualizar badge de notas pendientes
+        updateDevNotesBadge();
+    }
+
+    // Actualizar el badge de notas de desarrollo
+    function updateDevNotesBadge() {
+        const badge = document.getElementById('devNotesBadge');
+        if (!badge) return;
+
+        try {
+            const notes = JSON.parse(localStorage.getItem('contable_shared_devNotes') || '[]');
+            const pendingCount = notes.filter(n => n.status === 'pendiente' || n.status === 'en_progreso').length;
+
+            if (pendingCount > 0) {
+                badge.textContent = pendingCount > 99 ? '99+' : pendingCount;
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        } catch (e) {
+            badge.style.display = 'none';
+        }
     }
 
     // Verificar parámetros de URL para abrir modales (cuando se viene de otra página)
@@ -270,6 +314,13 @@
                         const modalStorage = document.getElementById('modalStorage');
                         if (modalStorage) modalStorage.classList.remove('hidden');
                         break;
+                    case 'devNotes':
+                        const modalDevNotes = document.getElementById('modalDevNotes');
+                        if (modalDevNotes) {
+                            modalDevNotes.classList.remove('hidden');
+                            if (window.DevNotes) window.DevNotes.render();
+                        }
+                        break;
                 }
                 // Limpiar parámetros de la URL
                 window.history.replaceState({}, document.title, window.location.pathname);
@@ -281,7 +332,8 @@
     window.GlobalNav = {
         init: initGlobalNav,
         getBasePath: getBasePath,
-        herramientas: herramientas
+        herramientas: herramientas,
+        updateDevNotesBadge: updateDevNotesBadge
     };
 
     // Auto-inicializar cuando el DOM esté listo

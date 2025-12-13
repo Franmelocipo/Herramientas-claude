@@ -580,6 +580,65 @@
         </div>
     </div>
 
+    <!-- Modal Notas de Desarrollo -->
+    <div id="modalDevNotes" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📝 Notas de Desarrollo</h2>
+                <button class="close-btn" id="btnCloseDevNotes">✕</button>
+            </div>
+
+            <div class="info-box" style="font-size: 12px; padding: 10px; margin-bottom: 16px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 4px solid #f59e0b;">
+                <strong>Herramienta de desarrollo:</strong> Registra bugs, mejoras y tareas pendientes mientras trabajas en las herramientas. Ideal para no perder el hilo de las correcciones detectadas.
+            </div>
+
+            <!-- Formulario para nueva nota -->
+            <div class="dev-note-form" id="devNoteForm">
+                <div class="form-row">
+                    <input type="text" id="devNoteTitulo" placeholder="Título de la nota (ej: Error en conversor de extractos)">
+                    <select id="devNoteHerramienta">
+                        <option value="">Herramienta relacionada</option>
+                        <option value="mercado-pago">Convertidor Mercado Pago</option>
+                        <option value="conversor-asientos">Conversor de Asientos</option>
+                        <option value="extractos-bancarios">Conversor Extractos Bancarios</option>
+                        <option value="servicios-outsourcing">Servicios Outsourcing</option>
+                        <option value="conversor-veps">Conversor VEPs ARCA</option>
+                        <option value="conciliador">Conciliador Bancario</option>
+                        <option value="combinador">Combinador Excel</option>
+                        <option value="segmentador">Segmentador de Asientos</option>
+                        <option value="auditoria">Auditoría de Extractos</option>
+                        <option value="general">General / Sistema</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <textarea id="devNoteDescripcion" placeholder="Descripción detallada del bug, mejora o tarea pendiente..."></textarea>
+                </div>
+                <div class="form-row">
+                    <select id="devNotePrioridad">
+                        <option value="media">Prioridad Media</option>
+                        <option value="alta">Prioridad Alta</option>
+                        <option value="baja">Prioridad Baja</option>
+                    </select>
+                    <button id="btnAgregarNota" class="btn-primary" style="flex: 0 0 auto; padding: 10px 24px;">+ Agregar Nota</button>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="dev-notes-stats" id="devNotesStats"></div>
+
+            <!-- Filtros -->
+            <div class="dev-notes-filters" id="devNotesFilters">
+                <button class="active" data-filter="todos">Todos</button>
+                <button data-filter="pendiente">Pendientes</button>
+                <button data-filter="en_progreso">En Progreso</button>
+                <button data-filter="completado">Completados</button>
+            </div>
+
+            <!-- Lista de notas -->
+            <div class="dev-notes-list" id="devNotesList"></div>
+        </div>
+    </div>
+
     <!-- Configuración de Supabase -->
     <script src="supabase-config.js"></script>
     <script src="clientes-simple.js"></script>
@@ -589,6 +648,7 @@
     <!-- Módulos compartidos -->
     <script src="shared/dataStore.js"></script>
     <script src="shared/taxManager.js"></script>
+    <script src="shared/devNotes.js"></script>
 
     <!-- Navegación Global -->
     <script src="shared/globalNav.js"></script>
