@@ -1007,8 +1007,13 @@ async function actualizarExtractosSeleccionados() {
     const [anioDesde, mesDesde] = desde.split('-').map(Number);
     const [anioHasta, mesHasta] = hasta.split('-').map(Number);
 
+    // Usar extractos de auditoriaData (flujo principal) o auditoriaCache (flujo alternativo)
+    const extractosDisponibles = (auditoriaData.extractosDisponibles && auditoriaData.extractosDisponibles.length > 0)
+        ? auditoriaData.extractosDisponibles
+        : auditoriaCache.extractosDisponibles;
+
     // Filtrar extractos en el rango
-    const extractosEnRango = auditoriaCache.extractosDisponibles.filter(ext => {
+    const extractosEnRango = extractosDisponibles.filter(ext => {
         const fechaExt = ext.anio * 100 + ext.mes;
         const fechaDesde = anioDesde * 100 + mesDesde;
         const fechaHasta = anioHasta * 100 + mesHasta;
