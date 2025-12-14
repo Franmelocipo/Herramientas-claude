@@ -6985,15 +6985,22 @@ async function procesarArchivoActualizarMayor(file) {
         const data = await leerExcel(file);
         movimientosArchivoActualizar = parsearMayor(data);
 
-        // Obtener los números de asiento existentes
+        // Determinar el tipo de movimiento según el tipo de conciliación
+        // Para débitos: esDebe = true, Para créditos: esDebe = false
+        const esDebeActual = state.tipoConciliacion === 'debitos';
+
+        // Filtrar movimientos del archivo según el tipo de conciliación ANTES de procesar
+        const movimientosDelTipoCorrecto = movimientosArchivoActualizar.filter(m => m.esDebe === esDebeActual);
+
+        // Obtener los números de asiento existentes (solo del mismo tipo de movimiento)
         const numerosAsientoExistentes = new Set();
 
-        // Desde los conciliados
+        // Desde los conciliados (solo del tipo actual)
         if (state.resultados && state.resultados.conciliados) {
             state.resultados.conciliados.forEach(c => {
                 if (c.mayor && Array.isArray(c.mayor)) {
                     c.mayor.forEach(m => {
-                        if (m.numeroAsiento) {
+                        if (m.numeroAsiento && m.esDebe === esDebeActual) {
                             numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
                         }
                     });
@@ -7001,37 +7008,44 @@ async function procesarArchivoActualizarMayor(file) {
             });
         }
 
-        // Desde el mayor no conciliado
+        // Desde el mayor no conciliado (solo del tipo actual)
         if (state.resultados && state.resultados.mayorNoConciliado) {
             state.resultados.mayorNoConciliado.forEach(m => {
-                if (m.numeroAsiento) {
+                if (m.numeroAsiento && m.esDebe === esDebeActual) {
                     numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
                 }
             });
         }
 
-        // Desde los datos originales del mayor
+        // Desde los datos originales del mayor (solo del tipo actual)
         if (state.datosMayor) {
             state.datosMayor.forEach(m => {
-                if (m.numeroAsiento) {
+                if (m.numeroAsiento && m.esDebe === esDebeActual) {
                     numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
                 }
             });
         }
 
-        // Filtrar movimientos nuevos (que no existen por número de asiento)
-        movimientosNuevosDetectados = movimientosArchivoActualizar.filter(m => {
+        // Filtrar movimientos nuevos del tipo correcto (que no existen por número de asiento)
+        movimientosNuevosDetectados = movimientosDelTipoCorrecto.filter(m => {
             const numAsiento = String(m.numeroAsiento || '').trim();
             return numAsiento && !numerosAsientoExistentes.has(numAsiento);
         });
 
-        // Calcular estadísticas
-        const totalMovimientos = movimientosArchivoActualizar.length;
+        // Calcular estadísticas (solo del tipo correcto según la conciliación)
+        const totalArchivo = movimientosArchivoActualizar.length;
+        const totalDelTipo = movimientosDelTipoCorrecto.length;
         const nuevos = movimientosNuevosDetectados.length;
-        const existentes = totalMovimientos - nuevos;
+        const existentes = totalDelTipo - nuevos;
+        const ignorados = totalArchivo - totalDelTipo;
+        const tipoTexto = state.tipoConciliacion === 'debitos' ? 'débitos' : 'créditos';
 
-        // Actualizar UI
-        document.getElementById('totalMovimientosArchivo').textContent = totalMovimientos;
+        // Actualizar UI - mostrar total del tipo correcto y mencionar ignorados si hay
+        let textoTotal = `${totalDelTipo} ${tipoTexto}`;
+        if (ignorados > 0) {
+            textoTotal += ` (${ignorados} ${state.tipoConciliacion === 'debitos' ? 'créditos' : 'débitos'} ignorados)`;
+        }
+        document.getElementById('totalMovimientosArchivo').textContent = textoTotal;
         document.getElementById('movimientosNuevos').textContent = nuevos;
         document.getElementById('movimientosExistentes').textContent = existentes;
 
