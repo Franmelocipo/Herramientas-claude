@@ -2849,6 +2849,32 @@ function preBloquearToggle(event) {
 }
 
 /**
+ * Pre-verificar si un toggle de grupo debe bloquearse
+ * Se llama en mousedown de los botones de toggle de grupo
+ * Esto previene que el onclick se ejecute si hay un cambio de color en progreso
+ */
+function preVerificarToggleGrupo(event) {
+    if (bloqueandoToggleGrupos) {
+        console.log('Toggle de grupo PREVENIDO en mousedown - cambio de color en progreso');
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+        }
+        // Marcar el botón para ignorar el click
+        if (event && event.target) {
+            event.target.dataset.ignorarClick = 'true';
+        }
+        return false;
+    }
+    // Limpiar marca si no hay bloqueo
+    if (event && event.target) {
+        event.target.dataset.ignorarClick = '';
+    }
+    return true;
+}
+
+/**
  * Cambiar la categoría de color de una conciliación (verde/naranja)
  * Verde = coincidencia de descripción, Naranja = sin coincidencia
  */
@@ -4922,6 +4948,13 @@ function toggleGrupoVerdes(event) {
         event.preventDefault();
     }
 
+    // Verificar si el click fue marcado para ignorar en mousedown
+    if (event && event.target && event.target.dataset.ignorarClick === 'true') {
+        console.log('toggleGrupoVerdes IGNORADO - marcado en mousedown');
+        event.target.dataset.ignorarClick = '';
+        return;
+    }
+
     // Verificar si estamos bloqueados por un cambio de color en progreso
     if (bloqueandoToggleGrupos) {
         console.log('toggleGrupoVerdes BLOQUEADO - cambio de color en progreso');
@@ -4942,6 +4975,13 @@ function toggleGrupoNaranjas(event) {
     if (event) {
         event.stopPropagation();
         event.preventDefault();
+    }
+
+    // Verificar si el click fue marcado para ignorar en mousedown
+    if (event && event.target && event.target.dataset.ignorarClick === 'true') {
+        console.log('toggleGrupoNaranjas IGNORADO - marcado en mousedown');
+        event.target.dataset.ignorarClick = '';
+        return;
     }
 
     // Verificar si estamos bloqueados por un cambio de color en progreso
