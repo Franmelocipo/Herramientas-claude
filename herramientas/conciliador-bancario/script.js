@@ -7026,6 +7026,18 @@ async function procesarArchivoActualizarMayor(file) {
             });
         }
 
+        // Desde los movimientos eliminados (solo del tipo actual)
+        if (state.eliminados && state.eliminados.length > 0) {
+            state.eliminados.forEach(m => {
+                if (m.numeroAsiento && m.esDebe === esDebeActual) {
+                    numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
+                }
+            });
+        }
+
+        console.log('Detección asientos nuevos - números existentes encontrados:', numerosAsientoExistentes.size,
+            'de fuentes: conciliados, mayorNoConciliado, datosMayor, eliminados');
+
         // Filtrar movimientos nuevos del tipo correcto (que no existen por número de asiento)
         movimientosNuevosDetectados = movimientosDelTipoCorrecto.filter(m => {
             const numAsiento = String(m.numeroAsiento || '').trim();
