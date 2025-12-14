@@ -18,8 +18,9 @@ let state = {
     tipoConciliacion: null, // 'creditos' o 'debitos'
     datosMayor: [],
     datosExtracto: [],
-    toleranciaFecha: 30,
-    toleranciaImporte: 20000,
+    toleranciaFecha: 0, // Proceso inicial: sin tolerancia de fecha
+    toleranciaImporte: 0, // Proceso inicial: sin tolerancia de importe
+    exigenciaPalabras: 2, // Proceso inicial: 2 palabras coincidentes exigidas
     resultados: null,
     eliminados: [], // Movimientos del Mayor eliminados del proceso de conciliación
     // Integración con auditoría
@@ -250,6 +251,8 @@ const elements = {
     // Tolerancias
     toleranciaFecha: document.getElementById('toleranciaFecha'),
     toleranciaImporte: document.getElementById('toleranciaImporte'),
+    exigenciaPalabras: document.getElementById('exigenciaPalabras'),
+    mensajeSugerenciaProceso: document.getElementById('mensaje-sugerencia-proceso'),
 
     // Conciliación
     btnConciliar: document.getElementById('btnConciliar'),
@@ -311,6 +314,8 @@ const elements = {
     reprocesoPendientesExtracto: document.getElementById('reprocesoPendientesExtracto'),
     reprocesoToleranciaFecha: document.getElementById('reproceso-tolerancia-fecha'),
     reprocesoToleranciaImporte: document.getElementById('reproceso-tolerancia-importe'),
+    reprocesoExigenciaPalabras: document.getElementById('reproceso-exigencia-palabras'),
+    mensajeSugerenciaReproceso: document.getElementById('mensaje-sugerencia-reproceso'),
     btnReprocesar: document.getElementById('btnReprocesar'),
 
     // Historial de procesamiento
@@ -347,13 +352,19 @@ function init() {
     elements.toleranciaFecha.addEventListener('change', () => {
         const valor = parseInt(elements.toleranciaFecha.value);
         // IMPORTANTE: No usar || porque 0 es un valor válido (tolerancia exacta)
-        state.toleranciaFecha = isNaN(valor) ? 30 : valor;
+        state.toleranciaFecha = isNaN(valor) ? 0 : valor;
     });
     elements.toleranciaImporte.addEventListener('change', () => {
         const valor = parseFloat(elements.toleranciaImporte.value);
         // IMPORTANTE: No usar || porque 0 es un valor válido (importe exacto)
-        state.toleranciaImporte = isNaN(valor) ? 20000 : valor;
+        state.toleranciaImporte = isNaN(valor) ? 0 : valor;
     });
+    if (elements.exigenciaPalabras) {
+        elements.exigenciaPalabras.addEventListener('change', () => {
+            const valor = parseInt(elements.exigenciaPalabras.value);
+            state.exigenciaPalabras = isNaN(valor) ? 2 : valor;
+        });
+    }
 
     // Conciliar
     elements.btnConciliar.addEventListener('click', ejecutarConciliacion);
@@ -2086,15 +2097,19 @@ async function ejecutarConciliacion() {
         // IMPORTANTE: No usar || porque 0 es un valor válido (coincidencia exacta)
         const valorFecha = parseInt(elements.toleranciaFecha.value);
         const valorImporte = parseFloat(elements.toleranciaImporte.value);
-        state.toleranciaFecha = isNaN(valorFecha) ? 30 : valorFecha;
-        state.toleranciaImporte = isNaN(valorImporte) ? 20000 : valorImporte;
+        const valorPalabras = parseInt(elements.exigenciaPalabras.value);
+        state.toleranciaFecha = isNaN(valorFecha) ? 0 : valorFecha;
+        state.toleranciaImporte = isNaN(valorImporte) ? 0 : valorImporte;
+        state.exigenciaPalabras = isNaN(valorPalabras) ? 2 : valorPalabras;
 
         // DEBUG: Mostrar tolerancias configuradas
         console.log('Tolerancias configuradas:', {
             fecha: state.toleranciaFecha,
             importe: state.toleranciaImporte,
+            exigenciaPalabras: state.exigenciaPalabras,
             valorFechaInput: elements.toleranciaFecha.value,
-            valorImporteInput: elements.toleranciaImporte.value
+            valorImporteInput: elements.toleranciaImporte.value,
+            valorPalabrasInput: elements.exigenciaPalabras.value
         });
 
         // Filtrar datos según el tipo de conciliación
@@ -2209,7 +2224,9 @@ async function conciliar(mayor, extracto) {
             5, // máximo 5 movimientos
             false,
             null,
-            movMayor.categoria || '' // Categoría del mayor para filtrar extractos compatibles
+            movMayor.categoria || '', // Categoría del mayor para filtrar extractos compatibles
+            movMayor.leyenda || '', // Texto de referencia para validar coincidencia de palabras
+            false // La lista es de extractos
         );
 
         if (combinacion) {
@@ -2263,7 +2280,9 @@ async function conciliar(mayor, extracto) {
             5,
             true, // Validar que los movimientos sean de la misma entidad
             movExtracto.descripcion || movExtracto.concepto || '', // Descripción del extracto para validar coincidencia de texto
-            movExtracto.categoria || '' // Categoría del extracto para filtrar mayores compatibles
+            movExtracto.categoria || '', // Categoría del extracto para filtrar mayores compatibles
+            movExtracto.descripcion || movExtracto.concepto || '', // Texto de referencia para validar coincidencia de palabras
+            true // La lista es de mayores
         );
 
         if (combinacion) {
@@ -2327,6 +2346,13 @@ function buscarCoincidenciaExacta(movMayor, listaExtracto) {
         // Verificar tolerancia de fecha
         if (!fechaDentroTolerancia(movMayor.fecha, movExtracto.fecha)) continue;
 
+        // Verificar exigencia de palabras coincidentes (si está configurada)
+        if (state.exigenciaPalabras > 0) {
+            if (!tieneCoincidenciaPalabras(movMayor.leyenda, movExtracto.descripcion, state.exigenciaPalabras)) {
+                continue;
+            }
+        }
+
         return i;
     }
 
@@ -2355,9 +2381,11 @@ function verificarCompatibilidadEtiquetas(movMayor, movExtracto) {
  * @param {boolean} validarEntidades - Si es true, valida que todos los movimientos sean de la misma entidad
  * @param {string} descripcionExtracto - Descripción del extracto para validar coincidencia de texto (opcional)
  * @param {string} categoriaRef - Categoría de referencia para filtrar por etiqueta (opcional)
+ * @param {string} textoReferenciaParaPalabras - Texto de referencia para validar coincidencia de palabras (leyenda o descripción)
+ * @param {boolean} esListaMayor - true si la lista contiene movimientos del mayor (para saber qué campo comparar)
  * @returns {Array|null} Combinación encontrada o null
  */
-function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos, validarEntidades = false, descripcionExtracto = null, categoriaRef = '') {
+function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos, validarEntidades = false, descripcionExtracto = null, categoriaRef = '', textoReferenciaParaPalabras = null, esListaMayor = false) {
     // Filtrar por fecha primero
     let candidatos = lista.filter(m => fechaDentroTolerancia(fechaRef, m.fecha));
 
@@ -2389,7 +2417,7 @@ function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos
 
     // Buscar combinaciones de 2 a maxElementos elementos
     for (let n = 2; n <= Math.min(maxElementos, candidatos.length); n++) {
-        const resultado = encontrarCombinacion(candidatos, importeObjetivo, n, validarEntidades, descripcionExtracto, categoriaRef);
+        const resultado = encontrarCombinacion(candidatos, importeObjetivo, n, validarEntidades, descripcionExtracto, categoriaRef, textoReferenciaParaPalabras, esListaMayor);
         if (resultado) return resultado;
     }
 
@@ -2405,9 +2433,11 @@ function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos
  * @param {boolean} validarEntidades - Si es true, valida que todos los movimientos sean de la misma entidad
  * @param {string} descripcionExtracto - Descripción del extracto para validar coincidencia de texto (opcional)
  * @param {string} categoriaRef - Categoría de referencia (no usada, el filtrado ya se hizo)
+ * @param {string} textoReferenciaParaPalabras - Texto de referencia para validar coincidencia de palabras
+ * @param {boolean} esListaMayor - true si la lista contiene movimientos del mayor
  * @returns {Array|null} Combinación encontrada o null
  */
-function encontrarCombinacion(lista, objetivo, n, validarEntidades = false, descripcionExtracto = null, categoriaRef = '') {
+function encontrarCombinacion(lista, objetivo, n, validarEntidades = false, descripcionExtracto = null, categoriaRef = '', textoReferenciaParaPalabras = null, esListaMayor = false) {
     const indices = [];
 
     function buscar(start, suma, count) {
@@ -2428,6 +2458,23 @@ function encontrarCombinacion(lista, objetivo, n, validarEntidades = false, desc
                 // Esto evita matches incorrectos donde la suma coincide por casualidad
                 if (descripcionExtracto && !validarCoincidenciaDescripcionExtracto(combinacion, descripcionExtracto)) {
                     return null; // Rechazar si no hay coincidencia de texto
+                }
+
+                // Validar exigencia de palabras coincidentes (si está configurada)
+                if (state.exigenciaPalabras > 0 && textoReferenciaParaPalabras) {
+                    let tieneCoincidencia = false;
+                    for (const mov of combinacion) {
+                        // Si es lista de mayor, comparar leyenda con texto de referencia (descripción del extracto)
+                        // Si es lista de extracto, comparar descripción con texto de referencia (leyenda del mayor)
+                        const textoMovimiento = esListaMayor ? mov.leyenda : mov.descripcion;
+                        if (tieneCoincidenciaPalabras(textoMovimiento, textoReferenciaParaPalabras, state.exigenciaPalabras)) {
+                            tieneCoincidencia = true;
+                            break;
+                        }
+                    }
+                    if (!tieneCoincidencia) {
+                        return null; // Rechazar si ningún elemento tiene suficientes palabras coincidentes
+                    }
                 }
 
                 return combinacion;
@@ -6112,6 +6159,7 @@ async function guardarConciliacion() {
             rango_hasta: rangoHasta,
             tolerancia_fecha: state.toleranciaFecha,
             tolerancia_importe: state.toleranciaImporte,
+            exigencia_palabras: state.exigenciaPalabras,
             datos: {
                 conciliados: state.resultados.conciliados.map(c => ({
                     id: c.id,
@@ -6274,6 +6322,7 @@ async function cargarConciliacionGuardada(conciliacionId) {
             state.tipoConciliacion = data.tipo;
             state.toleranciaFecha = data.tolerancia_fecha;
             state.toleranciaImporte = data.tolerancia_importe;
+            state.exigenciaPalabras = data.exigencia_palabras !== undefined ? data.exigencia_palabras : 2;
 
             // Convertir fechas de YYYY-MM-DD a YYYY-MM para los selectores
             const rangoDesdeSelector = data.rango_desde ? data.rango_desde.substring(0, 7) : null;
@@ -6309,6 +6358,9 @@ async function cargarConciliacionGuardada(conciliacionId) {
             // Actualizar UI - Tolerancias
             elements.toleranciaFecha.value = data.tolerancia_fecha;
             elements.toleranciaImporte.value = data.tolerancia_importe;
+            if (elements.exigenciaPalabras) {
+                elements.exigenciaPalabras.value = data.exigencia_palabras !== undefined ? data.exigencia_palabras : 2;
+            }
 
             // Actualizar UI - Selectores de rango
             const rangoDesdeSelect = document.getElementById('rangoDesde');
@@ -7196,8 +7248,9 @@ function reiniciar() {
         tipoConciliacion: null,
         datosMayor: [],
         datosExtracto: [],
-        toleranciaFecha: 30,
-        toleranciaImporte: 20000,
+        toleranciaFecha: 0,
+        toleranciaImporte: 0,
+        exigenciaPalabras: 2,
         resultados: null,
         eliminados: [],
         // Integración con auditoría
@@ -7271,9 +7324,12 @@ function reiniciar() {
     eliminarArchivo('mayor');
     eliminarArchivo('extracto');
 
-    // Resetear tolerancias
-    elements.toleranciaFecha.value = 30;
-    elements.toleranciaImporte.value = 20000;
+    // Resetear tolerancias a valores sugeridos para proceso inicial
+    elements.toleranciaFecha.value = 0;
+    elements.toleranciaImporte.value = 0;
+    if (elements.exigenciaPalabras) {
+        elements.exigenciaPalabras.value = 2;
+    }
 
     // Resetear tabs
     cambiarTab('conciliados');
@@ -7448,11 +7504,14 @@ function actualizarHistorial() {
         totalConciliados += item.conciliados;
         const prefijo = idx === 0 ? 'Procesamiento inicial' : `Reproceso ${idx}`;
         const signo = idx === 0 ? '' : '+';
+        const palabrasTexto = item.exigenciaPalabras !== undefined
+            ? `, ${item.exigenciaPalabras} pal.`
+            : '';
 
         html += `
             <div class="historial-item">
                 <span class="historial-numero">${idx + 1}.</span>
-                <span class="historial-descripcion">${prefijo} (${item.toleranciaFecha} días, $${item.toleranciaImporte.toLocaleString('es-AR')})</span>
+                <span class="historial-descripcion">${prefijo} (${item.toleranciaFecha} días, $${item.toleranciaImporte.toLocaleString('es-AR')}${palabrasTexto})</span>
                 <span class="historial-resultado">→ ${signo}${item.conciliados} conciliados</span>
             </div>
         `;
@@ -7463,23 +7522,87 @@ function actualizarHistorial() {
 }
 
 /**
+ * Configuraciones sugeridas para cada reproceso.
+ * Los primeros 6 procesos tienen sugerencias predefinidas.
+ */
+const SUGERENCIAS_REPROCESO = [
+    // Proceso inicial (índice 0) - Se maneja con valores por defecto en UI
+    { toleranciaFecha: 0, toleranciaImporte: 0, exigenciaPalabras: 2, mensaje: 'Proceso inicial: Parámetros sugeridos para máxima precisión. Se recomienda comenzar con 0 días, $0 y 2 palabras de exigencia.' },
+    // Reproceso 1 (índice 1) - Reducir a 1 palabra
+    { toleranciaFecha: 0, toleranciaImporte: 0, exigenciaPalabras: 1, mensaje: 'Reproceso 1: Mantener tolerancias estrictas, reducir exigencia a 1 palabra coincidente.' },
+    // Reproceso 2 (índice 2) - Sin exigencia de palabras
+    { toleranciaFecha: 0, toleranciaImporte: 0, exigenciaPalabras: 0, mensaje: 'Reproceso 2: Sin exigencia de palabras, mantener tolerancias de fecha e importe estrictas.' },
+    // Reproceso 3 (índice 3) - Ampliar tolerancias, volver a 2 palabras
+    { toleranciaFecha: 1, toleranciaImporte: 1, exigenciaPalabras: 2, mensaje: 'Reproceso 3: Ampliar tolerancias (1 día, $1), volver a exigir 2 palabras coincidentes.' },
+    // Reproceso 4 (índice 4) - 1 palabra con tolerancias ampliadas
+    { toleranciaFecha: 1, toleranciaImporte: 1, exigenciaPalabras: 1, mensaje: 'Reproceso 4: Mantener tolerancias ampliadas, reducir exigencia a 1 palabra.' },
+    // Reproceso 5 (índice 5) - Sin exigencia de palabras con tolerancias
+    { toleranciaFecha: 1, toleranciaImporte: 1, exigenciaPalabras: 0, mensaje: 'Reproceso 5: Sin exigencia de palabras, tolerancias ampliadas. Último reproceso sugerido.' }
+];
+
+/**
+ * Actualiza los valores sugeridos y mensajes para el próximo reproceso
+ */
+function actualizarSugerenciasReproceso() {
+    const numReproceso = historialProcesamiento.length; // Esto da el número del próximo reproceso
+
+    // Si hay más de 6 reprocesos, no hay sugerencias predefinidas
+    if (numReproceso >= SUGERENCIAS_REPROCESO.length) {
+        // Mostrar mensaje genérico
+        if (elements.mensajeSugerenciaReproceso) {
+            const texto = elements.mensajeSugerenciaReproceso.querySelector('.sugerencia-texto');
+            if (texto) {
+                texto.textContent = `Reproceso ${numReproceso}: Parámetros libres a configurar según necesidad.`;
+            }
+        }
+        return;
+    }
+
+    const sugerencia = SUGERENCIAS_REPROCESO[numReproceso];
+
+    // Actualizar valores en el panel de reproceso
+    if (elements.reprocesoToleranciaFecha) {
+        elements.reprocesoToleranciaFecha.value = sugerencia.toleranciaFecha;
+    }
+    if (elements.reprocesoToleranciaImporte) {
+        elements.reprocesoToleranciaImporte.value = sugerencia.toleranciaImporte;
+    }
+    if (elements.reprocesoExigenciaPalabras) {
+        elements.reprocesoExigenciaPalabras.value = sugerencia.exigenciaPalabras;
+    }
+
+    // Actualizar mensaje de sugerencia
+    if (elements.mensajeSugerenciaReproceso) {
+        const texto = elements.mensajeSugerenciaReproceso.querySelector('.sugerencia-texto');
+        if (texto) {
+            texto.textContent = sugerencia.mensaje;
+        }
+    }
+}
+
+/**
  * Guarda el procesamiento inicial en el historial
  */
 function guardarProcesamientoInicial(cantidadConciliados) {
     toleranciasIniciales = {
         fecha: state.toleranciaFecha,
-        importe: state.toleranciaImporte
+        importe: state.toleranciaImporte,
+        palabras: state.exigenciaPalabras
     };
 
     historialProcesamiento = [{
         fecha: new Date().toISOString(),
         toleranciaFecha: state.toleranciaFecha,
         toleranciaImporte: state.toleranciaImporte,
+        exigenciaPalabras: state.exigenciaPalabras,
         conciliados: cantidadConciliados,
         esInicial: true
     }];
 
     actualizarHistorial();
+
+    // Actualizar sugerencias para el primer reproceso
+    actualizarSugerenciasReproceso();
 }
 
 /**
@@ -7491,8 +7614,10 @@ async function reprocesarPendientes() {
         // IMPORTANTE: No usar || porque 0 es un valor válido (coincidencia exacta)
         const valorFecha = parseInt(elements.reprocesoToleranciaFecha.value);
         const valorImporte = parseFloat(elements.reprocesoToleranciaImporte.value);
-        const nuevaToleranciaFecha = isNaN(valorFecha) ? 10 : valorFecha;
-        const nuevaToleranciaImporte = isNaN(valorImporte) ? 1000 : valorImporte;
+        const valorPalabras = parseInt(elements.reprocesoExigenciaPalabras.value);
+        const nuevaToleranciaFecha = isNaN(valorFecha) ? 0 : valorFecha;
+        const nuevaToleranciaImporte = isNaN(valorImporte) ? 0 : valorImporte;
+        const nuevaExigenciaPalabras = isNaN(valorPalabras) ? 1 : valorPalabras;
 
         // Validar que hay movimientos pendientes
         if (state.resultados.mayorNoConciliado.length === 0 || state.resultados.extractoNoConciliado.length === 0) {
@@ -7504,7 +7629,8 @@ async function reprocesarPendientes() {
         const ultimoProceso = historialProcesamiento[historialProcesamiento.length - 1];
         if (ultimoProceso &&
             ultimoProceso.toleranciaFecha === nuevaToleranciaFecha &&
-            ultimoProceso.toleranciaImporte === nuevaToleranciaImporte) {
+            ultimoProceso.toleranciaImporte === nuevaToleranciaImporte &&
+            ultimoProceso.exigenciaPalabras === nuevaExigenciaPalabras) {
             if (!confirm('Los parámetros son iguales al último procesamiento. ¿Desea continuar de todos modos?')) {
                 return;
             }
@@ -7527,8 +7653,10 @@ async function reprocesarPendientes() {
         // Actualizar tolerancias temporalmente para el algoritmo
         const toleranciaFechaOriginal = state.toleranciaFecha;
         const toleranciaImporteOriginal = state.toleranciaImporte;
+        const exigenciaPalabrasOriginal = state.exigenciaPalabras;
         state.toleranciaFecha = nuevaToleranciaFecha;
         state.toleranciaImporte = nuevaToleranciaImporte;
+        state.exigenciaPalabras = nuevaExigenciaPalabras;
 
         // Ejecutar conciliación SOLO con pendientes
         actualizarPaso(2, 'Buscando coincidencias exactas (1:1)...');
@@ -7549,6 +7677,7 @@ async function reprocesarPendientes() {
         // Restaurar tolerancias originales
         state.toleranciaFecha = toleranciaFechaOriginal;
         state.toleranciaImporte = toleranciaImporteOriginal;
+        state.exigenciaPalabras = exigenciaPalabrasOriginal;
 
         actualizarPaso(3, 'Actualizando resultados...');
         actualizarProgreso(75);
@@ -7561,6 +7690,7 @@ async function reprocesarPendientes() {
             parametrosReproceso: {
                 toleranciaFecha: nuevaToleranciaFecha,
                 toleranciaImporte: nuevaToleranciaImporte,
+                exigenciaPalabras: nuevaExigenciaPalabras,
                 numeroReproceso: historialProcesamiento.length
             }
         }));
@@ -7583,9 +7713,13 @@ async function reprocesarPendientes() {
             fecha: new Date().toISOString(),
             toleranciaFecha: nuevaToleranciaFecha,
             toleranciaImporte: nuevaToleranciaImporte,
+            exigenciaPalabras: nuevaExigenciaPalabras,
             conciliados: nuevosConciliados.length,
             esInicial: false
         });
+
+        // Actualizar sugerencias para el próximo reproceso
+        actualizarSugerenciasReproceso();
 
         actualizarPaso(4, 'Finalizando...');
         actualizarProgreso(95);
@@ -7685,7 +7819,9 @@ async function conciliarReproceso(mayor, extracto, onProgreso = null) {
             5,
             false,
             null,
-            movMayor.categoria || '' // Categoría del mayor para filtrar extractos compatibles
+            movMayor.categoria || '', // Categoría del mayor para filtrar extractos compatibles
+            movMayor.leyenda || '', // Texto de referencia para validar coincidencia de palabras
+            false // La lista es de extractos
         );
 
         if (combinacion) {
@@ -7740,7 +7876,9 @@ async function conciliarReproceso(mayor, extracto, onProgreso = null) {
             5,
             true, // Validar que los movimientos sean de la misma entidad
             movExtracto.descripcion || movExtracto.concepto || '', // Descripción del extracto para validar coincidencia de texto
-            movExtracto.categoria || '' // Categoría del extracto para filtrar mayores compatibles
+            movExtracto.categoria || '', // Categoría del extracto para filtrar mayores compatibles
+            movExtracto.descripcion || movExtracto.concepto || '', // Texto de referencia para validar coincidencia de palabras
+            true // La lista es de mayores
         );
 
         if (combinacion) {

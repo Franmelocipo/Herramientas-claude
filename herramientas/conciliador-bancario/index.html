@@ -198,14 +198,23 @@
                 <div class="tolerance-grid">
                     <div class="tolerance-item">
                         <label for="toleranciaFecha">Tolerancia de fechas (días)</label>
-                        <input type="number" id="toleranciaFecha" value="30" min="0" max="365" class="input-number">
+                        <input type="number" id="toleranciaFecha" value="0" min="0" max="365" class="input-number">
                         <span class="tolerance-hint">± días de diferencia permitida</span>
                     </div>
                     <div class="tolerance-item">
                         <label for="toleranciaImporte">Tolerancia de importes ($)</label>
-                        <input type="number" id="toleranciaImporte" value="20000" min="0" step="1000" class="input-number">
+                        <input type="number" id="toleranciaImporte" value="0" min="0" step="1000" class="input-number">
                         <span class="tolerance-hint">± diferencia permitida en pesos</span>
                     </div>
+                    <div class="tolerance-item">
+                        <label for="exigenciaPalabras">Palabras coincidentes (exigencia)</label>
+                        <input type="number" id="exigenciaPalabras" value="2" min="0" max="10" class="input-number">
+                        <span class="tolerance-hint">Mínimo palabras coincidentes entre leyenda y descripción (0 = sin exigencia)</span>
+                    </div>
+                </div>
+                <div id="mensaje-sugerencia-proceso" class="mensaje-sugerencia">
+                    <span class="sugerencia-icono">💡</span>
+                    <span class="sugerencia-texto">Proceso inicial: Parámetros sugeridos para máxima precisión. Se recomienda comenzar con 0 días, $0 y 2 palabras de exigencia.</span>
                 </div>
             </div>
 
@@ -341,7 +350,7 @@
                             <div class="reproceso-campo">
                                 <label for="reproceso-tolerancia-fecha">Tolerancia de fechas:</label>
                                 <div class="reproceso-input-wrapper">
-                                    <input type="number" id="reproceso-tolerancia-fecha" value="10" min="0" max="365" class="reproceso-input">
+                                    <input type="number" id="reproceso-tolerancia-fecha" value="0" min="0" max="365" class="reproceso-input">
                                     <span class="reproceso-unidad">días</span>
                                 </div>
                             </div>
@@ -349,9 +358,20 @@
                                 <label for="reproceso-tolerancia-importe">Tolerancia de importes:</label>
                                 <div class="reproceso-input-wrapper">
                                     <span class="reproceso-signo">$</span>
-                                    <input type="number" id="reproceso-tolerancia-importe" value="1000" min="0" step="100" class="reproceso-input">
+                                    <input type="number" id="reproceso-tolerancia-importe" value="0" min="0" step="100" class="reproceso-input">
                                 </div>
                             </div>
+                            <div class="reproceso-campo">
+                                <label for="reproceso-exigencia-palabras">Palabras coincidentes:</label>
+                                <div class="reproceso-input-wrapper">
+                                    <input type="number" id="reproceso-exigencia-palabras" value="1" min="0" max="10" class="reproceso-input">
+                                    <span class="reproceso-unidad">palabras</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="mensaje-sugerencia-reproceso" class="mensaje-sugerencia mensaje-sugerencia-reproceso">
+                            <span class="sugerencia-icono">💡</span>
+                            <span class="sugerencia-texto">Reproceso 1: Parámetros sugeridos (0 días, $0, 1 palabra). Reducir exigencia de palabras gradualmente.</span>
                         </div>
                         <div class="reproceso-advertencia">
                             <span class="advertencia-icono">⚠️</span>
