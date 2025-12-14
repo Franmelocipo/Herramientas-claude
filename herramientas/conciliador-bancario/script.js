@@ -6994,14 +6994,23 @@ async function procesarArchivoActualizarMayor(file) {
 
         // Obtener los números de asiento existentes (solo del mismo tipo de movimiento)
         const numerosAsientoExistentes = new Set();
+        let debugCounts = { conciliados: 0, mayorNoConciliado: 0, datosMayor: 0, eliminados: 0 };
+
+        // Helper para determinar si un movimiento es de tipo "debe" (puede no tener esDebe si viene de conciliación guardada)
+        const esMovimientoDebe = (m) => {
+            if (typeof m.esDebe === 'boolean') return m.esDebe;
+            // Calcular basándose en debe/haber si esDebe no está definido
+            return (m.debe || 0) > 0;
+        };
 
         // Desde los conciliados (solo del tipo actual)
         if (state.resultados && state.resultados.conciliados) {
             state.resultados.conciliados.forEach(c => {
                 if (c.mayor && Array.isArray(c.mayor)) {
                     c.mayor.forEach(m => {
-                        if (m.numeroAsiento && m.esDebe === esDebeActual) {
+                        if (m.numeroAsiento && esMovimientoDebe(m) === esDebeActual) {
                             numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
+                            debugCounts.conciliados++;
                         }
                     });
                 }
@@ -7011,8 +7020,9 @@ async function procesarArchivoActualizarMayor(file) {
         // Desde el mayor no conciliado (solo del tipo actual)
         if (state.resultados && state.resultados.mayorNoConciliado) {
             state.resultados.mayorNoConciliado.forEach(m => {
-                if (m.numeroAsiento && m.esDebe === esDebeActual) {
+                if (m.numeroAsiento && esMovimientoDebe(m) === esDebeActual) {
                     numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
+                    debugCounts.mayorNoConciliado++;
                 }
             });
         }
@@ -7020,8 +7030,9 @@ async function procesarArchivoActualizarMayor(file) {
         // Desde los datos originales del mayor (solo del tipo actual)
         if (state.datosMayor) {
             state.datosMayor.forEach(m => {
-                if (m.numeroAsiento && m.esDebe === esDebeActual) {
+                if (m.numeroAsiento && esMovimientoDebe(m) === esDebeActual) {
                     numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
+                    debugCounts.datosMayor++;
                 }
             });
         }
@@ -7029,14 +7040,15 @@ async function procesarArchivoActualizarMayor(file) {
         // Desde los movimientos eliminados (solo del tipo actual)
         if (state.eliminados && state.eliminados.length > 0) {
             state.eliminados.forEach(m => {
-                if (m.numeroAsiento && m.esDebe === esDebeActual) {
+                if (m.numeroAsiento && esMovimientoDebe(m) === esDebeActual) {
                     numerosAsientoExistentes.add(String(m.numeroAsiento).trim());
+                    debugCounts.eliminados++;
                 }
             });
         }
 
         console.log('Detección asientos nuevos - números existentes encontrados:', numerosAsientoExistentes.size,
-            'de fuentes: conciliados, mayorNoConciliado, datosMayor, eliminados');
+            'por fuente:', debugCounts, 'esDebeActual:', esDebeActual);
 
         // Filtrar movimientos nuevos del tipo correcto (que no existen por número de asiento)
         movimientosNuevosDetectados = movimientosDelTipoCorrecto.filter(m => {
