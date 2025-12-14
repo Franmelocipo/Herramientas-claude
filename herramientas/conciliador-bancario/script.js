@@ -6986,8 +6986,8 @@ async function procesarArchivoActualizarMayor(file) {
         movimientosArchivoActualizar = parsearMayor(data);
 
         // Determinar el tipo de movimiento según el tipo de conciliación
-        // Para débitos: esDebe = true, Para créditos: esDebe = false
-        const esDebeActual = state.tipoConciliacion === 'debitos';
+        // Para créditos: esDebe = true (debe > 0), Para débitos: esDebe = false (haber > 0)
+        const esDebeActual = state.tipoConciliacion === 'creditos';
 
         // Filtrar movimientos del archivo según el tipo de conciliación ANTES de procesar
         const movimientosDelTipoCorrecto = movimientosArchivoActualizar.filter(m => m.esDebe === esDebeActual);
@@ -7079,11 +7079,11 @@ function confirmarActualizarMayor() {
 
     // Filtrar según el tipo de conciliación actual (débitos o créditos)
     let movimientosFiltrados;
-    if (state.tipoConciliacion === 'debitos') {
-        // Para débitos: movimientos con Debe > 0 (esDebe = true)
+    if (state.tipoConciliacion === 'creditos') {
+        // Para créditos: movimientos con Debe > 0 (esDebe = true)
         movimientosFiltrados = movimientosNuevosDetectados.filter(m => m.esDebe);
     } else {
-        // Para créditos: movimientos con Haber > 0 (esDebe = false)
+        // Para débitos: movimientos con Haber > 0 (esDebe = false)
         movimientosFiltrados = movimientosNuevosDetectados.filter(m => !m.esDebe);
     }
 
