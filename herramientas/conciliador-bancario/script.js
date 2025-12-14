@@ -6128,14 +6128,33 @@ async function guardarConciliacion() {
             fecha_conciliacion: new Date().toISOString()
         };
 
-        // Siempre crear una nueva conciliación (ya no sobrescribimos)
-        const { error } = await supabase
-            .from('conciliaciones_guardadas')
-            .insert([datosAGuardar]);
+        // Si hay una conciliación cargada, actualizar; si no, crear nueva
+        if (conciliacionCargadaId) {
+            // UPDATE: sobrescribir la conciliación existente
+            const { error } = await supabase
+                .from('conciliaciones_guardadas')
+                .update(datosAGuardar)
+                .eq('id', conciliacionCargadaId);
 
-        if (error) throw error;
+            if (error) throw error;
 
-        mostrarMensaje('Conciliación guardada correctamente', 'success');
+            mostrarMensaje('Conciliación actualizada correctamente', 'success');
+        } else {
+            // INSERT: crear nueva conciliación y guardar el ID
+            const { data, error } = await supabase
+                .from('conciliaciones_guardadas')
+                .insert([datosAGuardar])
+                .select('id');
+
+            if (error) throw error;
+
+            // Guardar el ID para futuros guardados (sobrescribir en lugar de crear nuevo)
+            if (data && data.length > 0) {
+                conciliacionCargadaId = data[0].id;
+            }
+
+            mostrarMensaje('Conciliación guardada correctamente', 'success');
+        }
 
         // Actualizar lista de conciliaciones guardadas
         const conciliaciones = await cargarConciliacionesGuardadas();
