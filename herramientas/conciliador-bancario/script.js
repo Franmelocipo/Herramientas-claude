@@ -266,7 +266,8 @@ const elements = {
 
     // Resultados
     resultados: document.getElementById('resultados'),
-    totalConciliados: document.getElementById('totalConciliados'),
+    conciliadosMayorCount: document.getElementById('conciliadosMayorCount'),
+    conciliadosExtractoCount: document.getElementById('conciliadosExtractoCount'),
     mayorNoConciliado: document.getElementById('mayorNoConciliado'),
     extractoNoConciliado: document.getElementById('extractoNoConciliado'),
     totalMayor: document.getElementById('totalMayor'),
@@ -2096,7 +2097,8 @@ function mostrarVistaInicialPendientes() {
     const totalExtractoPendiente = extractoFiltrado.reduce((sum, e) => sum + e.importe, 0);
 
     // Actualizar resumen
-    elements.totalConciliados.textContent = '0';
+    elements.conciliadosMayorCount.textContent = '0';
+    elements.conciliadosExtractoCount.textContent = '0';
     elements.mayorNoConciliado.textContent = mayorFiltrado.length;
     elements.extractoNoConciliado.textContent = extractoFiltrado.length;
 
@@ -2899,8 +2901,13 @@ function mostrarResultados() {
     const totalMayor = totalConciliadoMayor + totalMayorPendiente;
     const totalExtracto = totalConciliadoExtracto + totalExtractoPendiente;
 
+    // Contar movimientos individuales conciliados
+    const movimientosMayorConciliados = res.conciliados.reduce((sum, c) => sum + c.mayor.length, 0);
+    const movimientosExtractoConciliados = res.conciliados.reduce((sum, c) => sum + c.extracto.length, 0);
+
     // Actualizar resumen
-    elements.totalConciliados.textContent = res.conciliados.length;
+    elements.conciliadosMayorCount.textContent = movimientosMayorConciliados;
+    elements.conciliadosExtractoCount.textContent = movimientosExtractoConciliados;
     elements.mayorNoConciliado.textContent = res.mayorNoConciliado.length;
     elements.extractoNoConciliado.textContent = res.extractoNoConciliado.length;
 
@@ -3713,8 +3720,13 @@ function actualizarTotalesYContadores() {
     const totalMayor = totalConciliadoMayor + totalMayorPendiente;
     const totalExtracto = totalConciliadoExtracto + totalExtractoPendiente;
 
+    // Contar movimientos individuales conciliados
+    const movimientosMayorConciliados = res.conciliados.reduce((sum, c) => sum + c.mayor.length, 0);
+    const movimientosExtractoConciliados = res.conciliados.reduce((sum, c) => sum + c.extracto.length, 0);
+
     // Actualizar contadores en resumen
-    elements.totalConciliados.textContent = res.conciliados.length;
+    elements.conciliadosMayorCount.textContent = movimientosMayorConciliados;
+    elements.conciliadosExtractoCount.textContent = movimientosExtractoConciliados;
     elements.mayorNoConciliado.textContent = res.mayorNoConciliado.length;
     elements.extractoNoConciliado.textContent = res.extractoNoConciliado.length;
 
@@ -5570,10 +5582,11 @@ function renderizarConciliadosPorGrupos() {
     // Actualizar visibilidad de secciones y botones
     actualizarVistaGruposConciliados();
 
-    // Actualizar contador total
+    // Actualizar contador total (suma de movimientos del mayor y extracto)
     const countTab = document.getElementById('countConciliadosTab');
     if (countTab) {
-        countTab.textContent = `(${conciliados.length})`;
+        const totalMovimientos = conciliados.reduce((sum, c) => sum + c.mayor.length + c.extracto.length, 0);
+        countTab.textContent = `(${totalMovimientos})`;
     }
 }
 
@@ -6647,7 +6660,9 @@ function mostrarModalConciliacionGuardada(conciliaciones) {
         });
 
         const datos = conciliacion.datos || {};
-        const totalConciliados = (datos.conciliados || []).length;
+        const conciliadosArray = datos.conciliados || [];
+        const movMayorConc = conciliadosArray.reduce((sum, c) => sum + (c.mayor ? c.mayor.length : 0), 0);
+        const movExtractoConc = conciliadosArray.reduce((sum, c) => sum + (c.extracto ? c.extracto.length : 0), 0);
         const mayorPendiente = (datos.mayorNoConciliado || []).length;
         const extractoPendiente = (datos.extractoNoConciliado || []).length;
 
@@ -6666,7 +6681,7 @@ function mostrarModalConciliacionGuardada(conciliaciones) {
                     <div class="conciliacion-seleccion-detalles">
                         <span>📅 ${fechaFormateada}</span>
                         <span>📆 ${rangoDesde} a ${rangoHasta}</span>
-                        <span>✅ ${totalConciliados} conc.</span>
+                        <span>✅ ${movMayorConc}|${movExtractoConc} mov.</span>
                         <span>📋 ${mayorPendiente} pend.</span>
                         <span>🏦 ${extractoPendiente} ext.</span>
                     </div>
@@ -6771,7 +6786,9 @@ async function abrirGestionConciliaciones() {
             });
 
             const datos = conciliacion.datos || {};
-            const totalConciliados = (datos.conciliados || []).length;
+            const conciliadosArray = datos.conciliados || [];
+            const movMayorConc = conciliadosArray.reduce((sum, c) => sum + (c.mayor ? c.mayor.length : 0), 0);
+            const movExtractoConc = conciliadosArray.reduce((sum, c) => sum + (c.extracto ? c.extracto.length : 0), 0);
             const mayorPendiente = (datos.mayorNoConciliado || []).length;
             const extractoPendiente = (datos.extractoNoConciliado || []).length;
 
@@ -6789,7 +6806,7 @@ async function abrirGestionConciliaciones() {
                         <div class="conciliacion-meta">
                             <span class="conciliacion-meta-item">📅 ${fechaFormateada}</span>
                             <span class="conciliacion-meta-item">📆 ${rangoDesde} a ${rangoHasta}</span>
-                            <span class="conciliacion-meta-item">✅ ${totalConciliados} conc.</span>
+                            <span class="conciliacion-meta-item">✅ ${movMayorConc}|${movExtractoConc} mov.</span>
                             <span class="conciliacion-meta-item">📋 ${mayorPendiente} pend.</span>
                             <span class="conciliacion-meta-item">🏦 ${extractoPendiente} ext.</span>
                         </div>
@@ -6853,7 +6870,9 @@ function confirmarEliminarConciliacion(conciliacionId) {
     });
 
     const datos = conciliacion.datos || {};
-    const totalConciliados = (datos.conciliados || []).length;
+    const conciliadosArray = datos.conciliados || [];
+    const movMayorConc = conciliadosArray.reduce((sum, c) => sum + (c.mayor ? c.mayor.length : 0), 0);
+    const movExtractoConc = conciliadosArray.reduce((sum, c) => sum + (c.extracto ? c.extracto.length : 0), 0);
     const nombre = conciliacion.nombre || `Conciliación ${conciliacion.tipo}`;
 
     detalles.innerHTML = `
@@ -6872,7 +6891,7 @@ function confirmarEliminarConciliacion(conciliacionId) {
             </div>
             <div class="eliminar-info-row">
                 <span class="eliminar-label">Movimientos conciliados:</span>
-                <span class="eliminar-value">${totalConciliados}</span>
+                <span class="eliminar-value">${movMayorConc} mayor | ${movExtractoConc} extracto</span>
             </div>
         </div>
     `;
@@ -6966,7 +6985,9 @@ function confirmarEliminarConciliacionCargada() {
 
     if (!modal || !overlay) return;
 
-    const totalConciliados = state.resultados ? state.resultados.conciliados.length : 0;
+    const conciliadosArray = state.resultados ? state.resultados.conciliados : [];
+    const movMayorConc = conciliadosArray.reduce((sum, c) => sum + (c.mayor ? c.mayor.length : 0), 0);
+    const movExtractoConc = conciliadosArray.reduce((sum, c) => sum + (c.extracto ? c.extracto.length : 0), 0);
 
     detalles.innerHTML = `
         <div class="eliminar-item-info">
@@ -6980,7 +7001,7 @@ function confirmarEliminarConciliacionCargada() {
             </div>
             <div class="eliminar-info-row">
                 <span class="eliminar-label">Movimientos conciliados:</span>
-                <span class="eliminar-value">${totalConciliados}</span>
+                <span class="eliminar-value">${movMayorConc} mayor | ${movExtractoConc} extracto</span>
             </div>
         </div>
         <p class="eliminar-advertencia">⚠️ Esta acción no se puede deshacer. Se eliminarán todos los datos de esta conciliación.</p>
