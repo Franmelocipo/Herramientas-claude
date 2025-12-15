@@ -6661,6 +6661,188 @@ async function sincronizarConExtracto() {
 }
 
 /**
+ * Verificar integridad de la conciliación al cargarla
+ * Compara los movimientos de la conciliación con los del extracto original
+ * y alerta si hay discrepancias
+ */
+async function verificarIntegridadConciliacion() {
+    if (!state.resultados || !state.cuentaSeleccionada) {
+        return; // No hay conciliación cargada
+    }
+
+    if (!state.rangoExtractos?.desde || !state.rangoExtractos?.hasta) {
+        return; // No hay rango definido
+    }
+
+    try {
+        console.log('🔍 Verificando integridad de la conciliación...');
+
+        // Obtener extractos del rango actual
+        const [anioDesde, mesDesde] = state.rangoExtractos.desde.split('-').map(Number);
+        const [anioHasta, mesHasta] = state.rangoExtractos.hasta.split('-').map(Number);
+
+        const { data: extractos, error } = await supabase
+            .from('extractos_mensuales')
+            .select('id, mes, anio, data')
+            .eq('cuenta_id', state.cuentaSeleccionada.id);
+
+        if (error) {
+            console.error('Error verificando integridad:', error);
+            return;
+        }
+
+        // Filtrar extractos en el rango
+        const extractosEnRango = (extractos || []).filter(ext => {
+            const extValue = ext.anio * 100 + ext.mes;
+            const desdeValue = anioDesde * 100 + mesDesde;
+            const hastaValue = anioHasta * 100 + mesHasta;
+            const min = Math.min(desdeValue, hastaValue);
+            const max = Math.max(desdeValue, hastaValue);
+            return extValue >= min && extValue <= max;
+        });
+
+        if (extractosEnRango.length === 0) {
+            return; // No hay extractos para comparar
+        }
+
+        // Combinar todos los movimientos de los extractos
+        let todosLosMovimientos = [];
+        for (const extracto of extractosEnRango) {
+            const movimientos = extracto.data || [];
+            movimientos.forEach((mov, idx) => {
+                todosLosMovimientos.push({
+                    ...mov,
+                    extractoId: extracto.id,
+                    extractoMes: extracto.mes,
+                    extractoAnio: extracto.anio
+                });
+            });
+        }
+
+        // Convertir al formato del conciliador
+        const movimientosExtracto = convertirMovimientosAuditoria(todosLosMovimientos);
+
+        // Filtrar por tipo de conciliación (débitos o créditos)
+        const movimientosFiltrados = state.tipoConciliacion === 'creditos'
+            ? movimientosExtracto.filter(e => e.credito > 0)
+            : movimientosExtracto.filter(e => e.debito > 0);
+
+        // Crear función para generar clave única
+        const generarClave = (mov) => {
+            const origen = String(mov.origen || '').trim();
+            const importe = Number(mov.importe || mov.debito || mov.credito || 0).toFixed(2);
+            if (!origen) {
+                const desc = String(mov.descripcion || '').trim().toLowerCase();
+                return `desc:${desc}|${importe}`;
+            }
+            return `origen:${origen}|${importe}`;
+        };
+
+        // Obtener claves de todos los movimientos en la conciliación actual
+        const clavesEnConciliacion = new Set();
+
+        state.resultados.conciliados.forEach(c => {
+            c.extracto.forEach(e => clavesEnConciliacion.add(generarClave(e)));
+        });
+        state.resultados.extractoNoConciliado.forEach(e => clavesEnConciliacion.add(generarClave(e)));
+        state.eliminados.forEach(e => {
+            if (e.descripcion !== undefined) {
+                clavesEnConciliacion.add(generarClave(e));
+            }
+        });
+
+        // Encontrar movimientos faltantes
+        const movimientosFaltantes = movimientosFiltrados.filter(m => !clavesEnConciliacion.has(generarClave(m)));
+
+        if (movimientosFaltantes.length === 0) {
+            console.log('✅ Integridad OK: Todos los movimientos del extracto están en la conciliación');
+            return;
+        }
+
+        // Hay discrepancias - mostrar alerta
+        console.warn(`⚠️ Integridad: Se encontraron ${movimientosFaltantes.length} movimiento(s) faltante(s)`);
+
+        const tipoMovimiento = state.tipoConciliacion === 'creditos' ? 'créditos' : 'débitos';
+
+        // Crear y mostrar el banner de alerta
+        mostrarAlertaIntegridad(movimientosFaltantes.length, tipoMovimiento);
+
+    } catch (error) {
+        console.error('Error verificando integridad:', error);
+    }
+}
+
+/**
+ * Mostrar banner de alerta de integridad
+ */
+function mostrarAlertaIntegridad(cantidad, tipo) {
+    // Remover alerta anterior si existe
+    const alertaAnterior = document.getElementById('alerta-integridad');
+    if (alertaAnterior) {
+        alertaAnterior.remove();
+    }
+
+    const alertaHtml = `
+        <div id="alerta-integridad" style="
+            background: linear-gradient(135deg, #fef3cd 0%, #fff3cd 100%);
+            border: 1px solid #ffc107;
+            border-left: 4px solid #ff9800;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        ">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 24px;">⚠️</span>
+                <div>
+                    <strong style="color: #856404;">Verificación de integridad</strong>
+                    <p style="margin: 4px 0 0 0; color: #856404; font-size: 14px;">
+                        Se detectaron <strong>${cantidad}</strong> movimiento(s) de ${tipo} en el extracto que no están en la conciliación.
+                    </p>
+                </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button onclick="sincronizarConExtracto()" style="
+                    background: #28a745;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 500;
+                    transition: background 0.2s;
+                " onmouseover="this.style.background='#218838'" onmouseout="this.style.background='#28a745'">
+                    🔄 Sincronizar ahora
+                </button>
+                <button onclick="document.getElementById('alerta-integridad').remove()" style="
+                    background: #6c757d;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 500;
+                    transition: background 0.2s;
+                " onmouseover="this.style.background='#5a6268'" onmouseout="this.style.background='#6c757d'">
+                    ✕ Ignorar
+                </button>
+            </div>
+        </div>
+    `;
+
+    // Insertar antes de la sección de resultados
+    const resultados = document.getElementById('resultados');
+    if (resultados) {
+        resultados.insertAdjacentHTML('afterbegin', alertaHtml);
+    }
+}
+
+/**
  * Cargar conciliaciones guardadas para el cliente/cuenta actual
  */
 async function cargarConciliacionesGuardadas() {
@@ -6806,6 +6988,12 @@ async function cargarConciliacionGuardada(conciliacionId) {
             actualizarBotonEliminarConciliacionCargada();
 
             mostrarMensaje('Conciliación cargada correctamente', 'success');
+
+            // Verificar integridad de la conciliación (comparar con extracto original)
+            // Esto se ejecuta de forma asíncrona para no bloquear la UI
+            setTimeout(() => {
+                verificarIntegridadConciliacion();
+            }, 500);
         }
     } catch (error) {
         console.error('Error cargando conciliación:', error);
