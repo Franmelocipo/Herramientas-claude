@@ -1747,9 +1747,13 @@ function mostrarModalReversionesPW() {
 function formatearFechaPW(fecha) {
     if (!fecha) return '';
     if (typeof fecha === 'number') {
-        // Excel serial date
-        const date = new Date((fecha - 25569) * 86400 * 1000);
-        return date.toLocaleDateString('es-AR');
+        // Excel serial date - usar UTC con hora del mediodía para evitar desfase por zona horaria
+        const diasDesdeEpoch = fecha - 25569;
+        const date = new Date(Date.UTC(1970, 0, 1 + diasDesdeEpoch, 12, 0, 0));
+        const dia = date.getUTCDate();
+        const mes = date.getUTCMonth() + 1;
+        const anio = date.getUTCFullYear();
+        return `${dia}/${mes}/${anio}`;
     }
     return String(fecha);
 }
