@@ -4396,3 +4396,114 @@ body {
         min-width: 100%;
     }
 }
+
+/* ========== NOTAS DE CONCILIACIÓN ========== */
+
+/* Botón de nota en la tabla */
+.btn-nota {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    opacity: 0.5;
+}
+
+.btn-nota:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.05);
+    transform: scale(1.1);
+}
+
+.btn-nota-activa {
+    opacity: 1;
+    background: rgba(255, 193, 7, 0.15);
+}
+
+.btn-nota-activa:hover {
+    background: rgba(255, 193, 7, 0.25);
+}
+
+/* Modal de notas */
+.modal-nota {
+    max-width: 500px;
+}
+
+.nota-textarea-grupo {
+    margin: 16px 0;
+    position: relative;
+}
+
+.nota-textarea-grupo label {
+    display: block;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.nota-textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 100px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.nota-textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.nota-textarea::placeholder {
+    color: #999;
+}
+
+.nota-contador {
+    position: absolute;
+    bottom: -20px;
+    right: 0;
+    font-size: 11px;
+    color: #999;
+}
+
+/* Info del movimiento en el modal */
+.nota-info-row {
+    display: flex;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.nota-info-row:last-child {
+    border-bottom: none;
+}
+
+.nota-info-label {
+    font-weight: 600;
+    color: #666;
+    min-width: 80px;
+    font-size: 13px;
+}
+
+.nota-info-value {
+    color: #333;
+    font-size: 13px;
+    flex: 1;
+    word-break: break-word;
+}
+
+/* Botón guardar nota */
+.btn-guardar-nota {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.btn-guardar-nota:hover {
+    background: linear-gradient(135deg, #5a6fd6 0%, #6a4190 100%);
+}
