@@ -6535,7 +6535,7 @@ async function sincronizarConExtracto() {
         const [anioHasta, mesHasta] = state.rangoExtractos.hasta.split('-').map(Number);
 
         const { data: extractos, error } = await supabase
-            .from('extractos_bancarios')
+            .from('extractos_mensuales')
             .select('*')
             .eq('cuenta_bancaria_id', state.cuentaSeleccionada.id);
 
