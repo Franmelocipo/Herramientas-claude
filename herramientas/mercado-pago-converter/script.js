@@ -360,11 +360,12 @@ async function processFile() {
                 // Excluir explícitamente "Reserva para pago"
                 if (desc.includes('reserva para pago')) return false;
 
-                // Incluir: "Pago", "Extracción de efectivo", "Devolución de dinero" y "Rendimientos"
+                // Incluir: "Pago", "Extracción de efectivo", "Devolución de dinero", "Rendimientos" y "Cashback"
                 return desc.includes('pago') ||
                        desc.includes('extracción de efectivo') ||
                        desc.includes('devolución de dinero') ||
-                       desc.includes('rendimientos');
+                       desc.includes('rendimientos') ||
+                       desc.includes('cashback');
             });
 
             console.log(`  Registros filtrados: ${filteredData.length}`);
