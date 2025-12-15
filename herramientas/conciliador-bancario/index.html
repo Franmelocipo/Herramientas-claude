@@ -1035,6 +1035,37 @@
         </div>
     </div>
 
+    <!-- Modal de notas de conciliación -->
+    <div id="overlay-nota" class="overlay-eliminar"></div>
+    <div id="modal-nota" class="modal-eliminar modal-nota" style="max-width: 500px;">
+        <div class="modal-eliminar-header">
+            <h3>📝 Nota del Movimiento</h3>
+            <button class="modal-close-btn" onclick="cerrarModalNota()">✕</button>
+        </div>
+        <div class="modal-eliminar-body">
+            <p class="modal-eliminar-pregunta">Agregue o edite una nota para este movimiento conciliado:</p>
+
+            <div id="nota-detalles" class="eliminar-detalles">
+                <!-- Contenido dinámico con info del movimiento -->
+            </div>
+
+            <div class="nota-textarea-grupo">
+                <label for="nota-contenido">Nota:</label>
+                <textarea id="nota-contenido" class="nota-textarea" placeholder="Escriba una nota para este movimiento conciliado..." rows="4" maxlength="500"></textarea>
+                <span class="nota-contador"><span id="nota-contador-chars">0</span>/500</span>
+            </div>
+
+            <div class="eliminar-aviso">
+                <span class="aviso-icono">💡</span>
+                <span>Las notas se guardarán junto con la conciliación</span>
+            </div>
+        </div>
+        <div class="modal-eliminar-footer">
+            <button class="btn-cancelar" onclick="cerrarModalNota()">Cancelar</button>
+            <button class="btn-confirmar-eliminar btn-guardar-nota" onclick="guardarNota()">💾 Guardar Nota</button>
+        </div>
+    </div>
+
     <!-- Modal de eliminar -->
     <div id="overlay-eliminar" class="overlay-eliminar"></div>
     <div id="modal-eliminar" class="modal-eliminar">

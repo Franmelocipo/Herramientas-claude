@@ -5522,9 +5522,17 @@ function renderizarGrupoConciliados(grupo, conciliadosFiltrados, totalOriginal) 
                 const colorBtnTitle = tieneCoincidencia
                     ? 'Marcar como sin coincidencia (naranja)'
                     : 'Marcar como con coincidencia (verde)';
+                // Botón de nota - muestra icono diferente si tiene nota
+                const tieneNota = match.nota && match.nota.trim().length > 0;
+                const notaBtnClass = tieneNota ? 'btn-nota btn-nota-activa' : 'btn-nota';
+                const notaBtnIcon = tieneNota ? '📝' : '📋';
+                const notaBtnTitle = tieneNota ? `Nota: ${match.nota.substring(0, 50)}${match.nota.length > 50 ? '...' : ''}` : 'Agregar nota';
                 html += `
                     <td class="col-action">
                         ${tipoBadge}${manualBadge}${reprocesoBadge}
+                        <button class="${notaBtnClass}" onclick="abrirModalNota('${match.id}')" title="${notaBtnTitle}">
+                            ${notaBtnIcon}
+                        </button>
                         <button class="btn-toggle-color" onmousedown="preBloquearToggle(event)" onclick="toggleColorConciliacion('${match.id}', event)" title="${colorBtnTitle}">
                             ${colorBtnIcon}
                         </button>
@@ -6167,6 +6175,7 @@ async function guardarConciliacion() {
                     diferencia: c.diferencia,
                     manual: c.manual || false,
                     coincidenciaOverride: c.coincidenciaOverride,
+                    nota: c.nota || null,
                     mayor: c.mayor.map(m => ({
                         id: m.id,
                         fecha: m.fecha,
@@ -7994,4 +8003,126 @@ function mostrarResumenReproceso(nuevosConciliados) {
         mostrarMensaje('', 'clear');
     }, 5000);
 }
+
+// ========== NOTAS DE CONCILIACIÓN ==========
+
+let conciliacionNotaActual = null; // ID de la conciliación que se está editando
+
+/**
+ * Abre el modal para agregar/editar nota de una conciliación
+ * @param {string} conciliacionId - ID de la conciliación
+ */
+function abrirModalNota(conciliacionId) {
+    const conciliacion = state.resultados?.conciliados.find(c => c.id === conciliacionId);
+    if (!conciliacion) {
+        mostrarMensaje('No se encontró la conciliación', 'error');
+        return;
+    }
+
+    conciliacionNotaActual = conciliacionId;
+
+    // Mostrar información del movimiento
+    const detallesEl = document.getElementById('nota-detalles');
+    if (detallesEl) {
+        const primerMayor = conciliacion.mayor[0];
+        const primerExtracto = conciliacion.extracto[0];
+
+        detallesEl.innerHTML = `
+            <div class="nota-info-row">
+                <span class="nota-info-label">Mayor:</span>
+                <span class="nota-info-value">${formatearFecha(primerMayor?.fecha)} - ${primerMayor?.leyenda || 'Sin leyenda'}</span>
+            </div>
+            <div class="nota-info-row">
+                <span class="nota-info-label">Extracto:</span>
+                <span class="nota-info-value">${formatearFecha(primerExtracto?.fecha)} - ${primerExtracto?.descripcion || 'Sin descripción'}</span>
+            </div>
+            <div class="nota-info-row">
+                <span class="nota-info-label">Importe:</span>
+                <span class="nota-info-value">${formatearNumero(primerMayor?.importe || 0)}</span>
+            </div>
+        `;
+    }
+
+    // Cargar nota existente si hay
+    const textareaEl = document.getElementById('nota-contenido');
+    if (textareaEl) {
+        textareaEl.value = conciliacion.nota || '';
+        actualizarContadorNotas();
+    }
+
+    // Mostrar modal
+    document.getElementById('overlay-nota').classList.remove('hidden');
+    document.getElementById('modal-nota').classList.remove('hidden');
+
+    // Focus en el textarea
+    setTimeout(() => {
+        if (textareaEl) textareaEl.focus();
+    }, 100);
+}
+
+/**
+ * Cierra el modal de notas
+ */
+function cerrarModalNota() {
+    document.getElementById('overlay-nota').classList.add('hidden');
+    document.getElementById('modal-nota').classList.add('hidden');
+    conciliacionNotaActual = null;
+}
+
+/**
+ * Guarda la nota en la conciliación
+ */
+function guardarNota() {
+    if (!conciliacionNotaActual || !state.resultados) {
+        cerrarModalNota();
+        return;
+    }
+
+    const textareaEl = document.getElementById('nota-contenido');
+    const nota = textareaEl?.value?.trim() || '';
+
+    // Buscar y actualizar la conciliación
+    const conciliacion = state.resultados.conciliados.find(c => c.id === conciliacionNotaActual);
+    if (conciliacion) {
+        conciliacion.nota = nota;
+
+        // Re-renderizar para mostrar el icono actualizado
+        renderizarResultados();
+
+        mostrarMensaje(nota ? 'Nota guardada correctamente' : 'Nota eliminada', 'success');
+        setTimeout(() => mostrarMensaje('', 'clear'), 3000);
+    }
+
+    cerrarModalNota();
+}
+
+/**
+ * Actualiza el contador de caracteres del textarea de notas
+ */
+function actualizarContadorNotas() {
+    const textareaEl = document.getElementById('nota-contenido');
+    const contadorEl = document.getElementById('nota-contador-chars');
+
+    if (textareaEl && contadorEl) {
+        contadorEl.textContent = textareaEl.value.length;
+    }
+}
+
+// Event listener para actualizar contador
+document.addEventListener('DOMContentLoaded', () => {
+    const textareaEl = document.getElementById('nota-contenido');
+    if (textareaEl) {
+        textareaEl.addEventListener('input', actualizarContadorNotas);
+    }
+});
+
+// Cerrar modal con Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const modalNota = document.getElementById('modal-nota');
+        if (modalNota && !modalNota.classList.contains('hidden')) {
+            cerrarModalNota();
+        }
+    }
+});
 
