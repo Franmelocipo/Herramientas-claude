@@ -6513,6 +6513,130 @@ async function guardarConciliacion() {
 }
 
 /**
+ * Sincronizar movimientos del extracto con la conciliación actual
+ * Detecta y recupera movimientos que existen en el extracto pero faltan en la conciliación
+ */
+async function sincronizarConExtracto() {
+    if (!state.resultados || !state.cuentaSeleccionada) {
+        mostrarMensaje('Debe tener una conciliación cargada para sincronizar', 'error');
+        return;
+    }
+
+    if (!state.rangoExtractos?.desde || !state.rangoExtractos?.hasta) {
+        mostrarMensaje('No hay rango de extractos definido', 'error');
+        return;
+    }
+
+    try {
+        mostrarMensaje('Buscando movimientos faltantes...', 'info');
+
+        // Obtener extractos del rango actual
+        const [anioDesde, mesDesde] = state.rangoExtractos.desde.split('-').map(Number);
+        const [anioHasta, mesHasta] = state.rangoExtractos.hasta.split('-').map(Number);
+
+        const { data: extractos, error } = await supabase
+            .from('extractos_bancarios')
+            .select('*')
+            .eq('cuenta_bancaria_id', state.cuentaSeleccionada.id);
+
+        if (error) throw error;
+
+        // Filtrar extractos en el rango
+        const extractosEnRango = (extractos || []).filter(ext => {
+            const extValue = ext.anio * 100 + ext.mes;
+            const desdeValue = anioDesde * 100 + mesDesde;
+            const hastaValue = anioHasta * 100 + mesHasta;
+            const min = Math.min(desdeValue, hastaValue);
+            const max = Math.max(desdeValue, hastaValue);
+            return extValue >= min && extValue <= max;
+        });
+
+        if (extractosEnRango.length === 0) {
+            mostrarMensaje('No se encontraron extractos en el rango de la conciliación', 'error');
+            return;
+        }
+
+        // Combinar todos los movimientos de los extractos
+        let todosLosMovimientos = [];
+        for (const extracto of extractosEnRango) {
+            const movimientos = extracto.data || [];
+            movimientos.forEach((mov, idx) => {
+                todosLosMovimientos.push({
+                    ...mov,
+                    extractoId: extracto.id,
+                    extractoMes: extracto.mes,
+                    extractoAnio: extracto.anio
+                });
+            });
+        }
+
+        // Convertir al formato del conciliador
+        const movimientosExtracto = convertirMovimientosAuditoria(todosLosMovimientos);
+
+        // Filtrar por tipo de conciliación (débitos o créditos)
+        const movimientosFiltrados = state.tipoConciliacion === 'creditos'
+            ? movimientosExtracto.filter(e => e.credito > 0)
+            : movimientosExtracto.filter(e => e.debito > 0);
+
+        // Obtener IDs de todos los movimientos en la conciliación actual
+        const idsEnConciliacion = new Set();
+
+        // IDs en conciliados
+        state.resultados.conciliados.forEach(c => {
+            c.extracto.forEach(e => idsEnConciliacion.add(e.id));
+        });
+
+        // IDs en pendientes
+        state.resultados.extractoNoConciliado.forEach(e => idsEnConciliacion.add(e.id));
+
+        // IDs en eliminados
+        state.eliminados.forEach(e => {
+            if (e.id && e.id.startsWith('EA')) idsEnConciliacion.add(e.id);
+        });
+
+        // Encontrar movimientos faltantes
+        const movimientosFaltantes = movimientosFiltrados.filter(m => !idsEnConciliacion.has(m.id));
+
+        if (movimientosFaltantes.length === 0) {
+            mostrarMensaje('No se encontraron movimientos faltantes. La conciliación está sincronizada.', 'success');
+            return;
+        }
+
+        // Mostrar confirmación
+        const tipoMovimiento = state.tipoConciliacion === 'creditos' ? 'créditos' : 'débitos';
+        const mensaje = `Se encontraron ${movimientosFaltantes.length} movimiento(s) de ${tipoMovimiento} que existen en el extracto pero no en la conciliación.\n\n` +
+            `¿Desea agregarlos a la lista de pendientes?`;
+
+        if (!confirm(mensaje)) {
+            return;
+        }
+
+        // Agregar movimientos faltantes a pendientes
+        movimientosFaltantes.forEach(m => {
+            // Asegurar que tenga el campo importe
+            if (!m.importe) {
+                m.importe = state.tipoConciliacion === 'creditos' ? m.credito : m.debito;
+            }
+            state.resultados.extractoNoConciliado.push(m);
+        });
+
+        // Actualizar vistas
+        resetearFiltros();
+        mostrarResultados();
+        actualizarTotalesYContadores();
+
+        mostrarMensaje(`Se agregaron ${movimientosFaltantes.length} movimiento(s) a pendientes. Recuerde guardar la conciliación.`, 'success');
+
+        // Log para debugging
+        console.log('Movimientos recuperados:', movimientosFaltantes);
+
+    } catch (error) {
+        console.error('Error sincronizando con extracto:', error);
+        mostrarMensaje('Error al sincronizar: ' + (error.message || 'Error desconocido'), 'error');
+    }
+}
+
+/**
  * Cargar conciliaciones guardadas para el cliente/cuenta actual
  */
 async function cargarConciliacionesGuardadas() {
