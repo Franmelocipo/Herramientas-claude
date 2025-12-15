@@ -2180,8 +2180,34 @@ async function ejecutarConciliacion() {
         actualizarProgreso(5);
         await sleep(100); // Permitir render
 
-        // Reiniciar contador de conciliaciones y selección
-        conciliacionIdCounter = 0;
+        // Preservar conciliaciones manuales previas (si existen)
+        const conciliacionesPrevias = state.resultados?.conciliados?.filter(c => c.manual) || [];
+        const teniaConciliacionesManuales = conciliacionesPrevias.length > 0;
+
+        // Obtener IDs de movimientos ya conciliados manualmente
+        const idsYaConciliadosMayor = new Set();
+        const idsYaConciliadosExtracto = new Set();
+
+        conciliacionesPrevias.forEach(c => {
+            c.mayor.forEach(m => idsYaConciliadosMayor.add(m.id));
+            c.extracto.forEach(e => idsYaConciliadosExtracto.add(e.id));
+        });
+
+        if (teniaConciliacionesManuales) {
+            console.log(`Preservando ${conciliacionesPrevias.length} conciliaciones manuales (${idsYaConciliadosMayor.size} mov mayor, ${idsYaConciliadosExtracto.size} mov extracto)`);
+        }
+
+        // Reiniciar contador de conciliaciones solo si no hay conciliaciones previas
+        // Si hay conciliaciones previas, continuar desde el número más alto
+        if (teniaConciliacionesManuales) {
+            const maxId = conciliacionesPrevias.reduce((max, c) => {
+                const num = parseInt(c.id.replace('conc_', '')) || 0;
+                return Math.max(max, num);
+            }, 0);
+            conciliacionIdCounter = maxId;
+        } else {
+            conciliacionIdCounter = 0;
+        }
         seleccion = { mayor: [], extracto: [] };
 
         // Actualizar tolerancias
@@ -2218,11 +2244,29 @@ async function ejecutarConciliacion() {
             extractoFiltrado = state.datosExtracto.filter(e => e.debito > 0).map(e => ({...e, importe: e.debito, usado: false}));
         }
 
+        // OPTIMIZACIÓN: Excluir movimientos ya conciliados manualmente
+        if (teniaConciliacionesManuales) {
+            const cantMayorAntes = mayorFiltrado.length;
+            const cantExtractoAntes = extractoFiltrado.length;
+
+            mayorFiltrado = mayorFiltrado.filter(m => !idsYaConciliadosMayor.has(m.id));
+            extractoFiltrado = extractoFiltrado.filter(e => !idsYaConciliadosExtracto.has(e.id));
+
+            console.log(`Optimización: procesando ${mayorFiltrado.length}/${cantMayorAntes} mayor y ${extractoFiltrado.length}/${cantExtractoAntes} extracto (excluidos ya conciliados)`);
+        }
+
         actualizarProgreso(15, 'Datos validados correctamente');
         await sleep(100);
 
-        // Ejecutar algoritmo de conciliación con progreso
-        state.resultados = await conciliar(mayorFiltrado, extractoFiltrado);
+        // Ejecutar algoritmo de conciliación con progreso (solo sobre movimientos no conciliados)
+        const resultadosAutomaticos = await conciliar(mayorFiltrado, extractoFiltrado);
+
+        // Combinar conciliaciones manuales previas con las automáticas
+        state.resultados = {
+            conciliados: [...conciliacionesPrevias, ...resultadosAutomaticos.conciliados],
+            mayorNoConciliado: resultadosAutomaticos.mayorNoConciliado,
+            extractoNoConciliado: resultadosAutomaticos.extractoNoConciliado
+        };
 
         // Paso 4: Generando resultados
         actualizarPaso(4, 'Generando resultados...');
