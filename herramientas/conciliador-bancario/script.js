@@ -1818,11 +1818,11 @@ function parsearFecha(valor) {
         // 25569 = días entre 1/1/1900 y 1/1/1970 (época Unix)
         // Valores típicos para fechas 2020-2030: ~44000-55000
         if (valor > 1 && valor < 100000) {
-            // Usar UTC para evitar problemas de zona horaria
+            // Usar UTC con hora del mediodía para evitar problemas de zona horaria
+            // Al usar 12:00 UTC, cualquier conversión a zona horaria local (hasta +/- 12h)
+            // mantendrá la fecha correcta
             const diasDesdeEpoch = (valor - 25569);
-            fecha = new Date(Date.UTC(1970, 0, 1 + diasDesdeEpoch));
-            // Convertir a fecha local sin cambio de hora
-            fecha = new Date(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate());
+            fecha = new Date(Date.UTC(1970, 0, 1 + diasDesdeEpoch, 12, 0, 0));
         }
     }
     // Si es string
