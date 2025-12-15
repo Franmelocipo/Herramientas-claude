@@ -3529,12 +3529,17 @@ function toggleSeleccionExtracto(id, checked) {
 
 /**
  * Seleccionar/deseleccionar todos los movimientos del Mayor pendiente
+ * Respeta los filtros activos: solo selecciona movimientos visibles/filtrados
  */
 function seleccionarTodosMayor(checked) {
     if (!state.resultados) return;
 
     if (checked) {
-        seleccion.mayor = state.resultados.mayorNoConciliado.map(m => m.id);
+        // Usar movimientos filtrados si hay filtros activos, sino todos
+        const movimientos = hayFiltrosActivosMayor()
+            ? mayorPendienteFiltrado
+            : state.resultados.mayorNoConciliado;
+        seleccion.mayor = movimientos.map(m => m.id);
     } else {
         seleccion.mayor = [];
     }
@@ -3551,12 +3556,17 @@ function seleccionarTodosMayor(checked) {
 
 /**
  * Seleccionar/deseleccionar todos los movimientos del Extracto pendiente
+ * Respeta los filtros activos: solo selecciona movimientos visibles/filtrados
  */
 function seleccionarTodosExtracto(checked) {
     if (!state.resultados) return;
 
     if (checked) {
-        seleccion.extracto = state.resultados.extractoNoConciliado.map(e => e.id);
+        // Usar movimientos filtrados si hay filtros activos, sino todos
+        const movimientos = hayFiltrosActivosExtracto()
+            ? extractoPendienteFiltrado
+            : state.resultados.extractoNoConciliado;
+        seleccion.extracto = movimientos.map(e => e.id);
     } else {
         seleccion.extracto = [];
     }
