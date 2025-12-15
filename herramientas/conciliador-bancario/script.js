@@ -6606,6 +6606,12 @@ async function cargarConciliacionGuardada(conciliacionId) {
                 elements.stepConciliacion.classList.remove('hidden');
             }
 
+            // IMPORTANTE: Resetear filtros antes de mostrar resultados
+            // Esto evita que filtros residuales de sesiones anteriores oculten los movimientos
+            // Bug fix: movimientos desconciliados desaparecían porque renderizarTablaMayorOrdenada()
+            // usaba mayorPendienteFiltrado (vacío) cuando hayFiltrosActivosMayor() era true
+            resetearFiltros();
+
             // Mostrar resultados
             mostrarResultados(state.resultados);
 
