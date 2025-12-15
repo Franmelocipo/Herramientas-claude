@@ -487,6 +487,40 @@ body {
     margin-top: 4px;
 }
 
+/* Dual values for reconciled movements */
+.summary-values-dual {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.dual-value {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.dual-number {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1f2937;
+    line-height: 1.2;
+}
+
+.dual-label {
+    font-size: 11px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.dual-separator {
+    font-size: 24px;
+    color: #d1d5db;
+    font-weight: 300;
+}
+
 /* Totals box */
 .totals-box {
     background: #f1f5f9;
