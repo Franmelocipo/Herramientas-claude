@@ -6226,7 +6226,15 @@ async function guardarConciliacion() {
 
             if (error) throw error;
 
-            mostrarMensaje('Conciliación actualizada correctamente', 'success');
+            const fechaHoraGuardado = new Date().toLocaleString('es-AR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            mostrarMensaje(`Conciliación actualizada correctamente (${fechaHoraGuardado})`, 'success');
         } else {
             // INSERT: crear nueva conciliación y guardar el ID
             const { data, error } = await supabase
@@ -6241,7 +6249,15 @@ async function guardarConciliacion() {
                 conciliacionCargadaId = data[0].id;
             }
 
-            mostrarMensaje('Conciliación guardada correctamente', 'success');
+            const fechaHoraGuardado = new Date().toLocaleString('es-AR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            mostrarMensaje(`Conciliación guardada correctamente (${fechaHoraGuardado})`, 'success');
         }
 
         // Actualizar lista de conciliaciones guardadas
