@@ -6612,6 +6612,7 @@ async function cargarConciliacionGuardada(conciliacionId) {
             // Actualizar panel de reprocesamiento y historial
             actualizarPanelReproceso();
             actualizarHistorial();
+            actualizarSugerenciasReproceso(); // Actualizar número de reproceso basado en historial
 
             console.log('✅ Conciliación cargada - Conciliados:', state.resultados.conciliados.length,
                         'Mayor pendiente:', state.resultados.mayorNoConciliado.length,
