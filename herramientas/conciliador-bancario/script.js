@@ -6536,8 +6536,8 @@ async function sincronizarConExtracto() {
 
         const { data: extractos, error } = await supabase
             .from('extractos_mensuales')
-            .select('*')
-            .eq('cuenta_bancaria_id', state.cuentaSeleccionada.id);
+            .select('id, mes, anio, data')
+            .eq('cuenta_id', state.cuentaSeleccionada.id);
 
         if (error) throw error;
 
