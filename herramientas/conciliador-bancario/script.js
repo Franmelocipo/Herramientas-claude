@@ -6578,14 +6578,17 @@ async function sincronizarConExtracto() {
             ? movimientosExtracto.filter(e => e.credito > 0)
             : movimientosExtracto.filter(e => e.debito > 0);
 
-        // Crear función para generar clave única de movimiento (fecha + descripcion + importe)
+        // Crear función para generar clave única de movimiento
+        // Usamos origen (número de referencia) + importe ya que el origen es único por movimiento
         const generarClave = (mov) => {
-            const fecha = mov.fecha instanceof Date
-                ? mov.fecha.toISOString().split('T')[0]
-                : String(mov.fecha || '');
-            const desc = String(mov.descripcion || '').trim().toLowerCase();
+            const origen = String(mov.origen || '').trim();
             const importe = Number(mov.importe || mov.debito || mov.credito || 0).toFixed(2);
-            return `${fecha}|${desc}|${importe}`;
+            // Si no hay origen, usar descripción + importe como fallback
+            if (!origen) {
+                const desc = String(mov.descripcion || '').trim().toLowerCase();
+                return `desc:${desc}|${importe}`;
+            }
+            return `origen:${origen}|${importe}`;
         };
 
         // Obtener claves de todos los movimientos en la conciliación actual
@@ -6606,6 +6609,9 @@ async function sincronizarConExtracto() {
             }
         });
 
+        console.log('Claves en conciliación (muestra):', Array.from(clavesEnConciliacion).slice(0, 10));
+        console.log('Clave del movimiento buscado (496529):', generarClave({origen: '496529', debito: 2872724.42}));
+
         // Encontrar movimientos faltantes (comparando por clave única)
         const movimientosFaltantes = movimientosFiltrados.filter(m => !clavesEnConciliacion.has(generarClave(m)));
 
@@ -6617,7 +6623,7 @@ async function sincronizarConExtracto() {
         // Mostrar confirmación con detalles
         const tipoMovimiento = state.tipoConciliacion === 'creditos' ? 'créditos' : 'débitos';
         let detalles = movimientosFaltantes.slice(0, 5).map(m =>
-            `• ${m.fecha instanceof Date ? m.fecha.toLocaleDateString('es-AR') : m.fecha} - ${m.descripcion} - $${(m.importe || m.debito || m.credito).toLocaleString('es-AR')}`
+            `• ${m.origen || 'S/N'} - ${m.descripcion} - $${(m.importe || m.debito || m.credito).toLocaleString('es-AR')}`
         ).join('\n');
         if (movimientosFaltantes.length > 5) {
             detalles += `\n... y ${movimientosFaltantes.length - 5} más`;
