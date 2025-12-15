@@ -6578,34 +6578,52 @@ async function sincronizarConExtracto() {
             ? movimientosExtracto.filter(e => e.credito > 0)
             : movimientosExtracto.filter(e => e.debito > 0);
 
-        // Obtener IDs de todos los movimientos en la conciliación actual
-        const idsEnConciliacion = new Set();
+        // Crear función para generar clave única de movimiento (fecha + descripcion + importe)
+        const generarClave = (mov) => {
+            const fecha = mov.fecha instanceof Date
+                ? mov.fecha.toISOString().split('T')[0]
+                : String(mov.fecha || '');
+            const desc = String(mov.descripcion || '').trim().toLowerCase();
+            const importe = Number(mov.importe || mov.debito || mov.credito || 0).toFixed(2);
+            return `${fecha}|${desc}|${importe}`;
+        };
 
-        // IDs en conciliados
+        // Obtener claves de todos los movimientos en la conciliación actual
+        const clavesEnConciliacion = new Set();
+
+        // Claves en conciliados
         state.resultados.conciliados.forEach(c => {
-            c.extracto.forEach(e => idsEnConciliacion.add(e.id));
+            c.extracto.forEach(e => clavesEnConciliacion.add(generarClave(e)));
         });
 
-        // IDs en pendientes
-        state.resultados.extractoNoConciliado.forEach(e => idsEnConciliacion.add(e.id));
+        // Claves en pendientes
+        state.resultados.extractoNoConciliado.forEach(e => clavesEnConciliacion.add(generarClave(e)));
 
-        // IDs en eliminados
+        // Claves en eliminados (solo movimientos de extracto)
         state.eliminados.forEach(e => {
-            if (e.id && e.id.startsWith('EA')) idsEnConciliacion.add(e.id);
+            if (e.descripcion !== undefined) { // Es un movimiento de extracto
+                clavesEnConciliacion.add(generarClave(e));
+            }
         });
 
-        // Encontrar movimientos faltantes
-        const movimientosFaltantes = movimientosFiltrados.filter(m => !idsEnConciliacion.has(m.id));
+        // Encontrar movimientos faltantes (comparando por clave única)
+        const movimientosFaltantes = movimientosFiltrados.filter(m => !clavesEnConciliacion.has(generarClave(m)));
 
         if (movimientosFaltantes.length === 0) {
             mostrarMensaje('No se encontraron movimientos faltantes. La conciliación está sincronizada.', 'success');
             return;
         }
 
-        // Mostrar confirmación
+        // Mostrar confirmación con detalles
         const tipoMovimiento = state.tipoConciliacion === 'creditos' ? 'créditos' : 'débitos';
-        const mensaje = `Se encontraron ${movimientosFaltantes.length} movimiento(s) de ${tipoMovimiento} que existen en el extracto pero no en la conciliación.\n\n` +
-            `¿Desea agregarlos a la lista de pendientes?`;
+        let detalles = movimientosFaltantes.slice(0, 5).map(m =>
+            `• ${m.fecha instanceof Date ? m.fecha.toLocaleDateString('es-AR') : m.fecha} - ${m.descripcion} - $${(m.importe || m.debito || m.credito).toLocaleString('es-AR')}`
+        ).join('\n');
+        if (movimientosFaltantes.length > 5) {
+            detalles += `\n... y ${movimientosFaltantes.length - 5} más`;
+        }
+
+        const mensaje = `Se encontraron ${movimientosFaltantes.length} movimiento(s) de ${tipoMovimiento} faltantes:\n\n${detalles}\n\n¿Desea agregarlos a la lista de pendientes?`;
 
         if (!confirm(mensaje)) {
             return;
