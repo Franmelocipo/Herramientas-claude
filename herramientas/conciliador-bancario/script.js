@@ -5992,13 +5992,23 @@ function obtenerValorColumna(movimiento, columna, tipo) {
 function renderizarTablaMayorOrdenada() {
     if (!state.resultados) return;
 
-    // Obtener datos: filtrados si hay filtros activos, o todos
-    let movimientos = hayFiltrosActivosMayor()
+    // Obtener datos: filtrados si hay filtros activos Y hay datos filtrados, o todos
+    // IMPORTANTE: Si mayorPendienteFiltrado está vacío, usar siempre los datos originales
+    // Esto evita que movimientos desaparezcan cuando hay filtros residuales
+    const hayFiltros = hayFiltrosActivosMayor();
+    const hayDatosFiltrados = mayorPendienteFiltrado && mayorPendienteFiltrado.length > 0;
+
+    let movimientos = (hayFiltros && hayDatosFiltrados)
         ? mayorPendienteFiltrado
         : state.resultados.mayorNoConciliado;
 
     // Aplicar ordenamiento
     movimientos = aplicarOrdenamiento(movimientos, 'mayor');
+
+    // Actualizar contador para reflejar lo que realmente se muestra
+    if (elements.countMayorPendiente) {
+        elements.countMayorPendiente.textContent = `(${movimientos.length})`;
+    }
 
     // Renderizar filas
     let html = '';
@@ -6037,13 +6047,23 @@ function renderizarTablaMayorOrdenada() {
 function renderizarTablaExtractoOrdenada() {
     if (!state.resultados) return;
 
-    // Obtener datos: filtrados si hay filtros activos, o todos
-    let movimientos = hayFiltrosActivosExtracto()
+    // Obtener datos: filtrados si hay filtros activos Y hay datos filtrados, o todos
+    // IMPORTANTE: Si extractoPendienteFiltrado está vacío, usar siempre los datos originales
+    // Esto evita que movimientos desaparezcan cuando hay filtros residuales
+    const hayFiltros = hayFiltrosActivosExtracto();
+    const hayDatosFiltrados = extractoPendienteFiltrado && extractoPendienteFiltrado.length > 0;
+
+    let movimientos = (hayFiltros && hayDatosFiltrados)
         ? extractoPendienteFiltrado
         : state.resultados.extractoNoConciliado;
 
     // Aplicar ordenamiento
     movimientos = aplicarOrdenamiento(movimientos, 'extracto');
+
+    // Actualizar contador para reflejar lo que realmente se muestra
+    if (elements.countExtractoPendiente) {
+        elements.countExtractoPendiente.textContent = `(${movimientos.length})`;
+    }
 
     // Renderizar filas
     let html = '';
