@@ -738,10 +738,11 @@ function detectarMesAnioDeMovimientos(jsonData, headerRow) {
 
         // Parsear fecha
         if (typeof fecha === 'number') {
-            // Fecha de Excel
-            const excelDate = new Date((fecha - 25569) * 86400 * 1000);
-            mes = excelDate.getMonth() + 1;
-            anio = excelDate.getFullYear();
+            // Fecha de Excel - usar UTC con hora del mediodía para evitar desfase por zona horaria
+            const diasDesdeEpoch = fecha - 25569;
+            const excelDate = new Date(Date.UTC(1970, 0, 1 + diasDesdeEpoch, 12, 0, 0));
+            mes = excelDate.getUTCMonth() + 1;
+            anio = excelDate.getUTCFullYear();
         } else {
             // Formato texto DD/MM/YYYY o similar
             const fechaStr = String(fecha);
@@ -842,10 +843,14 @@ async function procesarExtracto() {
             let mes, anio;
 
             if (typeof fecha === 'number') {
-                const excelDate = new Date((fecha - 25569) * 86400 * 1000);
-                mes = excelDate.getMonth() + 1;
-                anio = excelDate.getFullYear();
-                fecha = excelDate.toLocaleDateString('es-AR');
+                // Usar UTC con hora del mediodía para evitar desfase por zona horaria
+                const diasDesdeEpoch = fecha - 25569;
+                const excelDate = new Date(Date.UTC(1970, 0, 1 + diasDesdeEpoch, 12, 0, 0));
+                mes = excelDate.getUTCMonth() + 1;
+                anio = excelDate.getUTCFullYear();
+                // Formatear fecha manualmente para evitar problemas de zona horaria
+                const dia = excelDate.getUTCDate();
+                fecha = `${dia}/${mes}/${anio}`;
             } else {
                 const fechaStr = String(fecha);
                 const partes = fechaStr.split(/[\/\-]/);
