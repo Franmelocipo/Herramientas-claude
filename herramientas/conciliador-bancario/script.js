@@ -2177,6 +2177,9 @@ async function ejecutarConciliacion() {
         mostrarMensaje('', 'clear');
         mostrarModalProgreso();
 
+        // Iniciar contador de tiempo
+        const tiempoInicio = Date.now();
+
         // Paso 1: Cargando y validando datos
         actualizarPaso(1, 'Cargando y validando datos...');
         actualizarProgreso(5);
@@ -2278,8 +2281,11 @@ async function ejecutarConciliacion() {
         // Mostrar resultados
         mostrarResultados();
 
+        // Calcular duración del proceso
+        const duracion = Date.now() - tiempoInicio;
+
         // Guardar el procesamiento inicial en el historial
-        guardarProcesamientoInicial(state.resultados.conciliados.length);
+        guardarProcesamientoInicial(state.resultados.conciliados.length, duracion);
 
         // Mostrar panel de reprocesamiento
         actualizarPanelReproceso();
@@ -3533,7 +3539,44 @@ function vincularManualmente() {
     // Cambiar a pestaña de conciliados para ver el resultado
     cambiarTab('conciliados');
 
+    // Registrar la conciliación manual en el historial
+    registrarConciliacionManualEnHistorial(movsMayor.length + movsExtracto.length);
+
     mostrarMensaje('Movimientos vinculados manualmente como conciliados', 'success');
+}
+
+/**
+ * Registra una conciliación manual en el historial de procesamiento
+ * @param {number} cantidadMovimientos - Cantidad de movimientos conciliados manualmente
+ */
+function registrarConciliacionManualEnHistorial(cantidadMovimientos) {
+    // Si no hay historial previo, crear uno vacío para el procesamiento inicial
+    if (historialProcesamiento.length === 0) {
+        historialProcesamiento = [{
+            fecha: new Date().toISOString(),
+            toleranciaFecha: state.toleranciaFecha,
+            toleranciaImporte: state.toleranciaImporte,
+            exigenciaPalabras: state.exigenciaPalabras,
+            conciliados: cantidadMovimientos,
+            esInicial: true,
+            tipo: 'manual',
+            duracion: 0
+        }];
+    } else {
+        // Agregar como nuevo proceso manual
+        historialProcesamiento.push({
+            fecha: new Date().toISOString(),
+            toleranciaFecha: state.toleranciaFecha,
+            toleranciaImporte: state.toleranciaImporte,
+            exigenciaPalabras: state.exigenciaPalabras,
+            conciliados: cantidadMovimientos,
+            esInicial: false,
+            tipo: 'manual',
+            duracion: 0
+        });
+    }
+
+    actualizarHistorial();
 }
 
 /**
@@ -7719,6 +7762,27 @@ function actualizarInfoDesconciliaciones() {
 }
 
 /**
+ * Formatea la duración en milisegundos a un formato legible
+ * @param {number} ms - Duración en milisegundos
+ * @returns {string} - Duración formateada
+ */
+function formatearDuracion(ms) {
+    if (!ms || ms <= 0) return '';
+
+    const segundos = Math.floor(ms / 1000);
+    const minutos = Math.floor(segundos / 60);
+    const segundosRestantes = segundos % 60;
+
+    if (minutos > 0) {
+        return `${minutos}m ${segundosRestantes}s`;
+    } else if (segundos > 0) {
+        return `${segundos}s`;
+    } else {
+        return `${ms}ms`;
+    }
+}
+
+/**
  * Actualiza el historial de procesamiento en la UI
  */
 function actualizarHistorial() {
@@ -7731,19 +7795,46 @@ function actualizarHistorial() {
 
     let html = '';
     let totalConciliados = 0;
+    let contadorAutomatico = 0;
+    let contadorManual = 0;
 
     historialProcesamiento.forEach((item, idx) => {
         totalConciliados += item.conciliados;
-        const prefijo = idx === 0 ? 'Procesamiento inicial' : `Reproceso ${idx}`;
+
+        // Determinar tipo y prefijo
+        const esManual = item.tipo === 'manual';
+        const tipoClase = esManual ? 'historial-item-manual' : 'historial-item-automatico';
+
+        let prefijo;
+        if (esManual) {
+            contadorManual++;
+            prefijo = contadorManual === 1 ? 'Vinculación manual' : `Vinculación manual ${contadorManual}`;
+        } else {
+            if (item.esInicial) {
+                prefijo = 'Procesamiento inicial';
+            } else {
+                contadorAutomatico++;
+                prefijo = `Reproceso ${contadorAutomatico}`;
+            }
+        }
+
         const signo = idx === 0 ? '' : '+';
         const palabrasTexto = item.exigenciaPalabras !== undefined
             ? `, ${item.exigenciaPalabras} pal.`
             : '';
 
+        // Formatear duración
+        const duracionTexto = item.duracion ? ` (${formatearDuracion(item.duracion)})` : '';
+
+        // Descripción de parámetros (solo para procesos automáticos)
+        const parametrosTexto = esManual
+            ? ''
+            : ` (${item.toleranciaFecha} días, $${item.toleranciaImporte.toLocaleString('es-AR')}${palabrasTexto})`;
+
         html += `
-            <div class="historial-item">
+            <div class="historial-item ${tipoClase}">
                 <span class="historial-numero">${idx + 1}.</span>
-                <span class="historial-descripcion">${prefijo} (${item.toleranciaFecha} días, $${item.toleranciaImporte.toLocaleString('es-AR')}${palabrasTexto})</span>
+                <span class="historial-descripcion">${prefijo}${parametrosTexto}${duracionTexto}</span>
                 <span class="historial-resultado">→ ${signo}${item.conciliados} conciliados</span>
             </div>
         `;
@@ -7814,8 +7905,10 @@ function actualizarSugerenciasReproceso() {
 
 /**
  * Guarda el procesamiento inicial en el historial
+ * @param {number} cantidadConciliados - Cantidad de movimientos conciliados
+ * @param {number} duracion - Duración del proceso en milisegundos
  */
-function guardarProcesamientoInicial(cantidadConciliados) {
+function guardarProcesamientoInicial(cantidadConciliados, duracion = 0) {
     toleranciasIniciales = {
         fecha: state.toleranciaFecha,
         importe: state.toleranciaImporte,
@@ -7828,7 +7921,9 @@ function guardarProcesamientoInicial(cantidadConciliados) {
         toleranciaImporte: state.toleranciaImporte,
         exigenciaPalabras: state.exigenciaPalabras,
         conciliados: cantidadConciliados,
-        esInicial: true
+        esInicial: true,
+        tipo: 'automatico',
+        duracion: duracion
     }];
 
     actualizarHistorial();
@@ -7870,8 +7965,13 @@ async function reprocesarPendientes() {
 
         // Mostrar progreso
         mostrarModalProgreso();
+
+        // Iniciar contador de tiempo
+        const tiempoInicio = Date.now();
+
         actualizarPaso(1, 'Iniciando reprocesamiento...');
         actualizarProgreso(5);
+        actualizarConciliados(0); // Inicializar contador de conciliados
         await sleep(100);
 
         // Guardar referencia a conciliados actuales (no se tocan)
@@ -7896,12 +7996,16 @@ async function reprocesarPendientes() {
         await sleep(100);
 
         // Callback para actualizar progreso durante el reproceso
-        const onProgresoReproceso = (fase, porcentaje, mensaje) => {
+        const onProgresoReproceso = (fase, porcentaje, mensaje, conciliadosActuales = 0) => {
             // Fase va de 1 a 3, mapeamos a progreso 20-70
             const progresoBase = 20 + (fase - 1) * 16;
             const progresoFinal = progresoBase + Math.floor(porcentaje * 0.16);
             actualizarPaso(2, mensaje);
             actualizarProgreso(Math.min(progresoFinal, 70));
+            // Actualizar contador de conciliados en tiempo real
+            if (conciliadosActuales > 0) {
+                actualizarConciliados(conciliadosActuales);
+            }
         };
 
         const resultadosReproceso = await conciliarReproceso(mayorPendiente, extractoPendiente, onProgresoReproceso);
@@ -7940,6 +8044,9 @@ async function reprocesarPendientes() {
         // Mantener eliminados
         state.eliminados = eliminadosPrevios;
 
+        // Calcular duración del proceso
+        const duracion = Date.now() - tiempoInicio;
+
         // Guardar en historial
         historialProcesamiento.push({
             fecha: new Date().toISOString(),
@@ -7947,7 +8054,9 @@ async function reprocesarPendientes() {
             toleranciaImporte: nuevaToleranciaImporte,
             exigenciaPalabras: nuevaExigenciaPalabras,
             conciliados: nuevosConciliados.length,
-            esInicial: false
+            esInicial: false,
+            tipo: 'automatico',
+            duracion: duracion
         });
 
         // Actualizar sugerencias para el próximo reproceso
@@ -7983,7 +8092,7 @@ async function reprocesarPendientes() {
  * IMPORTANTE: Respeta las desconciliaciones manuales previas
  * @param {Array} mayor - Movimientos del mayor pendientes
  * @param {Array} extracto - Movimientos del extracto pendientes
- * @param {Function} onProgreso - Callback para actualizar progreso (fase, porcentaje, mensaje)
+ * @param {Function} onProgreso - Callback para actualizar progreso (fase, porcentaje, mensaje, conciliadosActuales)
  */
 async function conciliarReproceso(mayor, extracto, onProgreso = null) {
     const conciliados = [];
@@ -7997,7 +8106,7 @@ async function conciliarReproceso(mayor, extracto, onProgreso = null) {
     const totalExtracto = extractoNoConciliado.length;
 
     // Paso 1: Buscar coincidencias exactas (1 a 1)
-    if (onProgreso) onProgreso(1, 0, 'Buscando coincidencias exactas (1:1)...');
+    if (onProgreso) onProgreso(1, 0, 'Buscando coincidencias exactas (1:1)...', 0);
 
     for (let i = mayorNoConciliado.length - 1; i >= 0; i--) {
         const movMayor = mayorNoConciliado[i];
@@ -8030,7 +8139,7 @@ async function conciliarReproceso(mayor, extracto, onProgreso = null) {
         // Yield para no bloquear UI y actualizar progreso
         if (i % 20 === 0) {
             const porcentaje = totalMayor > 0 ? Math.floor(((totalMayor - i) / totalMayor) * 100) : 100;
-            if (onProgreso) onProgreso(1, porcentaje, `Buscando coincidencias exactas (1:1)... ${totalMayor - i}/${totalMayor}`);
+            if (onProgreso) onProgreso(1, porcentaje, `Buscando coincidencias exactas (1:1)... ${totalMayor - i}/${totalMayor}`, conciliados.length);
             await sleep(0);
         }
     }
@@ -8038,7 +8147,7 @@ async function conciliarReproceso(mayor, extracto, onProgreso = null) {
     console.log('conciliarReproceso - Paso 1 completado, encontrados:', conciliados.filter(c => c.tipo === '1:1').length);
 
     // Paso 2: Buscar coincidencias 1 a muchos
-    if (onProgreso) onProgreso(2, 0, 'Buscando coincidencias (1:N)...');
+    if (onProgreso) onProgreso(2, 0, 'Buscando coincidencias (1:N)...', conciliados.length);
 
     const mayorParaN = mayorNoConciliado.length;
     for (let i = mayorNoConciliado.length - 1; i >= 0; i--) {
@@ -8086,7 +8195,7 @@ async function conciliarReproceso(mayor, extracto, onProgreso = null) {
         // Yield en cada iteración para evitar que el navegador se cuelgue
         // La búsqueda de combinaciones es muy costosa con muchos movimientos
         const porcentaje = mayorParaN > 0 ? Math.floor(((mayorParaN - i) / mayorParaN) * 100) : 100;
-        if (onProgreso) onProgreso(2, porcentaje, `Buscando coincidencias (1:N)... ${mayorParaN - i}/${mayorParaN}`);
+        if (onProgreso) onProgreso(2, porcentaje, `Buscando coincidencias (1:N)... ${mayorParaN - i}/${mayorParaN}`, conciliados.length);
         await sleep(0);
     }
 
@@ -8095,7 +8204,7 @@ async function conciliarReproceso(mayor, extracto, onProgreso = null) {
     // Paso 3: Buscar coincidencias muchos a 1
     // IMPORTANTE: Para este tipo de conciliación, validamos que todos los movimientos
     // del mayor sean de la misma entidad y que haya coincidencia de texto con el extracto
-    if (onProgreso) onProgreso(3, 0, 'Buscando coincidencias (N:1)...');
+    if (onProgreso) onProgreso(3, 0, 'Buscando coincidencias (N:1)...', conciliados.length);
 
     const extractoParaN1 = extractoNoConciliado.length;
     for (let i = extractoNoConciliado.length - 1; i >= 0; i--) {
@@ -8143,7 +8252,7 @@ async function conciliarReproceso(mayor, extracto, onProgreso = null) {
         // Yield en cada iteración para evitar que el navegador se cuelgue
         // La búsqueda de combinaciones es muy costosa con muchos movimientos
         const porcentaje = extractoParaN1 > 0 ? Math.floor(((extractoParaN1 - i) / extractoParaN1) * 100) : 100;
-        if (onProgreso) onProgreso(3, porcentaje, `Buscando coincidencias (N:1)... ${extractoParaN1 - i}/${extractoParaN1}`);
+        if (onProgreso) onProgreso(3, porcentaje, `Buscando coincidencias (N:1)... ${extractoParaN1 - i}/${extractoParaN1}`, conciliados.length);
         await sleep(0);
     }
 

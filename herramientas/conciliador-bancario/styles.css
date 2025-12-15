@@ -2660,6 +2660,30 @@ body {
     font-size: 13px;
 }
 
+/* Estilo para procesos automáticos */
+.historial-item-automatico {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border-color: #7dd3fc;
+}
+
+.historial-item-automatico .historial-numero {
+    color: #0284c7;
+}
+
+/* Estilo para procesos manuales */
+.historial-item-manual {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border-color: #fbbf24;
+}
+
+.historial-item-manual .historial-numero {
+    color: #d97706;
+}
+
+.historial-item-manual .historial-resultado {
+    color: #b45309;
+}
+
 .historial-numero {
     color: #64748b;
     font-weight: 600;
