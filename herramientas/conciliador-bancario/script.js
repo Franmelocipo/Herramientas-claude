@@ -3425,6 +3425,12 @@ function desconciliar(idConciliacion) {
     // Eliminar de conciliados
     state.resultados.conciliados = state.resultados.conciliados.filter(c => String(c.id) !== String(idConciliacion));
 
+    // IMPORTANTE: Resetear filtros antes de actualizar vistas
+    // Esto evita que los movimientos desconciliados desaparezcan cuando hay filtros activos
+    // Bug fix: renderizarTablaExtractoOrdenada() usaba extractoPendienteFiltrado (vacío/desactualizado)
+    // cuando hayFiltrosActivosExtracto() era true
+    resetearFiltros();
+
     // Actualizar vistas
     llenarTablaConciliados(state.resultados.conciliados);
     llenarTablaMayorPendiente(state.resultados.mayorNoConciliado);
