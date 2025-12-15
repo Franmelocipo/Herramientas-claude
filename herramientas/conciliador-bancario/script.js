@@ -32,7 +32,10 @@ let state = {
     // Administración del mayor
     mayorAdministrado: false, // Si el usuario ha revisado/administrado el mayor
     filtrosMayorAdmin: {}, // Filtros aplicados en administración del mayor
-    filtroCategoriaMayorAdmin: [] // Categorías seleccionadas para filtrar
+    filtroCategoriaMayorAdmin: [], // Categorías seleccionadas para filtrar
+    // Control de vista inicial de pendientes
+    vistaInicialMostrada: false, // Si ya se mostró la vista inicial de pendientes
+    datosVistaInicial: null // Hash de los datos para detectar cambios
 };
 
 // Memoria de desconciliaciones manuales - pares de IDs que no deben volver a conciliarse automáticamente
@@ -2051,6 +2054,85 @@ function sleep(ms) {
 
 // ========== CONCILIACIÓN ==========
 
+/**
+ * Muestra la vista inicial de pendientes antes de ejecutar la conciliación automática.
+ * Permite al usuario hacer conciliaciones manuales desde el principio.
+ */
+function mostrarVistaInicialPendientes() {
+    // Solo mostrar si hay datos cargados y tipo seleccionado
+    if (!state.tipoConciliacion || state.datosMayor.length === 0 || state.datosExtracto.length === 0) {
+        return;
+    }
+
+    // Reiniciar contador de conciliaciones y selección
+    conciliacionIdCounter = 0;
+    seleccion = { mayor: [], extracto: [] };
+
+    // Filtrar datos según el tipo de conciliación
+    let mayorFiltrado, extractoFiltrado;
+
+    if (state.tipoConciliacion === 'creditos') {
+        // Créditos (entradas de dinero): Debe del Mayor = Crédito del Extracto
+        mayorFiltrado = state.datosMayor.filter(m => m.debe > 0).map(m => ({...m, importe: m.debe, usado: false}));
+        extractoFiltrado = state.datosExtracto.filter(e => e.credito > 0).map(e => ({...e, importe: e.credito, usado: false}));
+    } else {
+        // Débitos (salidas de dinero): Haber del Mayor = Débito del Extracto
+        mayorFiltrado = state.datosMayor.filter(m => m.haber > 0).map(m => ({...m, importe: m.haber, usado: false}));
+        extractoFiltrado = state.datosExtracto.filter(e => e.debito > 0).map(e => ({...e, importe: e.debito, usado: false}));
+    }
+
+    // Inicializar state.resultados con todos como pendientes
+    state.resultados = {
+        conciliados: [],
+        mayorNoConciliado: mayorFiltrado,
+        extractoNoConciliado: extractoFiltrado
+    };
+
+    // Limpiar lista de eliminados
+    state.eliminados = [];
+
+    // Actualizar contadores y totales
+    const totalMayorPendiente = mayorFiltrado.reduce((sum, m) => sum + m.importe, 0);
+    const totalExtractoPendiente = extractoFiltrado.reduce((sum, e) => sum + e.importe, 0);
+
+    // Actualizar resumen
+    elements.totalConciliados.textContent = '0';
+    elements.mayorNoConciliado.textContent = mayorFiltrado.length;
+    elements.extractoNoConciliado.textContent = extractoFiltrado.length;
+
+    elements.totalMayor.textContent = formatearMoneda(totalMayorPendiente);
+    elements.totalExtracto.textContent = formatearMoneda(totalExtractoPendiente);
+    elements.diferencia.textContent = formatearMoneda(Math.abs(totalMayorPendiente - totalExtractoPendiente));
+
+    // Color de diferencia
+    const difElement = document.querySelector('.total-row.diferencia .total-value');
+    if (difElement) {
+        if (Math.abs(totalMayorPendiente - totalExtractoPendiente) > 0) {
+            difElement.style.color = '#dc2626';
+        } else {
+            difElement.style.color = '#059669';
+        }
+    }
+
+    // Llenar tablas de pendientes (conciliados y eliminados vacíos)
+    llenarTablaConciliados([]);
+    llenarTablaMayorPendiente(mayorFiltrado);
+    llenarTablaExtractoPendiente(extractoFiltrado);
+    llenarTablaEliminados();
+
+    // Poblar selector de tipos para el filtro de Mayor
+    poblarSelectorTiposMayor();
+
+    // Mostrar sección de resultados
+    elements.resultados.classList.remove('hidden');
+
+    // Cambiar al tab de Mayor Pendiente por defecto
+    cambiarTab('mayor-pendiente');
+
+    // Scroll a resultados
+    elements.resultados.scrollIntoView({ behavior: 'smooth' });
+}
+
 function actualizarBotonConciliar() {
     // Nuevo flujo: Cliente -> Cuenta -> Mayor -> Tipo
     const habilitado = state.clienteSeleccionado &&
@@ -2076,6 +2158,15 @@ function actualizarBotonConciliar() {
     // Mostrar paso de tipo cuando hay mayor cargado
     if (state.datosMayor.length > 0 && state.datosExtracto.length > 0) {
         elements.stepTipo.classList.remove('hidden');
+    }
+
+    // Mostrar vista inicial de pendientes cuando todos los datos están cargados
+    // Crear un "hash" de los datos actuales para detectar cambios
+    const datosActuales = `${state.tipoConciliacion}_${state.datosMayor.length}_${state.datosExtracto.length}`;
+
+    if (habilitado && state.datosVistaInicial !== datosActuales) {
+        state.datosVistaInicial = datosActuales;
+        mostrarVistaInicialPendientes();
     }
 }
 
@@ -7325,7 +7416,10 @@ function reiniciar() {
         // Administración del mayor
         mayorAdministrado: false,
         filtrosMayorAdmin: {},
-        filtroCategoriaMayorAdmin: []
+        filtroCategoriaMayorAdmin: [],
+        // Control de vista inicial de pendientes
+        vistaInicialMostrada: false,
+        datosVistaInicial: null
     };
 
     // Ocultar panel de administración del mayor
