@@ -416,7 +416,8 @@ async function processFile() {
                     const comisionCuotas = Math.abs(parseFloat(row['COMISIÓN POR OFRECER CUOTAS SIN INTERÉS']) || 0);
                     const costoEnvio = Math.abs(parseFloat(row['COSTO DE ENVÍO']) || 0);
                     const impuestosIIBB = Math.abs(parseFloat(row['IMPUESTOS COBRADOS POR RETENCIONES IIBB']) || 0);
-                    const cuponDescuento = Math.abs(parseFloat(row['CUPÓN DE DESCUENTO']) || 0);
+                    // Cupón de descuento - buscar con y sin acento
+                    const cuponDescuento = Math.abs(parseFloat(row['CUPÓN DE DESCUENTO'] || row['CUPON DE DESCUENTO']) || 0);
 
                     // Costo por ofrecer descuento (puede ser positivo o negativo)
                     const costoOfrecerDescuento = parseFloat(row['COSTO POR OFRECER DESCUENTO']) || 0;
