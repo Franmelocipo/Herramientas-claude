@@ -341,6 +341,79 @@ function handleMayorFileChange(event) {
 }
 
 /**
+ * Parsear número en formato argentino (puntos = miles, coma = decimal)
+ */
+function parsearNumeroArgentino(valor) {
+    if (valor === null || valor === undefined || valor === '') return 0;
+
+    // Si ya es número, retornarlo
+    if (typeof valor === 'number') return valor;
+
+    // Convertir a string
+    let str = valor.toString().trim();
+
+    // Quitar símbolos de moneda y espacios
+    str = str.replace(/[$\s]/g, '');
+
+    // Si está vacío o es solo guiones, retornar 0
+    if (!str || str === '-' || str === '--') return 0;
+
+    // Detectar formato:
+    // Formato argentino: 56.247,680 (punto = miles, coma = decimal)
+    // Formato internacional: 56,247.680 (coma = miles, punto = decimal)
+
+    const tienePunto = str.includes('.');
+    const tieneComa = str.includes(',');
+
+    if (tienePunto && tieneComa) {
+        // Tiene ambos - determinar cuál es el decimal por posición
+        const posPunto = str.lastIndexOf('.');
+        const posComa = str.lastIndexOf(',');
+
+        if (posComa > posPunto) {
+            // Formato argentino: 1.234,56
+            str = str.replace(/\./g, '').replace(',', '.');
+        } else {
+            // Formato internacional: 1,234.56
+            str = str.replace(/,/g, '');
+        }
+    } else if (tieneComa && !tienePunto) {
+        // Solo coma - probablemente decimal argentino: 1234,56
+        str = str.replace(',', '.');
+    } else if (tienePunto && !tieneComa) {
+        // Solo punto - verificar si es decimal o miles
+        // Si hay más de un punto, son separadores de miles
+        const puntos = (str.match(/\./g) || []).length;
+        if (puntos > 1) {
+            // Múltiples puntos = separadores de miles sin decimal
+            str = str.replace(/\./g, '');
+        }
+        // Si solo hay un punto, asumir que es decimal
+    }
+
+    const resultado = parseFloat(str);
+    return isNaN(resultado) ? 0 : Math.abs(resultado);
+}
+
+/**
+ * Buscar valor en objeto de fila con múltiples posibles nombres de columna
+ */
+function buscarColumna(row, ...nombres) {
+    for (const nombre of nombres) {
+        // Buscar coincidencia exacta
+        if (row[nombre] !== undefined) return row[nombre];
+
+        // Buscar coincidencia parcial (la columna contiene el nombre)
+        for (const key of Object.keys(row)) {
+            if (key.toLowerCase().includes(nombre.toLowerCase())) {
+                return row[key];
+            }
+        }
+    }
+    return '';
+}
+
+/**
  * Procesar archivo de mayor
  */
 async function procesarMayor() {
@@ -364,23 +437,30 @@ async function procesarMayor() {
             return;
         }
 
-        // Mapear columnas del mayor de Tango
+        console.log('Columnas detectadas:', Object.keys(jsonData[0]));
+        console.log('Primera fila:', jsonData[0]);
+
+        // Mapear columnas del mayor de Tango (flexibilidad en nombres)
         const registros = jsonData.map((row, index) => {
-            // Detectar columnas (flexibilidad en nombres)
-            const fecha = row['Fecha'] || row['FECHA'] || row['fecha'] || '';
-            const asiento = row['Asiento'] || row['ASIENTO'] || row['asiento'] || row['Nro Asiento'] || '';
-            const descripcion = row['Descripción'] || row['DESCRIPCION'] || row['descripcion'] || row['Concepto'] || row['CONCEPTO'] || '';
-            const debe = parseFloat((row['Debe'] || row['DEBE'] || row['debe'] || '0').toString().replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
-            const haber = parseFloat((row['Haber'] || row['HABER'] || row['haber'] || '0').toString().replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+            // Buscar columnas con múltiples nombres posibles
+            const fecha = buscarColumna(row, 'Fecha asien', 'Fecha', 'FECHA', 'fecha');
+            const asiento = buscarColumna(row, 'Número C', 'Numero', 'Asiento', 'ASIENTO', 'Nro Asiento', 'NroAsiento');
+            const descripcion = buscarColumna(row, 'Leyenda movimiento', 'Leyenda', 'Descripción', 'DESCRIPCION', 'Concepto', 'CONCEPTO');
+            const debeRaw = buscarColumna(row, 'Debe', 'DEBE');
+            const haberRaw = buscarColumna(row, 'Haber', 'HABER');
+
+            // Parsear números con formato argentino
+            const debe = parsearNumeroArgentino(debeRaw);
+            const haber = parsearNumeroArgentino(haberRaw);
 
             return {
                 id: `reg_${index}_${Date.now()}`,
                 fecha: parsearFecha(fecha),
                 fechaOriginal: fecha,
-                asiento: asiento.toString(),
-                descripcion: descripcion,
-                debe: Math.abs(debe),
-                haber: Math.abs(haber),
+                asiento: asiento ? asiento.toString() : '',
+                descripcion: descripcion || '',
+                debe: debe,
+                haber: haber,
                 estado: 'pendiente',
                 vinculadoCon: [],
                 tipo: debe > 0 ? 'debe' : 'haber',
@@ -408,6 +488,9 @@ async function procesarMayor() {
         document.getElementById('infoMayorCargado').style.display = 'block';
 
         console.log(`✅ Mayor procesado: ${registros.length} registros`);
+        if (registros.length > 0) {
+            console.log('Ejemplo de registro:', registros[0]);
+        }
 
     } catch (error) {
         console.error('Error procesando mayor:', error);
@@ -808,6 +891,431 @@ function marcarComoDevolucion() {
     // Actualizar UI
     renderizarVinculacion();
     renderizarTablaMayor();
+}
+
+// ============================================
+// CONCILIACIÓN AUTOMÁTICA
+// ============================================
+
+/**
+ * Mostrar panel de configuración de conciliación
+ */
+function conciliarAutomaticamente() {
+    const registros = stateMayores.registrosMayor;
+    if (registros.length === 0) {
+        alert('Primero debe cargar un mayor contable');
+        return;
+    }
+
+    const cuponesPendientes = registros.filter(r => r.debe > 0 && r.estado !== 'vinculado' && !r.esDevolucion);
+    const liquidacionesPendientes = registros.filter(r => r.haber > 0 && r.estado !== 'vinculado' && !r.esDevolucion);
+
+    if (cuponesPendientes.length === 0) {
+        alert('No hay cupones pendientes de vincular');
+        return;
+    }
+
+    if (liquidacionesPendientes.length === 0) {
+        alert('No hay liquidaciones pendientes de vincular');
+        return;
+    }
+
+    // Mostrar panel de configuración
+    document.getElementById('panelConfigConciliacion').style.display = 'block';
+    document.getElementById('resultadosConciliacion').style.display = 'none';
+}
+
+/**
+ * Cerrar panel de configuración
+ */
+function cerrarConfigConciliacion() {
+    document.getElementById('panelConfigConciliacion').style.display = 'none';
+}
+
+/**
+ * Cerrar resultados de conciliación
+ */
+function cerrarResultadosConciliacion() {
+    document.getElementById('resultadosConciliacion').style.display = 'none';
+}
+
+/**
+ * Ejecutar conciliación automática
+ */
+function ejecutarConciliacion() {
+    const tolerancia = parseFloat(document.getElementById('toleranciaImporte').value) || 0.01;
+    const diasMaximos = parseInt(document.getElementById('diasMaximos').value) || 40;
+    const modo = document.getElementById('modoConciliacion').value;
+
+    console.log(`🤖 Iniciando conciliación automática - Modo: ${modo}, Tolerancia: ${tolerancia}, Días máx: ${diasMaximos}`);
+
+    const registros = stateMayores.registrosMayor;
+
+    // Obtener cupones y liquidaciones pendientes
+    let cuponesPendientes = registros.filter(r =>
+        r.debe > 0 && r.estado !== 'vinculado' && !r.esDevolucion
+    ).sort((a, b) => (a.fecha || 0) - (b.fecha || 0)); // Ordenar por fecha
+
+    let liquidacionesPendientes = registros.filter(r =>
+        r.haber > 0 && r.estado !== 'vinculado' && !r.esDevolucion
+    ).sort((a, b) => (a.fecha || 0) - (b.fecha || 0));
+
+    let vinculacionesExitosas = 0;
+    let cuponesVinculados = new Set();
+    let liquidacionesVinculadas = new Set();
+
+    if (modo === 'N:1') {
+        // Modo N:1: Varios cupones pueden vincularse con una liquidación
+        // La suma de cupones debe coincidir con la liquidación
+        vinculacionesExitosas = conciliarN1(
+            cuponesPendientes,
+            liquidacionesPendientes,
+            tolerancia,
+            diasMaximos,
+            cuponesVinculados,
+            liquidacionesVinculadas
+        );
+    } else if (modo === '1:1') {
+        // Modo 1:1: Un cupón con una liquidación
+        vinculacionesExitosas = conciliar11(
+            cuponesPendientes,
+            liquidacionesPendientes,
+            tolerancia,
+            diasMaximos,
+            cuponesVinculados,
+            liquidacionesVinculadas
+        );
+    } else if (modo === '1:N') {
+        // Modo 1:N: Un cupón con varias liquidaciones
+        vinculacionesExitosas = conciliar1N(
+            cuponesPendientes,
+            liquidacionesPendientes,
+            tolerancia,
+            diasMaximos,
+            cuponesVinculados,
+            liquidacionesVinculadas
+        );
+    }
+
+    // Actualizar estadísticas
+    const cuponesSinMatch = cuponesPendientes.filter(c => !cuponesVinculados.has(c.id)).length;
+    const liquidacionesSinMatch = liquidacionesPendientes.filter(l => !liquidacionesVinculadas.has(l.id)).length;
+
+    // Mostrar resultados
+    document.getElementById('panelConfigConciliacion').style.display = 'none';
+    document.getElementById('resultadosConciliacion').style.display = 'block';
+    document.getElementById('conciliacionExitosas').textContent = vinculacionesExitosas;
+    document.getElementById('conciliacionPendientes').textContent = cuponesSinMatch;
+    document.getElementById('conciliacionLiquidaciones').textContent = liquidacionesSinMatch;
+
+    // Analizar vencimientos de los que quedaron
+    analizarVencimientos();
+
+    // Actualizar UI
+    renderizarVinculacion();
+    renderizarTablaMayor();
+    actualizarEstadisticasVinculacion();
+
+    console.log(`✅ Conciliación completada: ${vinculacionesExitosas} vinculaciones`);
+}
+
+/**
+ * Conciliación N:1 - Varios cupones con una liquidación
+ */
+function conciliarN1(cupones, liquidaciones, tolerancia, diasMaximos, cuponesVinculados, liquidacionesVinculadas) {
+    let vinculaciones = 0;
+
+    for (const liquidacion of liquidaciones) {
+        if (liquidacionesVinculadas.has(liquidacion.id)) continue;
+
+        const montoLiquidacion = liquidacion.haber;
+        const fechaLiquidacion = liquidacion.fecha;
+
+        if (!fechaLiquidacion) continue;
+
+        // Buscar cupones candidatos (fecha anterior a liquidación, dentro del plazo)
+        const cuponesCandidatos = cupones.filter(c => {
+            if (cuponesVinculados.has(c.id)) return false;
+            if (!c.fecha) return false;
+
+            const diasDiferencia = Math.floor((fechaLiquidacion - c.fecha) / (1000 * 60 * 60 * 24));
+            return diasDiferencia >= 0 && diasDiferencia <= diasMaximos;
+        });
+
+        if (cuponesCandidatos.length === 0) continue;
+
+        // Intentar encontrar combinación de cupones que sumen el monto de la liquidación
+        const combinacion = buscarCombinacionSuma(cuponesCandidatos, montoLiquidacion, tolerancia);
+
+        if (combinacion && combinacion.length > 0) {
+            // Crear vinculación
+            const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
+
+            // Marcar cupones
+            combinacion.forEach(cupon => {
+                cupon.estado = 'vinculado';
+                cupon.vinculadoCon = [liquidacion.id];
+                cupon.vinculacionId = vinculacionId;
+                cuponesVinculados.add(cupon.id);
+            });
+
+            // Marcar liquidación
+            liquidacion.estado = 'vinculado';
+            liquidacion.vinculadoCon = combinacion.map(c => c.id);
+            liquidacion.vinculacionId = vinculacionId;
+            liquidacionesVinculadas.add(liquidacion.id);
+
+            // Registrar vinculación
+            stateMayores.vinculaciones.push({
+                id: vinculacionId,
+                cupones: combinacion.map(c => c.id),
+                liquidaciones: [liquidacion.id],
+                tipo: 'automatica',
+                fecha: new Date().toISOString()
+            });
+
+            vinculaciones++;
+        }
+    }
+
+    return vinculaciones;
+}
+
+/**
+ * Conciliación 1:1 - Un cupón con una liquidación
+ */
+function conciliar11(cupones, liquidaciones, tolerancia, diasMaximos, cuponesVinculados, liquidacionesVinculadas) {
+    let vinculaciones = 0;
+
+    for (const cupon of cupones) {
+        if (cuponesVinculados.has(cupon.id)) continue;
+        if (!cupon.fecha) continue;
+
+        const montoCupon = cupon.debe;
+
+        // Buscar liquidación que coincida
+        for (const liquidacion of liquidaciones) {
+            if (liquidacionesVinculadas.has(liquidacion.id)) continue;
+            if (!liquidacion.fecha) continue;
+
+            const diasDiferencia = Math.floor((liquidacion.fecha - cupon.fecha) / (1000 * 60 * 60 * 24));
+            if (diasDiferencia < 0 || diasDiferencia > diasMaximos) continue;
+
+            const diferencia = Math.abs(montoCupon - liquidacion.haber);
+            if (diferencia <= tolerancia) {
+                // Match encontrado
+                const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
+
+                cupon.estado = 'vinculado';
+                cupon.vinculadoCon = [liquidacion.id];
+                cupon.vinculacionId = vinculacionId;
+
+                liquidacion.estado = 'vinculado';
+                liquidacion.vinculadoCon = [cupon.id];
+                liquidacion.vinculacionId = vinculacionId;
+
+                cuponesVinculados.add(cupon.id);
+                liquidacionesVinculadas.add(liquidacion.id);
+
+                stateMayores.vinculaciones.push({
+                    id: vinculacionId,
+                    cupones: [cupon.id],
+                    liquidaciones: [liquidacion.id],
+                    tipo: 'automatica',
+                    fecha: new Date().toISOString()
+                });
+
+                vinculaciones++;
+                break;
+            }
+        }
+    }
+
+    return vinculaciones;
+}
+
+/**
+ * Conciliación 1:N - Un cupón con varias liquidaciones
+ */
+function conciliar1N(cupones, liquidaciones, tolerancia, diasMaximos, cuponesVinculados, liquidacionesVinculadas) {
+    let vinculaciones = 0;
+
+    for (const cupon of cupones) {
+        if (cuponesVinculados.has(cupon.id)) continue;
+        if (!cupon.fecha) continue;
+
+        const montoCupon = cupon.debe;
+
+        // Buscar liquidaciones candidatas
+        const liquidacionesCandidatas = liquidaciones.filter(l => {
+            if (liquidacionesVinculadas.has(l.id)) return false;
+            if (!l.fecha) return false;
+
+            const diasDiferencia = Math.floor((l.fecha - cupon.fecha) / (1000 * 60 * 60 * 24));
+            return diasDiferencia >= 0 && diasDiferencia <= diasMaximos;
+        });
+
+        if (liquidacionesCandidatas.length === 0) continue;
+
+        // Buscar combinación de liquidaciones que sumen el monto del cupón
+        const combinacion = buscarCombinacionSumaHaber(liquidacionesCandidatas, montoCupon, tolerancia);
+
+        if (combinacion && combinacion.length > 0) {
+            const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
+
+            cupon.estado = 'vinculado';
+            cupon.vinculadoCon = combinacion.map(l => l.id);
+            cupon.vinculacionId = vinculacionId;
+            cuponesVinculados.add(cupon.id);
+
+            combinacion.forEach(liq => {
+                liq.estado = 'vinculado';
+                liq.vinculadoCon = [cupon.id];
+                liq.vinculacionId = vinculacionId;
+                liquidacionesVinculadas.add(liq.id);
+            });
+
+            stateMayores.vinculaciones.push({
+                id: vinculacionId,
+                cupones: [cupon.id],
+                liquidaciones: combinacion.map(l => l.id),
+                tipo: 'automatica',
+                fecha: new Date().toISOString()
+            });
+
+            vinculaciones++;
+        }
+    }
+
+    return vinculaciones;
+}
+
+/**
+ * Buscar combinación de cupones que sumen un monto específico
+ * Usa un algoritmo greedy con backtracking limitado para eficiencia
+ */
+function buscarCombinacionSuma(elementos, montoObjetivo, tolerancia) {
+    // Primero intentar match exacto con un solo elemento
+    for (const elem of elementos) {
+        if (Math.abs(elem.debe - montoObjetivo) <= tolerancia) {
+            return [elem];
+        }
+    }
+
+    // Ordenar por monto descendente para mejor eficiencia
+    const ordenados = [...elementos].sort((a, b) => b.debe - a.debe);
+
+    // Intentar combinaciones (limitado a combinaciones razonables)
+    const resultado = [];
+    let sumaActual = 0;
+
+    for (const elem of ordenados) {
+        if (sumaActual + elem.debe <= montoObjetivo + tolerancia) {
+            resultado.push(elem);
+            sumaActual += elem.debe;
+
+            if (Math.abs(sumaActual - montoObjetivo) <= tolerancia) {
+                return resultado;
+            }
+        }
+    }
+
+    // Si el greedy no funcionó, intentar subset sum con límite
+    if (elementos.length <= 20) {
+        const combinacion = subsetSum(elementos, montoObjetivo, tolerancia);
+        if (combinacion) return combinacion;
+    }
+
+    return null;
+}
+
+/**
+ * Buscar combinación de liquidaciones que sumen un monto específico
+ */
+function buscarCombinacionSumaHaber(elementos, montoObjetivo, tolerancia) {
+    // Primero intentar match exacto con un solo elemento
+    for (const elem of elementos) {
+        if (Math.abs(elem.haber - montoObjetivo) <= tolerancia) {
+            return [elem];
+        }
+    }
+
+    // Ordenar por monto descendente
+    const ordenados = [...elementos].sort((a, b) => b.haber - a.haber);
+
+    // Greedy
+    const resultado = [];
+    let sumaActual = 0;
+
+    for (const elem of ordenados) {
+        if (sumaActual + elem.haber <= montoObjetivo + tolerancia) {
+            resultado.push(elem);
+            sumaActual += elem.haber;
+
+            if (Math.abs(sumaActual - montoObjetivo) <= tolerancia) {
+                return resultado;
+            }
+        }
+    }
+
+    // Subset sum limitado
+    if (elementos.length <= 20) {
+        const combinacion = subsetSumHaber(elementos, montoObjetivo, tolerancia);
+        if (combinacion) return combinacion;
+    }
+
+    return null;
+}
+
+/**
+ * Algoritmo de subset sum para cupones (debe)
+ */
+function subsetSum(elementos, objetivo, tolerancia, maxElementos = 10) {
+    const n = Math.min(elementos.length, maxElementos);
+
+    // Generar todas las combinaciones posibles (hasta 2^n)
+    for (let mask = 1; mask < (1 << n); mask++) {
+        const combo = [];
+        let suma = 0;
+
+        for (let i = 0; i < n; i++) {
+            if (mask & (1 << i)) {
+                combo.push(elementos[i]);
+                suma += elementos[i].debe;
+            }
+        }
+
+        if (Math.abs(suma - objetivo) <= tolerancia) {
+            return combo;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Algoritmo de subset sum para liquidaciones (haber)
+ */
+function subsetSumHaber(elementos, objetivo, tolerancia, maxElementos = 10) {
+    const n = Math.min(elementos.length, maxElementos);
+
+    for (let mask = 1; mask < (1 << n); mask++) {
+        const combo = [];
+        let suma = 0;
+
+        for (let i = 0; i < n; i++) {
+            if (mask & (1 << i)) {
+                combo.push(elementos[i]);
+                suma += elementos[i].haber;
+            }
+        }
+
+        if (Math.abs(suma - objetivo) <= tolerancia) {
+            return combo;
+        }
+    }
+
+    return null;
 }
 
 // ============================================
