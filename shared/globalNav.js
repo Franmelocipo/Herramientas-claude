@@ -211,10 +211,15 @@
         if (btnClients) {
             btnClients.addEventListener('click', () => {
                 if (isHome) {
-                    // En home, abrir el modal existente
-                    const modal = document.getElementById('modalClients');
-                    if (modal) {
-                        modal.classList.remove('hidden');
+                    // En home, llamar a showClientsModal para cargar la lista
+                    if (typeof window.showClientsModal === 'function') {
+                        window.showClientsModal();
+                    } else {
+                        // Fallback: abrir el modal existente
+                        const modal = document.getElementById('modalClients');
+                        if (modal) {
+                            modal.classList.remove('hidden');
+                        }
                     }
                 } else {
                     // En herramientas, redirigir a home con parámetro
@@ -228,9 +233,13 @@
         if (btnTaxes) {
             btnTaxes.addEventListener('click', () => {
                 if (isHome) {
-                    const modal = document.getElementById('modalTaxes');
-                    if (modal) {
-                        modal.classList.remove('hidden');
+                    if (typeof window.showTaxesModal === 'function') {
+                        window.showTaxesModal();
+                    } else {
+                        const modal = document.getElementById('modalTaxes');
+                        if (modal) {
+                            modal.classList.remove('hidden');
+                        }
                     }
                 } else {
                     window.location.href = basePath + 'index.html?action=taxes';
@@ -243,9 +252,13 @@
         if (btnStorage) {
             btnStorage.addEventListener('click', () => {
                 if (isHome) {
-                    const modal = document.getElementById('modalStorage');
-                    if (modal) {
-                        modal.classList.remove('hidden');
+                    if (typeof window.showStorageModal === 'function') {
+                        window.showStorageModal();
+                    } else {
+                        const modal = document.getElementById('modalStorage');
+                        if (modal) {
+                            modal.classList.remove('hidden');
+                        }
                     }
                 } else {
                     window.location.href = basePath + 'index.html?action=storage';
@@ -299,20 +312,32 @@
         const action = params.get('action');
 
         if (action) {
-            // Esperar a que los modales estén disponibles
+            // Esperar a que las funciones estén disponibles
             setTimeout(() => {
                 switch(action) {
                     case 'clients':
-                        const modalClients = document.getElementById('modalClients');
-                        if (modalClients) modalClients.classList.remove('hidden');
+                        if (typeof window.showClientsModal === 'function') {
+                            window.showClientsModal();
+                        } else {
+                            const modalClients = document.getElementById('modalClients');
+                            if (modalClients) modalClients.classList.remove('hidden');
+                        }
                         break;
                     case 'taxes':
-                        const modalTaxes = document.getElementById('modalTaxes');
-                        if (modalTaxes) modalTaxes.classList.remove('hidden');
+                        if (typeof window.showTaxesModal === 'function') {
+                            window.showTaxesModal();
+                        } else {
+                            const modalTaxes = document.getElementById('modalTaxes');
+                            if (modalTaxes) modalTaxes.classList.remove('hidden');
+                        }
                         break;
                     case 'storage':
-                        const modalStorage = document.getElementById('modalStorage');
-                        if (modalStorage) modalStorage.classList.remove('hidden');
+                        if (typeof window.showStorageModal === 'function') {
+                            window.showStorageModal();
+                        } else {
+                            const modalStorage = document.getElementById('modalStorage');
+                            if (modalStorage) modalStorage.classList.remove('hidden');
+                        }
                         break;
                     case 'devNotes':
                         const modalDevNotes = document.getElementById('modalDevNotes');

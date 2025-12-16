@@ -213,10 +213,15 @@ async function updateCountsFromLocalStorage() {
 // EVENT LISTENERS
 // ============================================
 function attachEventListeners() {
-    // Botones del menú superior
-    document.getElementById('btnClients').addEventListener('click', () => showClientsModal());
-    document.getElementById('btnTaxes').addEventListener('click', () => showTaxesModal());
-    document.getElementById('btnStorage').addEventListener('click', () => showStorageModal());
+    // Botones del menú superior (ahora manejados por globalNav.js)
+    // Solo agregamos listeners si los elementos existen (compatibilidad legacy)
+    const btnClients = document.getElementById('btnClients');
+    const btnTaxes = document.getElementById('btnTaxes');
+    const btnStorage = document.getElementById('btnStorage');
+
+    if (btnClients) btnClients.addEventListener('click', () => showClientsModal());
+    if (btnTaxes) btnTaxes.addEventListener('click', () => showTaxesModal());
+    if (btnStorage) btnStorage.addEventListener('click', () => showStorageModal());
 
     // Modal Clientes
     document.getElementById('btnCloseClients').addEventListener('click', () => hideClientsModal());
@@ -2331,6 +2336,11 @@ window.seleccionarClienteActivo = function(clienteId, razonSocial) {
         return { success: false, error: 'Función no disponible' };
     }
 };
+
+// Exportar funciones de modales como globales para globalNav.js
+window.showClientsModal = showClientsModal;
+window.showTaxesModal = showTaxesModal;
+window.showStorageModal = showStorageModal;
 
 console.log('✅ Sistema de Cliente Activo inicializado');
 console.log('   Funciones disponibles:');
