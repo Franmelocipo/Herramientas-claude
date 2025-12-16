@@ -184,7 +184,7 @@ input[type="file"] {
     color: #4a5568;
 }
 
-button {
+.card button {
     width: 100%;
     padding: 15px;
     background: #2c5282;
@@ -197,12 +197,12 @@ button {
     transition: all 0.3s;
 }
 
-button:hover:not(:disabled) {
+.card button:hover:not(:disabled) {
     background: #2a4a6d;
     transform: translateY(-2px);
 }
 
-button:disabled {
+.card button:disabled {
     background: #cbd5e0;
     cursor: not-allowed;
 }
