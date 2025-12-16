@@ -704,7 +704,16 @@ function toggleSeleccionCupon(id) {
     } else {
         stateMayores.cuponesSeleccionados.push(id);
     }
-    renderizarVinculacion();
+
+    // Actualizar clase visual del elemento
+    const item = document.querySelector(`.registro-item[data-id="${id}"]`);
+    if (item) {
+        item.classList.toggle('selected', stateMayores.cuponesSeleccionados.includes(id));
+        const checkbox = item.querySelector('.registro-checkbox');
+        if (checkbox) checkbox.checked = stateMayores.cuponesSeleccionados.includes(id);
+    }
+
+    actualizarBarraSeleccionMayores();
 }
 
 /**
@@ -717,7 +726,148 @@ function toggleSeleccionLiquidacion(id) {
     } else {
         stateMayores.liquidacionesSeleccionadas.push(id);
     }
+
+    // Actualizar clase visual del elemento
+    const item = document.querySelector(`.registro-item[data-id="${id}"]`);
+    if (item) {
+        item.classList.toggle('selected', stateMayores.liquidacionesSeleccionadas.includes(id));
+        const checkbox = item.querySelector('.registro-checkbox');
+        if (checkbox) checkbox.checked = stateMayores.liquidacionesSeleccionadas.includes(id);
+    }
+
+    actualizarBarraSeleccionMayores();
+}
+
+/**
+ * Actualizar barra de selección flotante
+ */
+function actualizarBarraSeleccionMayores() {
+    const bar = document.getElementById('selectionBarMayores');
+    if (!bar) return;
+
+    const cantCupones = stateMayores.cuponesSeleccionados.length;
+    const cantLiquidaciones = stateMayores.liquidacionesSeleccionadas.length;
+
+    // Calcular totales
+    const totalCupones = stateMayores.registrosMayor
+        .filter(r => stateMayores.cuponesSeleccionados.includes(r.id))
+        .reduce((sum, r) => sum + (r.debe || 0), 0);
+
+    const totalLiquidaciones = stateMayores.registrosMayor
+        .filter(r => stateMayores.liquidacionesSeleccionadas.includes(r.id))
+        .reduce((sum, r) => sum + (r.haber || r.debe || 0), 0);
+
+    const diferencia = totalCupones - totalLiquidaciones;
+    const diferenciAbs = Math.abs(diferencia);
+
+    // Actualizar UI
+    document.getElementById('selCuponesCount').textContent = cantCupones;
+    document.getElementById('selCuponesTotal').textContent = formatearMoneda(totalCupones);
+    document.getElementById('selLiquidacionesCount').textContent = cantLiquidaciones;
+    document.getElementById('selLiquidacionesTotal').textContent = formatearMoneda(totalLiquidaciones);
+
+    const diffElement = document.getElementById('selDiferenciaMayores');
+    const signo = diferencia > 0 ? '+' : diferencia < 0 ? '-' : '';
+    diffElement.textContent = signo + formatearMoneda(diferenciAbs);
+
+    // Colorear según la diferencia
+    diffElement.classList.remove('diff-warning', 'diff-error', 'diff-ok');
+    if (diferenciAbs === 0) {
+        diffElement.classList.add('diff-ok');
+    } else if (diferenciAbs <= 1) {
+        diffElement.classList.add('diff-warning');
+    } else {
+        diffElement.classList.add('diff-error');
+    }
+
+    // Habilitar/deshabilitar botón de vincular
+    const btnVincular = document.getElementById('btnVincularMayores');
+    btnVincular.disabled = cantCupones === 0 || cantLiquidaciones === 0;
+
+    // Mostrar/ocultar barra
+    if (cantCupones > 0 || cantLiquidaciones > 0) {
+        bar.classList.remove('hidden');
+    } else {
+        bar.classList.add('hidden');
+    }
+}
+
+/**
+ * Limpiar selección de mayores
+ */
+function limpiarSeleccionMayores() {
+    stateMayores.cuponesSeleccionados = [];
+    stateMayores.liquidacionesSeleccionadas = [];
+
+    // Quitar clases visuales
+    document.querySelectorAll('.registro-item.selected').forEach(item => {
+        item.classList.remove('selected');
+        const checkbox = item.querySelector('.registro-checkbox');
+        if (checkbox) checkbox.checked = false;
+    });
+
+    actualizarBarraSeleccionMayores();
+}
+
+/**
+ * Vincular seleccionados manualmente (versión mejorada)
+ */
+function vincularSeleccionadosManual() {
+    if (stateMayores.cuponesSeleccionados.length === 0 || stateMayores.liquidacionesSeleccionadas.length === 0) {
+        alert('Debe seleccionar al menos un cupón y una liquidación para vincular');
+        return;
+    }
+
+    // Obtener registros seleccionados
+    const cupones = stateMayores.registrosMayor.filter(r => stateMayores.cuponesSeleccionados.includes(r.id));
+    const liquidaciones = stateMayores.registrosMayor.filter(r => stateMayores.liquidacionesSeleccionadas.includes(r.id));
+
+    // Calcular diferencia
+    const sumaCupones = cupones.reduce((sum, c) => sum + (c.debe || 0), 0);
+    const sumaLiquidaciones = liquidaciones.reduce((sum, l) => sum + (l.haber || l.debe || 0), 0);
+    const diferencia = Math.abs(sumaCupones - sumaLiquidaciones);
+
+    // Validar diferencia
+    if (diferencia > 1) {
+        const mensaje = `La diferencia entre cupones y liquidaciones es de ${formatearMoneda(diferencia)}.\n\n¿Desea vincular de todos modos?`;
+        if (!confirm(mensaje)) return;
+    }
+
+    const vinculacionId = `vinc_manual_${Date.now()}`;
+
+    // Marcar cupones como vinculados
+    cupones.forEach(cupon => {
+        cupon.estado = 'vinculado';
+        cupon.vinculadoCon = stateMayores.liquidacionesSeleccionadas.slice();
+        cupon.vinculacionId = vinculacionId;
+    });
+
+    // Marcar liquidaciones como vinculadas
+    liquidaciones.forEach(liq => {
+        liq.estado = 'vinculado';
+        liq.vinculadoCon = stateMayores.cuponesSeleccionados.slice();
+        liq.vinculacionId = vinculacionId;
+    });
+
+    // Registrar vinculación
+    stateMayores.vinculaciones.push({
+        id: vinculacionId,
+        cupones: stateMayores.cuponesSeleccionados.slice(),
+        liquidaciones: stateMayores.liquidacionesSeleccionadas.slice(),
+        tipo: 'manual',
+        diferencia: diferencia,
+        fecha: new Date().toISOString()
+    });
+
+    // Limpiar selección
+    limpiarSeleccionMayores();
+
+    // Actualizar UI
     renderizarVinculacion();
+    renderizarTablaMayor();
+    actualizarEstadisticasVinculacion();
+
+    console.log(`✅ Vinculación manual creada: ${cupones.length} cupones con ${liquidaciones.length} liquidaciones`);
 }
 
 /**
@@ -743,7 +893,16 @@ function seleccionarTodosCupones() {
         stateMayores.cuponesSeleccionados = cuponesFiltrados.map(c => c.id);
     }
 
-    renderizarVinculacion();
+    // Actualizar checkboxes visualmente
+    document.querySelectorAll('#listaCupones .registro-item').forEach(item => {
+        const id = item.dataset.id;
+        const isSelected = stateMayores.cuponesSeleccionados.includes(id);
+        item.classList.toggle('selected', isSelected);
+        const checkbox = item.querySelector('.registro-checkbox');
+        if (checkbox) checkbox.checked = isSelected;
+    });
+
+    actualizarBarraSeleccionMayores();
 }
 
 /**
@@ -769,7 +928,16 @@ function seleccionarTodasLiquidaciones() {
         stateMayores.liquidacionesSeleccionadas = liquidacionesFiltradas.map(l => l.id);
     }
 
-    renderizarVinculacion();
+    // Actualizar checkboxes visualmente
+    document.querySelectorAll('#listaLiquidaciones .registro-item').forEach(item => {
+        const id = item.dataset.id;
+        const isSelected = stateMayores.liquidacionesSeleccionadas.includes(id);
+        item.classList.toggle('selected', isSelected);
+        const checkbox = item.querySelector('.registro-checkbox');
+        if (checkbox) checkbox.checked = isSelected;
+    });
+
+    actualizarBarraSeleccionMayores();
 }
 
 /**
