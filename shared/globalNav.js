@@ -83,10 +83,10 @@
         },
         {
             id: 'auditoria',
-            nombre: 'Auditoría de Extractos',
+            nombre: 'Auditoría',
             icono: '🔍',
             ruta: 'herramientas/auditoria/',
-            descripcion: 'Gestione extractos mensuales'
+            descripcion: 'Herramientas de auditoría contable'
         }
     ];
 

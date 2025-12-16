@@ -23,54 +23,284 @@
     <div class="container">
         <div class="header">
             <h1>🔍 Auditoría</h1>
-            <p>Herramienta de auditoría de estados contables</p>
+            <p>Herramientas de auditoría para estados contables</p>
         </div>
 
-        <!-- Selector de Cliente -->
-        <div class="cliente-selector">
-            <div class="search-box">
-                <div class="selector-group">
-                    <label>Seleccionar Cliente:</label>
-                    <select id="clienteSelect" class="input-text" onchange="cargarDashboard()">
-                        <option value="">-- Seleccione un cliente --</option>
-                    </select>
+        <!-- Panel de Selección de Herramienta -->
+        <div id="herramientasPanel" class="herramientas-auditoria-panel">
+            <div class="herramientas-grid">
+                <div class="herramienta-card" onclick="seleccionarHerramienta('extractos')">
+                    <div class="herramienta-icon">🏦</div>
+                    <h3>Extractos Bancarios</h3>
+                    <p>Gestione cuentas bancarias y extractos mensuales. Cargue, edite y clasifique movimientos.</p>
+                    <ul class="herramienta-features">
+                        <li>Carga de extractos Excel</li>
+                        <li>Clasificación de movimientos</li>
+                        <li>Filtros avanzados</li>
+                    </ul>
                 </div>
-                <div class="filter-group">
-                    <input type="text" id="clienteSearch" class="input-text" placeholder="🔍 Filtrar clientes..." oninput="filtrarClientes()">
+                <div class="herramienta-card" onclick="seleccionarHerramienta('mayores')">
+                    <div class="herramienta-icon">📊</div>
+                    <h3>Análisis de Mayores Contables</h3>
+                    <p>Analice mayores contables de Tango. Vincule transacciones y concilie registros.</p>
+                    <ul class="herramienta-features">
+                        <li>Tipos de mayor configurables</li>
+                        <li>Vinculación de transacciones</li>
+                        <li>Análisis de cupones de tarjetas</li>
+                    </ul>
                 </div>
             </div>
         </div>
 
-        <!-- Dashboard (se muestra al seleccionar cliente) -->
-        <div id="dashboard" style="display: none;">
-            <!-- Info del Cliente Seleccionado -->
-            <div class="cliente-info">
-                <div class="cliente-datos">
-                    <h3 id="clienteNombre"></h3>
-                    <span id="clienteCuit"></span>
-                </div>
-                <button onclick="mostrarNuevaCuentaBancaria()" class="btn-primary">+ Nueva Cuenta Bancaria</button>
+        <!-- ============================================ -->
+        <!-- MÓDULO: EXTRACTOS BANCARIOS -->
+        <!-- ============================================ -->
+        <div id="moduloExtractos" class="modulo-auditoria" style="display: none;">
+            <div class="modulo-header">
+                <button onclick="volverAHerramientas()" class="btn-back">← Volver</button>
+                <h2>🏦 Extractos Bancarios</h2>
             </div>
 
-            <!-- Panel de Cuentas Bancarias y Extractos -->
-            <div class="cuentas-panel">
-                <div class="info-box">
-                    <strong>Panel de Extractos Bancarios:</strong> Visualice todas las cuentas bancarias del cliente con sus extractos mensuales.
-                    Puede cargar nuevos extractos, editarlos, filtrar movimientos y descargar reportes.
+            <!-- Selector de Cliente -->
+            <div class="cliente-selector">
+                <div class="search-box">
+                    <div class="selector-group">
+                        <label>Seleccionar Cliente:</label>
+                        <select id="clienteSelect" class="input-text" onchange="cargarDashboard()">
+                            <option value="">-- Seleccione un cliente --</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <input type="text" id="clienteSearch" class="input-text" placeholder="🔍 Filtrar clientes..." oninput="filtrarClientes()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard (se muestra al seleccionar cliente) -->
+            <div id="dashboard" style="display: none;">
+                <!-- Info del Cliente Seleccionado -->
+                <div class="cliente-info">
+                    <div class="cliente-datos">
+                        <h3 id="clienteNombre"></h3>
+                        <span id="clienteCuit"></span>
+                    </div>
+                    <button onclick="mostrarNuevaCuentaBancaria()" class="btn-primary">+ Nueva Cuenta Bancaria</button>
                 </div>
 
-                <!-- Lista de Cuentas con Extractos -->
-                <div id="cuentasList" class="cuentas-list">
-                    <div class="empty-state">Seleccione un cliente para ver sus cuentas bancarias</div>
+                <!-- Panel de Cuentas Bancarias y Extractos -->
+                <div class="cuentas-panel">
+                    <div class="info-box">
+                        <strong>Panel de Extractos Bancarios:</strong> Visualice todas las cuentas bancarias del cliente con sus extractos mensuales.
+                        Puede cargar nuevos extractos, editarlos, filtrar movimientos y descargar reportes.
+                    </div>
+
+                    <!-- Lista de Cuentas con Extractos -->
+                    <div id="cuentasList" class="cuentas-list">
+                        <div class="empty-state">Seleccione un cliente para ver sus cuentas bancarias</div>
+                    </div>
                 </div>
+            </div>
+
+            <!-- Estado vacío inicial -->
+            <div id="emptyState" class="empty-state-container">
+                <div class="empty-icon">🏦</div>
+                <h3>Seleccione un Cliente</h3>
+                <p>Elija un cliente del selector superior para ver sus cuentas bancarias y extractos mensuales.</p>
             </div>
         </div>
 
-        <!-- Estado vacío inicial -->
-        <div id="emptyState" class="empty-state-container">
-            <div class="empty-icon">🏦</div>
-            <h3>Seleccione un Cliente</h3>
-            <p>Elija un cliente del selector superior para ver sus cuentas bancarias y extractos mensuales.</p>
+        <!-- ============================================ -->
+        <!-- MÓDULO: ANÁLISIS DE MAYORES CONTABLES -->
+        <!-- ============================================ -->
+        <div id="moduloMayores" class="modulo-auditoria" style="display: none;">
+            <div class="modulo-header">
+                <button onclick="volverAHerramientas()" class="btn-back">← Volver</button>
+                <h2>📊 Análisis de Mayores Contables</h2>
+            </div>
+
+            <!-- Selector de Cliente para Mayores -->
+            <div class="cliente-selector">
+                <div class="search-box">
+                    <div class="selector-group">
+                        <label>Seleccionar Cliente:</label>
+                        <select id="clienteSelectMayores" class="input-text" onchange="cargarDashboardMayores()">
+                            <option value="">-- Seleccione un cliente --</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <input type="text" id="clienteSearchMayores" class="input-text" placeholder="🔍 Filtrar clientes..." oninput="filtrarClientesMayores()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard de Mayores -->
+            <div id="dashboardMayores" style="display: none;">
+                <!-- Info del Cliente Seleccionado -->
+                <div class="cliente-info">
+                    <div class="cliente-datos">
+                        <h3 id="clienteNombreMayores"></h3>
+                        <span id="clienteCuitMayores"></span>
+                    </div>
+                </div>
+
+                <!-- Selector de Tipo de Mayor -->
+                <div class="tipo-mayor-selector">
+                    <div class="info-box">
+                        <strong>Tipos de Mayores:</strong> Seleccione el tipo de mayor que desea analizar. Cada tipo tiene su propia lógica de análisis y vinculación.
+                    </div>
+                    <div class="tipos-mayor-grid" id="tiposMayorGrid">
+                        <!-- Se llena dinámicamente -->
+                    </div>
+                </div>
+
+                <!-- Panel de Análisis de Mayor (se muestra al seleccionar tipo) -->
+                <div id="panelAnalisisMayor" style="display: none;">
+                    <div class="panel-mayor-header">
+                        <h3 id="tipoMayorTitulo"></h3>
+                        <p id="tipoMayorDescripcion"></p>
+                    </div>
+
+                    <!-- Toolbar -->
+                    <div class="btn-group mb-4 toolbar">
+                        <button onclick="mostrarSubirMayor()" class="btn-primary">📤 Cargar Mayor</button>
+                        <button onclick="exportarAnalisisMayor()" class="btn-template">📥 Exportar Análisis</button>
+                    </div>
+
+                    <!-- Info del Mayor Cargado -->
+                    <div id="infoMayorCargado" class="info-mayor-cargado" style="display: none;">
+                        <div class="mayor-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Período:</span>
+                                <span class="stat-value" id="mayorPeriodo">-</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Total Registros:</span>
+                                <span class="stat-value" id="mayorTotalRegistros">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Total Debe:</span>
+                                <span class="stat-value debe" id="mayorTotalDebe">$0,00</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Total Haber:</span>
+                                <span class="stat-value haber" id="mayorTotalHaber">$0,00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel de Vinculación (específico para Cupones de Tarjetas) -->
+                    <div id="panelVinculacionCupones" class="panel-vinculacion" style="display: none;">
+                        <div class="vinculacion-header">
+                            <h4>🔗 Vinculación de Cupones</h4>
+                            <div class="vinculacion-stats">
+                                <span class="stat vinculados"><span id="cuponesVinculados">0</span> vinculados</span>
+                                <span class="stat pendientes"><span id="cuponesPendientes">0</span> pendientes</span>
+                                <span class="stat vencidos"><span id="cuponesVencidos">0</span> vencidos (+40 días)</span>
+                            </div>
+                        </div>
+
+                        <div class="vinculacion-info">
+                            <p><strong>Lógica de vinculación:</strong> Los cupones (débitos) deben vincularse con liquidaciones (créditos) dentro de 40 días.</p>
+                        </div>
+
+                        <!-- Filtros de vinculación -->
+                        <div class="vinculacion-filtros">
+                            <div class="filtro-item">
+                                <label>Estado:</label>
+                                <select id="filtroEstadoVinculacion" class="input-text" onchange="filtrarVinculaciones()">
+                                    <option value="">Todos</option>
+                                    <option value="pendiente">Pendientes</option>
+                                    <option value="vinculado">Vinculados</option>
+                                    <option value="vencido">Vencidos</option>
+                                    <option value="devolucion">Devoluciones</option>
+                                </select>
+                            </div>
+                            <div class="filtro-item">
+                                <label>Buscar:</label>
+                                <input type="text" id="filtroTextoVinculacion" class="input-text" placeholder="Buscar en descripción..." oninput="filtrarVinculaciones()">
+                            </div>
+                        </div>
+
+                        <!-- Área de trabajo dividida -->
+                        <div class="vinculacion-workspace">
+                            <!-- Columna de Cupones (Débitos) -->
+                            <div class="vinculacion-columna cupones-columna">
+                                <div class="columna-header">
+                                    <h5>📋 Cupones (Debe)</h5>
+                                    <span class="columna-total" id="totalCuponesDebe">$0,00</span>
+                                </div>
+                                <div class="columna-acciones">
+                                    <button onclick="seleccionarTodosCupones()" class="btn-secondary btn-xs">Seleccionar todos</button>
+                                </div>
+                                <div class="registros-lista" id="listaCupones">
+                                    <!-- Se llena dinámicamente -->
+                                </div>
+                            </div>
+
+                            <!-- Columna de Liquidaciones (Créditos) -->
+                            <div class="vinculacion-columna liquidaciones-columna">
+                                <div class="columna-header">
+                                    <h5>💰 Liquidaciones (Haber)</h5>
+                                    <span class="columna-total" id="totalLiquidacionesHaber">$0,00</span>
+                                </div>
+                                <div class="columna-acciones">
+                                    <button onclick="seleccionarTodasLiquidaciones()" class="btn-secondary btn-xs">Seleccionar todas</button>
+                                </div>
+                                <div class="registros-lista" id="listaLiquidaciones">
+                                    <!-- Se llena dinámicamente -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Acciones de vinculación -->
+                        <div class="vinculacion-acciones">
+                            <button onclick="vincularSeleccionados()" class="btn-primary">🔗 Vincular Seleccionados</button>
+                            <button onclick="desvincularSeleccionados()" class="btn-warning">↩️ Desvincular</button>
+                            <button onclick="marcarComoDevolucion()" class="btn-secondary">🔄 Marcar como Devolución</button>
+                            <button onclick="guardarVinculaciones()" class="btn-success">💾 Guardar</button>
+                        </div>
+                    </div>
+
+                    <!-- Tabla de registros del mayor -->
+                    <div class="preview-container mt-4">
+                        <div class="preview-header">
+                            <h4>Registros del Mayor</h4>
+                            <div class="preview-actions">
+                                <label>
+                                    <input type="checkbox" id="mostrarSoloNoVinculados" onchange="filtrarRegistrosMayor()">
+                                    Mostrar solo no vinculados
+                                </label>
+                            </div>
+                        </div>
+                        <div class="preview-table-container">
+                            <table id="tablaMayor" class="preview-table">
+                                <thead>
+                                    <tr>
+                                        <th class="checkbox-col"><input type="checkbox" id="selectAllMayor" onchange="toggleSeleccionarTodosMayor(this)"></th>
+                                        <th>Fecha</th>
+                                        <th>Asiento</th>
+                                        <th>Descripción</th>
+                                        <th class="text-right">Debe</th>
+                                        <th class="text-right">Haber</th>
+                                        <th>Estado</th>
+                                        <th>Vinculado con</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaMayorBody">
+                                    <!-- Se llena dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Estado vacío para Mayores -->
+            <div id="emptyStateMayores" class="empty-state-container">
+                <div class="empty-icon">📊</div>
+                <h3>Seleccione un Cliente</h3>
+                <p>Elija un cliente del selector superior para comenzar el análisis de mayores contables.</p>
+            </div>
         </div>
     </div>
 
@@ -376,9 +606,88 @@
         </div>
     </div>
 
+    <!-- Modal Subir Mayor Contable -->
+    <div id="modalSubirMayor" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>📤 Cargar Mayor Contable</h3>
+            <div class="info-box mb-4">
+                <strong>Formato esperado:</strong> Archivo Excel exportado desde Tango con las columnas:
+                Fecha | Asiento | Descripción | Debe | Haber
+            </div>
+            <label>Archivo Excel:</label>
+            <input type="file" id="mayorFile" accept=".xlsx,.xls" class="input-text mb-4" onchange="handleMayorFileChange(event)">
+            <div id="mayorFileInfo" class="file-info"></div>
+            <div id="mayorPreviewInfo" class="preview-info" style="display: none;"></div>
+            <div class="btn-group">
+                <button onclick="cerrarSubirMayor()" class="btn-secondary">Cancelar</button>
+                <button onclick="procesarMayor()" class="btn-primary">Procesar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Configurar Tipo de Mayor -->
+    <div id="modalConfigurarTipoMayor" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ Configurar Tipos de Mayores</h2>
+                <button class="close-btn" onclick="cerrarConfigurarTipoMayor()">✕</button>
+            </div>
+
+            <div class="info-box">
+                <strong>Tipos de Mayores:</strong> Configure los diferentes tipos de mayores contables que desea analizar.
+                Cada tipo puede tener su propia lógica de análisis y vinculación.
+            </div>
+
+            <!-- Formulario para nuevo tipo -->
+            <div class="nueva-categoria-form">
+                <h4>Nuevo Tipo de Mayor</h4>
+                <div class="categoria-form-row">
+                    <div class="categoria-form-field">
+                        <label>ID (único):</label>
+                        <input type="text" id="nuevoTipoMayorId" class="input-text" placeholder="ej: cupones_tarjetas">
+                    </div>
+                    <div class="categoria-form-field">
+                        <label>Nombre:</label>
+                        <input type="text" id="nuevoTipoMayorNombre" class="input-text" placeholder="ej: Cupones de Tarjetas">
+                    </div>
+                </div>
+                <div class="categoria-form-row">
+                    <div class="categoria-form-field" style="flex: 2;">
+                        <label>Descripción:</label>
+                        <input type="text" id="nuevoTipoMayorDescripcion" class="input-text" placeholder="Descripción del tipo de mayor...">
+                    </div>
+                    <div class="categoria-form-field">
+                        <label>Lógica:</label>
+                        <select id="nuevoTipoMayorLogica" class="input-text">
+                            <option value="vinculacion">Vinculación Debe/Haber</option>
+                            <option value="simple">Análisis Simple</option>
+                        </select>
+                    </div>
+                    <div class="categoria-form-field categoria-btn-field">
+                        <button onclick="agregarTipoMayor()" class="btn-primary">+ Agregar</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de tipos existentes -->
+            <div class="categorias-lista-container">
+                <h4>Tipos de Mayores Configurados</h4>
+                <div id="tiposMayorLista" class="categorias-lista">
+                    <!-- Se llena dinámicamente -->
+                </div>
+            </div>
+
+            <div class="btn-group mt-4">
+                <button onclick="cerrarConfigurarTipoMayor()" class="btn-secondary">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Navegación global -->
     <script src="../../shared/globalNav.js"></script>
     <!-- Script principal -->
     <script src="script.js"></script>
+    <!-- Script del módulo de mayores -->
+    <script src="mayores.js"></script>
 </body>
 </html>
