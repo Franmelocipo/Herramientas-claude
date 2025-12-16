@@ -351,6 +351,34 @@
                 <h3>Seleccione un Cliente</h3>
                 <p>Elija un cliente del selector superior para comenzar el análisis de mayores contables.</p>
             </div>
+
+            <!-- Barra de selección flotante para vinculación manual -->
+            <div id="selectionBarMayores" class="selection-bar-mayores hidden">
+                <div class="selection-summary">
+                    <div class="selection-group cupones-group">
+                        <span class="selection-icon">📋</span>
+                        <span class="selection-label">Cupones:</span>
+                        <span id="selCuponesCount" class="selection-count">0</span>
+                        <span class="selection-amount">(<span id="selCuponesTotal">$0,00</span>)</span>
+                    </div>
+                    <div class="selection-separator">+</div>
+                    <div class="selection-group liquidaciones-group">
+                        <span class="selection-icon">💰</span>
+                        <span class="selection-label">Liquidaciones:</span>
+                        <span id="selLiquidacionesCount" class="selection-count">0</span>
+                        <span class="selection-amount">(<span id="selLiquidacionesTotal">$0,00</span>)</span>
+                    </div>
+                    <div class="selection-separator">=</div>
+                    <div class="selection-group selection-diff">
+                        <span class="selection-label">Diferencia:</span>
+                        <span id="selDiferenciaMayores" class="selection-diff-value">$0,00</span>
+                    </div>
+                </div>
+                <div class="selection-actions">
+                    <button onclick="limpiarSeleccionMayores()" class="btn-selection-clear" title="Limpiar selección">✕ Limpiar</button>
+                    <button id="btnVincularMayores" onclick="vincularSeleccionadosManual()" class="btn-vincular-mayores" disabled>🔗 Vincular Seleccionados</button>
+                </div>
+            </div>
         </div>
     </div>
 
