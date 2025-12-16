@@ -299,7 +299,7 @@ function generarHTMLDesglose(desglose, tieneEscala = false) {
  */
 async function cargarCodigosRetencion(soloActivos = true) {
     try {
-        let query = supabase
+        let query = getSupabaseHelper()
             .from('codigos_retencion')
             .select('*')
             .order('codigo');
