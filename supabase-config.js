@@ -20,16 +20,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Inicializar el cliente de Supabase
-let supabase = null
+// Usamos supabaseClient para evitar conflicto con window.supabase del CDN
+let supabaseClient = null
 
 // Función para inicializar Supabase
 function initSupabase() {
-  if (supabase) return supabase
+  if (supabaseClient) return supabaseClient
 
   if (window.supabase && window.supabase.createClient) {
-    supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey)
+    supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey)
     console.log('✅ Supabase client initialized')
-    return supabase
+    return supabaseClient
   }
   return null
 }
@@ -37,7 +38,7 @@ function initSupabase() {
 // Función para esperar a que Supabase esté listo (útil para otros scripts)
 async function waitForSupabase(maxAttempts = 50, delay = 100) {
   for (let i = 0; i < maxAttempts; i++) {
-    if (supabase) return supabase
+    if (supabaseClient) return supabaseClient
     const client = initSupabase()
     if (client) return client
     await new Promise(resolve => setTimeout(resolve, delay))
@@ -51,9 +52,16 @@ if (typeof window !== 'undefined') {
   initSupabase()
 
   // Si no se pudo inicializar, intentar en DOMContentLoaded
-  if (!supabase) {
+  if (!supabaseClient) {
     window.addEventListener('DOMContentLoaded', () => {
       initSupabase()
+      // Exponer el cliente globalmente después de inicializar
+      if (supabaseClient) {
+        window.supabaseDB = supabaseClient
+      }
     })
+  } else {
+    // Exponer el cliente globalmente
+    window.supabaseDB = supabaseClient
   }
 }

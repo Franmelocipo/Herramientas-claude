@@ -49,23 +49,11 @@ async function cargarClientesEnSelector() {
         // Esperar a que Supabase esté disponible usando la función global o esperando la variable
         let supabaseClient = null;
 
-        // Intentar usar waitForSupabase si está disponible, sino esperar la variable global
+        // Intentar usar waitForSupabase si está disponible
         if (typeof waitForSupabase === 'function') {
             supabaseClient = await waitForSupabase();
-        } else {
-            // Fallback: esperar a que la variable global supabase esté disponible
-            for (let i = 0; i < 50; i++) {
-                if (window.supabase && typeof window.supabase.from === 'function') {
-                    supabaseClient = window.supabase;
-                    break;
-                }
-                // También verificar si existe la variable supabase inicializada por supabase-config.js
-                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
-                    supabaseClient = supabase;
-                    break;
-                }
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
+        } else if (window.supabaseDB) {
+            supabaseClient = window.supabaseDB;
         }
 
         if (!supabaseClient) {
@@ -5828,8 +5816,8 @@ async function cargarClientesAuditoria() {
 
         if (typeof waitForSupabase === 'function') {
             supabaseClient = await waitForSupabase();
-        } else if (typeof supabase !== 'undefined' && supabase) {
-            supabaseClient = supabase;
+        } else if (window.supabaseDB) {
+            supabaseClient = window.supabaseDB;
         }
 
         if (!supabaseClient) {
@@ -5871,14 +5859,14 @@ async function cargarCuentasCliente() {
     selectCuenta.disabled = true;
 
     try {
-        let supabaseClient = typeof supabase !== 'undefined' ? supabase : null;
+        let client = typeof supabaseClient !== 'undefined' ? supabaseClient : null;
 
-        if (!supabaseClient) {
+        if (!client) {
             selectCuenta.innerHTML = '<option value="">-- Error: Supabase no disponible --</option>';
             return;
         }
 
-        const { data: cuentas, error } = await supabaseClient
+        const { data: cuentas, error } = await client
             .from('cuentas_bancarias')
             .select('*')
             .eq('cliente_id', clienteId)
@@ -5993,14 +5981,14 @@ async function verificarPeriodoAuditoria() {
     document.getElementById('auditoriaProgressText').textContent = 'Verificando período...';
 
     try {
-        let supabaseClient = typeof supabase !== 'undefined' ? supabase : null;
+        let client = typeof supabaseClient !== 'undefined' ? supabaseClient : null;
 
-        if (!supabaseClient) {
+        if (!client) {
             throw new Error('Supabase no disponible');
         }
 
         // Verificar si existe extracto para ese período
-        const { data: existente, error } = await supabaseClient
+        const { data: existente, error } = await client
             .from('extractos_mensuales')
             .select('id, data')
             .eq('cuenta_id', cuentaId)
@@ -6140,9 +6128,9 @@ async function enviarMovimientosAuditoria() {
     auditoriaElements.btnEnviarFinal.classList.add('hidden');
 
     try {
-        let supabaseClient = typeof supabase !== 'undefined' ? supabase : null;
+        let client = typeof supabaseClient !== 'undefined' ? supabaseClient : null;
 
-        if (!supabaseClient) {
+        if (!client) {
             throw new Error('Supabase no disponible');
         }
 
@@ -6254,14 +6242,14 @@ async function crearNuevaCuentaYEnviar() {
     auditoriaElements.btnEnviarFinal.classList.add('hidden');
 
     try {
-        let supabaseClient = typeof supabase !== 'undefined' ? supabase : null;
+        let client = typeof supabaseClient !== 'undefined' ? supabaseClient : null;
 
-        if (!supabaseClient) {
+        if (!client) {
             throw new Error('Supabase no disponible');
         }
 
         // Crear cuenta
-        const { data: nuevaCuenta, error: errorCuenta } = await supabaseClient
+        const { data: nuevaCuenta, error: errorCuenta } = await client
             .from('cuentas_bancarias')
             .insert([{
                 cliente_id: clienteId,

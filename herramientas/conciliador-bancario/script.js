@@ -810,15 +810,9 @@ async function cargarClientesAuditoria() {
             supabaseClient = await waitForSupabase();
         }
 
-        // Fallback: esperar a que la variable global supabase esté disponible
-        if (!supabaseClient) {
-            for (let i = 0; i < 50; i++) {
-                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
-                    supabaseClient = supabase;
-                    break;
-                }
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
+        // Fallback: usar window.supabaseDB
+        if (!supabaseClient && window.supabaseDB) {
+            supabaseClient = window.supabaseDB;
         }
 
         if (!supabaseClient) {
@@ -946,12 +940,12 @@ async function cargarCuentasCliente() {
     actualizarEstadoAuditoria('loading', 'Cargando cuentas bancarias...');
 
     try {
-        let supabaseClient = typeof supabase !== 'undefined' ? supabase : null;
-        if (!supabaseClient) {
+        let client = typeof supabaseClient !== 'undefined' ? supabaseClient : null;
+        if (!client) {
             throw new Error('Supabase no disponible');
         }
 
-        const { data, error } = await supabaseClient
+        const { data, error } = await client
             .from('cuentas_bancarias')
             .select('*')
             .eq('cliente_id', clienteId)
@@ -1014,12 +1008,12 @@ async function cargarExtractosDisponibles() {
     actualizarEstadoAuditoria('loading', 'Cargando extractos disponibles...');
 
     try {
-        let supabaseClient = typeof supabase !== 'undefined' ? supabase : null;
-        if (!supabaseClient) {
+        let client = typeof supabaseClient !== 'undefined' ? supabaseClient : null;
+        if (!client) {
             throw new Error('Supabase no disponible');
         }
 
-        const { data, error } = await supabaseClient
+        const { data, error } = await client
             .from('extractos_mensuales')
             .select('id, mes, anio, data')
             .eq('cuenta_id', cuentaId)
@@ -1283,15 +1277,8 @@ async function cargarCategoriasConciliador() {
 
         if (typeof waitForSupabase === 'function') {
             supabaseClient = await waitForSupabase();
-        } else {
-            // Fallback: esperar a que la variable global supabase esté disponible
-            for (let i = 0; i < 50; i++) {
-                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
-                    supabaseClient = supabase;
-                    break;
-                }
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
+        } else if (window.supabaseDB) {
+            supabaseClient = window.supabaseDB;
         }
 
         if (supabaseClient) {
