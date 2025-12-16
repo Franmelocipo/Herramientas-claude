@@ -3085,14 +3085,20 @@ function renderGroupsList() {
     // PARA OTROS TIPOS: Renderizar interfaz estándar de grupos
     elements.groupStats.textContent = `${state.groupedData.length} grupos | ${state.sourceData.length} movimientos`;
 
-    // SIEMPRE mostrar la sección de cuenta de contrapartida (banco/caja)
-    elements.bankAccountSection.classList.remove('hidden');
-    elements.bankAccountLabel.textContent = 'Cuenta de CONTRAPARTIDA (banco/caja) para TODOS los movimientos';
-    elements.bankAccountInput.placeholder = getSelectedClientId() ? '🔍 Buscar cuenta contrapartida...' : 'Ej: 11020101';
-    elements.bankAccountInput.value = state.bankAccount;
-
-    // Ocultar info de compensaciones (ya no aplica)
-    elements.compensacionesInfo.classList.add('hidden');
+    // Para COMPENSACIONES: ocultar contrapartida y mostrar info específica
+    // El archivo de compensaciones ya contiene origen (HABER) y destino (DEBE)
+    if (state.sourceType === 'compensaciones') {
+        elements.bankAccountSection.classList.add('hidden');
+        elements.compensacionesInfo.classList.remove('hidden');
+    } else {
+        // Para otros tipos: mostrar la sección de cuenta de contrapartida (banco/caja)
+        elements.bankAccountSection.classList.remove('hidden');
+        elements.bankAccountLabel.textContent = 'Cuenta de CONTRAPARTIDA (banco/caja) para TODOS los movimientos';
+        elements.bankAccountInput.placeholder = getSelectedClientId() ? '🔍 Buscar cuenta contrapartida...' : 'Ej: 11020101';
+        elements.bankAccountInput.value = state.bankAccount;
+        // Ocultar info de compensaciones
+        elements.compensacionesInfo.classList.add('hidden');
+    }
 
     // Renderizar grupos
     const html = state.groupedData.map((g, idx) => {
@@ -4616,8 +4622,9 @@ function generateFinalExcel() {
         }
     } else {
         // VALIDACIÓN PARA OTROS TIPOS DE ORIGEN
-        // Validar cuenta de contrapartida global (obligatoria para todos)
-        if (!state.bankAccount) {
+        // Validar cuenta de contrapartida global (obligatoria EXCEPTO para compensaciones)
+        // Compensaciones no necesita contrapartida porque el archivo ya tiene origen y destino
+        if (!state.bankAccount && state.sourceType !== 'compensaciones') {
             errors.push('Falta la cuenta de CONTRAPARTIDA (banco/caja)');
         }
 
@@ -4629,8 +4636,8 @@ function generateFinalExcel() {
                 errors.push(`Grupo "${g.concepto}": falta asignar la cuenta`);
             }
 
-            // Validar que la cuenta del grupo no sea igual a la contrapartida
-            if (hasCuenta && state.bankAccount && state.accountCodes[idx] === state.bankAccount) {
+            // Validar que la cuenta del grupo no sea igual a la contrapartida (solo si hay contrapartida)
+            if (hasCuenta && state.bankAccount && state.accountCodes[idx] === state.bankAccount && state.sourceType !== 'compensaciones') {
                 errors.push(`Grupo "${g.concepto}": la cuenta no puede ser igual a la contrapartida`);
             }
         });
@@ -4882,6 +4889,64 @@ function generateFinalExcel() {
             return; // No continuar con la lógica genérica
         }
 
+        // LÓGICA ESPECÍFICA PARA COMPENSACIONES: Un asiento por transacción
+        // El archivo de origen ya contiene ORIGEN (saldo a favor → HABER) y DESTINO (deuda → DEBE)
+        // No se necesita cuenta de contrapartida porque ambos lados están en el archivo
+        if (state.sourceType === 'compensaciones') {
+            // Para compensaciones, cada grupo genera UNA línea (no usa contrapartida)
+            // Cada item tiene _transaccion que se usará para agrupar asientos
+            g.items.forEach(item => {
+                const transaccion = item['Transacción'] || item['Transaccion'] || '';
+                const fecha = item['Fecha Operación'] || item['Fecha Operacion'] || '';
+                const importe = parseAmount(item['Importe']);
+                const periodoOrig = item['Período Orig'] || item['Periodo Orig'] || '';
+                const periodoDest = item['Período Dest'] || item['Periodo Dest'] || '';
+
+                let leyenda;
+                if (g.isOrigen) {
+                    const impuesto = item['Impuesto Orig'] || '';
+                    const concepto = item['Concepto Orig'] || '';
+                    const subconcepto = item['Subconcepto Orig'] || '';
+                    leyenda = `COMP ${transaccion} - ${impuesto} ${concepto} ${subconcepto} / ${periodoOrig}`;
+
+                    // ORIGEN va al HABER (saldo a favor que se usa/consume)
+                    allData.push({
+                        Fecha: fecha,
+                        Cuenta: cuentaGrupo,
+                        Debe: 0,
+                        Haber: parseFloat(importe.toFixed(2)),
+                        'Tipo de auxiliar': 1,
+                        Auxiliar: 1,
+                        Importe: parseFloat((-importe).toFixed(2)),
+                        Leyenda: leyenda,
+                        ExtraContable: 's',
+                        _transaccion: transaccion
+                    });
+                } else {
+                    const impuesto = item['Impuesto Dest'] || '';
+                    const concepto = item['Concepto Dest'] || '';
+                    const subconcepto = item['Subconcepto Dest'] || '';
+                    leyenda = `COMP ${transaccion} - ${impuesto} ${concepto} ${subconcepto} / ${periodoDest}`;
+
+                    // DESTINO va al DEBE (deuda que se cancela)
+                    allData.push({
+                        Fecha: fecha,
+                        Cuenta: cuentaGrupo,
+                        Debe: parseFloat(importe.toFixed(2)),
+                        Haber: 0,
+                        'Tipo de auxiliar': 1,
+                        Auxiliar: 1,
+                        Importe: parseFloat(importe.toFixed(2)),
+                        Leyenda: leyenda,
+                        ExtraContable: 's',
+                        _transaccion: transaccion
+                    });
+                }
+            });
+
+            return; // No continuar con la lógica genérica
+        }
+
         // LÓGICA GENÉRICA para otros tipos de origen
         g.items.forEach(item => {
             // Obtener fecha y descripción según el tipo de fuente
@@ -4896,15 +4961,6 @@ function generateFinalExcel() {
                 const debito = parseAmount(item['Débito']);
                 const credito = parseAmount(item['Crédito']);
                 importe = credito - debito;
-            } else if (state.sourceType === 'compensaciones') {
-                fecha = item['Fecha Operación'] || item['Fecha Operacion'] || '';
-                const transaccion = item['Transacción'] || item['Transaccion'] || '';
-                const impuesto = g.isOrigen ? (item['Impuesto Orig'] || '') : (item['Impuesto Dest'] || '');
-                const concepto = g.isOrigen ? (item['Concepto Orig'] || '') : (item['Concepto Dest'] || '');
-                descripcion = `COMP ${transaccion} - ${impuesto} ${concepto}`;
-                importe = parseAmount(item['Importe']);
-                // Origen = sale (negativo), Destino = entra (positivo)
-                if (g.isOrigen) importe = -importe;
             } else if (state.sourceType === 'tabla') {
                 fecha = item['FECHA'] || item['Fecha'] || item['fecha'] || '';
                 descripcion = item['DESCRIPCION'] || item['Descripcion'] || item['descripcion'] || '';
@@ -4975,6 +5031,35 @@ function generateFinalExcel() {
         });
     });
 
+    // PARA COMPENSACIONES: Asignar números de asiento agrupados por transacción
+    // Las líneas de origen y destino de la misma transacción deben tener el mismo número de asiento
+    if (state.sourceType === 'compensaciones') {
+        // Agrupar líneas por transacción
+        const transaccionToNumero = {};
+        let numeroCompensacion = 1;
+
+        // Primero, asignar un número de asiento a cada transacción única
+        allData.forEach(item => {
+            const transaccion = item._transaccion;
+            if (transaccion && !transaccionToNumero[transaccion]) {
+                transaccionToNumero[transaccion] = numeroCompensacion++;
+            }
+        });
+
+        // Luego, asignar el número de asiento correcto a cada línea
+        allData.forEach(item => {
+            const transaccion = item._transaccion;
+            if (transaccion && transaccionToNumero[transaccion]) {
+                item.Numero = transaccionToNumero[transaccion];
+            }
+        });
+
+        // Limpiar propiedad temporal
+        allData.forEach(item => {
+            delete item._transaccion;
+        });
+    }
+
     // Validación de partida doble: suma DEBE = suma HABER por asiento
     const asientosByNumero = {};
     allData.forEach(item => {
@@ -5009,98 +5094,6 @@ function generateFinalExcel() {
 
     state.finalData = allData;
     goToStep(3);
-}
-
-function processCompensaciones(g, codeDebe, codeHaber, allData) {
-    const itemsByTransaccion = {};
-
-    g.items.forEach(item => {
-        const transaccion = item['Transacción'] || item['Transaccion'] || '';
-        if (!itemsByTransaccion[transaccion]) {
-            itemsByTransaccion[transaccion] = [];
-        }
-        itemsByTransaccion[transaccion].push(item);
-    });
-
-    Object.entries(itemsByTransaccion).forEach(([transaccion, items]) => {
-        const primeraLinea = items[0];
-        const fechaOp = primeraLinea['Fecha Operación'] || primeraLinea['Fecha Operacion'] || '';
-        const periodoOrig = primeraLinea['Período Orig'] || primeraLinea['Periodo Orig'] || '';
-        const periodoDest = primeraLinea['Período Dest'] || primeraLinea['Periodo Dest'] || '';
-
-        const importe = parseAmount(primeraLinea['Importe']);
-
-        let leyenda;
-        const importeVal = parseFloat(importe.toFixed(2));
-
-        if (g.isOrigen) {
-            const impuesto = primeraLinea['Impuesto Orig'] || '';
-            const concepto = primeraLinea['Concepto Orig'] || '';
-            const subconcepto = primeraLinea['Subconcepto Orig'] || '';
-            leyenda = `COMP ${transaccion} - ${impuesto} ${concepto} ${subconcepto} / ${periodoOrig}`;
-
-            // Línea 1: Cuenta DEBE al debe
-            allData.push({
-                Fecha: fechaOp,
-                Cuenta: codeDebe,
-                Debe: importeVal,
-                Haber: 0,
-                'Tipo de auxiliar': 1,
-                Auxiliar: 1,
-                Importe: parseFloat(importeVal.toFixed(2)),
-                Leyenda: leyenda,
-                ExtraContable: 's',
-                _transaccion: transaccion
-            });
-
-            // Línea 2: Cuenta HABER al haber (contrapartida)
-            allData.push({
-                Fecha: fechaOp,
-                Cuenta: codeHaber,
-                Debe: 0,
-                Haber: importeVal,
-                'Tipo de auxiliar': 1,
-                Auxiliar: 1,
-                Importe: parseFloat((-importeVal).toFixed(2)),
-                Leyenda: leyenda,
-                ExtraContable: 's',
-                _transaccion: transaccion
-            });
-        } else {
-            const impuesto = primeraLinea['Impuesto Dest'] || '';
-            const concepto = primeraLinea['Concepto Dest'] || '';
-            const subconcepto = primeraLinea['Subconcepto Dest'] || '';
-            leyenda = `COMP ${transaccion} - ${impuesto} ${concepto} ${subconcepto} / ${periodoDest}`;
-
-            // Línea 1: Cuenta DEBE al debe
-            allData.push({
-                Fecha: fechaOp,
-                Cuenta: codeDebe,
-                Debe: importeVal,
-                Haber: 0,
-                'Tipo de auxiliar': 1,
-                Auxiliar: 1,
-                Importe: parseFloat(importeVal.toFixed(2)),
-                Leyenda: leyenda,
-                ExtraContable: 's',
-                _transaccion: transaccion
-            });
-
-            // Línea 2: Cuenta HABER al haber (contrapartida)
-            allData.push({
-                Fecha: fechaOp,
-                Cuenta: codeHaber,
-                Debe: 0,
-                Haber: importeVal,
-                'Tipo de auxiliar': 1,
-                Auxiliar: 1,
-                Importe: parseFloat((-importeVal).toFixed(2)),
-                Leyenda: leyenda,
-                ExtraContable: 's',
-                _transaccion: transaccion
-            });
-        }
-    });
 }
 
 function processVeps(g, codeDebe, codeHaber, allData, numeroAsiento) {
