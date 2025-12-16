@@ -424,30 +424,6 @@ async function processFile() {
                     const comisionCuotas = Math.abs(parseFloat(row['COMISIÓN POR OFRECER CUOTAS SIN INTERÉS']) || 0);
                     const costoEnvio = Math.abs(parseFloat(row['COSTO DE ENVÍO']) || 0);
                     const impuestosIIBB = Math.abs(parseFloat(row['IMPUESTOS COBRADOS POR RETENCIONES IIBB']) || 0);
-                    // Cupón de descuento - buscar con diferentes variantes del nombre de columna
-                    // La columna N del archivo de origen puede tener diferentes nombres
-                    let cuponDescuentoValor = row['CUPÓN DE DESCUENTO'] ||
-                                              row['CUPON DE DESCUENTO'] ||
-                                              row['Cupón de descuento'] ||
-                                              row['Cupon de descuento'] ||
-                                              row['CUPÓN DE DESCUENTO '] ||  // con espacio al final
-                                              row['CUPON DE DESCUENTO '];    // con espacio al final
-
-                    // Si no se encontró por nombre, buscar por posición (columna N = índice 13)
-                    if (cuponDescuentoValor === undefined || cuponDescuentoValor === null || cuponDescuentoValor === '') {
-                        // Buscar en las claves del objeto por coincidencia parcial
-                        const claves = Object.keys(row);
-                        const claveCupon = claves.find(k =>
-                            k.toLowerCase().includes('cupón') ||
-                            k.toLowerCase().includes('cupon')
-                        );
-                        if (claveCupon) {
-                            cuponDescuentoValor = row[claveCupon];
-                        }
-                    }
-
-                    const cuponDescuento = Math.abs(parseFloat(cuponDescuentoValor) || 0);
-
                     // Costo por ofrecer descuento (puede ser positivo o negativo)
                     const costoOfrecerDescuento = parseFloat(row['COSTO POR OFRECER DESCUENTO']) || 0;
 
@@ -519,16 +495,6 @@ async function processFile() {
                         });
                     }
 
-                    if (cuponDescuento > 0) {
-                        todosLosMovimientos.push({
-                            fecha,
-                            descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Cupón de descuento' : 'Cupón de descuento'),
-                            origen: 'Mercado Pago',
-                            credito: esDevolucion ? cuponDescuento : 0,
-                            debito: esDevolucion ? 0 : cuponDescuento,
-                            saldo: saldoDelArchivo
-                        });
-                    }
 
                     // Procesar OPERATION_TAGS para reintegros/cupones primero
                     let tieneOperationTags = false;
