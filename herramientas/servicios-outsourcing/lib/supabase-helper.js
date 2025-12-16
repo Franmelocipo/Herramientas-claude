@@ -4,7 +4,7 @@
  */
 
 // Referencia al cliente de Supabase (desde supabase-config.js)
-function getSupabase() {
+function getSupabaseHelper() {
     if (typeof supabaseClient !== 'undefined' && supabaseClient) {
         return supabaseClient;
     }
@@ -14,13 +14,6 @@ function getSupabase() {
     console.error('Supabase no está disponible');
     return null;
 }
-
-// Alias para compatibilidad
-const supabase = {
-    get from() { return getSupabase()?.from.bind(getSupabase()); },
-    get storage() { return getSupabase()?.storage; },
-    get rpc() { return getSupabase()?.rpc.bind(getSupabase()); }
-};
 
 // =====================================================
 // GESTIÓN DE PERÍODOS
@@ -33,7 +26,7 @@ const supabase = {
  */
 async function getPeriodos(filtros = {}) {
     try {
-        let query = supabase
+        let query = getSupabaseHelper()
             .from('periods')
             .select(`
                 *,
@@ -76,7 +69,7 @@ async function getPeriodos(filtros = {}) {
  */
 async function crearPeriodo(periodo) {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseHelper()
             .from('periods')
             .insert([periodo])
             .select()
@@ -115,7 +108,7 @@ async function cerrarPeriodo(periodoId, usuarioId, observaciones = null) {
             updates.observaciones = observaciones;
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseHelper()
             .from('periods')
             .update(updates)
             .eq('id', periodoId)
@@ -138,7 +131,7 @@ async function cerrarPeriodo(periodoId, usuarioId, observaciones = null) {
  */
 async function reabrirPeriodo(periodoId) {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseHelper()
             .from('periods')
             .update({
                 estado: 'abierto',
@@ -165,7 +158,7 @@ async function reabrirPeriodo(periodoId) {
  */
 async function getPeriodosAbiertos(clientId) {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseHelper()
             .from('periods')
             .select('*')
             .eq('client_id', clientId)
@@ -199,7 +192,7 @@ async function subirArchivoComprobante(file, clientId, year, month) {
         const fileName = generarNombreArchivoUnico(file.name);
         const filePath = `${clientId}/${year}/${month}/${fileName}`;
 
-        const { data, error } = await supabase.storage
+        const { data, error } = await getSupabaseHelper().storage
             .from('comprobantes')
             .upload(filePath, file, {
                 cacheControl: '3600',
@@ -209,7 +202,7 @@ async function subirArchivoComprobante(file, clientId, year, month) {
         if (error) throw error;
 
         // Obtener URL pública
-        const { data: urlData } = supabase.storage
+        const { data: urlData } = getSupabaseHelper().storage
             .from('comprobantes')
             .getPublicUrl(filePath);
 
@@ -231,7 +224,7 @@ async function subirArchivoComprobante(file, clientId, year, month) {
  */
 async function crearComprobante(comprobante) {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseHelper()
             .from('comprobantes')
             .insert([comprobante])
             .select()
@@ -253,7 +246,7 @@ async function crearComprobante(comprobante) {
  */
 async function getComprobantes(filtros = {}) {
     try {
-        let query = supabase
+        let query = getSupabaseHelper()
             .from('comprobantes')
             .select(`
                 *,
@@ -307,7 +300,7 @@ async function getComprobantes(filtros = {}) {
  */
 async function actualizarComprobante(comprobanteId, updates) {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseHelper()
             .from('comprobantes')
             .update(updates)
             .eq('id', comprobanteId)
@@ -333,7 +326,7 @@ async function actualizarComprobante(comprobanteId, updates) {
 async function vincularComprobante(comprobanteId, registroId, usuarioId) {
     try {
         // Actualizar comprobante
-        const { data: comprobante, error: errorComp } = await supabase
+        const { data: comprobante, error: errorComp } = await getSupabaseHelper()
             .from('comprobantes')
             .update({
                 estado: 'vinculado',
@@ -348,7 +341,7 @@ async function vincularComprobante(comprobanteId, registroId, usuarioId) {
         if (errorComp) throw errorComp;
 
         // Actualizar registro contable
-        const { data: registro, error: errorReg } = await supabase
+        const { data: registro, error: errorReg } = await getSupabaseHelper()
             .from('registros_contables')
             .update({
                 tiene_comprobante: true,
@@ -377,7 +370,7 @@ async function vincularComprobante(comprobanteId, registroId, usuarioId) {
 async function desvincularComprobante(comprobanteId) {
     try {
         // Obtener el registro vinculado primero
-        const { data: comprobante } = await supabase
+        const { data: comprobante } = await getSupabaseHelper()
             .from('comprobantes')
             .select('registro_contable_id')
             .eq('id', comprobanteId)
@@ -397,7 +390,7 @@ async function desvincularComprobante(comprobanteId) {
         }
 
         // Actualizar comprobante
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseHelper()
             .from('comprobantes')
             .update({
                 estado: 'pendiente',
@@ -429,7 +422,7 @@ async function desvincularComprobante(comprobanteId) {
  */
 async function getRegistrosContables(filtros = {}) {
     try {
-        let query = supabase
+        let query = getSupabaseHelper()
             .from('registros_contables')
             .select(`
                 *,
@@ -481,7 +474,7 @@ async function getRegistrosContables(filtros = {}) {
  */
 async function crearRegistroContable(registro) {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseHelper()
             .from('registros_contables')
             .insert([{ ...registro, sistema_origen: 'manual' }])
             .select()
@@ -509,12 +502,12 @@ async function crearOrdenPago(orden) {
     try {
         // Generar número de orden si no se proporciona
         if (!orden.numero_orden) {
-            const { data: numeroOrden } = await supabase
+            const { data: numeroOrden } = await getSupabaseHelper()
                 .rpc('generar_numero_orden');
             orden.numero_orden = numeroOrden;
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseHelper()
             .from('ordenes_pago')
             .insert([orden])
             .select()
@@ -536,7 +529,7 @@ async function crearOrdenPago(orden) {
  */
 async function getOrdenesPago(filtros = {}) {
     try {
-        let query = supabase
+        let query = getSupabaseHelper()
             .from('ordenes_pago')
             .select(`
                 *,
@@ -580,7 +573,7 @@ async function getOrdenesPago(filtros = {}) {
  */
 async function aprobarOrdenPago(ordenId, usuarioId) {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseHelper()
             .from('ordenes_pago')
             .update({
                 estado: 'aprobada',
@@ -609,7 +602,7 @@ async function aprobarOrdenPago(ordenId, usuarioId) {
  */
 async function rechazarOrdenPago(ordenId, usuarioId, motivo) {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseHelper()
             .from('ordenes_pago')
             .update({
                 estado: 'rechazada',
@@ -639,7 +632,7 @@ async function rechazarOrdenPago(ordenId, usuarioId, motivo) {
  */
 async function registrarPagoOrden(ordenId, usuarioId, datosPago) {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabaseHelper()
             .from('ordenes_pago')
             .update({
                 estado: 'pagada',
@@ -672,11 +665,11 @@ async function registrarPagoOrden(ordenId, usuarioId, datosPago) {
  */
 async function getEstadisticas(filtros = {}) {
     try {
-        let queryComprobantes = supabase
+        let queryComprobantes = getSupabaseHelper()
             .from('comprobantes')
             .select('estado, monto_total, tiene_retencion, monto_retencion');
 
-        let queryOrdenes = supabase
+        let queryOrdenes = getSupabaseHelper()
             .from('ordenes_pago')
             .select('estado, monto');
 
@@ -725,7 +718,7 @@ async function getEstadisticas(filtros = {}) {
  */
 async function getGastosPorConcepto(filtros = {}) {
     try {
-        let query = supabase
+        let query = getSupabaseHelper()
             .from('comprobantes')
             .select('concepto, monto_total');
 

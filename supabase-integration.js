@@ -14,11 +14,10 @@ function getSupabaseIntegration() {
     return null;
 }
 
-// Alias para compatibilidad con el código existente
-const supabase = {
-    get from() { return getSupabaseIntegration()?.from.bind(getSupabaseIntegration()); },
-    get rpc() { return getSupabaseIntegration()?.rpc.bind(getSupabaseIntegration()); }
-};
+// Función helper para obtener el cliente (reemplaza las llamadas directas a 'supabase')
+function getSupabase() {
+    return getSupabaseIntegration();
+}
 
 // =====================================================
 // FUNCIONES PARA CLIENTES
@@ -29,14 +28,14 @@ const supabase = {
  */
 async function getSupabaseClients() {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('❌ [getSupabaseClients] Supabase no está inicializado');
             return [];
         }
 
         console.log('📡 [getSupabaseClients] Obteniendo clientes desde Supabase...');
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('clientes')
             .select('*')
             .order('nombre', { ascending: true });
@@ -79,7 +78,7 @@ async function getSupabaseClients() {
  */
 async function createSupabaseClient(clientData) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('❌ [createSupabaseClient] Supabase no está inicializado');
             return null;
         }
@@ -97,7 +96,7 @@ async function createSupabaseClient(clientData) {
 
         console.log('📤 [createSupabaseClient] Datos a insertar:', clientToInsert);
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('clientes')
             .insert([clientToInsert])
             .select()
@@ -142,7 +141,7 @@ async function createSupabaseClient(clientData) {
  */
 async function updateSupabaseClient(clientId, updates) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('❌ [updateSupabaseClient] Supabase no está inicializado');
             return null;
         }
@@ -158,7 +157,7 @@ async function updateSupabaseClient(clientId, updates) {
         if (updates.telefono !== undefined) mappedUpdates.telefono = updates.telefono;
         if (updates.tipo_societario !== undefined) mappedUpdates.tipo_societario = updates.tipo_societario;
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('clientes')
             .update(mappedUpdates)
             .eq('id', clientId)
@@ -183,14 +182,14 @@ async function updateSupabaseClient(clientId, updates) {
  */
 async function deleteSupabaseClient(clientId) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('❌ [deleteSupabaseClient] Supabase no está inicializado');
             return false;
         }
 
         console.log('🗑️ [deleteSupabaseClient] Eliminando cliente:', clientId);
 
-        const { error } = await supabase
+        const { error } = await getSupabase()
             .from('clientes')
             .delete()
             .eq('id', clientId);
@@ -213,7 +212,7 @@ async function deleteSupabaseClient(clientId) {
  */
 async function importSupabaseClients(clients) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('❌ [importSupabaseClients] Supabase no está inicializado');
             return { imported: 0, errors: [] };
         }
@@ -231,7 +230,7 @@ async function importSupabaseClients(clients) {
 
         console.log('📤 [importSupabaseClients] Datos a insertar:', clientsToInsert);
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('clientes')
             .insert(clientsToInsert)
             .select();
@@ -261,12 +260,12 @@ async function importSupabaseClients(clients) {
  */
 async function updateClientAccountPlan(clientId, accountPlan) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return false;
         }
 
-        const { error } = await supabase
+        const { error } = await getSupabase()
             .from('shared_clients')
             .update({ account_plan: accountPlan })
             .eq('id', clientId);
@@ -288,12 +287,12 @@ async function updateClientAccountPlan(clientId, accountPlan) {
  */
 async function getSupabaseTaxDatabase() {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return [];
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('tax_database')
             .select('*')
             .order('impuesto');
@@ -311,14 +310,14 @@ async function getSupabaseTaxDatabase() {
  */
 async function importSupabaseTaxDatabase(taxes, clearFirst = false) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return { success: false, imported: 0 };
         }
 
         // Limpiar base de datos si se solicita
         if (clearFirst) {
-            const { error: deleteError } = await supabase
+            const { error: deleteError } = await getSupabase()
                 .from('tax_database')
                 .delete()
                 .neq('id', 0); // Eliminar todos los registros
@@ -327,7 +326,7 @@ async function importSupabaseTaxDatabase(taxes, clearFirst = false) {
         }
 
         // Insertar nuevos datos
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('tax_database')
             .upsert(taxes, {
                 onConflict: 'impuesto,concepto,subconcepto',
@@ -356,12 +355,12 @@ async function importSupabaseTaxDatabase(taxes, clearFirst = false) {
  */
 async function clearSupabaseTaxDatabase() {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return false;
         }
 
-        const { error } = await supabase
+        const { error } = await getSupabase()
             .from('tax_database')
             .delete()
             .neq('id', 0); // Eliminar todos los registros
@@ -383,12 +382,12 @@ async function clearSupabaseTaxDatabase() {
  */
 async function getSupabaseImpuestosBase() {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return [];
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('impuestos_base')
             .select('*')
             .order('codigo_impuesto')
@@ -408,11 +407,11 @@ async function getSupabaseImpuestosBase() {
  */
 async function getSupabaseImpuestosBaseCount() {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             return 0;
         }
 
-        const { count, error } = await supabase
+        const { count, error } = await getSupabase()
             .from('impuestos_base')
             .select('*', { count: 'exact', head: true });
 
@@ -429,14 +428,14 @@ async function getSupabaseImpuestosBaseCount() {
  */
 async function importSupabaseImpuestosBase(taxes, clearFirst = false) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return { success: false, imported: 0 };
         }
 
         // Limpiar base de datos si se solicita
         if (clearFirst) {
-            const { error: deleteError } = await supabase
+            const { error: deleteError } = await getSupabase()
                 .from('impuestos_base')
                 .delete()
                 .neq('id', '00000000-0000-0000-0000-000000000000'); // Eliminar todos los registros
@@ -448,7 +447,7 @@ async function importSupabaseImpuestosBase(taxes, clearFirst = false) {
         }
 
         // Insertar nuevos datos
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('impuestos_base')
             .insert(taxes)
             .select();
@@ -477,12 +476,12 @@ async function importSupabaseImpuestosBase(taxes, clearFirst = false) {
  */
 async function clearSupabaseImpuestosBase() {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return false;
         }
 
-        const { error } = await supabase
+        const { error } = await getSupabase()
             .from('impuestos_base')
             .delete()
             .neq('id', '00000000-0000-0000-0000-000000000000'); // Eliminar todos los registros
@@ -503,14 +502,14 @@ async function clearSupabaseImpuestosBase() {
  */
 async function searchSupabaseImpuestosBase(searchTerm) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return [];
         }
 
         const term = searchTerm.toLowerCase();
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('impuestos_base')
             .select('*')
             .or(`codigo_impuesto.ilike.%${term}%,descripcion_impuesto.ilike.%${term}%,codigo_concepto.ilike.%${term}%,descripcion_concepto.ilike.%${term}%,codigo_subconcepto.ilike.%${term}%,descripcion_subconcepto.ilike.%${term}%`)
@@ -531,11 +530,11 @@ async function searchSupabaseImpuestosBase(searchTerm) {
  */
 async function getUniqueImpuestos() {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             return [];
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('impuestos_base')
             .select('codigo_impuesto, descripcion_impuesto')
             .order('codigo_impuesto');
@@ -563,11 +562,11 @@ async function getUniqueImpuestos() {
  */
 async function getConceptosByImpuesto(codigoImpuesto) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             return [];
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('impuestos_base')
             .select('codigo_concepto, descripcion_concepto')
             .eq('codigo_impuesto', codigoImpuesto)
@@ -596,11 +595,11 @@ async function getConceptosByImpuesto(codigoImpuesto) {
  */
 async function getSubconceptosByConcepto(codigoImpuesto, codigoConcepto) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             return [];
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('impuestos_base')
             .select('codigo_subconcepto, descripcion_subconcepto')
             .eq('codigo_impuesto', codigoImpuesto)
@@ -620,7 +619,7 @@ async function getSubconceptosByConcepto(codigoImpuesto, codigoConcepto) {
  */
 async function getSupabaseTaxObligations(clientId = null, status = null) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return [];
         }
@@ -653,12 +652,12 @@ async function getSupabaseTaxObligations(clientId = null, status = null) {
  */
 async function createSupabaseTaxObligation(obligation) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return null;
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
             .from('tax_obligations')
             .insert([obligation])
             .select()
@@ -677,12 +676,12 @@ async function createSupabaseTaxObligation(obligation) {
  */
 async function updateSupabaseTaxObligation(obligationId, updates) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return false;
         }
 
-        const { error } = await supabase
+        const { error } = await getSupabase()
             .from('tax_obligations')
             .update(updates)
             .eq('id', obligationId);
@@ -700,12 +699,12 @@ async function updateSupabaseTaxObligation(obligationId, updates) {
  */
 async function deleteSupabaseTaxObligation(obligationId) {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return false;
         }
 
-        const { error } = await supabase
+        const { error } = await getSupabase()
             .from('tax_obligations')
             .delete()
             .eq('id', obligationId);
@@ -727,12 +726,12 @@ async function deleteSupabaseTaxObligation(obligationId) {
  */
 async function getSupabaseStorageStats() {
     try {
-        if (!supabase) {
+        if (!getSupabase()) {
             console.error('Supabase no está inicializado');
             return null;
         }
 
-        const { data, error } = await supabase.rpc('get_storage_stats');
+        const { data, error } = await getSupabase().rpc('get_storage_stats');
 
         if (error) throw error;
 
@@ -746,9 +745,9 @@ async function getSupabaseStorageStats() {
         // Fallback: obtener conteos manualmente
         try {
             const [clients, taxDb, taxObl] = await Promise.all([
-                supabase.from('shared_clients').select('id', { count: 'exact', head: true }),
-                supabase.from('tax_database').select('id', { count: 'exact', head: true }),
-                supabase.from('tax_obligations').select('id', { count: 'exact', head: true })
+                getSupabase().from('shared_clients').select('id', { count: 'exact', head: true }),
+                getSupabase().from('tax_database').select('id', { count: 'exact', head: true }),
+                getSupabase().from('tax_obligations').select('id', { count: 'exact', head: true })
             ]);
 
             return {
