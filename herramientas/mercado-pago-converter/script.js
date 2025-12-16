@@ -360,12 +360,13 @@ async function processFile() {
                 // Excluir explícitamente "Reserva para pago"
                 if (desc.includes('reserva para pago')) return false;
 
-                // Incluir: "Pago", "Extracción de efectivo", "Devolución de dinero", "Rendimientos" y "Cashback"
+                // Incluir: "Pago", "Extracción de efectivo", "Devolución de dinero", "Rendimientos", "Cashback" y "Tarifa de envío"
                 return desc.includes('pago') ||
                        desc.includes('extracción de efectivo') ||
                        desc.includes('devolución de dinero') ||
                        desc.includes('rendimientos') ||
-                       desc.includes('cashback');
+                       desc.includes('cashback') ||
+                       desc.includes('tarifa de envío');
             });
 
             console.log(`  Registros filtrados: ${filteredData.length}`);
