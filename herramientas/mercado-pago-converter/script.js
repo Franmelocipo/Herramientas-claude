@@ -424,8 +424,29 @@ async function processFile() {
                     const comisionCuotas = Math.abs(parseFloat(row['COMISIÓN POR OFRECER CUOTAS SIN INTERÉS']) || 0);
                     const costoEnvio = Math.abs(parseFloat(row['COSTO DE ENVÍO']) || 0);
                     const impuestosIIBB = Math.abs(parseFloat(row['IMPUESTOS COBRADOS POR RETENCIONES IIBB']) || 0);
-                    // Cupón de descuento - buscar con y sin acento
-                    const cuponDescuento = Math.abs(parseFloat(row['CUPÓN DE DESCUENTO'] || row['CUPON DE DESCUENTO']) || 0);
+                    // Cupón de descuento - buscar con diferentes variantes del nombre de columna
+                    // La columna N del archivo de origen puede tener diferentes nombres
+                    let cuponDescuentoValor = row['CUPÓN DE DESCUENTO'] ||
+                                              row['CUPON DE DESCUENTO'] ||
+                                              row['Cupón de descuento'] ||
+                                              row['Cupon de descuento'] ||
+                                              row['CUPÓN DE DESCUENTO '] ||  // con espacio al final
+                                              row['CUPON DE DESCUENTO '];    // con espacio al final
+
+                    // Si no se encontró por nombre, buscar por posición (columna N = índice 13)
+                    if (cuponDescuentoValor === undefined || cuponDescuentoValor === null || cuponDescuentoValor === '') {
+                        // Buscar en las claves del objeto por coincidencia parcial
+                        const claves = Object.keys(row);
+                        const claveCupon = claves.find(k =>
+                            k.toLowerCase().includes('cupón') ||
+                            k.toLowerCase().includes('cupon')
+                        );
+                        if (claveCupon) {
+                            cuponDescuentoValor = row[claveCupon];
+                        }
+                    }
+
+                    const cuponDescuento = Math.abs(parseFloat(cuponDescuentoValor) || 0);
 
                     // Costo por ofrecer descuento (puede ser positivo o negativo)
                     const costoOfrecerDescuento = parseFloat(row['COSTO POR OFRECER DESCUENTO']) || 0;
@@ -439,9 +460,9 @@ async function processFile() {
                     // Detectar si es una tarifa de envío (para evitar línea vacía duplicada)
                     const esTarifaEnvio = String(descripcionBase).toLowerCase().includes('tarifa de envío');
 
-                    // Solo agregar movimiento principal si tiene monto o no es tarifa de envío
-                    // (las tarifas de envío sin monto bruto se muestran solo como "Costo de envío")
-                    if (montoBruto !== 0 || !esTarifaEnvio) {
+                    // Solo agregar movimiento principal si tiene monto
+                    // (las tarifas de envío y devoluciones sin monto bruto se muestran solo como costos/comisiones)
+                    if (montoBruto !== 0) {
                         todosLosMovimientos.push({
                             fecha,
                             descripcion: descripcionCompleta,
