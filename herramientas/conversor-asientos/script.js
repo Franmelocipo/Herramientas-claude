@@ -279,15 +279,15 @@ async function cargarPlanCuentasCliente(clienteId) {
     try {
         console.log('Cargando plan de cuentas para cliente:', clienteId);
 
-        // Usar la variable global supabase
-        if (!supabase) {
+        // Usar la variable global supabaseDB (inicializada en supabase-config.js)
+        if (!window.supabaseDB) {
             console.error('❌ Supabase no está disponible');
             mostrarInfoPlan('Error de conexión con la base de datos', 'error');
             deshabilitarOpciones();
             return;
         }
 
-        let { data: cuentas, error } = await supabase
+        let { data: cuentas, error } = await window.supabaseDB
             .from('plan_cuentas')
             .select('codigo, cuenta, codigos_impuesto')
             .eq('cliente_id', clienteId)
@@ -298,7 +298,7 @@ async function cargarPlanCuentasCliente(clienteId) {
             // Si el error es por columna faltante, hacer query sin esa columna
             if (error.message && error.message.includes('codigos_impuesto')) {
                 console.log('Columna codigos_impuesto no existe, usando query sin ella');
-                const { data: dataFallback, error: errorFallback } = await supabase
+                const { data: dataFallback, error: errorFallback } = await window.supabaseDB
                     .from('plan_cuentas')
                     .select('codigo, cuenta')
                     .eq('cliente_id', clienteId)
@@ -1391,13 +1391,13 @@ function guardarMapeoCuentasPW(clienteId, mapeo) {
  * @param {Object} mapeo - Mapeo {codigoPW: {codigoSistema, nombreSistema}}
  */
 async function guardarMapeosPWEnSupabase(clienteId, mapeo) {
-    if (!supabase) return;
+    if (!window.supabaseDB) return;
 
     try {
         // Convertir el mapeo a formato de Supabase y hacer upsert
         for (const [codigoCliente, datos] of Object.entries(mapeo)) {
             if (datos.codigoSistema) {
-                await supabase
+                await window.supabaseDB
                     .from('mapeo_cuentas_cliente')
                     .upsert({
                         cliente_id: clienteId,
@@ -1891,7 +1891,7 @@ async function cargarPlanCuentasClienteDesdeSupabase(clienteId) {
 
     try {
         // Cargar plan de cuentas del cliente desde la tabla plan_cuentas_cliente
-        const { data: planCliente, error } = await supabase
+        const { data: planCliente, error } = await window.supabaseDB
             .from('plan_cuentas_cliente')
             .select('codigo, nombre')
             .eq('cliente_id', clienteId)
@@ -1953,7 +1953,7 @@ async function cargarPlanCuentasClienteDesdeSupabase(clienteId) {
  */
 async function cargarMapeosClienteDesdeSupabase(clienteId) {
     try {
-        const { data: mapeos, error } = await supabase
+        const { data: mapeos, error } = await window.supabaseDB
             .from('mapeo_cuentas_cliente')
             .select('codigo_cliente, codigo_sistema, nombre_sistema')
             .eq('cliente_id', clienteId);
@@ -1988,7 +1988,7 @@ async function cargarMapeosClienteDesdeSupabase(clienteId) {
  */
 async function guardarMapeoClienteEnSupabase(clienteId, codigoCliente, codigoSistema, nombreSistema) {
     try {
-        const { error } = await supabase
+        const { error } = await window.supabaseDB
             .from('mapeo_cuentas_cliente')
             .upsert({
                 cliente_id: clienteId,
