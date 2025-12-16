@@ -23,6 +23,7 @@ let state = {
     exigenciaPalabras: 2, // Proceso inicial: 2 palabras coincidentes exigidas
     resultados: null,
     eliminados: [], // Movimientos del Mayor eliminados del proceso de conciliación
+    enAuditoria: [], // Movimientos del Extracto marcados para auditoría
     // Integración con auditoría
     fuenteExtracto: 'archivo', // 'archivo' o 'auditoria'
     clienteSeleccionado: null,
@@ -297,7 +298,9 @@ const elements = {
     countMayorPendiente: document.getElementById('countMayorPendiente'),
     countExtractoPendiente: document.getElementById('countExtractoPendiente'),
     countEliminados: document.getElementById('countEliminados'),
+    countEnAuditoria: document.getElementById('countEnAuditoria'),
     tablaEliminados: document.getElementById('tablaEliminados'),
+    tablaEnAuditoria: document.getElementById('tablaEnAuditoria'),
     btnEliminarSeleccionados: document.getElementById('btnEliminarSeleccionados'),
 
     // Modal de progreso
@@ -2089,8 +2092,9 @@ function mostrarVistaInicialPendientes() {
         extractoNoConciliado: extractoFiltrado
     };
 
-    // Limpiar lista de eliminados
+    // Limpiar lista de eliminados y auditoría
     state.eliminados = [];
+    state.enAuditoria = [];
 
     // Actualizar contadores y totales
     const totalMayorPendiente = mayorFiltrado.reduce((sum, m) => sum + m.importe, 0);
@@ -2934,6 +2938,7 @@ function mostrarResultados() {
     llenarTablaMayorPendiente(res.mayorNoConciliado);
     llenarTablaExtractoPendiente(res.extractoNoConciliado);
     llenarTablaEliminados();
+    llenarTablaEnAuditoria();
 
     // Poblar selector de tipos para el filtro de Mayor
     poblarSelectorTiposMayor();
@@ -3014,11 +3019,16 @@ function llenarTablaExtractoPendiente(pendientes) {
                 <td>${e.origen}</td>
                 <td class="text-right">${e.debito > 0 ? formatearNumero(e.debito) : ''}</td>
                 <td class="text-right">${e.credito > 0 ? formatearNumero(e.credito) : ''}</td>
+                <td class="col-action-auditoria">
+                    <button class="btn-auditoria-mini" onclick="moverAuditoria('${e.id}')" title="Marcar para auditoría">
+                        🔍
+                    </button>
+                </td>
             </tr>
         `;
     });
 
-    elements.tablaExtractoPendiente.innerHTML = html || '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:20px;">Todos los movimientos del Extracto fueron conciliados</td></tr>';
+    elements.tablaExtractoPendiente.innerHTML = html || '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:20px;">Todos los movimientos del Extracto fueron conciliados</td></tr>';
 
     // Reset checkbox "seleccionar todos"
     if (elements.selectAllExtracto) {
@@ -3027,6 +3037,9 @@ function llenarTablaExtractoPendiente(pendientes) {
 
     // Actualizar indicadores de ordenamiento
     actualizarIndicadoresOrden('extracto');
+
+    // Actualizar botón de mover a auditoría
+    actualizarBotonMoverAuditoria();
 }
 
 // ========== CONCILIACIÓN MANUAL ==========
@@ -4153,6 +4166,325 @@ function actualizarBotonEliminarSeleccionados() {
     }
 }
 
+// ========== MOVIMIENTOS EN AUDITORÍA ==========
+
+/**
+ * Mover un movimiento del Extracto a estado "En Auditoría"
+ * @param {string} id - ID del movimiento a mover
+ */
+function moverAuditoria(id) {
+    if (!state.resultados) return;
+
+    const movimiento = state.resultados.extractoNoConciliado.find(m => m.id === id);
+    if (!movimiento) return;
+
+    // Mostrar modal para agregar nota de auditoría
+    mostrarModalNotaAuditoria(movimiento, (nota) => {
+        // Agregar a enAuditoria con metadata
+        state.enAuditoria.push({
+            ...movimiento,
+            fechaAuditoria: new Date().toISOString(),
+            notaAuditoria: nota || ''
+        });
+
+        // Quitar de extractoNoConciliado
+        state.resultados.extractoNoConciliado = state.resultados.extractoNoConciliado.filter(m => m.id !== id);
+
+        // Quitar de selección si estaba seleccionado
+        seleccion.extracto = seleccion.extracto.filter(i => i !== id);
+
+        // Actualizar vistas
+        actualizarVistasAuditoria();
+
+        mostrarMensaje('Movimiento marcado para auditoría', 'success');
+    });
+}
+
+/**
+ * Mover múltiples movimientos seleccionados del extracto a auditoría
+ */
+function moverSeleccionadosAAuditoria() {
+    if (!state.resultados) return;
+
+    const idsAMover = [...seleccion.extracto];
+    if (idsAMover.length === 0) {
+        mostrarMensaje('No hay movimientos seleccionados', 'warning');
+        return;
+    }
+
+    // Mostrar modal para agregar nota de auditoría (para todos los seleccionados)
+    mostrarModalNotaAuditoria(null, (nota) => {
+        const movimientos = state.resultados.extractoNoConciliado.filter(m => idsAMover.includes(m.id));
+
+        // Agregar a enAuditoria con metadata
+        movimientos.forEach(movimiento => {
+            state.enAuditoria.push({
+                ...movimiento,
+                fechaAuditoria: new Date().toISOString(),
+                notaAuditoria: nota || ''
+            });
+        });
+
+        // Quitar de extractoNoConciliado
+        state.resultados.extractoNoConciliado = state.resultados.extractoNoConciliado.filter(
+            m => !idsAMover.includes(m.id)
+        );
+
+        // Limpiar selección
+        seleccion.extracto = [];
+
+        // Actualizar vistas
+        actualizarVistasAuditoria();
+
+        mostrarMensaje(`${movimientos.length} movimiento(s) marcado(s) para auditoría`, 'success');
+    });
+}
+
+/**
+ * Restaurar un movimiento de Auditoría al Extracto Pendiente
+ * @param {string} id - ID del movimiento a restaurar
+ */
+function restaurarDeAuditoria(id) {
+    const movimiento = state.enAuditoria.find(m => m.id === id);
+    if (!movimiento) return;
+
+    // Quitar metadata de auditoría y restaurar a extractoNoConciliado
+    const { fechaAuditoria, notaAuditoria, ...movimientoOriginal } = movimiento;
+
+    state.resultados.extractoNoConciliado.push(movimientoOriginal);
+
+    // Quitar de enAuditoria
+    state.enAuditoria = state.enAuditoria.filter(m => m.id !== id);
+
+    // Actualizar vistas
+    actualizarVistasAuditoria();
+
+    mostrarMensaje('Movimiento restaurado al extracto pendiente', 'success');
+}
+
+/**
+ * Editar la nota de auditoría de un movimiento
+ * @param {string} id - ID del movimiento
+ */
+function editarNotaAuditoria(id) {
+    const movimiento = state.enAuditoria.find(m => m.id === id);
+    if (!movimiento) return;
+
+    mostrarModalNotaAuditoria(movimiento, (nota) => {
+        movimiento.notaAuditoria = nota;
+        llenarTablaEnAuditoria();
+        mostrarMensaje('Nota de auditoría actualizada', 'success');
+    }, movimiento.notaAuditoria);
+}
+
+/**
+ * Mostrar modal para agregar/editar nota de auditoría
+ * @param {Object|null} movimiento - Movimiento específico o null para múltiples
+ * @param {Function} callback - Función a ejecutar con la nota
+ * @param {string} notaActual - Nota actual para edición
+ */
+function mostrarModalNotaAuditoria(movimiento, callback, notaActual = '') {
+    // Crear el modal dinámicamente
+    let modal = document.getElementById('modal-nota-auditoria');
+    let overlay = document.getElementById('overlay-nota-auditoria');
+
+    if (!modal) {
+        overlay = document.createElement('div');
+        overlay.id = 'overlay-nota-auditoria';
+        overlay.className = 'modal-overlay';
+        overlay.onclick = () => cerrarModalNotaAuditoria();
+
+        modal = document.createElement('div');
+        modal.id = 'modal-nota-auditoria';
+        modal.className = 'modal modal-nota-auditoria';
+        modal.innerHTML = `
+            <div class="modal-header">
+                <h3 id="titulo-modal-nota">Agregar Nota de Auditoría</h3>
+                <button class="modal-close" onclick="cerrarModalNotaAuditoria()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="info-movimiento-auditoria" class="info-movimiento-auditoria"></div>
+                <div class="form-group">
+                    <label for="inputNotaAuditoria">Nota de auditoría:</label>
+                    <textarea id="inputNotaAuditoria" class="input-nota-auditoria" rows="4" placeholder="Ingrese las observaciones o el tratamiento a dar a este movimiento..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="cerrarModalNotaAuditoria()">Cancelar</button>
+                <button id="btnConfirmarNota" class="btn-primary">Confirmar</button>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+        document.body.appendChild(modal);
+    }
+
+    // Configurar contenido del modal
+    const titulo = document.getElementById('titulo-modal-nota');
+    const infoDiv = document.getElementById('info-movimiento-auditoria');
+    const inputNota = document.getElementById('inputNotaAuditoria');
+    const btnConfirmar = document.getElementById('btnConfirmarNota');
+
+    if (notaActual) {
+        titulo.textContent = 'Editar Nota de Auditoría';
+    } else {
+        titulo.textContent = 'Agregar Nota de Auditoría';
+    }
+
+    if (movimiento) {
+        const importe = movimiento.debito > 0 ? -movimiento.debito : movimiento.credito;
+        infoDiv.innerHTML = `
+            <div class="movimiento-info-row">
+                <span class="label">Fecha:</span>
+                <span class="value">${formatearFecha(movimiento.fecha)}</span>
+            </div>
+            <div class="movimiento-info-row">
+                <span class="label">Descripción:</span>
+                <span class="value">${truncar(movimiento.descripcion, 50)}</span>
+            </div>
+            <div class="movimiento-info-row">
+                <span class="label">Importe:</span>
+                <span class="value ${importe >= 0 ? 'text-success' : 'text-danger'}">${formatearNumero(Math.abs(importe))}</span>
+            </div>
+        `;
+        infoDiv.classList.remove('hidden');
+    } else {
+        infoDiv.innerHTML = `<p class="text-muted">Se aplicará la misma nota a todos los movimientos seleccionados.</p>`;
+        infoDiv.classList.remove('hidden');
+    }
+
+    inputNota.value = notaActual;
+
+    // Configurar callback del botón
+    btnConfirmar.onclick = () => {
+        const nota = inputNota.value.trim();
+        cerrarModalNotaAuditoria();
+        callback(nota);
+    };
+
+    // Mostrar modal
+    overlay.classList.add('active');
+    modal.classList.add('active');
+    inputNota.focus();
+}
+
+/**
+ * Cerrar modal de nota de auditoría
+ */
+function cerrarModalNotaAuditoria() {
+    const overlay = document.getElementById('overlay-nota-auditoria');
+    const modal = document.getElementById('modal-nota-auditoria');
+
+    if (overlay) overlay.classList.remove('active');
+    if (modal) modal.classList.remove('active');
+}
+
+/**
+ * Llenar la tabla de movimientos en auditoría
+ */
+function llenarTablaEnAuditoria() {
+    if (!elements.tablaEnAuditoria) return;
+
+    let html = '';
+
+    // Actualizar contadores (en pestaña y en header)
+    if (elements.countEnAuditoria) {
+        elements.countEnAuditoria.textContent = `(${state.enAuditoria.length})`;
+    }
+    const countEnAuditoriaTab = document.getElementById('countEnAuditoriaTab');
+    if (countEnAuditoriaTab) {
+        countEnAuditoriaTab.textContent = `(${state.enAuditoria.length})`;
+    }
+
+    if (state.enAuditoria.length === 0) {
+        elements.tablaEnAuditoria.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos en auditoría</td></tr>';
+        return;
+    }
+
+    // Ordenar por fecha de auditoría (más reciente primero)
+    const auditoriaOrdenada = [...state.enAuditoria].sort((a, b) => {
+        return new Date(b.fechaAuditoria) - new Date(a.fechaAuditoria);
+    });
+
+    auditoriaOrdenada.forEach(m => {
+        const fechaAud = new Date(m.fechaAuditoria);
+        const fechaAuditoriaFormateada = formatearFecha(fechaAud) + ' ' +
+            fechaAud.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+        html += `
+            <tr data-id="${m.id}" class="fila-auditoria">
+                <td>${formatearFecha(m.fecha)}</td>
+                <td title="${m.descripcion}">${truncar(m.descripcion, 35)}</td>
+                <td title="${m.origen || ''}">${truncar(m.origen || '-', 15)}</td>
+                <td class="text-right ${m.debito > 0 ? 'text-danger' : ''}">${m.debito > 0 ? formatearNumero(m.debito) : '-'}</td>
+                <td class="text-right ${m.credito > 0 ? 'text-success' : ''}">${m.credito > 0 ? formatearNumero(m.credito) : '-'}</td>
+                <td class="text-muted fecha-auditoria">${fechaAuditoriaFormateada}</td>
+                <td class="col-nota-auditoria">
+                    <div class="nota-auditoria-container">
+                        <span class="nota-texto" title="${m.notaAuditoria || ''}">${truncar(m.notaAuditoria || '-', 30)}</span>
+                        <button class="btn-editar-nota" onclick="editarNotaAuditoria('${m.id}')" title="Editar nota">
+                            ✏️
+                        </button>
+                    </div>
+                </td>
+                <td class="col-action-restaurar">
+                    <button class="btn-restaurar" onclick="restaurarDeAuditoria('${m.id}')" title="Restaurar al extracto pendiente">
+                        ↩️ Restaurar
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    elements.tablaEnAuditoria.innerHTML = html;
+}
+
+/**
+ * Actualizar vistas después de mover movimientos a/desde auditoría
+ */
+function actualizarVistasAuditoria() {
+    // Actualizar tabla de extracto pendiente
+    renderizarExtractoPendienteFiltrado();
+
+    // Actualizar tabla de auditoría
+    llenarTablaEnAuditoria();
+
+    // Actualizar contadores
+    actualizarContadorExtractoPendiente();
+
+    // Actualizar barra de selección
+    actualizarBarraSeleccion();
+
+    // Actualizar botón de mover a auditoría
+    actualizarBotonMoverAuditoria();
+}
+
+/**
+ * Actualizar contador de extracto pendiente
+ */
+function actualizarContadorExtractoPendiente() {
+    if (elements.countExtractoPendiente && state.resultados) {
+        elements.countExtractoPendiente.textContent = `(${state.resultados.extractoNoConciliado.length})`;
+    }
+}
+
+/**
+ * Actualizar botón de mover a auditoría (seleccionados)
+ */
+function actualizarBotonMoverAuditoria() {
+    const btn = document.getElementById('btnMoverAuditoriaSeleccionados');
+    if (!btn) return;
+
+    const cantidad = seleccion.extracto.length;
+
+    if (cantidad > 0) {
+        btn.classList.remove('hidden');
+        btn.innerHTML = `🔍 Marcar para auditoría (${cantidad})`;
+    } else {
+        btn.classList.add('hidden');
+    }
+}
+
 // ========== FILTROS DE BÚSQUEDA ==========
 
 /**
@@ -4667,14 +4999,22 @@ function renderizarExtractoPendienteFiltrado() {
                 <td>${e.origen}</td>
                 <td class="text-right">${e.debito > 0 ? formatearNumero(e.debito) : ''}</td>
                 <td class="text-right">${e.credito > 0 ? formatearNumero(e.credito) : ''}</td>
+                <td class="col-action-auditoria">
+                    <button class="btn-auditoria-mini" onclick="moverAuditoria('${e.id}')" title="Marcar para auditoría">
+                        🔍
+                    </button>
+                </td>
             </tr>
         `;
     });
 
-    elements.tablaExtractoPendiente.innerHTML = html || '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos que coincidan con los filtros</td></tr>';
+    elements.tablaExtractoPendiente.innerHTML = html || '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos que coincidan con los filtros</td></tr>';
 
     // Actualizar indicadores de ordenamiento
     actualizarIndicadoresOrden('extracto');
+
+    // Actualizar botón de mover a auditoría
+    actualizarBotonMoverAuditoria();
 }
 
 /**
@@ -6079,14 +6419,22 @@ function renderizarTablaExtractoOrdenada() {
                 <td>${e.origen}</td>
                 <td class="text-right">${e.debito > 0 ? formatearNumero(e.debito) : ''}</td>
                 <td class="text-right">${e.credito > 0 ? formatearNumero(e.credito) : ''}</td>
+                <td class="col-action-auditoria">
+                    <button class="btn-auditoria-mini" onclick="moverAuditoria('${e.id}')" title="Marcar para auditoría">
+                        🔍
+                    </button>
+                </td>
             </tr>
         `;
     });
 
-    elements.tablaExtractoPendiente.innerHTML = html || '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos pendientes</td></tr>';
+    elements.tablaExtractoPendiente.innerHTML = html || '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos pendientes</td></tr>';
 
     // Actualizar indicadores visuales
     actualizarIndicadoresOrden('extracto');
+
+    // Actualizar botón de mover a auditoría
+    actualizarBotonMoverAuditoria();
 }
 
 /**
@@ -6248,7 +6596,27 @@ function descargarReporte() {
     const wsEliminados = XLSX.utils.aoa_to_sheet(dataEliminados);
     XLSX.utils.book_append_sheet(wb, wsEliminados, 'Eliminados');
 
-    // Hoja 5: Resumen
+    // Hoja 5: En Auditoría
+    const dataAuditoria = [];
+    dataAuditoria.push(['Fecha', 'Descripción', 'Origen', 'Débito', 'Crédito', 'Fecha Marcación', 'Nota de Auditoría']);
+
+    state.enAuditoria.forEach(e => {
+        const fechaAud = new Date(e.fechaAuditoria);
+        dataAuditoria.push([
+            formatearFecha(e.fecha),
+            e.descripcion,
+            e.origen,
+            e.debito || '',
+            e.credito || '',
+            formatearFecha(fechaAud) + ' ' + fechaAud.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+            e.notaAuditoria || ''
+        ]);
+    });
+
+    const wsAuditoria = XLSX.utils.aoa_to_sheet(dataAuditoria);
+    XLSX.utils.book_append_sheet(wb, wsAuditoria, 'En Auditoría');
+
+    // Hoja 6: Resumen
     const totalConciliadoMayor = res.conciliados.reduce((sum, c) =>
         sum + c.mayor.reduce((s, m) => s + m.importe, 0), 0);
     const totalConciliadoExtracto = res.conciliados.reduce((sum, c) =>
@@ -6256,6 +6624,7 @@ function descargarReporte() {
     const totalMayorPendiente = res.mayorNoConciliado.reduce((sum, m) => sum + m.importe, 0);
     const totalExtractoPendiente = res.extractoNoConciliado.reduce((sum, e) => sum + e.importe, 0);
     const totalEliminados = state.eliminados.reduce((sum, m) => sum + (m.importe || m.debe || m.haber || 0), 0);
+    const totalEnAuditoria = state.enAuditoria.reduce((sum, e) => sum + (e.debito || e.credito || 0), 0);
 
     const dataResumen = [
         ['RESUMEN DE CONCILIACIÓN'],
@@ -6269,6 +6638,7 @@ function descargarReporte() {
         ['Cantidad Mayor no conciliado:', res.mayorNoConciliado.length],
         ['Cantidad Extracto no conciliado:', res.extractoNoConciliado.length],
         ['Cantidad eliminados del Mayor:', state.eliminados.length],
+        ['Cantidad en auditoría:', state.enAuditoria.length],
         [''],
         ['TOTALES'],
         ['Total Mayor conciliado:', totalConciliadoMayor],
@@ -6276,12 +6646,13 @@ function descargarReporte() {
         ['Total Mayor no conciliado:', totalMayorPendiente],
         ['Total Extracto no conciliado:', totalExtractoPendiente],
         ['Total eliminados del Mayor:', totalEliminados],
+        ['Total en auditoría:', totalEnAuditoria],
         [''],
         ['Diferencia en conciliados:', Math.abs(totalConciliadoMayor - totalConciliadoExtracto)],
         [''],
-        ['DIFERENCIA AJUSTADA (excluyendo eliminados)'],
+        ['DIFERENCIA AJUSTADA (excluyendo eliminados y auditoría)'],
         ['Diferencia original:', Math.abs(totalMayorPendiente - totalExtractoPendiente)],
-        ['Diferencia ajustada:', Math.abs((totalMayorPendiente - totalEliminados) - totalExtractoPendiente)]
+        ['Diferencia ajustada:', Math.abs((totalMayorPendiente - totalEliminados) - (totalExtractoPendiente - totalEnAuditoria))]
     ];
 
     // Agregar historial de procesamiento si hay reprocesos
@@ -6445,6 +6816,18 @@ async function guardarConciliacion() {
                     importe: e.importe
                 })),
                 eliminados: state.eliminados,
+                // Guardar movimientos en auditoría con sus notas
+                enAuditoria: state.enAuditoria.map(e => ({
+                    id: e.id,
+                    fecha: e.fecha,
+                    descripcion: e.descripcion,
+                    origen: e.origen,
+                    debito: e.debito,
+                    credito: e.credito,
+                    importe: e.importe,
+                    fechaAuditoria: e.fechaAuditoria,
+                    notaAuditoria: e.notaAuditoria
+                })),
                 // Guardar desconciliaciones manuales para que no se vuelvan a conciliar en reprocesos
                 desconciliacionesManuales: desconciliacionesManuales
             },
@@ -6923,10 +7306,12 @@ async function cargarConciliacionGuardada(conciliacionId) {
                     extractoNoConciliado: data.datos.extractoNoConciliado || []
                 };
                 state.eliminados = data.datos.eliminados || [];
+                state.enAuditoria = data.datos.enAuditoria || [];
 
                 // Restaurar desconciliaciones manuales
                 desconciliacionesManuales = data.datos.desconciliacionesManuales || [];
                 console.log('Desconciliaciones manuales restauradas:', desconciliacionesManuales.length);
+                console.log('Movimientos en auditoría restaurados:', state.enAuditoria.length);
             }
 
             // Restaurar historial
@@ -7486,6 +7871,7 @@ function limpiarVistaConciliacion() {
     // Limpiar resultados
     state.resultados = null;
     state.eliminados = [];
+    state.enAuditoria = [];
 
     // Ocultar sección de resultados
     const resultsSection = document.getElementById('resultsSection');

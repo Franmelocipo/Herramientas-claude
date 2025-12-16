@@ -1843,6 +1843,215 @@ body {
     font-size: 11px;
 }
 
+/* ========== SECCIÓN EN AUDITORÍA ========== */
+
+.tab-auditoria {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%) !important;
+    border-color: #f59e0b !important;
+    color: #92400e !important;
+}
+
+.tab-auditoria.active {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+    color: white !important;
+    border-color: #d97706 !important;
+}
+
+.auditoria-header {
+    padding: 12px 0;
+    margin-bottom: 12px;
+}
+
+.auditoria-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #92400e;
+    margin: 0;
+}
+
+.auditoria-info {
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+}
+
+.auditoria-info p {
+    margin: 0;
+    font-size: 13px;
+    color: #92400e;
+}
+
+.fila-auditoria {
+    background: #fffbeb;
+}
+
+.fila-auditoria:hover {
+    background: #fef3c7;
+}
+
+.fecha-auditoria {
+    font-size: 11px;
+}
+
+.col-nota-auditoria {
+    min-width: 200px;
+    max-width: 300px;
+}
+
+.nota-auditoria-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.nota-texto {
+    flex: 1;
+    font-size: 12px;
+    color: #374151;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.btn-editar-nota {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    font-size: 14px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.btn-editar-nota:hover {
+    opacity: 1;
+}
+
+.btn-auditoria-mini {
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    color: #92400e;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-auditoria-mini:hover {
+    background: #fde68a;
+    border-color: #f59e0b;
+}
+
+.col-action-auditoria {
+    width: 70px;
+    text-align: center;
+}
+
+.btn-mover-auditoria {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 1px solid #f59e0b;
+    color: #92400e;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-mover-auditoria:hover {
+    background: linear-gradient(135deg, #fde68a 0%, #fcd34d 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.btn-mover-auditoria.hidden {
+    display: none;
+}
+
+/* ========== MODAL DE NOTA AUDITORÍA ========== */
+
+#overlay-nota-auditoria {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+#overlay-nota-auditoria.active {
+    display: block;
+}
+
+.modal-nota-auditoria {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    width: 500px;
+    max-width: 90vw;
+    display: none;
+}
+
+.modal-nota-auditoria.active {
+    display: block;
+    animation: modalEntrada 0.3s ease-out;
+}
+
+.info-movimiento-auditoria {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 16px;
+}
+
+.movimiento-info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 13px;
+}
+
+.movimiento-info-row .label {
+    color: #64748b;
+    font-weight: 500;
+}
+
+.movimiento-info-row .value {
+    color: #1e293b;
+}
+
+.input-nota-auditoria {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 100px;
+    font-family: inherit;
+}
+
+.input-nota-auditoria:focus {
+    outline: none;
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+}
+
 /* ========== MODAL DE ELIMINAR ========== */
 
 .overlay-eliminar {
