@@ -378,7 +378,7 @@ async function desvincularComprobante(comprobanteId) {
 
         if (comprobante && comprobante.registro_contable_id) {
             // Actualizar registro contable
-            await supabase
+            await getSupabaseHelper()
                 .from('registros_contables')
                 .update({
                     tiene_comprobante: false,
