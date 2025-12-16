@@ -27,11 +27,22 @@ let supabaseClient = null
 function initSupabase() {
   if (supabaseClient) return supabaseClient
 
+  console.log('🔄 Intentando inicializar Supabase...')
+  console.log('   window.supabase existe:', !!window.supabase)
+  console.log('   window.supabase.createClient existe:', !!(window.supabase && window.supabase.createClient))
+
   if (window.supabase && window.supabase.createClient) {
-    supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey)
-    console.log('✅ Supabase client initialized')
-    return supabaseClient
+    try {
+      supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey)
+      console.log('✅ Supabase client initialized successfully')
+      window.supabaseDB = supabaseClient // Exponer inmediatamente
+      return supabaseClient
+    } catch (e) {
+      console.error('❌ Error creando cliente Supabase:', e)
+      return null
+    }
   }
+  console.log('⏳ CDN de Supabase aún no disponible')
   return null
 }
 
