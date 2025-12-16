@@ -825,12 +825,21 @@ function limpiarSeleccionMayores() {
     stateMayores.cuponesSeleccionados = [];
     stateMayores.liquidacionesSeleccionadas = [];
 
-    // Quitar clases visuales
+    // Quitar clases visuales de las listas de cupones/liquidaciones
     document.querySelectorAll('.registro-item.selected').forEach(item => {
         item.classList.remove('selected');
         const checkbox = item.querySelector('.registro-checkbox');
         if (checkbox) checkbox.checked = false;
     });
+
+    // Limpiar checkboxes de la tabla del mayor
+    document.querySelectorAll('#tablaMayorBody input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+    });
+
+    // Limpiar checkbox de seleccionar todos
+    const selectAll = document.getElementById('selectAllMayor');
+    if (selectAll) selectAll.checked = false;
 
     actualizarBarraSeleccionMayores();
 }
@@ -1534,10 +1543,19 @@ function renderizarTablaMayor() {
         return;
     }
 
-    tbody.innerHTML = registrosFiltrados.map(r => `
-        <tr class="${r.estado}" data-id="${r.id}">
+    tbody.innerHTML = registrosFiltrados.map(r => {
+        // Determinar si el registro está seleccionado
+        const esCupon = r.debe > 0 && !r.esDevolucion;
+        const isSelected = esCupon
+            ? stateMayores.cuponesSeleccionados.includes(r.id)
+            : stateMayores.liquidacionesSeleccionadas.includes(r.id);
+        const checkedAttr = isSelected ? 'checked' : '';
+        const rowClass = isSelected ? `${r.estado} row-selected` : r.estado;
+
+        return `
+        <tr class="${rowClass}" data-id="${r.id}">
             <td class="checkbox-col">
-                <input type="checkbox" onchange="toggleSeleccionRegistroMayor('${r.id}', this)">
+                <input type="checkbox" ${checkedAttr} onchange="toggleSeleccionRegistroMayor('${r.id}', this)">
             </td>
             <td>${formatearFecha(r.fecha)}</td>
             <td>${r.asiento}</td>
@@ -1547,7 +1565,7 @@ function renderizarTablaMayor() {
             <td><span class="registro-estado ${r.estado}">${obtenerEtiquetaEstado(r.estado)}</span></td>
             <td>${r.vinculadoCon?.length > 0 ? `${r.vinculadoCon.length} reg.` : '-'}</td>
         </tr>
-    `).join('');
+    `}).join('');
 }
 
 /**
@@ -1561,10 +1579,44 @@ function filtrarRegistrosMayor() {
  * Toggle seleccionar todos en la tabla del mayor
  */
 function toggleSeleccionarTodosMayor(checkbox) {
+    const registros = stateMayores.registrosMayor;
+    const mostrarSoloNoVinculados = document.getElementById('mostrarSoloNoVinculados')?.checked || false;
+
+    // Obtener registros visibles según filtro
+    let registrosVisibles = registros;
+    if (mostrarSoloNoVinculados) {
+        registrosVisibles = registros.filter(r => r.estado !== 'vinculado');
+    }
+
+    if (checkbox.checked) {
+        // Seleccionar todos los registros visibles
+        registrosVisibles.forEach(r => {
+            if (r.debe > 0 && !r.esDevolucion) {
+                if (!stateMayores.cuponesSeleccionados.includes(r.id)) {
+                    stateMayores.cuponesSeleccionados.push(r.id);
+                }
+            } else {
+                if (!stateMayores.liquidacionesSeleccionadas.includes(r.id)) {
+                    stateMayores.liquidacionesSeleccionadas.push(r.id);
+                }
+            }
+        });
+    } else {
+        // Deseleccionar solo los registros visibles
+        const idsVisibles = registrosVisibles.map(r => r.id);
+        stateMayores.cuponesSeleccionados = stateMayores.cuponesSeleccionados.filter(id => !idsVisibles.includes(id));
+        stateMayores.liquidacionesSeleccionadas = stateMayores.liquidacionesSeleccionadas.filter(id => !idsVisibles.includes(id));
+    }
+
+    // Actualizar checkboxes visualmente
     const checkboxes = document.querySelectorAll('#tablaMayorBody input[type="checkbox"]');
     checkboxes.forEach(cb => {
         cb.checked = checkbox.checked;
     });
+
+    // Actualizar panel de vinculación y barra de selección flotante
+    renderizarVinculacion();
+    actualizarBarraSeleccionMayores();
 }
 
 /**
@@ -1593,7 +1645,9 @@ function toggleSeleccionRegistroMayor(id, checkbox) {
         }
     }
 
+    // Actualizar panel de vinculación y barra de selección flotante
     renderizarVinculacion();
+    actualizarBarraSeleccionMayores();
 }
 
 // ============================================
