@@ -480,11 +480,16 @@ async function processFile() {
                     // Si es una devolución, comisiones e impuestos también son devoluciones (créditos)
                     // Si no es devolución, son débitos normales
 
+                    // Función auxiliar para agregar ID de operación a la descripción
+                    const agregarIdOperacion = (desc) => {
+                        return idOperacion ? `${desc} - ${idOperacion}` : desc;
+                    };
+
                     // Mostrar comisiones como información (mismo saldo)
                     if (comisionMP > 0) {
                         todosLosMovimientos.push({
                             fecha,
-                            descripcion: esDevolucion ? 'Devolución - Comisión Mercado Pago (incluye IVA)' : 'Comisión Mercado Pago (incluye IVA)',
+                            descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Comisión Mercado Pago (incluye IVA)' : 'Comisión Mercado Pago (incluye IVA)'),
                             origen: 'Mercado Pago',
                             credito: esDevolucion ? comisionMP : 0,
                             debito: esDevolucion ? 0 : comisionMP,
@@ -495,7 +500,7 @@ async function processFile() {
                     if (comisionCuotas > 0) {
                         todosLosMovimientos.push({
                             fecha,
-                            descripcion: esDevolucion ? 'Devolución - Comisión por ofrecer cuotas sin interés' : 'Comisión por ofrecer cuotas sin interés',
+                            descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Comisión por ofrecer cuotas sin interés' : 'Comisión por ofrecer cuotas sin interés'),
                             origen: 'Mercado Pago',
                             credito: esDevolucion ? comisionCuotas : 0,
                             debito: esDevolucion ? 0 : comisionCuotas,
@@ -506,7 +511,7 @@ async function processFile() {
                     if (costoEnvio > 0) {
                         todosLosMovimientos.push({
                             fecha,
-                            descripcion: esDevolucion ? 'Devolución - Costo de envío' : 'Costo de envío',
+                            descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Costo de envío' : 'Costo de envío'),
                             origen: 'Mercado Pago',
                             credito: esDevolucion ? costoEnvio : 0,
                             debito: esDevolucion ? 0 : costoEnvio,
@@ -517,7 +522,7 @@ async function processFile() {
                     if (cuponDescuento > 0) {
                         todosLosMovimientos.push({
                             fecha,
-                            descripcion: esDevolucion ? 'Devolución - Cupón de descuento' : 'Cupón de descuento',
+                            descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Cupón de descuento' : 'Cupón de descuento'),
                             origen: 'Mercado Pago',
                             credito: esDevolucion ? cuponDescuento : 0,
                             debito: esDevolucion ? 0 : cuponDescuento,
@@ -551,7 +556,7 @@ async function processFile() {
 
                                         todosLosMovimientos.push({
                                             fecha,
-                                            descripcion: descripcionReintegro,
+                                            descripcion: agregarIdOperacion(descripcionReintegro),
                                             origen: 'Mercado Pago',
                                             credito: tag.amount,
                                             debito: 0,
@@ -574,7 +579,7 @@ async function processFile() {
 
                         todosLosMovimientos.push({
                             fecha,
-                            descripcion: 'Costo por ofrecer descuento',
+                            descripcion: agregarIdOperacion('Costo por ofrecer descuento'),
                             origen: 'Mercado Pago',
                             credito: esDebitoDescuento ? 0 : montoAbsoluto,
                             debito: esDebitoDescuento ? montoAbsoluto : 0,
@@ -595,7 +600,7 @@ async function processFile() {
 
                                 todosLosMovimientos.push({
                                     fecha,
-                                    descripcion: descripcionImpuesto,
+                                    descripcion: agregarIdOperacion(descripcionImpuesto),
                                     origen: 'Mercado Pago',
                                     credito: esDevolucion ? impuesto.monto : 0,
                                     debito: esDevolucion ? 0 : impuesto.monto,
@@ -606,7 +611,7 @@ async function processFile() {
                     } else if (impuestosIIBB > 0) {
                         todosLosMovimientos.push({
                             fecha,
-                            descripcion: esDevolucion ? 'Devolución - Retenciones de Impuestos' : 'Retenciones de Impuestos',
+                            descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Retenciones de Impuestos' : 'Retenciones de Impuestos'),
                             origen: 'Mercado Pago',
                             credito: esDevolucion ? impuestosIIBB : 0,
                             debito: esDevolucion ? 0 : impuestosIIBB,
