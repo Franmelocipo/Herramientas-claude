@@ -22,7 +22,7 @@ const clientNameElement = document.getElementById('clientName');
 // FUNCIONES PARA SELECTOR DE CLIENTE
 // ============================================
 
-async function cargarClientesEnSelector() {
+async function cargarClientesEnSelector(intentos = 3) {
     const select = document.getElementById('selector-cliente-mp');
     if (!select) return;
 
@@ -30,12 +30,35 @@ async function cargarClientesEnSelector() {
         // Esperar a que Supabase esté disponible usando la función global
         let client = null;
 
-        if (typeof waitForSupabase === 'function') {
-            client = await waitForSupabase();
+        // Intentar obtener el cliente de Supabase con reintentos
+        for (let i = 0; i < intentos; i++) {
+            console.log(`🔄 Intento ${i + 1}/${intentos} de conectar con Supabase...`);
+
+            if (typeof waitForSupabase === 'function') {
+                client = await waitForSupabase();
+            }
+
+            // También verificar window.supabaseDB como fallback
+            if (!client && window.supabaseDB) {
+                client = window.supabaseDB;
+                console.log('✅ Usando window.supabaseDB como fallback');
+            }
+
+            if (client) {
+                console.log('✅ Cliente Supabase obtenido exitosamente');
+                break;
+            }
+
+            // Esperar antes del siguiente intento (aumentar el tiempo progresivamente)
+            if (i < intentos - 1) {
+                const delay = (i + 1) * 500; // 500ms, 1000ms, 1500ms...
+                console.log(`⏳ Esperando ${delay}ms antes del siguiente intento...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
         }
 
         if (!client) {
-            console.error('❌ No se pudo conectar con Supabase');
+            console.error('❌ No se pudo conectar con Supabase después de varios intentos');
             select.innerHTML = '<option value="">-- Error cargando clientes --</option>';
             return;
         }
