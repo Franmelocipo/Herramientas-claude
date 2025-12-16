@@ -624,7 +624,7 @@ async function getSupabaseTaxObligations(clientId = null, status = null) {
             return [];
         }
 
-        let query = supabase
+        let query = getSupabase()
             .from('tax_obligations')
             .select('*')
             .order('due_date', { ascending: true });
