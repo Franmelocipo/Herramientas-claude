@@ -254,10 +254,60 @@
 
                         <!-- Acciones de vinculación -->
                         <div class="vinculacion-acciones">
+                            <button onclick="conciliarAutomaticamente()" class="btn-conciliar">🤖 Conciliar Automáticamente</button>
                             <button onclick="vincularSeleccionados()" class="btn-primary">🔗 Vincular Seleccionados</button>
                             <button onclick="desvincularSeleccionados()" class="btn-warning">↩️ Desvincular</button>
                             <button onclick="marcarComoDevolucion()" class="btn-secondary">🔄 Marcar como Devolución</button>
                             <button onclick="guardarVinculaciones()" class="btn-success">💾 Guardar</button>
+                        </div>
+
+                        <!-- Panel de configuración de conciliación automática -->
+                        <div id="panelConfigConciliacion" class="config-conciliacion" style="display: none;">
+                            <h5>⚙️ Configuración de Conciliación Automática</h5>
+                            <div class="config-row">
+                                <div class="config-item">
+                                    <label>Tolerancia de importe:</label>
+                                    <input type="number" id="toleranciaImporte" class="input-text" value="0.01" min="0" step="0.01">
+                                    <span class="config-hint">Diferencia máxima permitida en $</span>
+                                </div>
+                                <div class="config-item">
+                                    <label>Días máximos entre cupón y liquidación:</label>
+                                    <input type="number" id="diasMaximos" class="input-text" value="40" min="1" max="90">
+                                    <span class="config-hint">Plazo máximo para vincular</span>
+                                </div>
+                                <div class="config-item">
+                                    <label>Modo de conciliación:</label>
+                                    <select id="modoConciliacion" class="input-text">
+                                        <option value="1:1">1:1 - Un cupón con una liquidación</option>
+                                        <option value="N:1" selected>N:1 - Varios cupones con una liquidación</option>
+                                        <option value="1:N">1:N - Un cupón con varias liquidaciones</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="config-actions">
+                                <button onclick="ejecutarConciliacion()" class="btn-primary">▶️ Ejecutar Conciliación</button>
+                                <button onclick="cerrarConfigConciliacion()" class="btn-secondary">Cancelar</button>
+                            </div>
+                        </div>
+
+                        <!-- Resultados de conciliación -->
+                        <div id="resultadosConciliacion" class="resultados-conciliacion" style="display: none;">
+                            <h5>📊 Resultados de Conciliación Automática</h5>
+                            <div class="resultados-stats">
+                                <div class="resultado-item exito">
+                                    <span class="resultado-numero" id="conciliacionExitosas">0</span>
+                                    <span class="resultado-label">Vinculaciones exitosas</span>
+                                </div>
+                                <div class="resultado-item pendiente">
+                                    <span class="resultado-numero" id="conciliacionPendientes">0</span>
+                                    <span class="resultado-label">Cupones sin match</span>
+                                </div>
+                                <div class="resultado-item info">
+                                    <span class="resultado-numero" id="conciliacionLiquidaciones">0</span>
+                                    <span class="resultado-label">Liquidaciones sin match</span>
+                                </div>
+                            </div>
+                            <button onclick="cerrarResultadosConciliacion()" class="btn-secondary btn-sm">Cerrar</button>
                         </div>
                     </div>
 

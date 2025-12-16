@@ -1860,3 +1860,139 @@ body {
     color: #64748b;
     cursor: pointer;
 }
+
+/* ============================================
+   CONCILIACIÓN AUTOMÁTICA
+   ============================================ */
+
+.btn-conciliar {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-conciliar:hover {
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.config-conciliacion {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 16px;
+}
+
+.config-conciliacion h5 {
+    margin: 0 0 16px 0;
+    color: #1e293b;
+    font-size: 1rem;
+}
+
+.config-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.config-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.config-item label {
+    font-size: 13px;
+    color: #475569;
+    font-weight: 500;
+}
+
+.config-item .input-text {
+    padding: 8px 12px;
+}
+
+.config-hint {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.config-actions {
+    display: flex;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+}
+
+/* Resultados de conciliación */
+.resultados-conciliacion {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border: 2px solid #86efac;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 16px;
+}
+
+.resultados-conciliacion h5 {
+    margin: 0 0 16px 0;
+    color: #166534;
+    font-size: 1rem;
+}
+
+.resultados-stats {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.resultado-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 20px;
+    border-radius: 8px;
+    min-width: 120px;
+}
+
+.resultado-item.exito {
+    background: #dcfce7;
+}
+
+.resultado-item.pendiente {
+    background: #fef3c7;
+}
+
+.resultado-item.info {
+    background: #dbeafe;
+}
+
+.resultado-numero {
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.resultado-item.exito .resultado-numero {
+    color: #166534;
+}
+
+.resultado-item.pendiente .resultado-numero {
+    color: #92400e;
+}
+
+.resultado-item.info .resultado-numero {
+    color: #1e40af;
+}
+
+.resultado-label {
+    font-size: 12px;
+    color: #64748b;
+    text-align: center;
+}
