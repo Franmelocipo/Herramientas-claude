@@ -78,15 +78,8 @@ async function cargarClientes() {
 
         if (typeof waitForSupabase === 'function') {
             supabaseClient = await waitForSupabase();
-        } else {
-            // Fallback: esperar a que la variable global supabase esté disponible
-            for (let i = 0; i < 50; i++) {
-                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
-                    supabaseClient = supabase;
-                    break;
-                }
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
+        } else if (window.supabaseDB) {
+            supabaseClient = window.supabaseDB;
         }
 
         if (supabaseClient) {
@@ -189,7 +182,7 @@ async function cargarCuentasConExtractos(clienteId) {
     try {
         let cuentas = [];
 
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             // Cargar cuentas bancarias
             const { data: cuentasData, error: cuentasError } = await supabase
                 .from('cuentas_bancarias')
@@ -404,7 +397,7 @@ async function guardarCuentaBancaria() {
             alias
         };
 
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             if (id) {
                 // Actualizar
                 const { error } = await supabase
@@ -449,7 +442,7 @@ async function editarCuentaBancaria(id) {
         let cuenta;
         const clienteId = state.clienteActual?.id;
 
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             const { data, error } = await supabase
                 .from('cuentas_bancarias')
                 .select('*')
@@ -490,9 +483,9 @@ async function eliminarCuentaBancaria(id) {
     const clienteId = state.clienteActual?.id;
 
     try {
-        if (typeof supabase !== 'undefined' && supabase) {
-            await supabase.from('extractos_mensuales').delete().eq('cuenta_id', id);
-            const { error } = await supabase.from('cuentas_bancarias').delete().eq('id', id);
+        if (window.supabaseDB) {
+            await window.supabaseDB.from('extractos_mensuales').delete().eq('cuenta_id', id);
+            const { error } = await window.supabaseDB.from('cuentas_bancarias').delete().eq('id', id);
             if (error) throw error;
         } else {
             const cuentas = JSON.parse(localStorage.getItem(`cuentas_bancarias_${clienteId}`) || '[]');
@@ -557,7 +550,7 @@ async function cargarExtractosMensuales(cuentaId) {
     try {
         let extractos = [];
 
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             const { data, error } = await supabase
                 .from('extractos_mensuales')
                 .select('*')
@@ -902,7 +895,7 @@ async function procesarExtracto() {
             const movimientos = movimientosPorMes[key];
 
             // Verificar si ya existe extracto para ese período
-            if (typeof supabase !== 'undefined' && supabase) {
+            if (window.supabaseDB) {
                 const { data: existente } = await supabase
                     .from('extractos_mensuales')
                     .select('id')
@@ -916,7 +909,7 @@ async function procesarExtracto() {
                     if (!confirm(`Ya existe un extracto para ${nombreMes} ${anio}. ¿Desea reemplazarlo?`)) {
                         continue;
                     }
-                    await supabase.from('extractos_mensuales').delete().eq('id', existente.id);
+                    await window.supabaseDB.from('extractos_mensuales').delete().eq('id', existente.id);
                 }
 
                 // Guardar en Supabase
@@ -994,7 +987,7 @@ async function eliminarExtracto(id) {
     const cuentaId = state.cuentaActual?.id;
 
     try {
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             const { error } = await supabase
                 .from('extractos_mensuales')
                 .delete()
@@ -1029,7 +1022,7 @@ async function eliminarExtractoDirecto(id, cuentaId, nombreMes, anio) {
     }
 
     try {
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             const { error } = await supabase
                 .from('extractos_mensuales')
                 .delete()
@@ -1074,7 +1067,7 @@ async function verDetalleExtracto(id, cuentaId) {
     try {
         let extracto;
 
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             const { data, error } = await supabase
                 .from('extractos_mensuales')
                 .select('*')
@@ -1505,7 +1498,7 @@ async function guardarCambiosExtracto() {
     }
 
     try {
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             const { error } = await supabase
                 .from('extractos_mensuales')
                 .update({
@@ -1565,7 +1558,7 @@ async function guardarCambiosExtractoModoRango() {
         });
 
         // Actualizar cada extracto
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             for (const extractoId of Object.keys(movimientosPorExtracto)) {
                 const { error } = await supabase
                     .from('extractos_mensuales')
@@ -1910,7 +1903,7 @@ async function cargarExtractosPorRango() {
     try {
         let extractos = [];
 
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             // Cargar extractos de la cuenta en el rango especificado
             const { data, error } = await supabase
                 .from('extractos_mensuales')
@@ -2293,15 +2286,8 @@ async function cargarCategorias() {
 
         if (typeof waitForSupabase === 'function') {
             supabaseClient = await waitForSupabase();
-        } else {
-            // Fallback: esperar a que la variable global supabase esté disponible
-            for (let i = 0; i < 50; i++) {
-                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
-                    supabaseClient = supabase;
-                    break;
-                }
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
+        } else if (window.supabaseDB) {
+            supabaseClient = window.supabaseDB;
         }
 
         if (supabaseClient) {
@@ -2415,7 +2401,7 @@ async function agregarCategoria() {
     };
 
     try {
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             const { error } = await supabase
                 .from('categorias_movimientos')
                 .insert([nuevaCategoria]);
@@ -2507,9 +2493,9 @@ async function guardarEdicionCategoria() {
             color
         };
 
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             // Eliminar la antigua y crear la nueva (por si cambió el ID)
-            await supabase.from('categorias_movimientos').delete().eq('id', idOriginal);
+            await window.supabaseDB.from('categorias_movimientos').delete().eq('id', idOriginal);
             const { error } = await supabase
                 .from('categorias_movimientos')
                 .insert([categoriaActualizada]);
@@ -2549,7 +2535,7 @@ async function eliminarCategoria(id) {
     }
 
     try {
-        if (typeof supabase !== 'undefined' && supabase) {
+        if (window.supabaseDB) {
             const { error } = await supabase
                 .from('categorias_movimientos')
                 .delete()

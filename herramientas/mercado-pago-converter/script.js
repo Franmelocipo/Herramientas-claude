@@ -27,36 +27,21 @@ async function cargarClientesEnSelector() {
     if (!select) return;
 
     try {
-        // Esperar a que Supabase esté disponible usando la función global o esperando la variable
-        let supabaseClient = null;
+        // Esperar a que Supabase esté disponible usando la función global
+        let client = null;
 
-        // Intentar usar waitForSupabase si está disponible, sino esperar la variable global
         if (typeof waitForSupabase === 'function') {
-            supabaseClient = await waitForSupabase();
-        } else {
-            // Fallback: esperar a que la variable global supabase esté disponible
-            for (let i = 0; i < 50; i++) {
-                if (window.supabase && typeof window.supabase.from === 'function') {
-                    supabaseClient = window.supabase;
-                    break;
-                }
-                // También verificar si existe la variable supabase inicializada por supabase-config.js
-                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
-                    supabaseClient = supabase;
-                    break;
-                }
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
+            client = await waitForSupabase();
         }
 
-        if (!supabaseClient) {
+        if (!client) {
             console.error('❌ No se pudo conectar con Supabase');
             select.innerHTML = '<option value="">-- Error cargando clientes --</option>';
             return;
         }
 
         // Obtener clientes desde Supabase
-        const { data: clientes, error } = await supabaseClient
+        const { data: clientes, error } = await client
             .from('clientes')
             .select('id, razon_social')
             .order('razon_social');

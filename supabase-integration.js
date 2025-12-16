@@ -3,6 +3,23 @@
  * Funciones para sincronizar datos entre localStorage y Supabase
  */
 
+// Referencia al cliente de Supabase (desde supabase-config.js)
+function getSupabaseIntegration() {
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        return supabaseClient;
+    }
+    if (window.supabaseDB) {
+        return window.supabaseDB;
+    }
+    return null;
+}
+
+// Alias para compatibilidad con el código existente
+const supabase = {
+    get from() { return getSupabaseIntegration()?.from.bind(getSupabaseIntegration()); },
+    get rpc() { return getSupabaseIntegration()?.rpc.bind(getSupabaseIntegration()); }
+};
+
 // =====================================================
 // FUNCIONES PARA CLIENTES
 // =====================================================

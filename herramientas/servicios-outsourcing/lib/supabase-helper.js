@@ -3,6 +3,25 @@
  * Funciones específicas para el sistema de servicios de outsourcing
  */
 
+// Referencia al cliente de Supabase (desde supabase-config.js)
+function getSupabase() {
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        return supabaseClient;
+    }
+    if (window.supabaseDB) {
+        return window.supabaseDB;
+    }
+    console.error('Supabase no está disponible');
+    return null;
+}
+
+// Alias para compatibilidad
+const supabase = {
+    get from() { return getSupabase()?.from.bind(getSupabase()); },
+    get storage() { return getSupabase()?.storage; },
+    get rpc() { return getSupabase()?.rpc.bind(getSupabase()); }
+};
+
 // =====================================================
 // GESTIÓN DE PERÍODOS
 // =====================================================

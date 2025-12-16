@@ -173,23 +173,11 @@ async function cargarClientesEnSelector() {
         // Esperar a que Supabase esté disponible usando la función global o esperando la variable
         let supabaseClient = null;
 
-        // Intentar usar waitForSupabase si está disponible, sino esperar la variable global
+        // Intentar usar waitForSupabase si está disponible
         if (typeof waitForSupabase === 'function') {
             supabaseClient = await waitForSupabase();
-        } else {
-            // Fallback: esperar a que la variable global supabase esté disponible
-            for (let i = 0; i < 50; i++) {
-                if (window.supabase && typeof window.supabase.from === 'function') {
-                    supabaseClient = window.supabase;
-                    break;
-                }
-                // También verificar si existe la variable supabase inicializada por supabase-config.js
-                if (typeof supabase !== 'undefined' && supabase && typeof supabase.from === 'function') {
-                    supabaseClient = supabase;
-                    break;
-                }
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
+        } else if (window.supabaseDB) {
+            supabaseClient = window.supabaseDB;
         }
 
         if (!supabaseClient) {

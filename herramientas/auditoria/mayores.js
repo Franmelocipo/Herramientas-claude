@@ -108,8 +108,9 @@ async function cargarClientesMayores() {
     try {
         let clientes = [];
 
-        if (typeof supabase !== 'undefined' && supabase) {
-            const { data, error } = await supabase
+        const client = typeof waitForSupabase === 'function' ? await waitForSupabase() : window.supabaseDB;
+        if (client) {
+            const { data, error } = await client
                 .from('clientes')
                 .select('*')
                 .order('razon_social');
