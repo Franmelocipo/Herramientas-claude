@@ -397,8 +397,19 @@ function parsearNumeroArgentino(valor) {
 
 /**
  * Buscar valor en objeto de fila con múltiples posibles nombres de columna
+ * @param {Object} row - Fila de datos
+ * @param {Object} opciones - Opciones de búsqueda (excluir: array de palabras a excluir)
+ * @param {...string} nombres - Nombres posibles de columna
  */
-function buscarColumna(row, ...nombres) {
+function buscarColumna(row, opciones, ...nombres) {
+    // Si opciones es string, es un nombre de columna (compatibilidad hacia atrás)
+    if (typeof opciones === 'string') {
+        nombres.unshift(opciones);
+        opciones = {};
+    }
+
+    const excluir = opciones.excluir || [];
+
     for (const nombre of nombres) {
         // Buscar coincidencia exacta
         if (row[nombre] !== undefined) return row[nombre];
@@ -406,7 +417,13 @@ function buscarColumna(row, ...nombres) {
         // Buscar coincidencia parcial (la columna contiene el nombre)
         for (const key of Object.keys(row)) {
             if (key.toLowerCase().includes(nombre.toLowerCase())) {
-                return row[key];
+                // Verificar que no contenga palabras excluidas
+                const contieneExcluida = excluir.some(ex =>
+                    key.toLowerCase().includes(ex.toLowerCase())
+                );
+                if (!contieneExcluida) {
+                    return row[key];
+                }
             }
         }
     }
@@ -444,7 +461,7 @@ async function procesarMayor() {
         const registros = jsonData.map((row, index) => {
             // Buscar columnas con múltiples nombres posibles
             const fecha = buscarColumna(row, 'Fecha asien', 'Fecha', 'FECHA', 'fecha');
-            const asiento = buscarColumna(row, 'Número C', 'Numero', 'Asiento', 'ASIENTO', 'Nro Asiento', 'NroAsiento');
+            const asiento = buscarColumna(row, { excluir: ['Fecha'] }, 'Nro. asiento', 'Nro asiento', 'Número asiento', 'Número C', 'Numero', 'Asiento', 'ASIENTO', 'NroAsiento');
             const descripcion = buscarColumna(row, 'Leyenda movimiento', 'Leyenda', 'Descripción', 'DESCRIPCION', 'Concepto', 'CONCEPTO');
             const debeRaw = buscarColumna(row, 'Debe', 'DEBE');
             const haberRaw = buscarColumna(row, 'Haber', 'HABER');
