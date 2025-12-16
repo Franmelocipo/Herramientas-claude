@@ -2187,6 +2187,15 @@ body {
     accent-color: #3b82f6;
 }
 
+/* Filas seleccionadas en la tabla del mayor */
+#tablaMayorBody tr.row-selected {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
+}
+
+#tablaMayorBody tr.row-selected td {
+    border-color: #3b82f6;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .selection-bar-mayores {
