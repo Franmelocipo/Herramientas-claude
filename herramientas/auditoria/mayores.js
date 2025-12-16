@@ -11,8 +11,15 @@ const stateMayores = {
     vinculaciones: [],
     cuponesSeleccionados: [],
     liquidacionesSeleccionadas: [],
-    clientesCache: []
+    clientesCache: [],
+    conciliacionCargadaId: null,  // ID de la conciliación actualmente cargada
+    conciliacionCargadaNombre: null  // Nombre de la conciliación actualmente cargada
 };
+
+// Variables para gestión de conciliaciones
+let conciliacionesMayorGuardadasLista = [];
+let conciliacionMayorSeleccionadaId = null;
+let conciliacionMayorAEliminarId = null;
 
 // Tipos de mayores predefinidos
 const TIPOS_MAYOR_DEFAULT = [
@@ -264,14 +271,16 @@ function seleccionarTipoMayor(tipoId) {
     // Ocultar info del mayor (hasta que se cargue)
     document.getElementById('infoMayorCargado').style.display = 'none';
 
-    // Resetear datos
+    // Resetear datos y estado de conciliación cargada
     stateMayores.registrosMayor = [];
     stateMayores.vinculaciones = [];
+    stateMayores.conciliacionCargadaId = null;
+    stateMayores.conciliacionCargadaNombre = null;
     renderizarTablaMayor();
     renderizarVinculacion();
 
-    // Intentar cargar datos guardados
-    cargarDatosGuardados();
+    // Verificar si hay conciliaciones guardadas para este cliente/tipo
+    verificarConciliacionesMayorGuardadas();
 }
 
 // ============================================
@@ -1588,71 +1597,550 @@ function toggleSeleccionRegistroMayor(id, checkbox) {
 }
 
 // ============================================
-// PERSISTENCIA DE DATOS
+// PERSISTENCIA DE DATOS Y GESTIÓN DE CONCILIACIONES
 // ============================================
 
 /**
- * Guardar vinculaciones
+ * Obtener la clave base para localStorage de conciliaciones
  */
-async function guardarVinculaciones() {
+function getConciliacionesMayorKey() {
+    return `conciliaciones_mayor_${stateMayores.clienteActual.id}_${stateMayores.tipoMayorActual.id}`;
+}
+
+/**
+ * Cargar lista de conciliaciones guardadas desde localStorage
+ */
+function cargarConciliacionesMayorGuardadas() {
+    if (!stateMayores.clienteActual || !stateMayores.tipoMayorActual) {
+        console.log('⚠️ cargarConciliacionesMayorGuardadas: No hay cliente o tipo seleccionado');
+        return [];
+    }
+
+    try {
+        const key = getConciliacionesMayorKey();
+        const datosGuardados = localStorage.getItem(key);
+
+        if (datosGuardados) {
+            const conciliaciones = JSON.parse(datosGuardados);
+            console.log(`📊 ${conciliaciones.length} conciliaciones encontradas para ${key}`);
+            return conciliaciones;
+        }
+
+        return [];
+    } catch (error) {
+        console.error('Error cargando conciliaciones:', error);
+        return [];
+    }
+}
+
+/**
+ * Verificar y mostrar conciliaciones guardadas al seleccionar tipo de mayor
+ */
+function verificarConciliacionesMayorGuardadas() {
+    console.log('🔍 Verificando conciliaciones de mayor guardadas...');
+    console.log('   Cliente ID:', stateMayores.clienteActual?.id);
+    console.log('   Tipo Mayor ID:', stateMayores.tipoMayorActual?.id);
+
+    const conciliaciones = cargarConciliacionesMayorGuardadas();
+    conciliacionesMayorGuardadasLista = conciliaciones || [];
+
+    console.log('📋 Conciliaciones encontradas:', conciliacionesMayorGuardadasLista.length);
+
+    // Actualizar estado del botón de gestión
+    actualizarBotonGestionConciliacionesMayor();
+
+    if (conciliacionesMayorGuardadasLista.length > 0) {
+        console.log('✅ Mostrando modal con conciliaciones');
+        mostrarModalConciliacionMayorGuardada(conciliacionesMayorGuardadasLista);
+    } else {
+        console.log('ℹ️ No hay conciliaciones guardadas para este tipo de mayor');
+    }
+}
+
+/**
+ * Actualizar estado del botón de gestión de conciliaciones
+ */
+function actualizarBotonGestionConciliacionesMayor() {
+    const btn = document.getElementById('btnGestionConciliacionesMayor');
+    if (btn) {
+        btn.disabled = conciliacionesMayorGuardadasLista.length === 0;
+        if (conciliacionesMayorGuardadasLista.length > 0) {
+            btn.innerHTML = `<span>📂</span> Gestionar Conciliaciones (${conciliacionesMayorGuardadasLista.length})`;
+        } else {
+            btn.innerHTML = `<span>📂</span> Gestionar Conciliaciones`;
+        }
+    }
+}
+
+/**
+ * Mostrar modal de selección de conciliaciones guardadas
+ */
+function mostrarModalConciliacionMayorGuardada(conciliaciones) {
+    const overlay = document.getElementById('overlay-conciliacion-mayor-guardada');
+    const modal = document.getElementById('modal-conciliacion-mayor-guardada');
+    const lista = document.getElementById('conciliaciones-mayor-seleccion-lista');
+    const btnCargar = document.getElementById('btnConfirmarCargarConciliacionMayor');
+
+    // Resetear selección
+    conciliacionMayorSeleccionadaId = null;
+    if (btnCargar) btnCargar.disabled = true;
+
+    // Generar lista de conciliaciones
+    lista.innerHTML = conciliaciones.map(conciliacion => {
+        const fechaGuardado = new Date(conciliacion.fechaGuardado);
+        const fechaFormateada = fechaGuardado.toLocaleDateString('es-AR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        const registros = conciliacion.registros || [];
+        const vinculaciones = conciliacion.vinculaciones || [];
+        const vinculados = registros.filter(r => r.estado === 'vinculado').length;
+        const pendientes = registros.filter(r => r.estado === 'pendiente').length;
+        const vencidos = registros.filter(r => r.estado === 'vencido').length;
+
+        // Detectar período
+        const fechas = registros.filter(r => r.fecha).map(r => new Date(r.fecha));
+        let periodo = 'N/A';
+        if (fechas.length > 0) {
+            const minFecha = new Date(Math.min(...fechas));
+            const maxFecha = new Date(Math.max(...fechas));
+            periodo = `${formatearFecha(minFecha)} - ${formatearFecha(maxFecha)}`;
+        }
+
+        const nombre = conciliacion.nombre || `Conciliación ${fechaFormateada}`;
+
+        return `
+            <div class="conciliacion-seleccion-item" onclick="seleccionarConciliacionMayor('${conciliacion.id}')">
+                <div class="conciliacion-radio">
+                    <input type="radio" name="conciliacionMayorSeleccion" id="conc_${conciliacion.id}" value="${conciliacion.id}">
+                </div>
+                <div class="conciliacion-info">
+                    <div class="conciliacion-nombre">${nombre}</div>
+                    <div class="conciliacion-detalles">
+                        <span class="conciliacion-fecha">📅 ${fechaFormateada}</span>
+                        <span class="conciliacion-periodo">📆 ${periodo}</span>
+                    </div>
+                    <div class="conciliacion-stats">
+                        <span class="stat-vinculados">✓ ${vinculados} vinculados</span>
+                        <span class="stat-pendientes">⏳ ${pendientes} pendientes</span>
+                        <span class="stat-vencidos">⚠️ ${vencidos} vencidos</span>
+                        <span class="stat-total">📊 ${registros.length} registros</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Mostrar modal
+    overlay.classList.add('active');
+    modal.classList.add('active');
+}
+
+/**
+ * Cerrar modal de conciliación guardada
+ */
+function cerrarModalConciliacionMayorGuardada() {
+    const overlay = document.getElementById('overlay-conciliacion-mayor-guardada');
+    const modal = document.getElementById('modal-conciliacion-mayor-guardada');
+
+    overlay.classList.remove('active');
+    modal.classList.remove('active');
+
+    conciliacionMayorSeleccionadaId = null;
+}
+
+/**
+ * Seleccionar una conciliación de la lista
+ */
+function seleccionarConciliacionMayor(id) {
+    conciliacionMayorSeleccionadaId = id;
+
+    // Marcar radio button
+    const radio = document.getElementById(`conc_${id}`);
+    if (radio) radio.checked = true;
+
+    // Marcar item visualmente
+    document.querySelectorAll('.conciliacion-seleccion-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+    const item = document.querySelector(`.conciliacion-seleccion-item input[value="${id}"]`);
+    if (item) {
+        item.closest('.conciliacion-seleccion-item').classList.add('selected');
+    }
+
+    // Habilitar botón de cargar
+    const btnCargar = document.getElementById('btnConfirmarCargarConciliacionMayor');
+    if (btnCargar) btnCargar.disabled = false;
+}
+
+/**
+ * Confirmar y cargar la conciliación seleccionada
+ */
+function confirmarCargarConciliacionMayorSeleccionada() {
+    if (!conciliacionMayorSeleccionadaId) {
+        alert('Seleccione una conciliación para cargar');
+        return;
+    }
+
+    cargarConciliacionMayorGuardada(conciliacionMayorSeleccionadaId);
+    cerrarModalConciliacionMayorGuardada();
+}
+
+/**
+ * Cargar una conciliación guardada específica
+ */
+function cargarConciliacionMayorGuardada(conciliacionId) {
+    const conciliacion = conciliacionesMayorGuardadasLista.find(c => c.id === conciliacionId);
+
+    if (!conciliacion) {
+        alert('No se encontró la conciliación seleccionada');
+        return;
+    }
+
+    console.log('📂 Cargando conciliación:', conciliacion.nombre);
+
+    // Restaurar fechas como objetos Date
+    const registros = conciliacion.registros || [];
+    registros.forEach(r => {
+        if (r.fecha) {
+            r.fecha = new Date(r.fecha);
+        }
+    });
+
+    // Restaurar estado
+    stateMayores.registrosMayor = registros;
+    stateMayores.vinculaciones = conciliacion.vinculaciones || [];
+    stateMayores.conciliacionCargadaId = conciliacion.id;
+    stateMayores.conciliacionCargadaNombre = conciliacion.nombre;
+
+    // Actualizar UI
+    actualizarEstadisticasMayor();
+    renderizarTablaMayor();
+
+    if (stateMayores.tipoMayorActual?.logica === 'vinculacion') {
+        renderizarVinculacion();
+        actualizarEstadisticasVinculacion();
+    }
+
+    document.getElementById('infoMayorCargado').style.display =
+        stateMayores.registrosMayor.length > 0 ? 'block' : 'none';
+
+    console.log(`✅ Conciliación "${conciliacion.nombre}" cargada: ${registros.length} registros`);
+}
+
+/**
+ * Nueva conciliación (cerrar modal y empezar desde cero)
+ */
+function nuevaConciliacionMayor() {
+    cerrarModalConciliacionMayorGuardada();
+
+    // Resetear estado
+    stateMayores.registrosMayor = [];
+    stateMayores.vinculaciones = [];
+    stateMayores.conciliacionCargadaId = null;
+    stateMayores.conciliacionCargadaNombre = null;
+
+    renderizarTablaMayor();
+    renderizarVinculacion();
+
+    document.getElementById('infoMayorCargado').style.display = 'none';
+
+    console.log('📝 Nueva conciliación iniciada');
+}
+
+/**
+ * Abrir modal de gestión de conciliaciones
+ */
+function abrirGestionConciliacionesMayor() {
+    // Recargar lista
+    const conciliaciones = cargarConciliacionesMayorGuardadas();
+    conciliacionesMayorGuardadasLista = conciliaciones || [];
+
+    const overlay = document.getElementById('overlay-gestion-conciliaciones-mayor');
+    const modal = document.getElementById('modal-gestion-conciliaciones-mayor');
+    const lista = document.getElementById('gestion-conciliaciones-mayor-lista');
+
+    if (conciliacionesMayorGuardadasLista.length === 0) {
+        lista.innerHTML = `
+            <div class="conciliaciones-vacio">
+                <div class="conciliaciones-vacio-icon">📂</div>
+                <p>No hay conciliaciones guardadas para este tipo de mayor</p>
+            </div>
+        `;
+    } else {
+        lista.innerHTML = conciliacionesMayorGuardadasLista.map(conciliacion => {
+            const fechaGuardado = new Date(conciliacion.fechaGuardado);
+            const fechaFormateada = fechaGuardado.toLocaleDateString('es-AR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            const registros = conciliacion.registros || [];
+            const vinculados = registros.filter(r => r.estado === 'vinculado').length;
+            const pendientes = registros.filter(r => r.estado === 'pendiente').length;
+
+            // Detectar período
+            const fechas = registros.filter(r => r.fecha).map(r => new Date(r.fecha));
+            let periodo = 'N/A';
+            if (fechas.length > 0) {
+                const minFecha = new Date(Math.min(...fechas));
+                const maxFecha = new Date(Math.max(...fechas));
+                periodo = `${formatearFecha(minFecha)} - ${formatearFecha(maxFecha)}`;
+            }
+
+            const nombre = conciliacion.nombre || `Conciliación ${fechaFormateada}`;
+            const esCargada = stateMayores.conciliacionCargadaId === conciliacion.id;
+
+            return `
+                <div class="conciliacion-gestion-item ${esCargada ? 'activa' : ''}">
+                    <div class="conciliacion-gestion-info">
+                        <div class="conciliacion-nombre">
+                            ${nombre}
+                            ${esCargada ? '<span class="badge-activa">Cargada</span>' : ''}
+                        </div>
+                        <div class="conciliacion-detalles">
+                            <span>📅 ${fechaFormateada}</span>
+                            <span>📆 ${periodo}</span>
+                            <span>📊 ${registros.length} registros</span>
+                            <span>✓ ${vinculados} vinculados</span>
+                            <span>⏳ ${pendientes} pendientes</span>
+                        </div>
+                    </div>
+                    <div class="conciliacion-gestion-acciones">
+                        <button onclick="cargarConciliacionDesdeGestion('${conciliacion.id}')" class="btn-cargar-conciliacion" title="Cargar">📂 Cargar</button>
+                        <button onclick="confirmarEliminarConciliacionMayor('${conciliacion.id}')" class="btn-eliminar-conciliacion" title="Eliminar">🗑️</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    overlay.classList.add('active');
+    modal.classList.add('active');
+}
+
+/**
+ * Cargar conciliación desde modal de gestión
+ */
+function cargarConciliacionDesdeGestion(id) {
+    cerrarGestionConciliacionesMayor();
+    cargarConciliacionMayorGuardada(id);
+}
+
+/**
+ * Cerrar modal de gestión de conciliaciones
+ */
+function cerrarGestionConciliacionesMayor() {
+    const overlay = document.getElementById('overlay-gestion-conciliaciones-mayor');
+    const modal = document.getElementById('modal-gestion-conciliaciones-mayor');
+
+    overlay.classList.remove('active');
+    modal.classList.remove('active');
+}
+
+/**
+ * Confirmar eliminación de conciliación
+ */
+function confirmarEliminarConciliacionMayor(id) {
+    conciliacionMayorAEliminarId = id;
+
+    const conciliacion = conciliacionesMayorGuardadasLista.find(c => c.id === id);
+    if (!conciliacion) return;
+
+    const detalles = document.getElementById('eliminar-conciliacion-mayor-detalles');
+    const registros = conciliacion.registros || [];
+
+    detalles.innerHTML = `
+        <p><strong>Nombre:</strong> ${conciliacion.nombre || 'Sin nombre'}</p>
+        <p><strong>Registros:</strong> ${registros.length}</p>
+        <p><strong>Guardada:</strong> ${new Date(conciliacion.fechaGuardado).toLocaleDateString('es-AR')}</p>
+    `;
+
+    const overlay = document.getElementById('overlay-confirmar-eliminar-conciliacion-mayor');
+    const modal = document.getElementById('modal-confirmar-eliminar-conciliacion-mayor');
+
+    overlay.classList.add('active');
+    modal.classList.add('active');
+}
+
+/**
+ * Cerrar modal de confirmación de eliminación
+ */
+function cerrarConfirmarEliminarConciliacionMayor() {
+    const overlay = document.getElementById('overlay-confirmar-eliminar-conciliacion-mayor');
+    const modal = document.getElementById('modal-confirmar-eliminar-conciliacion-mayor');
+
+    overlay.classList.remove('active');
+    modal.classList.remove('active');
+
+    conciliacionMayorAEliminarId = null;
+}
+
+/**
+ * Ejecutar eliminación de conciliación
+ */
+function ejecutarEliminarConciliacionMayor() {
+    if (!conciliacionMayorAEliminarId) return;
+
+    const key = getConciliacionesMayorKey();
+
+    // Filtrar la conciliación a eliminar
+    conciliacionesMayorGuardadasLista = conciliacionesMayorGuardadasLista.filter(
+        c => c.id !== conciliacionMayorAEliminarId
+    );
+
+    // Guardar lista actualizada
+    localStorage.setItem(key, JSON.stringify(conciliacionesMayorGuardadasLista));
+
+    // Si la conciliación eliminada estaba cargada, limpiar
+    if (stateMayores.conciliacionCargadaId === conciliacionMayorAEliminarId) {
+        stateMayores.registrosMayor = [];
+        stateMayores.vinculaciones = [];
+        stateMayores.conciliacionCargadaId = null;
+        stateMayores.conciliacionCargadaNombre = null;
+
+        renderizarTablaMayor();
+        renderizarVinculacion();
+        document.getElementById('infoMayorCargado').style.display = 'none';
+    }
+
+    cerrarConfirmarEliminarConciliacionMayor();
+
+    // Actualizar botón y refrescar modal de gestión si está abierto
+    actualizarBotonGestionConciliacionesMayor();
+
+    // Refrescar modal de gestión
+    const modalGestion = document.getElementById('modal-gestion-conciliaciones-mayor');
+    if (modalGestion.classList.contains('active')) {
+        abrirGestionConciliacionesMayor();
+    }
+
+    console.log('🗑️ Conciliación eliminada');
+}
+
+/**
+ * Mostrar modal para guardar conciliación con nombre
+ */
+function mostrarModalGuardarConciliacionMayor() {
     if (!stateMayores.clienteActual || !stateMayores.tipoMayorActual) {
         alert('Debe seleccionar un cliente y tipo de mayor');
         return;
     }
 
-    const key = `mayor_${stateMayores.clienteActual.id}_${stateMayores.tipoMayorActual.id}`;
+    if (stateMayores.registrosMayor.length === 0) {
+        alert('No hay datos para guardar. Primero cargue un mayor.');
+        return;
+    }
 
-    const datos = {
-        registros: stateMayores.registrosMayor,
-        vinculaciones: stateMayores.vinculaciones,
-        fechaGuardado: new Date().toISOString()
-    };
+    const overlay = document.getElementById('overlay-guardar-conciliacion-mayor');
+    const modal = document.getElementById('modal-guardar-conciliacion-mayor');
+    const inputNombre = document.getElementById('nombreConciliacionMayor');
 
+    // Pre-llenar con nombre existente o sugerir uno nuevo
+    if (stateMayores.conciliacionCargadaNombre) {
+        inputNombre.value = stateMayores.conciliacionCargadaNombre;
+    } else {
+        const fechaHoy = new Date().toLocaleDateString('es-AR');
+        inputNombre.value = `Conciliación ${stateMayores.tipoMayorActual.nombre} - ${fechaHoy}`;
+    }
+
+    overlay.classList.add('active');
+    modal.classList.add('active');
+    inputNombre.focus();
+    inputNombre.select();
+}
+
+/**
+ * Cerrar modal de guardar conciliación
+ */
+function cerrarModalGuardarConciliacionMayor() {
+    const overlay = document.getElementById('overlay-guardar-conciliacion-mayor');
+    const modal = document.getElementById('modal-guardar-conciliacion-mayor');
+
+    overlay.classList.remove('active');
+    modal.classList.remove('active');
+}
+
+/**
+ * Ejecutar guardado de conciliación
+ */
+function ejecutarGuardarConciliacionMayor() {
+    const inputNombre = document.getElementById('nombreConciliacionMayor');
+    const nombre = inputNombre.value.trim();
+
+    if (!nombre) {
+        alert('Por favor ingrese un nombre para la conciliación');
+        inputNombre.focus();
+        return;
+    }
+
+    const key = getConciliacionesMayorKey();
+
+    // Cargar conciliaciones existentes
+    let conciliaciones = cargarConciliacionesMayorGuardadas();
+
+    // Crear o actualizar conciliación
+    const ahora = new Date().toISOString();
+
+    if (stateMayores.conciliacionCargadaId) {
+        // Actualizar conciliación existente
+        const index = conciliaciones.findIndex(c => c.id === stateMayores.conciliacionCargadaId);
+        if (index !== -1) {
+            conciliaciones[index] = {
+                ...conciliaciones[index],
+                nombre: nombre,
+                registros: stateMayores.registrosMayor,
+                vinculaciones: stateMayores.vinculaciones,
+                fechaModificado: ahora
+            };
+            console.log('📝 Conciliación actualizada:', nombre);
+        }
+    } else {
+        // Crear nueva conciliación
+        const nuevaConciliacion = {
+            id: `conc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            nombre: nombre,
+            registros: stateMayores.registrosMayor,
+            vinculaciones: stateMayores.vinculaciones,
+            fechaGuardado: ahora,
+            fechaModificado: ahora
+        };
+
+        conciliaciones.push(nuevaConciliacion);
+        stateMayores.conciliacionCargadaId = nuevaConciliacion.id;
+        stateMayores.conciliacionCargadaNombre = nombre;
+
+        console.log('💾 Nueva conciliación guardada:', nombre);
+    }
+
+    // Guardar en localStorage
     try {
-        localStorage.setItem(key, JSON.stringify(datos));
-        alert('Vinculaciones guardadas correctamente');
-        console.log('✅ Datos guardados en:', key);
+        localStorage.setItem(key, JSON.stringify(conciliaciones));
+        conciliacionesMayorGuardadasLista = conciliaciones;
+
+        // Actualizar botón
+        actualizarBotonGestionConciliacionesMayor();
+
+        cerrarModalGuardarConciliacionMayor();
+        alert('Conciliación guardada correctamente');
     } catch (error) {
-        console.error('Error guardando datos:', error);
+        console.error('Error guardando conciliación:', error);
         alert('Error al guardar: ' + error.message);
     }
 }
 
 /**
- * Cargar datos guardados
+ * Función legacy para compatibilidad - redirige al nuevo modal
  */
-function cargarDatosGuardados() {
-    if (!stateMayores.clienteActual || !stateMayores.tipoMayorActual) return;
-
-    const key = `mayor_${stateMayores.clienteActual.id}_${stateMayores.tipoMayorActual.id}`;
-
-    try {
-        const datosGuardados = localStorage.getItem(key);
-        if (datosGuardados) {
-            const datos = JSON.parse(datosGuardados);
-
-            // Restaurar fechas como objetos Date
-            datos.registros.forEach(r => {
-                if (r.fecha) {
-                    r.fecha = new Date(r.fecha);
-                }
-            });
-
-            stateMayores.registrosMayor = datos.registros || [];
-            stateMayores.vinculaciones = datos.vinculaciones || [];
-
-            actualizarEstadisticasMayor();
-            renderizarTablaMayor();
-            renderizarVinculacion();
-
-            document.getElementById('infoMayorCargado').style.display =
-                stateMayores.registrosMayor.length > 0 ? 'block' : 'none';
-
-            console.log('✅ Datos cargados desde:', key);
-        }
-    } catch (error) {
-        console.error('Error cargando datos:', error);
-    }
+async function guardarVinculaciones() {
+    mostrarModalGuardarConciliacionMayor();
 }
 
 /**

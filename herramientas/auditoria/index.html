@@ -163,6 +163,7 @@
                     <!-- Toolbar -->
                     <div class="btn-group mb-4 toolbar">
                         <button onclick="mostrarSubirMayor()" class="btn-primary">📤 Cargar Mayor</button>
+                        <button id="btnGestionConciliacionesMayor" onclick="abrirGestionConciliacionesMayor()" class="btn-secondary" disabled>📂 Gestionar Conciliaciones</button>
                         <button onclick="exportarAnalisisMayor()" class="btn-template">📥 Exportar Análisis</button>
                     </div>
 
@@ -258,7 +259,7 @@
                             <button onclick="vincularSeleccionados()" class="btn-primary">🔗 Vincular Seleccionados</button>
                             <button onclick="desvincularSeleccionados()" class="btn-warning">↩️ Desvincular</button>
                             <button onclick="marcarComoDevolucion()" class="btn-secondary">🔄 Marcar como Devolución</button>
-                            <button onclick="guardarVinculaciones()" class="btn-success">💾 Guardar</button>
+                            <button onclick="mostrarModalGuardarConciliacionMayor()" class="btn-success">💾 Guardar</button>
                         </div>
 
                         <!-- Panel de configuración de conciliación automática -->
@@ -758,6 +759,101 @@
             <div class="btn-group mt-4">
                 <button onclick="cerrarConfigurarTipoMayor()" class="btn-secondary">Cerrar</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal de conciliaciones guardadas de mayores - Selección -->
+    <div id="overlay-conciliacion-mayor-guardada" class="overlay-eliminar"></div>
+    <div id="modal-conciliacion-mayor-guardada" class="modal-eliminar modal-gestion-conciliaciones" style="max-width: 600px;">
+        <div class="modal-eliminar-header">
+            <h3>📂 Conciliaciones Guardadas</h3>
+            <button class="modal-close-btn" onclick="cerrarModalConciliacionMayorGuardada()">✕</button>
+        </div>
+        <div class="modal-eliminar-body">
+            <p class="modal-eliminar-pregunta">Se encontraron conciliaciones guardadas para este mayor. Seleccione una para cargar:</p>
+
+            <div id="conciliaciones-mayor-seleccion-lista" class="conciliaciones-seleccion-lista">
+                <!-- Lista dinámica de conciliaciones -->
+            </div>
+
+            <div class="eliminar-aviso">
+                <span class="aviso-icono">💡</span>
+                <span>Al cargar una conciliación, se restaurarán todos los registros y vinculaciones guardadas.</span>
+            </div>
+        </div>
+        <div class="modal-eliminar-footer">
+            <button class="btn-cancelar" onclick="nuevaConciliacionMayor()">Nueva Conciliación</button>
+            <button id="btnConfirmarCargarConciliacionMayor" class="btn-confirmar-eliminar" style="background: #28a745;" onclick="confirmarCargarConciliacionMayorSeleccionada()" disabled>📂 Cargar Seleccionada</button>
+        </div>
+    </div>
+
+    <!-- Modal de gestión de conciliaciones de mayores -->
+    <div id="overlay-gestion-conciliaciones-mayor" class="overlay-eliminar"></div>
+    <div id="modal-gestion-conciliaciones-mayor" class="modal-eliminar modal-gestion-conciliaciones">
+        <div class="modal-eliminar-header">
+            <h3>📋 Gestión de Conciliaciones Guardadas</h3>
+            <button class="modal-close-btn" onclick="cerrarGestionConciliacionesMayor()">✕</button>
+        </div>
+        <div class="modal-eliminar-body">
+            <p class="modal-eliminar-pregunta">Administre las conciliaciones guardadas para este cliente y tipo de mayor:</p>
+
+            <div id="gestion-conciliaciones-mayor-lista" class="conciliaciones-lista">
+                <!-- Lista dinámica de conciliaciones -->
+            </div>
+        </div>
+        <div class="modal-eliminar-footer">
+            <button class="btn-cancelar" onclick="cerrarGestionConciliacionesMayor()">Cerrar</button>
+        </div>
+    </div>
+
+    <!-- Modal de confirmar eliminación de conciliación de mayor -->
+    <div id="overlay-confirmar-eliminar-conciliacion-mayor" class="overlay-eliminar"></div>
+    <div id="modal-confirmar-eliminar-conciliacion-mayor" class="modal-eliminar" style="max-width: 450px;">
+        <div class="modal-eliminar-header">
+            <h3>🗑️ Eliminar Conciliación</h3>
+            <button class="modal-close-btn" onclick="cerrarConfirmarEliminarConciliacionMayor()">✕</button>
+        </div>
+        <div class="modal-eliminar-body">
+            <p class="modal-eliminar-pregunta">¿Está seguro de eliminar esta conciliación guardada?</p>
+
+            <div id="eliminar-conciliacion-mayor-detalles" class="eliminar-detalles">
+                <!-- Detalles dinámicos -->
+            </div>
+
+            <div class="eliminar-aviso">
+                <span class="aviso-icono">⚠️</span>
+                <span>Esta acción no se puede deshacer. Se perderán todos los datos de la conciliación.</span>
+            </div>
+        </div>
+        <div class="modal-eliminar-footer">
+            <button class="btn-cancelar" onclick="cerrarConfirmarEliminarConciliacionMayor()">Cancelar</button>
+            <button class="btn-confirmar-eliminar" onclick="ejecutarEliminarConciliacionMayor()">🗑️ Eliminar</button>
+        </div>
+    </div>
+
+    <!-- Modal para guardar conciliación con nombre -->
+    <div id="overlay-guardar-conciliacion-mayor" class="overlay-eliminar"></div>
+    <div id="modal-guardar-conciliacion-mayor" class="modal-eliminar" style="max-width: 450px;">
+        <div class="modal-eliminar-header">
+            <h3>💾 Guardar Conciliación</h3>
+            <button class="modal-close-btn" onclick="cerrarModalGuardarConciliacionMayor()">✕</button>
+        </div>
+        <div class="modal-eliminar-body">
+            <p class="modal-eliminar-pregunta">Ingrese un nombre para identificar esta conciliación:</p>
+
+            <div class="form-group" style="margin: 16px 0;">
+                <label for="nombreConciliacionMayor">Nombre de la conciliación:</label>
+                <input type="text" id="nombreConciliacionMayor" class="input-text" placeholder="Ej: Conciliación Enero 2024" style="width: 100%; margin-top: 8px;">
+            </div>
+
+            <div class="eliminar-aviso">
+                <span class="aviso-icono">💡</span>
+                <span>Puede guardar múltiples conciliaciones con diferentes nombres.</span>
+            </div>
+        </div>
+        <div class="modal-eliminar-footer">
+            <button class="btn-cancelar" onclick="cerrarModalGuardarConciliacionMayor()">Cancelar</button>
+            <button class="btn-confirmar-eliminar" style="background: #28a745;" onclick="ejecutarGuardarConciliacionMayor()">💾 Guardar</button>
         </div>
     </div>
 

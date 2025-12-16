@@ -2209,3 +2209,413 @@ body {
         flex: 1;
     }
 }
+
+/* ============================================
+   MODALES DE GESTIÓN DE CONCILIACIONES
+   ============================================ */
+
+.overlay-eliminar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+.overlay-eliminar.active {
+    display: block;
+}
+
+.modal-eliminar {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    width: 500px;
+    max-width: 90vw;
+    display: none;
+}
+
+.modal-eliminar.active {
+    display: block;
+    animation: modalEntrada 0.3s ease-out;
+}
+
+@keyframes modalEntrada {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+.modal-eliminar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-eliminar-header h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0;
+}
+
+.modal-close-btn {
+    background: none;
+    border: none;
+    color: #9ca3af;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.modal-close-btn:hover {
+    color: #374151;
+}
+
+.modal-eliminar-body {
+    padding: 24px;
+}
+
+.modal-eliminar-pregunta {
+    font-size: 15px;
+    color: #374151;
+    margin: 0 0 20px 0;
+}
+
+.eliminar-detalles {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.eliminar-detalles p {
+    margin: 8px 0;
+    font-size: 14px;
+    color: #374151;
+}
+
+.eliminar-detalles p strong {
+    color: #1f2937;
+}
+
+.eliminar-aviso {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+}
+
+.aviso-icono {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.eliminar-aviso span:last-child {
+    font-size: 13px;
+    color: #92400e;
+    line-height: 1.5;
+}
+
+.modal-eliminar-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 24px;
+    border-top: 1px solid #e5e7eb;
+    background: #f9fafb;
+    border-radius: 0 0 16px 16px;
+}
+
+.btn-cancelar {
+    background: white;
+    border: 1px solid #d1d5db;
+    color: #374151;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-cancelar:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+}
+
+.btn-confirmar-eliminar {
+    background: #dc2626;
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-confirmar-eliminar:hover {
+    background: #b91c1c;
+}
+
+.btn-confirmar-eliminar:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+}
+
+/* Modal de gestión de conciliaciones */
+.modal-gestion-conciliaciones {
+    max-width: 700px;
+    max-height: 80vh;
+}
+
+.modal-gestion-conciliaciones .modal-eliminar-body {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* Lista de conciliaciones para selección */
+.conciliaciones-seleccion-lista {
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+}
+
+.conciliacion-seleccion-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.conciliacion-seleccion-item:hover {
+    border-color: #8b5cf6;
+    background: #faf5ff;
+}
+
+.conciliacion-seleccion-item.selected {
+    border-color: #8b5cf6;
+    background: #f3e8ff;
+}
+
+.conciliacion-radio {
+    margin-right: 12px;
+}
+
+.conciliacion-radio input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #8b5cf6;
+}
+
+.conciliacion-info {
+    flex: 1;
+}
+
+.conciliacion-nombre {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1f2937;
+    margin-bottom: 4px;
+}
+
+.conciliacion-detalles {
+    font-size: 12px;
+    color: #6b7280;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
+.conciliacion-stats {
+    font-size: 11px;
+    color: #6b7280;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.conciliacion-stats .stat-vinculados {
+    color: #059669;
+}
+
+.conciliacion-stats .stat-pendientes {
+    color: #d97706;
+}
+
+.conciliacion-stats .stat-vencidos {
+    color: #dc2626;
+}
+
+.conciliacion-stats .stat-total {
+    color: #6366f1;
+}
+
+/* Lista de gestión de conciliaciones */
+.conciliaciones-lista {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.conciliacion-gestion-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    background: #fff;
+    transition: all 0.2s;
+}
+
+.conciliacion-gestion-item:hover {
+    background: #f9fafb;
+    border-color: #8b5cf6;
+}
+
+.conciliacion-gestion-item.activa {
+    background: #f3e8ff;
+    border-color: #8b5cf6;
+}
+
+.conciliacion-gestion-info {
+    flex: 1;
+}
+
+.conciliacion-gestion-info .conciliacion-nombre {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.badge-activa {
+    display: inline-block;
+    background: #8b5cf6;
+    color: white;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+.conciliacion-gestion-info .conciliacion-detalles {
+    margin-top: 6px;
+}
+
+.conciliacion-gestion-acciones {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-cargar-conciliacion {
+    background: #059669;
+    border: none;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-cargar-conciliacion:hover {
+    background: #047857;
+}
+
+.btn-eliminar-conciliacion {
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #dc2626;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-eliminar-conciliacion:hover {
+    background: #fecaca;
+}
+
+/* Estado vacío de conciliaciones */
+.conciliaciones-vacio {
+    text-align: center;
+    padding: 40px;
+    color: #9ca3af;
+}
+
+.conciliaciones-vacio-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
+
+.conciliaciones-vacio p {
+    font-size: 14px;
+    margin: 0;
+}
+
+/* Responsive para modales */
+@media (max-width: 768px) {
+    .modal-eliminar {
+        width: 95%;
+    }
+
+    .modal-eliminar-header {
+        padding: 16px;
+    }
+
+    .modal-eliminar-body {
+        padding: 16px;
+    }
+
+    .modal-eliminar-footer {
+        padding: 12px 16px;
+        flex-direction: column-reverse;
+    }
+
+    .btn-cancelar,
+    .btn-confirmar-eliminar {
+        width: 100%;
+    }
+
+    .conciliacion-gestion-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .conciliacion-gestion-acciones {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}
