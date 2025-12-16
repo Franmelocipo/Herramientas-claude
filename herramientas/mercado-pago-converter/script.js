@@ -360,13 +360,14 @@ async function processFile() {
                 // Excluir explícitamente "Reserva para pago"
                 if (desc.includes('reserva para pago')) return false;
 
-                // Incluir: "Pago", "Extracción de efectivo", "Devolución de dinero", "Rendimientos", "Cashback" y "Tarifa de envío"
+                // Incluir: "Pago", "Extracción de efectivo", "Devolución de dinero", "Rendimientos", "Cashback", "Tarifa de envío" y "Dinero retenido de envío"
                 return desc.includes('pago') ||
                        desc.includes('extracción de efectivo') ||
                        desc.includes('devolución de dinero') ||
                        desc.includes('rendimientos') ||
                        desc.includes('cashback') ||
-                       desc.includes('tarifa de envío');
+                       desc.includes('tarifa de envío') ||
+                       desc.includes('dinero retenido de envío');
             });
 
             console.log(`  Registros filtrados: ${filteredData.length}`);
@@ -425,14 +426,21 @@ async function processFile() {
                     // Detectar si es una devolución
                     const esDevolucion = String(descripcionBase).toLowerCase().includes('devolución de dinero');
 
-                    todosLosMovimientos.push({
-                        fecha,
-                        descripcion: descripcionCompleta,
-                        origen: 'Mercado Pago',
-                        credito: esCredito ? montoBruto : 0,
-                        debito: !esCredito ? Math.abs(montoBruto) : 0,
-                        saldo: saldoDelArchivo
-                    });
+                    // Detectar si es una tarifa de envío (para evitar línea vacía duplicada)
+                    const esTarifaEnvio = String(descripcionBase).toLowerCase().includes('tarifa de envío');
+
+                    // Solo agregar movimiento principal si tiene monto o no es tarifa de envío
+                    // (las tarifas de envío sin monto bruto se muestran solo como "Costo de envío")
+                    if (montoBruto !== 0 || !esTarifaEnvio) {
+                        todosLosMovimientos.push({
+                            fecha,
+                            descripcion: descripcionCompleta,
+                            origen: 'Mercado Pago',
+                            credito: esCredito ? montoBruto : 0,
+                            debito: !esCredito ? Math.abs(montoBruto) : 0,
+                            saldo: saldoDelArchivo
+                        });
+                    }
 
                     // NOTA: Las comisiones e impuestos ya están incluidas en la diferencia entre
                     // MONTO BRUTO y MONTO NETO, por lo que NO debemos desagregarlas del saldo.
