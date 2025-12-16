@@ -368,7 +368,7 @@ async function processFile() {
                 // Excluir explícitamente "Reserva para pago"
                 if (desc.includes('reserva para pago')) return false;
 
-                // Incluir: "Pago", "Extracción de efectivo", "Devolución de dinero", "Rendimientos", "Cashback", "Tarifa de envío", "Dinero retenido de envío", "Débito de dinero por mediación" y "Dinero retenido para reembolso"
+                // Incluir: "Pago", "Extracción de efectivo", "Devolución de dinero", "Rendimientos", "Cashback", "Tarifa de envío", "Dinero retenido de envío", "Débito de dinero por mediación", "Dinero retenido para reembolso" y "reserve_for_dispute"
                 return desc.includes('pago') ||
                        desc.includes('extracción de efectivo') ||
                        desc.includes('devolución de dinero') ||
@@ -377,7 +377,8 @@ async function processFile() {
                        desc.includes('tarifa de envío') ||
                        desc.includes('dinero retenido de envío') ||
                        desc.includes('débito de dinero por mediación') ||
-                       desc.includes('dinero retenido para reembolso');
+                       desc.includes('dinero retenido para reembolso') ||
+                       desc.includes('reserve_for_dispute');
             });
 
             console.log(`  Registros filtrados: ${filteredData.length}`);
