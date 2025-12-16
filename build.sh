@@ -15,62 +15,94 @@ echo "URL: $VITE_SUPABASE_URL"
 echo "Key: ${VITE_SUPABASE_ANON_KEY:0:20}..."
 
 # Generar archivo supabase-config.js
-cat > supabase-config.js << EOF
+# IMPORTANTE: Usamos 'supabaseClient' para evitar conflicto con window.supabase del CDN
+cat > supabase-config.js << 'HEREDOC_START'
 /**
  * CONFIGURACIÓN DE SUPABASE
  * Herramientas Contables - Claude Tools
  *
- * Este archivo es generado automáticamente durante el build (Netlify/Vercel)
- * Las credenciales provienen de las variables de entorno configuradas en la plataforma
+ * Este archivo es generado automáticamente durante el build (Vercel)
+ * Las credenciales provienen de las variables de entorno configuradas
+ *
+ * IMPORTANTE: Usamos 'supabaseClient' para evitar conflicto con window.supabase del CDN
  */
 
 // =====================================================
 // CREDENCIALES DE SUPABASE (Generadas automáticamente)
 // =====================================================
-const SUPABASE_CONFIG = {
-    url: '$VITE_SUPABASE_URL',
-    anonKey: '$VITE_SUPABASE_ANON_KEY'
-};
+HEREDOC_START
 
-// Log para verificar configuración (solo en desarrollo)
+# Añadir las credenciales con variables de entorno
+cat >> supabase-config.js << EOF
+const supabaseUrl = '$VITE_SUPABASE_URL';
+const supabaseAnonKey = '$VITE_SUPABASE_ANON_KEY';
+EOF
+
+# Añadir el resto del código (sin variables de entorno)
+cat >> supabase-config.js << 'HEREDOC_END'
+
+// Log para verificar configuración
 console.log('🔑 Supabase Config Loaded:');
-console.log('  URL:', SUPABASE_CONFIG.url);
-console.log('  Key exists:', !!SUPABASE_CONFIG.anonKey);
-console.log('  Key length:', SUPABASE_CONFIG.anonKey?.length || 0);
+console.log('  URL:', supabaseUrl);
+console.log('  Key exists:', !!supabaseAnonKey);
+console.log('  Key length:', supabaseAnonKey?.length || 0);
 
 // =====================================================
 // INICIALIZAR CLIENTE DE SUPABASE
+// Usamos supabaseClient para evitar conflicto con window.supabase del CDN
 // =====================================================
 
-let supabase;
+let supabaseClient = null;
 
 function initSupabase() {
-    if (typeof window.supabase === 'undefined') {
-        console.error('❌ Supabase library not loaded. Add the CDN script to your HTML.');
-        return null;
+    if (supabaseClient) return supabaseClient;
+
+    console.log('🔄 Intentando inicializar Supabase...');
+    console.log('   window.supabase existe:', !!window.supabase);
+    console.log('   window.supabase.createClient existe:', !!(window.supabase && window.supabase.createClient));
+
+    if (window.supabase && window.supabase.createClient) {
+        try {
+            supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+            console.log('✅ Supabase client initialized successfully');
+            window.supabaseDB = supabaseClient; // Exponer globalmente
+            return supabaseClient;
+        } catch (e) {
+            console.error('❌ Error creando cliente Supabase:', e);
+            return null;
+        }
     }
-
-    try {
-        supabase = window.supabase.createClient(
-            SUPABASE_CONFIG.url,
-            SUPABASE_CONFIG.anonKey
-        );
-
-        console.log('✅ Supabase initialized successfully');
-        console.log('   URL:', SUPABASE_CONFIG.url);
-
-        return supabase;
-    } catch (error) {
-        console.error('❌ Error initializing Supabase:', error);
-        return null;
-    }
+    console.log('⏳ CDN de Supabase aún no disponible');
+    return null;
 }
 
-// Inicializar automáticamente al cargar
+// Función para esperar a que Supabase esté listo
+async function waitForSupabase(maxAttempts = 50, delay = 100) {
+    for (let i = 0; i < maxAttempts; i++) {
+        if (supabaseClient) return supabaseClient;
+        const client = initSupabase();
+        if (client) return client;
+        await new Promise(resolve => setTimeout(resolve, delay));
+    }
+    console.error('❌ Supabase library not loaded after waiting');
+    return null;
+}
+
+// Intentar inicializar inmediatamente
 if (typeof window !== 'undefined') {
-    window.addEventListener('DOMContentLoaded', () => {
-        initSupabase();
-    });
+    initSupabase();
+
+    // Si no se pudo inicializar, intentar en DOMContentLoaded
+    if (!supabaseClient) {
+        window.addEventListener('DOMContentLoaded', () => {
+            initSupabase();
+            if (supabaseClient) {
+                window.supabaseDB = supabaseClient;
+            }
+        });
+    } else {
+        window.supabaseDB = supabaseClient;
+    }
 }
 
 // =====================================================
@@ -81,7 +113,11 @@ if (typeof window !== 'undefined') {
  * Obtener todos los clientes activos
  */
 async function getClients() {
-    const { data, error } = await supabase
+    if (!supabaseClient) {
+        console.error('Supabase no inicializado');
+        return [];
+    }
+    const { data, error } = await supabaseClient
         .from('clientes')
         .select('*')
         .order('nombre');
@@ -97,7 +133,11 @@ async function getClients() {
  * Buscar cliente por CUIT
  */
 async function getClientByCuit(cuit) {
-    const { data, error } = await supabase
+    if (!supabaseClient) {
+        console.error('Supabase no inicializado');
+        return null;
+    }
+    const { data, error } = await supabaseClient
         .from('clientes')
         .select('*')
         .eq('cuit', cuit)
@@ -114,7 +154,11 @@ async function getClientByCuit(cuit) {
  * Crear nuevo cliente
  */
 async function createClient(clientData) {
-    const { data, error } = await supabase
+    if (!supabaseClient) {
+        console.error('Supabase no inicializado');
+        return null;
+    }
+    const { data, error } = await supabaseClient
         .from('clientes')
         .insert([clientData])
         .select()
@@ -131,7 +175,11 @@ async function createClient(clientData) {
  * Actualizar cliente existente
  */
 async function updateClient(clientId, updates) {
-    const { data, error } = await supabase
+    if (!supabaseClient) {
+        console.error('Supabase no inicializado');
+        return null;
+    }
+    const { data, error } = await supabaseClient
         .from('clientes')
         .update(updates)
         .eq('id', clientId)
@@ -150,7 +198,10 @@ async function updateClient(clientId, updates) {
  */
 async function testConnection() {
     try {
-        const { data, error } = await supabase
+        if (!supabaseClient) {
+            throw new Error('Supabase no inicializado');
+        }
+        const { data, error } = await supabaseClient
             .from('clientes')
             .select('count');
 
@@ -163,11 +214,11 @@ async function testConnection() {
         return false;
     }
 }
-EOF
+HEREDOC_END
 
 echo "✅ Archivo supabase-config.js generado exitosamente"
 echo ""
 echo "📋 Contenido generado (primeras líneas):"
-head -n 20 supabase-config.js
+head -n 30 supabase-config.js
 
 exit 0
