@@ -2632,7 +2632,16 @@ function exportarAnalisisMayor() {
         XLSX.utils.book_append_sheet(wb, wsSinVincular, 'Pendientes');
     }
 
-    // ===== HOJA 5: DETALLE COMPLETO (TODOS LOS REGISTROS) =====
+    // ===== HOJA 5: COMPOSICIÓN DEL SALDO CONTABLE =====
+    const datosComposicionSaldo = generarDatosComposicionSaldoContable(
+        vinculacionesParciales,
+        registrosSinVincular,
+        config
+    );
+    const wsComposicionSaldo = XLSX.utils.aoa_to_sheet(datosComposicionSaldo);
+    XLSX.utils.book_append_sheet(wb, wsComposicionSaldo, 'Composición Saldo');
+
+    // ===== HOJA 6: DETALLE COMPLETO (TODOS LOS REGISTROS) =====
     const registrosCompletos = stateMayores.registrosMayor.map(r => ({
         'Fecha': formatearFecha(r.fecha),
         'Asiento': r.asiento,
@@ -2951,6 +2960,158 @@ function generarDatosSinVincular(registros, config) {
         const totalDestinos = destinos.reduce((sum, r) => sum + obtenerMontoDestino(r), 0);
         datos.push([]);
         datos.push(['', '', `TOTAL ${config.etiquetaDestino.toUpperCase()}:`, '', formatearMonedaExcel(totalDestinos), '']);
+    }
+
+    return datos;
+}
+
+/**
+ * Generar datos para hoja de composición del saldo contable
+ * Muestra emisiones sin vincular y diferencias de vinculaciones parciales
+ */
+function generarDatosComposicionSaldoContable(vincParciales, sinVincular, config) {
+    const datos = [];
+
+    // Calcular totales
+    const emisionesSinVincular = sinVincular.filter(r => esRegistroOrigen(r));
+    const totalEmisionesSinVincular = emisionesSinVincular.reduce((sum, r) => sum + obtenerMontoOrigen(r), 0);
+
+    // Calcular total de diferencias de vinculaciones parciales (sólo la parte de emisiones pendientes)
+    let totalDiferenciasParciales = 0;
+    vincParciales.forEach(v => {
+        if (v.diferencia > 0) {
+            totalDiferenciasParciales += v.diferencia;
+        }
+    });
+
+    // Calcular saldo del mayor
+    const totalDebe = stateMayores.registrosMayor.reduce((sum, r) => sum + (r.debe || 0), 0);
+    const totalHaber = stateMayores.registrosMayor.reduce((sum, r) => sum + (r.haber || 0), 0);
+    const saldoMayor = totalHaber - totalDebe; // Para cheques: haber (emisiones) - debe (cobros)
+
+    // Encabezado
+    datos.push(['COMPOSICIÓN DEL SALDO CONTABLE DEL MAYOR']);
+    datos.push([`Tipo de Mayor: ${stateMayores.tipoMayorActual?.nombre || 'N/A'}`]);
+    datos.push([`Cliente: ${stateMayores.clienteActual?.nombre || 'N/A'}`]);
+    datos.push([`Fecha de exportación: ${new Date().toLocaleDateString('es-AR')}`]);
+    datos.push([]);
+    datos.push(['Este detalle muestra los elementos que componen el saldo del mayor contable.']);
+    datos.push(['El saldo se compone de: emisiones sin vincular + diferencias de vinculaciones parciales.']);
+    datos.push([]);
+
+    // Resumen de composición
+    datos.push(['═══════════════════════════════════════════════════════════════════════════════']);
+    datos.push(['RESUMEN DE COMPOSICIÓN']);
+    datos.push(['═══════════════════════════════════════════════════════════════════════════════']);
+    datos.push(['Concepto', 'Cantidad', 'Importe']);
+    datos.push([`${config.etiquetaOrigen} sin vinculación`, emisionesSinVincular.length, formatearMonedaExcel(totalEmisionesSinVincular)]);
+    datos.push([`${config.etiquetaOrigen} con vinculación parcial (diferencias)`, vincParciales.filter(v => v.diferencia > 0).length, formatearMonedaExcel(totalDiferenciasParciales)]);
+    datos.push(['───────────────────────────────────────────────────────────────────────────────']);
+    datos.push(['TOTAL COMPOSICIÓN DEL SALDO', '', formatearMonedaExcel(totalEmisionesSinVincular + totalDiferenciasParciales)]);
+    datos.push(['Saldo según Mayor Contable', '', formatearMonedaExcel(saldoMayor)]);
+    datos.push([]);
+
+    // ===== SECCIÓN 1: EMISIONES SIN VINCULACIÓN =====
+    datos.push(['═══════════════════════════════════════════════════════════════════════════════']);
+    datos.push([`${config.etiquetaOrigen.toUpperCase()} SIN VINCULACIÓN`]);
+    datos.push(['═══════════════════════════════════════════════════════════════════════════════']);
+    datos.push([`Estos registros no tienen ninguna vinculación y componen directamente el saldo.`]);
+    datos.push([]);
+
+    if (emisionesSinVincular.length === 0) {
+        datos.push(['No hay emisiones sin vinculación']);
+        datos.push([]);
+    } else {
+        datos.push(['Fecha', 'Asiento', 'Descripción', 'Importe', 'Estado']);
+
+        // Ordenar por fecha
+        const emisionesOrdenadas = [...emisionesSinVincular].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+        emisionesOrdenadas.forEach(r => {
+            const monto = obtenerMontoOrigen(r);
+            datos.push([
+                formatearFecha(r.fecha),
+                r.asiento,
+                r.descripcion,
+                formatearMonedaExcel(monto),
+                obtenerEtiquetaEstado(r.estado)
+            ]);
+        });
+
+        datos.push(['───────────────────────────────────────────────────────────────────────────────']);
+        datos.push(['', '', `SUBTOTAL ${config.etiquetaOrigen.toUpperCase()} SIN VINCULACIÓN:`, formatearMonedaExcel(totalEmisionesSinVincular), '']);
+        datos.push([]);
+    }
+
+    // ===== SECCIÓN 2: EMISIONES CON VINCULACIONES PARCIALES =====
+    datos.push(['═══════════════════════════════════════════════════════════════════════════════']);
+    datos.push([`${config.etiquetaOrigen.toUpperCase()} CON VINCULACIÓN PARCIAL`]);
+    datos.push(['═══════════════════════════════════════════════════════════════════════════════']);
+    datos.push([`Estos registros tienen vinculación parcial. Se muestra la diferencia pendiente de cada vinculación.`]);
+    datos.push([]);
+
+    // Filtrar sólo vinculaciones parciales con diferencia positiva (emisiones > cobros)
+    const vincParcialesConDiferencia = vincParciales.filter(v => v.diferencia > 0);
+
+    if (vincParcialesConDiferencia.length === 0) {
+        datos.push(['No hay emisiones con vinculaciones parciales']);
+        datos.push([]);
+    } else {
+        vincParcialesConDiferencia.forEach((vinc, idx) => {
+            datos.push(['───────────────────────────────────────────────────────────────────────────────']);
+            datos.push([`Vinculación Parcial #${idx + 1}`]);
+            datos.push([`Total ${config.etiquetaOrigen}: ${formatearMonedaExcel(vinc.totalOrigen)} | Total ${config.etiquetaDestino}: ${formatearMonedaExcel(vinc.totalDestino)} | DIFERENCIA PENDIENTE: ${formatearMonedaExcel(vinc.diferencia)}`]);
+            datos.push([]);
+
+            // Mostrar las emisiones de esta vinculación
+            datos.push(['Fecha', 'Asiento', 'Descripción', 'Importe', 'Tipo']);
+
+            vinc.registrosOrigen.forEach(r => {
+                datos.push([
+                    formatearFecha(r.fecha),
+                    r.asiento,
+                    r.descripcion,
+                    formatearMonedaExcel(obtenerMontoOrigen(r)),
+                    config.etiquetaSingularOrigen.toUpperCase()
+                ]);
+            });
+
+            // Mostrar los cobros parciales de esta vinculación
+            vinc.registrosDestino.forEach(r => {
+                datos.push([
+                    formatearFecha(r.fecha),
+                    r.asiento,
+                    r.descripcion,
+                    formatearMonedaExcel(obtenerMontoDestino(r)),
+                    config.etiquetaSingularDestino.toUpperCase()
+                ]);
+            });
+
+            datos.push([]);
+        });
+
+        datos.push(['───────────────────────────────────────────────────────────────────────────────']);
+        datos.push(['', '', `SUBTOTAL DIFERENCIAS PARCIALES:`, formatearMonedaExcel(totalDiferenciasParciales), '']);
+        datos.push([]);
+    }
+
+    // ===== RESUMEN FINAL =====
+    datos.push(['═══════════════════════════════════════════════════════════════════════════════']);
+    datos.push(['VERIFICACIÓN']);
+    datos.push(['═══════════════════════════════════════════════════════════════════════════════']);
+    const totalComposicion = totalEmisionesSinVincular + totalDiferenciasParciales;
+    datos.push(['Concepto', '', 'Importe']);
+    datos.push([`${config.etiquetaOrigen} sin vinculación`, '', formatearMonedaExcel(totalEmisionesSinVincular)]);
+    datos.push(['Diferencias de vinculaciones parciales', '', formatearMonedaExcel(totalDiferenciasParciales)]);
+    datos.push(['───────────────────────────────────────────────────────────────────────────────']);
+    datos.push(['TOTAL COMPOSICIÓN', '', formatearMonedaExcel(totalComposicion)]);
+    datos.push(['Saldo Mayor Contable', '', formatearMonedaExcel(saldoMayor)]);
+
+    const diferencia = Math.abs(totalComposicion - saldoMayor);
+    if (diferencia <= 1) {
+        datos.push(['Estado', '', 'VERIFICADO ✓']);
+    } else {
+        datos.push(['Diferencia', '', formatearMonedaExcel(totalComposicion - saldoMayor)]);
     }
 
     return datos;
