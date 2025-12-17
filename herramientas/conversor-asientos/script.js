@@ -4912,6 +4912,7 @@ function generateFinalExcel() {
                     // ORIGEN va al HABER (saldo a favor que se usa/consume)
                     allData.push({
                         Fecha: fecha,
+                        Numero: 0, // Se asignará después al agrupar por transacción
                         Cuenta: cuentaGrupo,
                         Debe: 0,
                         Haber: parseFloat(importe.toFixed(2)),
@@ -4931,6 +4932,7 @@ function generateFinalExcel() {
                     // DESTINO va al DEBE (deuda que se cancela)
                     allData.push({
                         Fecha: fecha,
+                        Numero: 0, // Se asignará después al agrupar por transacción
                         Cuenta: cuentaGrupo,
                         Debe: parseFloat(importe.toFixed(2)),
                         Haber: 0,
@@ -5058,6 +5060,9 @@ function generateFinalExcel() {
         allData.forEach(item => {
             delete item._transaccion;
         });
+
+        // Ordenar las filas por número de asiento para que queden agrupadas
+        allData.sort((a, b) => a.Numero - b.Numero);
     }
 
     // Validación de partida doble: suma DEBE = suma HABER por asiento
