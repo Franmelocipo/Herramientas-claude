@@ -40,6 +40,10 @@ const TIPOS_MAYOR_DEFAULT = [
             etiquetaDestino: 'Liquidaciones',
             etiquetaSingularOrigen: 'cupón',
             etiquetaSingularDestino: 'liquidación',
+            articuloOrigen: 'un',        // Artículo singular para origen (cupón = masculino)
+            articuloDestino: 'una',      // Artículo singular para destino (liquidación = femenino)
+            articuloPluralOrigen: 'varios',   // Artículo plural para origen
+            articuloPluralDestino: 'varias',  // Artículo plural para destino
             iconoOrigen: '📋',
             iconoDestino: '💰',
             descripcionVinculacion: 'Los cupones (débitos) deben vincularse con liquidaciones (créditos) dentro de 40 días.'
@@ -62,6 +66,10 @@ const TIPOS_MAYOR_DEFAULT = [
             etiquetaDestino: 'Cobros',
             etiquetaSingularOrigen: 'emisión',
             etiquetaSingularDestino: 'cobro',
+            articuloOrigen: 'una',       // Artículo singular para origen (emisión = femenino)
+            articuloDestino: 'un',       // Artículo singular para destino (cobro = masculino)
+            articuloPluralOrigen: 'varias',  // Artículo plural para origen
+            articuloPluralDestino: 'varios', // Artículo plural para destino
             iconoOrigen: '📤',
             iconoDestino: '📥',
             descripcionVinculacion: 'Las emisiones de cheques (haber) deben vincularse con los cobros por terceros (debe).'
@@ -90,6 +98,10 @@ function obtenerConfigVinculacion() {
         etiquetaDestino: config.etiquetaDestino || 'Liquidaciones',
         etiquetaSingularOrigen: config.etiquetaSingularOrigen || 'cupón',
         etiquetaSingularDestino: config.etiquetaSingularDestino || 'liquidación',
+        articuloOrigen: config.articuloOrigen || 'un',
+        articuloDestino: config.articuloDestino || 'una',
+        articuloPluralOrigen: config.articuloPluralOrigen || 'varios',
+        articuloPluralDestino: config.articuloPluralDestino || 'varias',
         iconoOrigen: config.iconoOrigen || '📋',
         iconoDestino: config.iconoDestino || '💰',
         descripcionVinculacion: config.descripcionVinculacion || 'Vincule los registros de origen con los de destino.'
@@ -487,13 +499,16 @@ function actualizarEtiquetasVinculacion() {
         selDestinoIcon.textContent = config.iconoDestino;
     }
 
-    // Actualizar opciones del modo de conciliación
+    // Actualizar opciones del modo de conciliación con artículos correctos
     const modoConciliacion = document.getElementById('modoConciliacion');
     if (modoConciliacion) {
         const opciones = modoConciliacion.options;
-        opciones[0].textContent = `1:1 - Una ${config.etiquetaSingularOrigen} con un ${config.etiquetaSingularDestino}`;
-        opciones[1].textContent = `N:1 - Varias ${config.etiquetaOrigen.toLowerCase()} con un ${config.etiquetaSingularDestino}`;
-        opciones[2].textContent = `1:N - Una ${config.etiquetaSingularOrigen} con varios ${config.etiquetaDestino.toLowerCase()}`;
+        // Capitalizar primera letra del artículo para inicio de frase
+        const artOrigenCap = config.articuloOrigen.charAt(0).toUpperCase() + config.articuloOrigen.slice(1);
+        const artPluralOrigenCap = config.articuloPluralOrigen.charAt(0).toUpperCase() + config.articuloPluralOrigen.slice(1);
+        opciones[0].textContent = `1:1 - ${artOrigenCap} ${config.etiquetaSingularOrigen} con ${config.articuloDestino} ${config.etiquetaSingularDestino}`;
+        opciones[1].textContent = `N:1 - ${artPluralOrigenCap} ${config.etiquetaOrigen.toLowerCase()} con ${config.articuloDestino} ${config.etiquetaSingularDestino}`;
+        opciones[2].textContent = `1:N - ${artOrigenCap} ${config.etiquetaSingularOrigen} con ${config.articuloPluralDestino} ${config.etiquetaDestino.toLowerCase()}`;
     }
 
     // Actualizar etiquetas en panel de configuración
