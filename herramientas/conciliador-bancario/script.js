@@ -348,7 +348,19 @@ const elements = {
     historialBody: document.getElementById('historialBody'),
     historialLista: document.getElementById('historialLista'),
     historialTotalConciliados: document.getElementById('historialTotalConciliados'),
-    btnToggleHistorial: document.getElementById('btnToggleHistorial')
+    btnToggleHistorial: document.getElementById('btnToggleHistorial'),
+
+    // Panel de información de conciliación (sticky)
+    panelInfoConciliacion: document.getElementById('panelInfoConciliacion'),
+    panelClienteNombre: document.getElementById('panelClienteNombre'),
+    panelCuentaNombre: document.getElementById('panelCuentaNombre'),
+    panelTipoIcon: document.getElementById('panelTipoIcon'),
+    panelTipoNombre: document.getElementById('panelTipoNombre'),
+    panelPeriodo: document.getElementById('panelPeriodo'),
+    panelEstadoIcon: document.getElementById('panelEstadoIcon'),
+    panelEstado: document.getElementById('panelEstado'),
+    panelInfoGuardada: document.getElementById('panelInfoGuardada'),
+    panelNombreConciliacion: document.getElementById('panelNombreConciliacion')
 };
 
 // ========== INICIALIZACIÓN ==========
@@ -475,6 +487,9 @@ async function seleccionarClientePrincipal() {
 
     // Mostrar paso de cuenta
     elements.stepCuenta.classList.remove('hidden');
+
+    // Actualizar panel de información
+    actualizarPanelInfoConciliacion();
 }
 
 /**
@@ -494,6 +509,9 @@ function cambiarCliente() {
     elements.clienteSelectPrincipal.value = '';
     elements.clienteSearchPrincipal.value = '';
     filtrarClientesPrincipal();
+
+    // Actualizar panel de información
+    actualizarPanelInfoConciliacion();
 }
 
 /**
@@ -576,6 +594,9 @@ async function seleccionarCuentaPrincipal() {
 
     // Mostrar paso de mayor
     elements.stepMayor.classList.remove('hidden');
+
+    // Actualizar panel de información
+    actualizarPanelInfoConciliacion();
 }
 
 /**
@@ -728,6 +749,9 @@ async function actualizarExtractosSeleccionados() {
         // Actualizar botón de conciliar
         actualizarBotonConciliar();
 
+        // Actualizar panel de información
+        actualizarPanelInfoConciliacion();
+
     } catch (error) {
         console.error('Error cargando movimientos:', error);
     }
@@ -781,6 +805,9 @@ function seleccionarTipo(tipo) {
     elements.stepTolerancias.classList.remove('hidden');
 
     actualizarBotonConciliar();
+
+    // Actualizar panel de información
+    actualizarPanelInfoConciliacion();
 }
 
 // ========== INTEGRACIÓN CON AUDITORÍA ==========
@@ -1151,6 +1178,9 @@ async function actualizarExtractosSeleccionados() {
     mostrarPreviewExtractoAuditoria(extractosEnRango, state.datosExtracto.length);
 
     actualizarBotonConciliar();
+
+    // Actualizar panel de información
+    actualizarPanelInfoConciliacion();
 }
 
 /**
@@ -1704,6 +1734,9 @@ async function procesarArchivo(file, tipo) {
         }
 
         actualizarBotonConciliar();
+
+        // Actualizar panel de información
+        actualizarPanelInfoConciliacion();
 
     } catch (error) {
         mostrarMensaje(`Error al procesar archivo: ${error.message}`, 'error');
@@ -2959,6 +2992,9 @@ function mostrarResultados() {
 
     // Mostrar sección de resultados
     elements.resultados.classList.remove('hidden');
+
+    // Actualizar panel de información
+    actualizarPanelInfoConciliacion();
 
     // Scroll a resultados
     elements.resultados.scrollIntoView({ behavior: 'smooth' });
@@ -6896,6 +6932,9 @@ async function guardarConciliacion() {
                 second: '2-digit'
             });
             mostrarMensaje(`Conciliación guardada correctamente (${fechaHoraGuardado})`, 'success');
+
+            // Actualizar panel de información
+            actualizarPanelInfoConciliacion();
         }
 
         // Actualizar lista de conciliaciones guardadas
@@ -7415,6 +7454,9 @@ async function cargarConciliacionGuardada(conciliacionId) {
 
             mostrarMensaje('Conciliación cargada correctamente', 'success');
 
+            // Actualizar panel de información
+            actualizarPanelInfoConciliacion();
+
             // Verificar integridad de la conciliación (comparar con extracto original)
             // Esto se ejecuta de forma asíncrona para no bloquear la UI
             setTimeout(() => {
@@ -7901,6 +7943,9 @@ async function ejecutarEliminarConciliacionCargada() {
         // Ocultar botón de eliminar
         actualizarBotonEliminarConciliacionCargada();
 
+        // Actualizar panel de información
+        actualizarPanelInfoConciliacion();
+
         // Actualizar botón de gestión
         actualizarBotonGestionConciliaciones();
 
@@ -8379,6 +8424,121 @@ function cerrarToast(toast) {
     }, 300);
 }
 
+// ========== PANEL DE INFORMACIÓN DE CONCILIACIÓN (STICKY) ==========
+
+/**
+ * Actualiza el panel de información de conciliación con el estado actual
+ * Este panel muestra información relevante cuando se trabaja con múltiples pestañas
+ */
+function actualizarPanelInfoConciliacion() {
+    const panel = elements.panelInfoConciliacion;
+    if (!panel) return;
+
+    // Determinar si el panel debe mostrarse
+    // Se muestra cuando hay al menos un cliente seleccionado
+    const mostrarPanel = state.clienteSeleccionado !== null;
+
+    if (!mostrarPanel) {
+        panel.classList.add('hidden');
+        return;
+    }
+
+    panel.classList.remove('hidden');
+
+    // Actualizar cliente
+    if (state.clienteSeleccionado) {
+        elements.panelClienteNombre.textContent = state.clienteSeleccionado.nombre || '-';
+        elements.panelClienteNombre.title = state.clienteSeleccionado.cuit
+            ? `CUIT: ${state.clienteSeleccionado.cuit}`
+            : '';
+    } else {
+        elements.panelClienteNombre.textContent = '-';
+        elements.panelClienteNombre.title = '';
+    }
+
+    // Actualizar cuenta
+    if (state.cuentaSeleccionada) {
+        const nombreCuenta = state.cuentaSeleccionada.banco
+            ? `${state.cuentaSeleccionada.banco} - ${state.cuentaSeleccionada.numero_cuenta || ''}`
+            : state.cuentaSeleccionada.nombre || '-';
+        elements.panelCuentaNombre.textContent = nombreCuenta;
+        elements.panelCuentaNombre.title = state.cuentaSeleccionada.tipo_cuenta || '';
+    } else {
+        elements.panelCuentaNombre.textContent = '-';
+        elements.panelCuentaNombre.title = '';
+    }
+
+    // Actualizar tipo de conciliación
+    if (state.tipoConciliacion) {
+        const esCred = state.tipoConciliacion === 'creditos';
+        elements.panelTipoIcon.textContent = esCred ? '💰' : '💳';
+        elements.panelTipoNombre.textContent = esCred ? 'Créditos' : 'Débitos';
+        elements.panelTipoNombre.className = 'panel-info-value ' + (esCred ? 'tipo-creditos' : 'tipo-debitos');
+    } else {
+        elements.panelTipoIcon.textContent = '📊';
+        elements.panelTipoNombre.textContent = '-';
+        elements.panelTipoNombre.className = 'panel-info-value';
+    }
+
+    // Actualizar período
+    if (state.rangoExtractos && state.rangoExtractos.desde && state.rangoExtractos.hasta) {
+        const formatearMes = (mesAnio) => {
+            if (!mesAnio) return '';
+            const [anio, mes] = mesAnio.split('-');
+            const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+            const mesNum = parseInt(mes) - 1;
+            return `${meses[mesNum] || mes}/${anio ? anio.slice(-2) : ''}`;
+        };
+        const desde = formatearMes(state.rangoExtractos.desde);
+        const hasta = formatearMes(state.rangoExtractos.hasta);
+        elements.panelPeriodo.textContent = desde === hasta ? desde : `${desde} - ${hasta}`;
+    } else {
+        elements.panelPeriodo.textContent = '-';
+    }
+
+    // Actualizar estado
+    let estadoTexto = 'Configurando';
+    let estadoIcon = '⏳';
+    let estadoClase = 'estado-configurando';
+
+    if (state.resultados && state.resultados.conciliados && state.resultados.conciliados.length > 0) {
+        const total = state.resultados.conciliados.length;
+        const pendMayor = state.resultados.mayorNoConciliado ? state.resultados.mayorNoConciliado.length : 0;
+        const pendExtracto = state.resultados.extractoNoConciliado ? state.resultados.extractoNoConciliado.length : 0;
+
+        if (pendMayor === 0 && pendExtracto === 0) {
+            estadoTexto = `Completo (${total})`;
+            estadoIcon = '✅';
+            estadoClase = 'estado-conciliado';
+        } else {
+            estadoTexto = `${total} conc. | ${pendMayor + pendExtracto} pend.`;
+            estadoIcon = '📋';
+            estadoClase = 'estado-conciliado';
+        }
+    } else if (state.datosMayor.length > 0 && state.datosExtracto.length > 0 && state.tipoConciliacion) {
+        estadoTexto = 'Listo para conciliar';
+        estadoIcon = '🚀';
+        estadoClase = 'estado-listo';
+    } else if (state.datosMayor.length > 0 || state.datosExtracto.length > 0) {
+        estadoTexto = 'Cargando datos';
+        estadoIcon = '📥';
+        estadoClase = 'estado-configurando';
+    }
+
+    elements.panelEstadoIcon.textContent = estadoIcon;
+    elements.panelEstado.textContent = estadoTexto;
+    elements.panelEstado.className = 'panel-info-value ' + estadoClase;
+
+    // Actualizar sección de conciliación guardada
+    if (conciliacionCargadaId && nombreConciliacionCargada) {
+        elements.panelInfoGuardada.classList.remove('hidden');
+        elements.panelNombreConciliacion.textContent = nombreConciliacionCargada;
+    } else {
+        elements.panelInfoGuardada.classList.add('hidden');
+        elements.panelNombreConciliacion.textContent = '-';
+    }
+}
+
 function reiniciar() {
     // Resetear estado
     state = {
@@ -8494,6 +8654,9 @@ function reiniciar() {
 
     // Resetear integración con auditoría
     resetearAuditoria();
+
+    // Actualizar panel de información (ocultarlo ya que no hay cliente seleccionado)
+    actualizarPanelInfoConciliacion();
 }
 
 /**
