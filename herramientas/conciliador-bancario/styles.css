@@ -4779,121 +4779,103 @@ body {
    PANEL DE INFORMACIÓN DE CONCILIACIÓN (FIXED)
    ======================================== */
 .panel-info-conciliacion {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1001;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 9999 !important;
     background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
     color: white;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-    transition: transform 0.3s ease;
 }
 
 .panel-info-conciliacion.hidden {
-    display: none;
+    display: none !important;
 }
 
 /* Spacer para compensar el panel fixed */
 .panel-info-spacer {
     height: 0;
-    transition: height 0.3s ease;
+    transition: height 0.2s ease;
 }
 
 .panel-info-spacer.active {
-    height: 52px;
+    height: 44px;
 }
 
 .panel-info-content {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 8px 16px;
-    gap: 6px;
-    flex-wrap: nowrap;
-    max-width: 100%;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 10px 20px;
+    gap: 8px;
+    flex-wrap: nowrap !important;
     overflow-x: auto;
 }
 
 .panel-info-section {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
+    display: inline-flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 5px;
+    padding: 4px 8px;
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    flex-shrink: 0;
-    white-space: nowrap;
+    border-radius: 4px;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
 }
 
 .panel-info-icon {
     font-size: 14px;
     flex-shrink: 0;
-}
-
-.panel-info-data {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    min-width: 0;
-}
-
-.panel-info-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    opacity: 0.7;
-    font-weight: 500;
+    line-height: 1;
 }
 
 .panel-info-value {
     font-size: 12px;
     font-weight: 600;
-    white-space: nowrap;
+    white-space: nowrap !important;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 160px;
+    max-width: 200px;
+    display: inline !important;
 }
 
 .panel-info-divider {
     width: 1px;
-    height: 20px;
-    background: rgba(255, 255, 255, 0.25);
-    margin: 0 2px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.3);
     flex-shrink: 0;
 }
 
 /* Sección de conciliación guardada - inline */
 .panel-info-guardada {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    background: rgba(251, 191, 36, 0.2);
-    border-radius: 6px;
+    display: inline-flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 5px;
+    padding: 4px 8px;
+    background: rgba(251, 191, 36, 0.25);
+    border-radius: 4px;
     font-size: 12px;
-    flex-shrink: 0;
-    margin-left: 4px;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
 }
 
 .panel-info-guardada.hidden {
-    display: none;
+    display: none !important;
 }
 
 .panel-guardada-icon {
     font-size: 14px;
-}
-
-.panel-guardada-label {
-    opacity: 0.9;
-    font-weight: 500;
-    font-size: 11px;
+    line-height: 1;
 }
 
 .panel-guardada-nombre {
     font-weight: 600;
     color: #fbbf24;
-    max-width: 150px;
+    max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -4921,22 +4903,18 @@ body {
     color: #fca5a5;
 }
 
-/* Responsive para el panel */
+/* Responsive para el panel - solo ajustar tamaños, nunca cambiar a vertical */
 @media (max-width: 1024px) {
-    .panel-info-section {
-        padding: 4px 8px;
-    }
-
     .panel-info-value {
-        max-width: 130px;
+        max-width: 150px;
     }
 }
 
 @media (max-width: 768px) {
     .panel-info-content {
-        padding: 6px 12px;
-        gap: 4px;
-        justify-content: flex-start;
+        padding: 8px 12px;
+        gap: 6px;
+        justify-content: flex-start !important;
     }
 
     .panel-info-section {
@@ -4945,10 +4923,6 @@ body {
 
     .panel-info-icon {
         font-size: 12px;
-    }
-
-    .panel-info-label {
-        display: none;
     }
 
     .panel-info-value {
@@ -4964,28 +4938,19 @@ body {
         display: none !important;
     }
 
-    .panel-info-guardada {
-        padding: 3px 6px;
-        font-size: 11px;
-    }
-
-    .panel-guardada-label {
-        display: none;
-    }
-
     .panel-info-spacer.active {
-        height: 44px;
+        height: 40px;
     }
 }
 
 @media (max-width: 480px) {
     .panel-info-content {
-        padding: 5px 8px;
-        gap: 3px;
+        padding: 6px 8px;
+        gap: 4px;
     }
 
     .panel-info-section {
-        padding: 2px 5px;
+        padding: 2px 4px;
     }
 
     .panel-info-value {
@@ -4994,11 +4959,11 @@ body {
     }
 
     .panel-guardada-nombre {
-        max-width: 80px;
+        max-width: 60px;
     }
 
     .panel-info-spacer.active {
-        height: 40px;
+        height: 36px;
     }
 }
 
