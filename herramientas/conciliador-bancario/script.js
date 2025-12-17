@@ -206,6 +206,23 @@ let toleranciasIniciales = {
     importe: null
 };
 
+/**
+ * Obtener cliente de Supabase de forma consistente
+ * Usa waitForSupabase si está disponible, sino window.supabaseDB
+ */
+async function getSupabaseClient() {
+    // Intentar usar waitForSupabase si está disponible
+    if (typeof waitForSupabase === 'function') {
+        return await waitForSupabase();
+    }
+    // Fallback: usar window.supabaseDB
+    if (window.supabaseDB) {
+        return window.supabaseDB;
+    }
+    console.warn('Supabase no disponible');
+    return null;
+}
+
 // Elementos del DOM
 const elements = {
     // Pasos
@@ -486,8 +503,12 @@ async function cargarCuentasClientePrincipal(clienteId) {
     select.innerHTML = '<option value="">Cargando cuentas...</option>';
 
     try {
-        // Usar la misma lógica que cargarCuentasCliente pero para el selector principal
-        const { data: cuentas, error } = await supabase
+        const supabaseClient = await getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase no disponible');
+        }
+
+        const { data: cuentas, error } = await supabaseClient
             .from('cuentas_bancarias')
             .select('*')
             .eq('cliente_id', clienteId)
@@ -563,7 +584,12 @@ async function cargarExtractosDisponiblesPrincipal() {
     if (!state.clienteSeleccionado || !state.cuentaSeleccionada) return;
 
     try {
-        const { data: extractos, error } = await supabase
+        const supabaseClient = await getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase no disponible');
+        }
+
+        const { data: extractos, error } = await supabaseClient
             .from('extractos_mensuales')
             .select('id, mes, anio, data')
             .eq('cuenta_id', state.cuentaSeleccionada.id)
@@ -6738,6 +6764,11 @@ async function guardarConciliacion() {
     }
 
     try {
+        const supabaseClient = await getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase no disponible');
+        }
+
         // Convertir rangos de extractos a formato de fecha completa
         const rangoDesde = convertirAFechaCompleta(state.rangoExtractos?.desde, false);
         const rangoHasta = convertirAFechaCompleta(state.rangoExtractos?.hasta, true);
@@ -6825,7 +6856,7 @@ async function guardarConciliacion() {
         // Si hay una conciliación cargada, actualizar; si no, crear nueva
         if (conciliacionCargadaId) {
             // UPDATE: sobrescribir la conciliación existente
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('conciliaciones_guardadas')
                 .update(datosAGuardar)
                 .eq('id', conciliacionCargadaId);
@@ -6843,7 +6874,7 @@ async function guardarConciliacion() {
             mostrarMensaje(`Conciliación actualizada correctamente (${fechaHoraGuardado})`, 'success');
         } else {
             // INSERT: crear nueva conciliación y guardar el ID
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('conciliaciones_guardadas')
                 .insert([datosAGuardar])
                 .select('id');
@@ -6900,11 +6931,16 @@ async function sincronizarConExtracto() {
     try {
         mostrarMensaje('Buscando movimientos faltantes...', 'info');
 
+        const supabaseClient = await getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase no disponible');
+        }
+
         // Obtener extractos del rango actual
         const [anioDesde, mesDesde] = state.rangoExtractos.desde.split('-').map(Number);
         const [anioHasta, mesHasta] = state.rangoExtractos.hasta.split('-').map(Number);
 
-        const { data: extractos, error } = await supabase
+        const { data: extractos, error } = await supabaseClient
             .from('extractos_mensuales')
             .select('id, mes, anio, data')
             .eq('cuenta_id', state.cuentaSeleccionada.id);
@@ -7047,11 +7083,17 @@ async function verificarIntegridadConciliacion() {
     try {
         console.log('🔍 Verificando integridad de la conciliación...');
 
+        const supabaseClient = await getSupabaseClient();
+        if (!supabaseClient) {
+            console.error('Error verificando integridad: Supabase no disponible');
+            return;
+        }
+
         // Obtener extractos del rango actual
         const [anioDesde, mesDesde] = state.rangoExtractos.desde.split('-').map(Number);
         const [anioHasta, mesHasta] = state.rangoExtractos.hasta.split('-').map(Number);
 
-        const { data: extractos, error } = await supabase
+        const { data: extractos, error } = await supabaseClient
             .from('extractos_mensuales')
             .select('id, mes, anio, data')
             .eq('cuenta_id', state.cuentaSeleccionada.id);
@@ -7226,7 +7268,13 @@ async function cargarConciliacionesGuardadas() {
         console.log('   Filtro cliente_id:', state.clienteSeleccionado.id);
         console.log('   Filtro cuenta_bancaria_id:', state.cuentaSeleccionada.id);
 
-        const { data, error } = await supabase
+        const supabaseClient = await getSupabaseClient();
+        if (!supabaseClient) {
+            console.error('❌ Supabase no disponible');
+            return [];
+        }
+
+        const { data, error } = await supabaseClient
             .from('conciliaciones_guardadas')
             .select('*')
             .eq('cliente_id', state.clienteSeleccionado.id)
@@ -7259,7 +7307,12 @@ async function cargarConciliacionGuardada(conciliacionId) {
     }
 
     try {
-        const { data, error } = await supabase
+        const supabaseClient = await getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase no disponible');
+        }
+
+        const { data, error } = await supabaseClient
             .from('conciliaciones_guardadas')
             .select('*')
             .eq('id', conciliacionId)
@@ -7704,7 +7757,12 @@ async function ejecutarEliminarConciliacion() {
     if (!conciliacionAEliminar) return;
 
     try {
-        const { error } = await supabase
+        const supabaseClient = await getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase no disponible');
+        }
+
+        const { error } = await supabaseClient
             .from('conciliaciones_guardadas')
             .delete()
             .eq('id', conciliacionAEliminar.id);
@@ -7813,7 +7871,12 @@ async function ejecutarEliminarConciliacionCargada() {
     if (!conciliacionCargadaId) return;
 
     try {
-        const { error } = await supabase
+        const supabaseClient = await getSupabaseClient();
+        if (!supabaseClient) {
+            throw new Error('Supabase no disponible');
+        }
+
+        const { error } = await supabaseClient
             .from('conciliaciones_guardadas')
             .delete()
             .eq('id', conciliacionCargadaId);
