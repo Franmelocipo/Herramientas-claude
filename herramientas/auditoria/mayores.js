@@ -317,6 +317,16 @@ async function cargarTiposMayor() {
         const tiposGuardados = localStorage.getItem('auditoria_tipos_mayor');
         if (tiposGuardados) {
             TIPOS_MAYOR = JSON.parse(tiposGuardados);
+
+            // Sincronizar: agregar nuevos tipos por defecto que no existan en localStorage
+            const idsExistentes = new Set(TIPOS_MAYOR.map(t => t.id));
+            const tiposNuevos = TIPOS_MAYOR_DEFAULT.filter(t => !idsExistentes.has(t.id));
+
+            if (tiposNuevos.length > 0) {
+                TIPOS_MAYOR = [...TIPOS_MAYOR, ...tiposNuevos];
+                localStorage.setItem('auditoria_tipos_mayor', JSON.stringify(TIPOS_MAYOR));
+                console.log(`✅ Sincronizados ${tiposNuevos.length} nuevos tipos de mayor:`, tiposNuevos.map(t => t.nombre));
+            }
         } else {
             TIPOS_MAYOR = [...TIPOS_MAYOR_DEFAULT];
             localStorage.setItem('auditoria_tipos_mayor', JSON.stringify(TIPOS_MAYOR));
