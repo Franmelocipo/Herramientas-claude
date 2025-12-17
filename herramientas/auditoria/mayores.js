@@ -819,10 +819,25 @@ function actualizarEstadisticasMayor() {
         periodo = `${formatearFecha(minFecha)} - ${formatearFecha(maxFecha)}`;
     }
 
+    // Calcular saldo (Debe - Haber)
+    const saldo = totalDebe - totalHaber;
+
     document.getElementById('mayorPeriodo').textContent = periodo;
     document.getElementById('mayorTotalRegistros').textContent = registros.length;
     document.getElementById('mayorTotalDebe').textContent = formatearMoneda(totalDebe);
     document.getElementById('mayorTotalHaber').textContent = formatearMoneda(totalHaber);
+
+    // Mostrar saldo con estilo según signo
+    const saldoElement = document.getElementById('mayorSaldo');
+    saldoElement.textContent = formatearMoneda(Math.abs(saldo));
+    saldoElement.classList.remove('debe', 'haber');
+    if (saldo > 0) {
+        saldoElement.textContent = formatearMoneda(saldo) + ' (D)';
+        saldoElement.classList.add('debe');
+    } else if (saldo < 0) {
+        saldoElement.textContent = formatearMoneda(Math.abs(saldo)) + ' (H)';
+        saldoElement.classList.add('haber');
+    }
 }
 
 /**
