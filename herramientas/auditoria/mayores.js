@@ -88,6 +88,8 @@ function obtenerConfigVinculacion() {
         tipoDestino: config.tipoDestino || 'haber',
         etiquetaOrigen: config.etiquetaOrigen || 'Cupones',
         etiquetaDestino: config.etiquetaDestino || 'Liquidaciones',
+        etiquetaSingularOrigen: config.etiquetaSingularOrigen || 'cupón',
+        etiquetaSingularDestino: config.etiquetaSingularDestino || 'liquidación',
         iconoOrigen: config.iconoOrigen || '📋',
         iconoDestino: config.iconoDestino || '💰',
         descripcionVinculacion: config.descripcionVinculacion || 'Vincule los registros de origen con los de destino.'
@@ -489,21 +491,17 @@ function actualizarEtiquetasVinculacion() {
     const modoConciliacion = document.getElementById('modoConciliacion');
     if (modoConciliacion) {
         const opciones = modoConciliacion.options;
-        const singularOrigen = config.etiquetaSingularOrigen || config.etiquetaOrigen.toLowerCase().slice(0, -1);
-        const singularDestino = config.etiquetaSingularDestino || config.etiquetaDestino.toLowerCase().slice(0, -1);
-        opciones[0].textContent = `1:1 - Una ${singularOrigen} con un ${singularDestino}`;
-        opciones[1].textContent = `N:1 - Varias ${config.etiquetaOrigen.toLowerCase()} con un ${singularDestino}`;
-        opciones[2].textContent = `1:N - Una ${singularOrigen} con varios ${config.etiquetaDestino.toLowerCase()}`;
+        opciones[0].textContent = `1:1 - Una ${config.etiquetaSingularOrigen} con un ${config.etiquetaSingularDestino}`;
+        opciones[1].textContent = `N:1 - Varias ${config.etiquetaOrigen.toLowerCase()} con un ${config.etiquetaSingularDestino}`;
+        opciones[2].textContent = `1:N - Una ${config.etiquetaSingularOrigen} con varios ${config.etiquetaDestino.toLowerCase()}`;
     }
 
     // Actualizar etiquetas en panel de configuración
     const labelDias = document.querySelector('.config-item label[for="diasMaximos"], .config-item label');
     if (labelDias && labelDias.textContent.includes('Días máximos')) {
-        const singularOrigen = config.etiquetaSingularOrigen || config.etiquetaOrigen.toLowerCase().slice(0, -1);
-        const singularDestino = config.etiquetaSingularDestino || config.etiquetaDestino.toLowerCase().slice(0, -1);
         const tipoMayor = stateMayores.tipoMayorActual;
         const sufijo = tipoMayor === 'cheques_diferidos' ? ' de cheques' : '';
-        labelDias.textContent = `Días máximos entre ${singularOrigen} y ${singularDestino}${sufijo}:`;
+        labelDias.textContent = `Días máximos entre ${config.etiquetaSingularOrigen} y ${config.etiquetaSingularDestino}${sufijo}:`;
     }
 }
 
@@ -1456,6 +1454,11 @@ function ejecutarConciliacion() {
     document.getElementById('conciliacionExitosas').textContent = vinculacionesExitosas;
     document.getElementById('conciliacionPendientes').textContent = origenSinMatch;
     document.getElementById('conciliacionLiquidaciones').textContent = destinoSinMatch;
+
+    // Actualizar etiquetas según el tipo de mayor
+    const configResultados = obtenerConfigVinculacion();
+    document.getElementById('labelOrigenSinMatch').textContent = `${configResultados.etiquetaOrigen} sin match`;
+    document.getElementById('labelDestinoSinMatch').textContent = `${configResultados.etiquetaDestino} sin match`;
 
     // Analizar vencimientos de los que quedaron
     analizarVencimientos();
