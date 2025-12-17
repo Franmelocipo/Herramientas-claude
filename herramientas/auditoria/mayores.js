@@ -38,6 +38,8 @@ const TIPOS_MAYOR_DEFAULT = [
             tipoDestino: 'haber',    // El destino de la vinculación (liquidaciones)
             etiquetaOrigen: 'Cupones',
             etiquetaDestino: 'Liquidaciones',
+            etiquetaSingularOrigen: 'cupón',
+            etiquetaSingularDestino: 'liquidación',
             iconoOrigen: '📋',
             iconoDestino: '💰',
             descripcionVinculacion: 'Los cupones (débitos) deben vincularse con liquidaciones (créditos) dentro de 40 días.'
@@ -58,6 +60,8 @@ const TIPOS_MAYOR_DEFAULT = [
             tipoDestino: 'debe',     // Los cobros van al debe
             etiquetaOrigen: 'Emisiones',
             etiquetaDestino: 'Cobros',
+            etiquetaSingularOrigen: 'emisión',
+            etiquetaSingularDestino: 'cobro',
             iconoOrigen: '📤',
             iconoDestino: '📥',
             descripcionVinculacion: 'Las emisiones de cheques (haber) deben vincularse con los cobros por terceros (debe).'
@@ -470,15 +474,21 @@ function actualizarEtiquetasVinculacion() {
     const modoConciliacion = document.getElementById('modoConciliacion');
     if (modoConciliacion) {
         const opciones = modoConciliacion.options;
-        opciones[0].textContent = `1:1 - Un ${config.etiquetaOrigen.toLowerCase().slice(0, -1)} con un ${config.etiquetaDestino.toLowerCase().slice(0, -1)}`;
-        opciones[1].textContent = `N:1 - Varios ${config.etiquetaOrigen.toLowerCase()} con un ${config.etiquetaDestino.toLowerCase().slice(0, -1)}`;
-        opciones[2].textContent = `1:N - Un ${config.etiquetaOrigen.toLowerCase().slice(0, -1)} con varios ${config.etiquetaDestino.toLowerCase()}`;
+        const singularOrigen = config.etiquetaSingularOrigen || config.etiquetaOrigen.toLowerCase().slice(0, -1);
+        const singularDestino = config.etiquetaSingularDestino || config.etiquetaDestino.toLowerCase().slice(0, -1);
+        opciones[0].textContent = `1:1 - Una ${singularOrigen} con un ${singularDestino}`;
+        opciones[1].textContent = `N:1 - Varias ${config.etiquetaOrigen.toLowerCase()} con un ${singularDestino}`;
+        opciones[2].textContent = `1:N - Una ${singularOrigen} con varios ${config.etiquetaDestino.toLowerCase()}`;
     }
 
     // Actualizar etiquetas en panel de configuración
     const labelDias = document.querySelector('.config-item label[for="diasMaximos"], .config-item label');
     if (labelDias && labelDias.textContent.includes('Días máximos')) {
-        labelDias.textContent = `Días máximos entre ${config.etiquetaOrigen.toLowerCase().slice(0, -1)} y ${config.etiquetaDestino.toLowerCase().slice(0, -1)}:`;
+        const singularOrigen = config.etiquetaSingularOrigen || config.etiquetaOrigen.toLowerCase().slice(0, -1);
+        const singularDestino = config.etiquetaSingularDestino || config.etiquetaDestino.toLowerCase().slice(0, -1);
+        const tipoMayor = stateMayores.tipoMayorActual;
+        const sufijo = tipoMayor === 'cheques_diferidos' ? ' de cheques' : '';
+        labelDias.textContent = `Días máximos entre ${singularOrigen} y ${singularDestino}${sufijo}:`;
     }
 }
 
