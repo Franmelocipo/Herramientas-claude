@@ -1397,8 +1397,25 @@ function ejecutarConciliacion() {
     const config = obtenerConfigVinculacion();
 
     console.log(`🤖 Iniciando conciliación automática - Modo: ${modo}, Tolerancia: ${tolerancia}, Días máx: ${diasMaximos}`);
+    console.log(`📋 Configuración: tipoOrigen=${config.tipoOrigen}, tipoDestino=${config.tipoDestino}`);
+
+    // Reset del contador de debug para buscarCombinacionSumaGenerica
+    buscarCombinacionSumaGenerica._contador = 0;
 
     const registros = stateMayores.registrosMayor;
+    console.log(`📊 Total registros cargados: ${registros.length}`);
+
+    // Debug: Verificar estado de las fechas
+    const conFechaValida = registros.filter(r => r.fecha instanceof Date && !isNaN(r.fecha.getTime())).length;
+    const conFechaInvalida = registros.filter(r => r.fecha && (!(r.fecha instanceof Date) || isNaN(r.fecha.getTime()))).length;
+    const sinFecha = registros.filter(r => !r.fecha).length;
+    console.log(`📅 Fechas: válidas=${conFechaValida}, inválidas=${conFechaInvalida}, sin fecha=${sinFecha}`);
+    if (conFechaInvalida > 0 || sinFecha > 0) {
+        const ejemploInvalida = registros.find(r => r.fecha && (!(r.fecha instanceof Date) || isNaN(r.fecha.getTime())));
+        if (ejemploInvalida) {
+            console.log(`   ⚠️ Ejemplo fecha inválida: tipo=${typeof ejemploInvalida.fecha}, valor=${ejemploInvalida.fecha}`);
+        }
+    }
 
     // Obtener registros de origen y destino pendientes según configuración
     let origenPendientes = obtenerRegistrosOrigen(registros, false)
@@ -1407,6 +1424,20 @@ function ejecutarConciliacion() {
     let destinoPendientes = obtenerRegistrosDestino(registros, false)
         .filter(r => !r.esDevolucion)
         .sort((a, b) => (a.fecha || 0) - (b.fecha || 0));
+
+    // Debug: mostrar estadísticas de registros
+    console.log(`📤 Registros origen (${config.etiquetaOrigen}) pendientes: ${origenPendientes.length}`);
+    console.log(`📥 Registros destino (${config.etiquetaDestino}) pendientes: ${destinoPendientes.length}`);
+
+    // Debug: mostrar muestra de registros
+    if (origenPendientes.length > 0) {
+        const muestra = origenPendientes[0];
+        console.log(`   Ejemplo origen: fecha=${muestra.fecha}, monto=${obtenerMontoOrigen(muestra)}, leyenda=${muestra.leyenda?.substring(0, 50)}`);
+    }
+    if (destinoPendientes.length > 0) {
+        const muestra = destinoPendientes[0];
+        console.log(`   Ejemplo destino: fecha=${muestra.fecha}, monto=${obtenerMontoDestino(muestra)}, leyenda=${muestra.leyenda?.substring(0, 50)}`);
+    }
 
     let vinculacionesExitosas = 0;
     let origenVinculados = new Set();
@@ -1594,10 +1625,19 @@ function conciliar11(origenes, destinos, tolerancia, diasMaximos, origenesVincul
  */
 function conciliar1N(origenes, destinos, tolerancia, diasMaximos, origenesVinculados, destinosVinculados) {
     let vinculaciones = 0;
+    let origenesEvaluados = 0;
+    let origenesSinFecha = 0;
+    let origenesSinCandidatos = 0;
+
+    console.log(`🔍 conciliar1N: Evaluando ${origenes.length} orígenes contra ${destinos.length} destinos`);
 
     for (const origen of origenes) {
         if (origenesVinculados.has(origen.id)) continue;
-        if (!origen.fecha) continue;
+        if (!origen.fecha) {
+            origenesSinFecha++;
+            continue;
+        }
+        origenesEvaluados++;
 
         const montoOrigen = obtenerMontoOrigen(origen);
 
@@ -1610,7 +1650,30 @@ function conciliar1N(origenes, destinos, tolerancia, diasMaximos, origenesVincul
             return diasDiferencia >= 0 && diasDiferencia <= diasMaximos;
         });
 
-        if (destinosCandidatos.length === 0) continue;
+        if (destinosCandidatos.length === 0) {
+            origenesSinCandidatos++;
+            // Debug: mostrar por qué no hay candidatos para el primer origen sin candidatos
+            if (origenesSinCandidatos <= 3) {
+                const fechaOrigen = origen.fecha instanceof Date ? origen.fecha.toISOString().split('T')[0] : origen.fecha;
+                console.log(`   ⚠️ Origen sin candidatos: monto=${montoOrigen.toFixed(2)}, fecha=${fechaOrigen}`);
+                // Ver cuántos destinos tienen fecha válida
+                const destinosConFecha = destinos.filter(d => d.fecha && !destinosVinculados.has(d.id));
+                console.log(`      Destinos con fecha válida: ${destinosConFecha.length}`);
+                if (destinosConFecha.length > 0) {
+                    const ejemploDestino = destinosConFecha[0];
+                    const fechaDestino = ejemploDestino.fecha instanceof Date ? ejemploDestino.fecha.toISOString().split('T')[0] : ejemploDestino.fecha;
+                    const diasDif = Math.floor((ejemploDestino.fecha - origen.fecha) / (1000 * 60 * 60 * 24));
+                    console.log(`      Ejemplo destino: fecha=${fechaDestino}, diasDif=${diasDif}, dentroRango=${diasDif >= 0 && diasDif <= diasMaximos}`);
+                }
+            }
+            continue;
+        }
+
+        // Debug: mostrar candidatos encontrados para los primeros orígenes
+        if (origenesEvaluados <= 3) {
+            const sumaDestinos = destinosCandidatos.reduce((sum, d) => sum + obtenerMontoDestino(d), 0);
+            console.log(`   🎯 Origen #${origenesEvaluados}: monto=${montoOrigen.toFixed(2)}, candidatos=${destinosCandidatos.length}, sumaCandidatos=${sumaDestinos.toFixed(2)}`);
+        }
 
         // Buscar combinación de destinos que sumen el monto del origen
         const combinacion = buscarCombinacionSumaGenerica(destinosCandidatos, montoOrigen, tolerancia, obtenerMontoDestino);
@@ -1642,6 +1705,13 @@ function conciliar1N(origenes, destinos, tolerancia, diasMaximos, origenesVincul
         }
     }
 
+    // Resumen de debug
+    console.log(`📈 Resumen conciliar1N:`);
+    console.log(`   - Orígenes evaluados: ${origenesEvaluados}`);
+    console.log(`   - Orígenes sin fecha: ${origenesSinFecha}`);
+    console.log(`   - Orígenes sin candidatos (por rango de fechas): ${origenesSinCandidatos}`);
+    console.log(`   - Vinculaciones exitosas: ${vinculaciones}`);
+
     return vinculaciones;
 }
 
@@ -1654,9 +1724,22 @@ function conciliar1N(origenes, destinos, tolerancia, diasMaximos, origenesVincul
  * @returns {Array|null} Combinación encontrada o null
  */
 function buscarCombinacionSumaGenerica(elementos, montoObjetivo, tolerancia, obtenerMonto) {
+    // Debug: log de entrada (solo para las primeras 3 búsquedas)
+    if (!buscarCombinacionSumaGenerica._contador) {
+        buscarCombinacionSumaGenerica._contador = 0;
+    }
+    buscarCombinacionSumaGenerica._contador++;
+    const logThis = buscarCombinacionSumaGenerica._contador <= 3;
+
+    if (logThis) {
+        console.log(`🔎 buscarCombinacionSumaGenerica #${buscarCombinacionSumaGenerica._contador}:`);
+        console.log(`   Objetivo: ${montoObjetivo.toFixed(2)}, Elementos: ${elementos.length}, Tolerancia: ${tolerancia}`);
+    }
+
     // Primero intentar match exacto con un solo elemento
     for (const elem of elementos) {
         if (Math.abs(obtenerMonto(elem) - montoObjetivo) <= tolerancia) {
+            if (logThis) console.log(`   ✅ Match exacto encontrado con 1 elemento`);
             return [elem];
         }
     }
@@ -1664,6 +1747,10 @@ function buscarCombinacionSumaGenerica(elementos, montoObjetivo, tolerancia, obt
     // OPTIMIZACIÓN: Verificar si TODOS los elementos suman al objetivo
     // Esto es común en cheques diferidos donde una emisión se vincula con todos los cobros
     const sumaTotal = elementos.reduce((sum, elem) => sum + obtenerMonto(elem), 0);
+    if (logThis) {
+        console.log(`   Suma total de todos los elementos: ${sumaTotal.toFixed(2)}`);
+        console.log(`   Diferencia con objetivo: ${Math.abs(sumaTotal - montoObjetivo).toFixed(2)}`);
+    }
     if (Math.abs(sumaTotal - montoObjetivo) <= tolerancia) {
         console.log(`✅ Todos los ${elementos.length} elementos suman al objetivo: ${sumaTotal.toFixed(2)} ≈ ${montoObjetivo.toFixed(2)}`);
         return [...elementos];
