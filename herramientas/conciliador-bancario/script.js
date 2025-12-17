@@ -281,6 +281,7 @@ const elements = {
     // Mensajes
     errorBox: document.getElementById('errorBox'),
     successBox: document.getElementById('successBox'),
+    toastContainer: document.getElementById('toastContainer'),
 
     // Resultados
     resultados: document.getElementById('resultados'),
@@ -8301,13 +8302,15 @@ function matchTieneCoincidenciaDescripcion(match) {
     return false;
 }
 
-function mostrarMensaje(mensaje, tipo) {
+function mostrarMensaje(mensaje, tipo, duracion = 5000) {
+    // Limpiar mensajes antiguos (para compatibilidad con código existente)
     if (tipo === 'clear') {
         elements.errorBox.classList.add('hidden');
         elements.successBox.classList.add('hidden');
         return;
     }
 
+    // También actualizar los elementos estáticos para compatibilidad
     if (tipo === 'error') {
         elements.errorBox.textContent = mensaje;
         elements.errorBox.classList.remove('hidden');
@@ -8317,6 +8320,63 @@ function mostrarMensaje(mensaje, tipo) {
         elements.successBox.classList.remove('hidden');
         elements.errorBox.classList.add('hidden');
     }
+
+    // Mostrar notificación flotante (toast)
+    mostrarToast(mensaje, tipo, duracion);
+}
+
+// Sistema de notificaciones flotantes (toast)
+function mostrarToast(mensaje, tipo = 'success', duracion = 5000) {
+    const container = elements.toastContainer;
+    if (!container) return;
+
+    // Determinar el icono según el tipo
+    const iconos = {
+        success: '✓',
+        error: '⚠️',
+        info: 'ℹ️',
+        warning: '⚡'
+    };
+
+    // Crear el toast
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${tipo}`;
+    toast.innerHTML = `
+        <span class="toast-icon">${iconos[tipo] || iconos.success}</span>
+        <span class="toast-content">${mensaje}</span>
+        <button class="toast-close" onclick="cerrarToast(this.parentElement)">&times;</button>
+        <div class="toast-progress" style="animation-duration: ${duracion}ms;"></div>
+    `;
+
+    // Agregar al contenedor
+    container.appendChild(toast);
+
+    // Auto-cerrar después de la duración especificada
+    const timeoutId = setTimeout(() => {
+        cerrarToast(toast);
+    }, duracion);
+
+    // Guardar el timeout para cancelar si se cierra manualmente
+    toast.dataset.timeoutId = timeoutId;
+}
+
+function cerrarToast(toast) {
+    if (!toast || toast.classList.contains('hiding')) return;
+
+    // Cancelar el timeout si existe
+    if (toast.dataset.timeoutId) {
+        clearTimeout(parseInt(toast.dataset.timeoutId));
+    }
+
+    // Agregar clase de animación de salida
+    toast.classList.add('hiding');
+
+    // Remover del DOM después de la animación
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.parentElement.removeChild(toast);
+        }
+    }, 300);
 }
 
 function reiniciar() {
