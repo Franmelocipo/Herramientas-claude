@@ -4776,88 +4776,104 @@ body {
 }
 
 /* ========================================
-   PANEL DE INFORMACIÓN DE CONCILIACIÓN (STICKY)
+   PANEL DE INFORMACIÓN DE CONCILIACIÓN (FIXED)
    ======================================== */
 .panel-info-conciliacion {
-    position: sticky;
+    position: fixed;
     top: 0;
-    z-index: 1000;
+    left: 0;
+    right: 0;
+    z-index: 1001;
     background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
     color: white;
-    border-radius: 12px;
-    margin: 0 auto 20px;
-    max-width: 1200px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-    transition: all 0.3s ease;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s ease;
 }
 
 .panel-info-conciliacion.hidden {
     display: none;
 }
 
+/* Spacer para compensar el panel fixed */
+.panel-info-spacer {
+    height: 0;
+    transition: height 0.3s ease;
+}
+
+.panel-info-spacer.active {
+    height: 52px;
+}
+
 .panel-info-content {
     display: flex;
-    align-items: stretch;
-    padding: 12px 20px;
-    gap: 8px;
-    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    gap: 6px;
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
 }
 
 .panel-info-section {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
+    gap: 6px;
+    padding: 4px 10px;
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    flex: 1;
-    min-width: 140px;
+    border-radius: 6px;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .panel-info-icon {
-    font-size: 20px;
+    font-size: 14px;
     flex-shrink: 0;
 }
 
 .panel-info-data {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    gap: 4px;
     min-width: 0;
 }
 
 .panel-info-label {
     font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    opacity: 0.75;
+    letter-spacing: 0.3px;
+    opacity: 0.7;
     font-weight: 500;
 }
 
 .panel-info-value {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 180px;
+    max-width: 160px;
 }
 
 .panel-info-divider {
     width: 1px;
-    background: rgba(255, 255, 255, 0.2);
-    margin: 0 4px;
-    align-self: stretch;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.25);
+    margin: 0 2px;
+    flex-shrink: 0;
 }
 
-/* Sección de conciliación guardada */
+/* Sección de conciliación guardada - inline */
 .panel-info-guardada {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 20px 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.15);
-    font-size: 13px;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(251, 191, 36, 0.2);
+    border-radius: 6px;
+    font-size: 12px;
+    flex-shrink: 0;
+    margin-left: 4px;
 }
 
 .panel-info-guardada.hidden {
@@ -4865,17 +4881,22 @@ body {
 }
 
 .panel-guardada-icon {
-    font-size: 16px;
+    font-size: 14px;
 }
 
 .panel-guardada-label {
-    opacity: 0.8;
+    opacity: 0.9;
     font-weight: 500;
+    font-size: 11px;
 }
 
 .panel-guardada-nombre {
     font-weight: 600;
     color: #fbbf24;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Estado del panel - indicadores de color */
@@ -4902,41 +4923,36 @@ body {
 
 /* Responsive para el panel */
 @media (max-width: 1024px) {
-    .panel-info-conciliacion {
-        margin-left: 20px;
-        margin-right: 20px;
-    }
-
     .panel-info-section {
-        min-width: 120px;
+        padding: 4px 8px;
     }
 
     .panel-info-value {
-        max-width: 140px;
+        max-width: 130px;
     }
 }
 
 @media (max-width: 768px) {
     .panel-info-content {
-        padding: 10px 15px;
-        gap: 6px;
+        padding: 6px 12px;
+        gap: 4px;
+        justify-content: flex-start;
     }
 
     .panel-info-section {
-        min-width: 100px;
-        padding: 6px 10px;
+        padding: 3px 6px;
     }
 
     .panel-info-icon {
-        font-size: 16px;
+        font-size: 12px;
     }
 
     .panel-info-label {
-        font-size: 9px;
+        display: none;
     }
 
     .panel-info-value {
-        font-size: 12px;
+        font-size: 11px;
         max-width: 100px;
     }
 
@@ -4949,30 +4965,40 @@ body {
     }
 
     .panel-info-guardada {
-        padding: 6px 15px 10px;
-        font-size: 12px;
+        padding: 3px 6px;
+        font-size: 11px;
+    }
+
+    .panel-guardada-label {
+        display: none;
+    }
+
+    .panel-info-spacer.active {
+        height: 44px;
     }
 }
 
 @media (max-width: 480px) {
-    .panel-info-conciliacion {
-        margin-left: 10px;
-        margin-right: 10px;
-        border-radius: 10px;
-    }
-
     .panel-info-content {
-        padding: 8px 12px;
-        gap: 4px;
+        padding: 5px 8px;
+        gap: 3px;
     }
 
     .panel-info-section {
-        min-width: 45%;
-        flex: 0 0 45%;
+        padding: 2px 5px;
     }
 
     .panel-info-value {
+        max-width: 70px;
+        font-size: 10px;
+    }
+
+    .panel-guardada-nombre {
         max-width: 80px;
+    }
+
+    .panel-info-spacer.active {
+        height: 40px;
     }
 }
 

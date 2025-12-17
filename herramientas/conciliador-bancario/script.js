@@ -350,8 +350,9 @@ const elements = {
     historialTotalConciliados: document.getElementById('historialTotalConciliados'),
     btnToggleHistorial: document.getElementById('btnToggleHistorial'),
 
-    // Panel de información de conciliación (sticky)
+    // Panel de información de conciliación (fixed)
     panelInfoConciliacion: document.getElementById('panelInfoConciliacion'),
+    panelInfoSpacer: document.getElementById('panelInfoSpacer'),
     panelClienteNombre: document.getElementById('panelClienteNombre'),
     panelCuentaNombre: document.getElementById('panelCuentaNombre'),
     panelTipoIcon: document.getElementById('panelTipoIcon'),
@@ -8441,6 +8442,7 @@ function cerrarToast(toast) {
  */
 function actualizarPanelInfoConciliacion() {
     const panel = elements.panelInfoConciliacion;
+    const spacer = elements.panelInfoSpacer;
     if (!panel) return;
 
     // Determinar si el panel debe mostrarse
@@ -8449,10 +8451,12 @@ function actualizarPanelInfoConciliacion() {
 
     if (!mostrarPanel) {
         panel.classList.add('hidden');
+        if (spacer) spacer.classList.remove('active');
         return;
     }
 
     panel.classList.remove('hidden');
+    if (spacer) spacer.classList.add('active');
 
     // Actualizar cliente
     if (state.clienteSeleccionado) {
