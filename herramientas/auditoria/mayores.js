@@ -1658,6 +1658,14 @@ function buscarCombinacionSumaGenerica(elementos, montoObjetivo, tolerancia, obt
         }
     }
 
+    // OPTIMIZACIÓN: Verificar si TODOS los elementos suman al objetivo
+    // Esto es común en cheques diferidos donde una emisión se vincula con todos los cobros
+    const sumaTotal = elementos.reduce((sum, elem) => sum + obtenerMonto(elem), 0);
+    if (Math.abs(sumaTotal - montoObjetivo) <= tolerancia) {
+        console.log(`✅ Todos los ${elementos.length} elementos suman al objetivo: ${sumaTotal.toFixed(2)} ≈ ${montoObjetivo.toFixed(2)}`);
+        return [...elementos];
+    }
+
     // Ordenar por monto descendente para mejor eficiencia
     const ordenados = [...elementos].sort((a, b) => obtenerMonto(b) - obtenerMonto(a));
 
@@ -1678,8 +1686,9 @@ function buscarCombinacionSumaGenerica(elementos, montoObjetivo, tolerancia, obt
     }
 
     // Si el greedy no funcionó, intentar subset sum con límite
+    // CORREGIDO: Pasar elementos.length como maxElementos para considerar todos los elementos
     if (elementos.length <= 20) {
-        const combinacion = subsetSumGenerico(elementos, montoObjetivo, tolerancia, obtenerMonto);
+        const combinacion = subsetSumGenerico(elementos, montoObjetivo, tolerancia, obtenerMonto, elementos.length);
         if (combinacion) return combinacion;
     }
 
