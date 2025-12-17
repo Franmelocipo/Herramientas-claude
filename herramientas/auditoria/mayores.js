@@ -32,13 +32,122 @@ const TIPOS_MAYOR_DEFAULT = [
         configuracion: {
             diasVencimiento: 40,
             debeEsCupon: true,  // Los cupones van al debe
-            haberEsLiquidacion: true  // Las liquidaciones van al haber
+            haberEsLiquidacion: true,  // Las liquidaciones van al haber
+            // Configuración genérica de vinculación
+            tipoOrigen: 'debe',      // El origen de la vinculación (cupones)
+            tipoDestino: 'haber',    // El destino de la vinculación (liquidaciones)
+            etiquetaOrigen: 'Cupones',
+            etiquetaDestino: 'Liquidaciones',
+            iconoOrigen: '📋',
+            iconoDestino: '💰',
+            descripcionVinculacion: 'Los cupones (débitos) deben vincularse con liquidaciones (créditos) dentro de 40 días.'
+        }
+    },
+    {
+        id: 'cheques_diferidos',
+        nombre: 'Cheques Diferidos Emitidos',
+        descripcion: 'Análisis de cheques diferidos emitidos y sus cobros por terceros',
+        logica: 'vinculacion',
+        icono: '📝',
+        configuracion: {
+            diasVencimiento: 180,  // Los cheques diferidos pueden tardar más en cobrarse
+            debeEsCupon: false,    // La lógica está invertida
+            haberEsLiquidacion: false,
+            // Configuración genérica de vinculación
+            tipoOrigen: 'haber',     // Las emisiones van al haber
+            tipoDestino: 'debe',     // Los cobros van al debe
+            etiquetaOrigen: 'Emisiones',
+            etiquetaDestino: 'Cobros',
+            iconoOrigen: '📤',
+            iconoDestino: '📥',
+            descripcionVinculacion: 'Las emisiones de cheques (haber) deben vincularse con los cobros por terceros (debe).'
         }
     }
 ];
 
 // Tipos de mayor dinámicos
 let TIPOS_MAYOR = [...TIPOS_MAYOR_DEFAULT];
+
+// ============================================
+// FUNCIONES HELPER PARA CONFIGURACIÓN DINÁMICA
+// ============================================
+
+/**
+ * Obtener configuración de vinculación del tipo de mayor actual
+ * @returns {Object} Configuración de vinculación con valores por defecto
+ */
+function obtenerConfigVinculacion() {
+    const config = stateMayores.tipoMayorActual?.configuracion || {};
+    return {
+        diasVencimiento: config.diasVencimiento || 40,
+        tipoOrigen: config.tipoOrigen || 'debe',
+        tipoDestino: config.tipoDestino || 'haber',
+        etiquetaOrigen: config.etiquetaOrigen || 'Cupones',
+        etiquetaDestino: config.etiquetaDestino || 'Liquidaciones',
+        iconoOrigen: config.iconoOrigen || '📋',
+        iconoDestino: config.iconoDestino || '💰',
+        descripcionVinculacion: config.descripcionVinculacion || 'Vincule los registros de origen con los de destino.'
+    };
+}
+
+/**
+ * Obtener registros de origen según configuración (cupones o emisiones)
+ * @param {Array} registros - Lista de registros
+ * @param {boolean} incluirVinculados - Incluir registros ya vinculados
+ * @returns {Array} Registros de origen filtrados
+ */
+function obtenerRegistrosOrigen(registros, incluirVinculados = true) {
+    const config = obtenerConfigVinculacion();
+    return registros.filter(r => {
+        if (!incluirVinculados && r.estado === 'vinculado') return false;
+        if (r.esDevolucion) return false;
+
+        if (config.tipoOrigen === 'debe') {
+            return r.debe > 0;
+        } else {
+            return r.haber > 0;
+        }
+    });
+}
+
+/**
+ * Obtener registros de destino según configuración (liquidaciones o cobros)
+ * @param {Array} registros - Lista de registros
+ * @param {boolean} incluirVinculados - Incluir registros ya vinculados
+ * @returns {Array} Registros de destino filtrados
+ */
+function obtenerRegistrosDestino(registros, incluirVinculados = true) {
+    const config = obtenerConfigVinculacion();
+    return registros.filter(r => {
+        if (!incluirVinculados && r.estado === 'vinculado') return false;
+
+        if (config.tipoDestino === 'haber') {
+            return r.haber > 0 || r.esDevolucion;
+        } else {
+            return r.debe > 0 || r.esDevolucion;
+        }
+    });
+}
+
+/**
+ * Obtener monto de origen de un registro según configuración
+ * @param {Object} registro - Registro del mayor
+ * @returns {number} Monto de origen
+ */
+function obtenerMontoOrigen(registro) {
+    const config = obtenerConfigVinculacion();
+    return config.tipoOrigen === 'debe' ? registro.debe : registro.haber;
+}
+
+/**
+ * Obtener monto de destino de un registro según configuración
+ * @param {Object} registro - Registro del mayor
+ * @returns {number} Monto de destino
+ */
+function obtenerMontoDestino(registro) {
+    const config = obtenerConfigVinculacion();
+    return config.tipoDestino === 'haber' ? registro.haber : registro.debe;
+}
 
 // ============================================
 // NAVEGACIÓN ENTRE MÓDULOS
@@ -265,6 +374,8 @@ function seleccionarTipoMayor(tipoId) {
     const panelVinculacion = document.getElementById('panelVinculacionCupones');
     if (tipo.logica === 'vinculacion') {
         panelVinculacion.style.display = 'block';
+        // Actualizar etiquetas dinámicas según el tipo de mayor
+        actualizarEtiquetasVinculacion();
     } else {
         panelVinculacion.style.display = 'none';
     }
@@ -282,6 +393,83 @@ function seleccionarTipoMayor(tipoId) {
 
     // Verificar si hay conciliaciones guardadas para este cliente/tipo
     verificarConciliacionesMayorGuardadas();
+}
+
+/**
+ * Actualizar etiquetas del panel de vinculación según el tipo de mayor
+ */
+function actualizarEtiquetasVinculacion() {
+    const config = obtenerConfigVinculacion();
+
+    // Actualizar título del panel
+    const headerTitle = document.querySelector('.vinculacion-header h4');
+    if (headerTitle) {
+        headerTitle.textContent = `🔗 Vinculación de ${config.etiquetaOrigen}`;
+    }
+
+    // Actualizar descripción de lógica
+    const vinculacionInfo = document.querySelector('.vinculacion-info p');
+    if (vinculacionInfo) {
+        vinculacionInfo.innerHTML = `<strong>Lógica de vinculación:</strong> ${config.descripcionVinculacion}`;
+    }
+
+    // Actualizar etiqueta de vencidos según configuración
+    const vencidosLabel = document.querySelector('.vinculacion-stats .stat.vencidos');
+    if (vencidosLabel) {
+        const vencidosCount = vencidosLabel.querySelector('span');
+        vencidosLabel.innerHTML = `<span id="cuponesVencidos">${vencidosCount?.textContent || '0'}</span> vencidos (+${config.diasVencimiento} días)`;
+    }
+
+    // Actualizar encabezado columna origen (cupones/emisiones)
+    const columnaOrigenHeader = document.querySelector('.cupones-columna .columna-header h5');
+    if (columnaOrigenHeader) {
+        const tipoColumna = config.tipoOrigen === 'debe' ? 'Debe' : 'Haber';
+        columnaOrigenHeader.textContent = `${config.iconoOrigen} ${config.etiquetaOrigen} (${tipoColumna})`;
+    }
+
+    // Actualizar encabezado columna destino (liquidaciones/cobros)
+    const columnaDestinoHeader = document.querySelector('.liquidaciones-columna .columna-header h5');
+    if (columnaDestinoHeader) {
+        const tipoColumna = config.tipoDestino === 'haber' ? 'Haber' : 'Debe';
+        columnaDestinoHeader.textContent = `${config.iconoDestino} ${config.etiquetaDestino} (${tipoColumna})`;
+    }
+
+    // Actualizar etiquetas en la barra de selección flotante
+    const selOrigenLabel = document.querySelector('.cupones-group .selection-label');
+    if (selOrigenLabel) {
+        selOrigenLabel.textContent = config.etiquetaOrigen + ':';
+    }
+
+    const selDestinoLabel = document.querySelector('.liquidaciones-group .selection-label');
+    if (selDestinoLabel) {
+        selDestinoLabel.textContent = config.etiquetaDestino + ':';
+    }
+
+    // Actualizar iconos en la barra de selección
+    const selOrigenIcon = document.querySelector('.cupones-group .selection-icon');
+    if (selOrigenIcon) {
+        selOrigenIcon.textContent = config.iconoOrigen;
+    }
+
+    const selDestinoIcon = document.querySelector('.liquidaciones-group .selection-icon');
+    if (selDestinoIcon) {
+        selDestinoIcon.textContent = config.iconoDestino;
+    }
+
+    // Actualizar opciones del modo de conciliación
+    const modoConciliacion = document.getElementById('modoConciliacion');
+    if (modoConciliacion) {
+        const opciones = modoConciliacion.options;
+        opciones[0].textContent = `1:1 - Un ${config.etiquetaOrigen.toLowerCase().slice(0, -1)} con un ${config.etiquetaDestino.toLowerCase().slice(0, -1)}`;
+        opciones[1].textContent = `N:1 - Varios ${config.etiquetaOrigen.toLowerCase()} con un ${config.etiquetaDestino.toLowerCase().slice(0, -1)}`;
+        opciones[2].textContent = `1:N - Un ${config.etiquetaOrigen.toLowerCase().slice(0, -1)} con varios ${config.etiquetaDestino.toLowerCase()}`;
+    }
+
+    // Actualizar etiquetas en panel de configuración
+    const labelDias = document.querySelector('.config-item label[for="diasMaximos"], .config-item label');
+    if (labelDias && labelDias.textContent.includes('Días máximos')) {
+        labelDias.textContent = `Días máximos entre ${config.etiquetaOrigen.toLowerCase().slice(0, -1)} y ${config.etiquetaDestino.toLowerCase().slice(0, -1)}:`;
+    }
 }
 
 // ============================================
@@ -564,19 +752,20 @@ function parsearFecha(fechaStr) {
 // ============================================
 
 /**
- * Analizar vencimientos de cupones
+ * Analizar vencimientos de registros de origen (cupones o emisiones)
  */
 function analizarVencimientos() {
-    const config = stateMayores.tipoMayorActual?.configuracion || { diasVencimiento: 40 };
+    const configVinc = obtenerConfigVinculacion();
     const hoy = new Date();
 
     stateMayores.registrosMayor.forEach(registro => {
         if (registro.estado === 'vinculado' || registro.esDevolucion) return;
 
-        // Solo analizar cupones (débitos)
-        if (registro.debe > 0 && registro.fecha) {
+        // Analizar registros de origen según configuración
+        const montoOrigen = obtenerMontoOrigen(registro);
+        if (montoOrigen > 0 && registro.fecha) {
             const diasTranscurridos = Math.floor((hoy - registro.fecha) / (1000 * 60 * 60 * 24));
-            if (diasTranscurridos > config.diasVencimiento) {
+            if (diasTranscurridos > configVinc.diasVencimiento) {
                 registro.estado = 'vencido';
             } else {
                 registro.estado = 'pendiente';
@@ -631,40 +820,42 @@ function actualizarEstadisticasMayor() {
  */
 function renderizarVinculacion() {
     const registros = stateMayores.registrosMayor;
+    const config = obtenerConfigVinculacion();
 
-    // Filtrar cupones (débitos) y liquidaciones (créditos)
-    const cupones = registros.filter(r => r.debe > 0 && !r.esDevolucion);
-    const liquidaciones = registros.filter(r => r.haber > 0 || r.esDevolucion);
+    // Filtrar registros de origen y destino según configuración
+    const registrosOrigen = obtenerRegistrosOrigen(registros);
+    const registrosDestino = obtenerRegistrosDestino(registros);
 
     // Aplicar filtros
     const filtroEstado = document.getElementById('filtroEstadoVinculacion')?.value || '';
     const filtroTexto = document.getElementById('filtroTextoVinculacion')?.value?.toLowerCase() || '';
 
-    const cuponesFiltrados = cupones.filter(c => {
+    const origenFiltrados = registrosOrigen.filter(c => {
         if (filtroEstado && c.estado !== filtroEstado) return false;
         if (filtroTexto && !c.descripcion.toLowerCase().includes(filtroTexto)) return false;
         return true;
     });
 
-    const liquidacionesFiltradas = liquidaciones.filter(l => {
+    const destinoFiltrados = registrosDestino.filter(l => {
         if (filtroEstado === 'devolucion' && !l.esDevolucion) return false;
         if (filtroEstado && filtroEstado !== 'devolucion' && l.estado !== filtroEstado) return false;
         if (filtroTexto && !l.descripcion.toLowerCase().includes(filtroTexto)) return false;
         return true;
     });
 
-    // Calcular totales
-    const totalCupones = cuponesFiltrados.reduce((sum, c) => sum + c.debe, 0);
-    const totalLiquidaciones = liquidacionesFiltradas.reduce((sum, l) => sum + l.haber, 0);
+    // Calcular totales usando los montos según configuración
+    const totalOrigen = origenFiltrados.reduce((sum, c) => sum + obtenerMontoOrigen(c), 0);
+    const totalDestino = destinoFiltrados.reduce((sum, l) => sum + obtenerMontoDestino(l), 0);
 
-    document.getElementById('totalCuponesDebe').textContent = formatearMoneda(totalCupones);
-    document.getElementById('totalLiquidacionesHaber').textContent = formatearMoneda(totalLiquidaciones);
+    document.getElementById('totalCuponesDebe').textContent = formatearMoneda(totalOrigen);
+    document.getElementById('totalLiquidacionesHaber').textContent = formatearMoneda(totalDestino);
 
-    // Renderizar lista de cupones
+    // Renderizar lista de origen (cupones o emisiones)
     const listaCupones = document.getElementById('listaCupones');
-    listaCupones.innerHTML = cuponesFiltrados.length === 0
-        ? '<div class="empty-state" style="padding: 20px; text-align: center; color: #94a3b8;">No hay cupones</div>'
-        : cuponesFiltrados.map(c => `
+    const claseMontoOrigen = config.tipoOrigen === 'debe' ? 'debe' : 'haber';
+    listaCupones.innerHTML = origenFiltrados.length === 0
+        ? `<div class="empty-state" style="padding: 20px; text-align: center; color: #94a3b8;">No hay ${config.etiquetaOrigen.toLowerCase()}</div>`
+        : origenFiltrados.map(c => `
             <div class="registro-item ${c.estado} ${stateMayores.cuponesSeleccionados.includes(c.id) ? 'selected' : ''}"
                  onclick="toggleSeleccionCupon('${c.id}')" data-id="${c.id}">
                 <input type="checkbox" class="registro-checkbox"
@@ -674,16 +865,17 @@ function renderizarVinculacion() {
                     <div class="registro-fecha">${formatearFecha(c.fecha)}</div>
                     <div class="registro-desc" title="${c.descripcion}">${c.descripcion}</div>
                 </div>
-                <div class="registro-monto debe">${formatearMoneda(c.debe)}</div>
+                <div class="registro-monto ${claseMontoOrigen}">${formatearMoneda(obtenerMontoOrigen(c))}</div>
                 <span class="registro-estado ${c.estado}">${obtenerEtiquetaEstado(c.estado)}</span>
             </div>
         `).join('');
 
-    // Renderizar lista de liquidaciones
+    // Renderizar lista de destino (liquidaciones o cobros)
     const listaLiquidaciones = document.getElementById('listaLiquidaciones');
-    listaLiquidaciones.innerHTML = liquidacionesFiltradas.length === 0
-        ? '<div class="empty-state" style="padding: 20px; text-align: center; color: #94a3b8;">No hay liquidaciones</div>'
-        : liquidacionesFiltradas.map(l => `
+    const claseMontoDestino = config.tipoDestino === 'haber' ? 'haber' : 'debe';
+    listaLiquidaciones.innerHTML = destinoFiltrados.length === 0
+        ? `<div class="empty-state" style="padding: 20px; text-align: center; color: #94a3b8;">No hay ${config.etiquetaDestino.toLowerCase()}</div>`
+        : destinoFiltrados.map(l => `
             <div class="registro-item ${l.esDevolucion ? 'devolucion' : l.estado} ${stateMayores.liquidacionesSeleccionadas.includes(l.id) ? 'selected' : ''}"
                  onclick="toggleSeleccionLiquidacion('${l.id}')" data-id="${l.id}">
                 <input type="checkbox" class="registro-checkbox"
@@ -693,7 +885,7 @@ function renderizarVinculacion() {
                     <div class="registro-fecha">${formatearFecha(l.fecha)}</div>
                     <div class="registro-desc" title="${l.descripcion}">${l.descripcion}</div>
                 </div>
-                <div class="registro-monto haber">${formatearMoneda(l.haber || l.debe)}</div>
+                <div class="registro-monto ${claseMontoDestino}">${formatearMoneda(obtenerMontoDestino(l))}</div>
                 <span class="registro-estado ${l.esDevolucion ? 'devolucion' : l.estado}">${l.esDevolucion ? 'Devolución' : obtenerEtiquetaEstado(l.estado)}</span>
             </div>
         `).join('');
@@ -772,36 +964,36 @@ function actualizarBarraSeleccionMayores() {
     const bar = document.getElementById('selectionBarMayores');
     if (!bar) return;
 
-    const cantCupones = stateMayores.cuponesSeleccionados.length;
-    const cantLiquidaciones = stateMayores.liquidacionesSeleccionadas.length;
+    const cantOrigen = stateMayores.cuponesSeleccionados.length;
+    const cantDestino = stateMayores.liquidacionesSeleccionadas.length;
 
-    // Calcular totales
-    const totalCupones = stateMayores.registrosMayor
+    // Calcular totales usando configuración dinámica
+    const totalOrigen = stateMayores.registrosMayor
         .filter(r => stateMayores.cuponesSeleccionados.includes(r.id))
-        .reduce((sum, r) => sum + (r.debe || 0), 0);
+        .reduce((sum, r) => sum + obtenerMontoOrigen(r), 0);
 
-    const totalLiquidaciones = stateMayores.registrosMayor
+    const totalDestino = stateMayores.registrosMayor
         .filter(r => stateMayores.liquidacionesSeleccionadas.includes(r.id))
-        .reduce((sum, r) => sum + (r.haber || r.debe || 0), 0);
+        .reduce((sum, r) => sum + obtenerMontoDestino(r), 0);
 
-    const diferencia = totalCupones - totalLiquidaciones;
-    const diferenciAbs = Math.abs(diferencia);
+    const diferencia = totalOrigen - totalDestino;
+    const diferenciaAbs = Math.abs(diferencia);
 
     // Actualizar UI
-    document.getElementById('selCuponesCount').textContent = cantCupones;
-    document.getElementById('selCuponesTotal').textContent = formatearMoneda(totalCupones);
-    document.getElementById('selLiquidacionesCount').textContent = cantLiquidaciones;
-    document.getElementById('selLiquidacionesTotal').textContent = formatearMoneda(totalLiquidaciones);
+    document.getElementById('selCuponesCount').textContent = cantOrigen;
+    document.getElementById('selCuponesTotal').textContent = formatearMoneda(totalOrigen);
+    document.getElementById('selLiquidacionesCount').textContent = cantDestino;
+    document.getElementById('selLiquidacionesTotal').textContent = formatearMoneda(totalDestino);
 
     const diffElement = document.getElementById('selDiferenciaMayores');
     const signo = diferencia > 0 ? '+' : diferencia < 0 ? '-' : '';
-    diffElement.textContent = signo + formatearMoneda(diferenciAbs);
+    diffElement.textContent = signo + formatearMoneda(diferenciaAbs);
 
     // Colorear según la diferencia
     diffElement.classList.remove('diff-warning', 'diff-error', 'diff-ok');
-    if (diferenciAbs === 0) {
+    if (diferenciaAbs === 0) {
         diffElement.classList.add('diff-ok');
-    } else if (diferenciAbs <= 1) {
+    } else if (diferenciaAbs <= 1) {
         diffElement.classList.add('diff-warning');
     } else {
         diffElement.classList.add('diff-error');
@@ -809,10 +1001,10 @@ function actualizarBarraSeleccionMayores() {
 
     // Habilitar/deshabilitar botón de vincular
     const btnVincular = document.getElementById('btnVincularMayores');
-    btnVincular.disabled = cantCupones === 0 || cantLiquidaciones === 0;
+    btnVincular.disabled = cantOrigen === 0 || cantDestino === 0;
 
     // Mostrar/ocultar barra
-    if (cantCupones > 0 || cantLiquidaciones > 0) {
+    if (cantOrigen > 0 || cantDestino > 0) {
         bar.classList.remove('hidden');
     } else {
         bar.classList.add('hidden');
@@ -849,40 +1041,42 @@ function limpiarSeleccionMayores() {
  * Vincular seleccionados manualmente (versión mejorada)
  */
 function vincularSeleccionadosManual() {
+    const config = obtenerConfigVinculacion();
+
     if (stateMayores.cuponesSeleccionados.length === 0 || stateMayores.liquidacionesSeleccionadas.length === 0) {
-        alert('Debe seleccionar al menos un cupón y una liquidación para vincular');
+        alert(`Debe seleccionar al menos un ${config.etiquetaOrigen.toLowerCase().slice(0, -1)} y un ${config.etiquetaDestino.toLowerCase().slice(0, -1)} para vincular`);
         return;
     }
 
     // Obtener registros seleccionados
-    const cupones = stateMayores.registrosMayor.filter(r => stateMayores.cuponesSeleccionados.includes(r.id));
-    const liquidaciones = stateMayores.registrosMayor.filter(r => stateMayores.liquidacionesSeleccionadas.includes(r.id));
+    const origenes = stateMayores.registrosMayor.filter(r => stateMayores.cuponesSeleccionados.includes(r.id));
+    const destinos = stateMayores.registrosMayor.filter(r => stateMayores.liquidacionesSeleccionadas.includes(r.id));
 
-    // Calcular diferencia
-    const sumaCupones = cupones.reduce((sum, c) => sum + (c.debe || 0), 0);
-    const sumaLiquidaciones = liquidaciones.reduce((sum, l) => sum + (l.haber || l.debe || 0), 0);
-    const diferencia = Math.abs(sumaCupones - sumaLiquidaciones);
+    // Calcular diferencia usando configuración dinámica
+    const sumaOrigenes = origenes.reduce((sum, o) => sum + obtenerMontoOrigen(o), 0);
+    const sumaDestinos = destinos.reduce((sum, d) => sum + obtenerMontoDestino(d), 0);
+    const diferencia = Math.abs(sumaOrigenes - sumaDestinos);
 
     // Validar diferencia
     if (diferencia > 1) {
-        const mensaje = `La diferencia entre cupones y liquidaciones es de ${formatearMoneda(diferencia)}.\n\n¿Desea vincular de todos modos?`;
+        const mensaje = `La diferencia entre ${config.etiquetaOrigen.toLowerCase()} y ${config.etiquetaDestino.toLowerCase()} es de ${formatearMoneda(diferencia)}.\n\n¿Desea vincular de todos modos?`;
         if (!confirm(mensaje)) return;
     }
 
     const vinculacionId = `vinc_manual_${Date.now()}`;
 
-    // Marcar cupones como vinculados
-    cupones.forEach(cupon => {
-        cupon.estado = 'vinculado';
-        cupon.vinculadoCon = stateMayores.liquidacionesSeleccionadas.slice();
-        cupon.vinculacionId = vinculacionId;
+    // Marcar orígenes como vinculados
+    origenes.forEach(origen => {
+        origen.estado = 'vinculado';
+        origen.vinculadoCon = stateMayores.liquidacionesSeleccionadas.slice();
+        origen.vinculacionId = vinculacionId;
     });
 
-    // Marcar liquidaciones como vinculadas
-    liquidaciones.forEach(liq => {
-        liq.estado = 'vinculado';
-        liq.vinculadoCon = stateMayores.cuponesSeleccionados.slice();
-        liq.vinculacionId = vinculacionId;
+    // Marcar destinos como vinculados
+    destinos.forEach(destino => {
+        destino.estado = 'vinculado';
+        destino.vinculadoCon = stateMayores.cuponesSeleccionados.slice();
+        destino.vinculacionId = vinculacionId;
     });
 
     // Registrar vinculación
@@ -903,30 +1097,30 @@ function vincularSeleccionadosManual() {
     renderizarTablaMayor();
     actualizarEstadisticasVinculacion();
 
-    console.log(`✅ Vinculación manual creada: ${cupones.length} cupones con ${liquidaciones.length} liquidaciones`);
+    console.log(`✅ Vinculación manual creada: ${origenes.length} ${config.etiquetaOrigen.toLowerCase()} con ${destinos.length} ${config.etiquetaDestino.toLowerCase()}`);
 }
 
 /**
- * Seleccionar todos los cupones visibles
+ * Seleccionar todos los registros de origen visibles (cupones o emisiones)
  */
 function seleccionarTodosCupones() {
-    const cupones = stateMayores.registrosMayor.filter(r => r.debe > 0 && !r.esDevolucion);
+    const registrosOrigen = obtenerRegistrosOrigen(stateMayores.registrosMayor);
     const filtroEstado = document.getElementById('filtroEstadoVinculacion')?.value || '';
     const filtroTexto = document.getElementById('filtroTextoVinculacion')?.value?.toLowerCase() || '';
 
-    const cuponesFiltrados = cupones.filter(c => {
+    const origenFiltrados = registrosOrigen.filter(c => {
         if (filtroEstado && c.estado !== filtroEstado) return false;
         if (filtroTexto && !c.descripcion.toLowerCase().includes(filtroTexto)) return false;
         return true;
     });
 
     // Toggle: si todos están seleccionados, deseleccionar; si no, seleccionar todos
-    const todosSeleccionados = cuponesFiltrados.every(c => stateMayores.cuponesSeleccionados.includes(c.id));
+    const todosSeleccionados = origenFiltrados.every(c => stateMayores.cuponesSeleccionados.includes(c.id));
 
     if (todosSeleccionados) {
         stateMayores.cuponesSeleccionados = [];
     } else {
-        stateMayores.cuponesSeleccionados = cuponesFiltrados.map(c => c.id);
+        stateMayores.cuponesSeleccionados = origenFiltrados.map(c => c.id);
     }
 
     // Actualizar checkboxes visualmente
@@ -942,26 +1136,26 @@ function seleccionarTodosCupones() {
 }
 
 /**
- * Seleccionar todas las liquidaciones visibles
+ * Seleccionar todos los registros de destino visibles (liquidaciones o cobros)
  */
 function seleccionarTodasLiquidaciones() {
-    const liquidaciones = stateMayores.registrosMayor.filter(r => r.haber > 0 || r.esDevolucion);
+    const registrosDestino = obtenerRegistrosDestino(stateMayores.registrosMayor);
     const filtroEstado = document.getElementById('filtroEstadoVinculacion')?.value || '';
     const filtroTexto = document.getElementById('filtroTextoVinculacion')?.value?.toLowerCase() || '';
 
-    const liquidacionesFiltradas = liquidaciones.filter(l => {
+    const destinoFiltrados = registrosDestino.filter(l => {
         if (filtroEstado === 'devolucion' && !l.esDevolucion) return false;
         if (filtroEstado && filtroEstado !== 'devolucion' && l.estado !== filtroEstado) return false;
         if (filtroTexto && !l.descripcion.toLowerCase().includes(filtroTexto)) return false;
         return true;
     });
 
-    const todasSeleccionadas = liquidacionesFiltradas.every(l => stateMayores.liquidacionesSeleccionadas.includes(l.id));
+    const todasSeleccionadas = destinoFiltrados.every(l => stateMayores.liquidacionesSeleccionadas.includes(l.id));
 
     if (todasSeleccionadas) {
         stateMayores.liquidacionesSeleccionadas = [];
     } else {
-        stateMayores.liquidacionesSeleccionadas = liquidacionesFiltradas.map(l => l.id);
+        stateMayores.liquidacionesSeleccionadas = destinoFiltrados.map(l => l.id);
     }
 
     // Actualizar checkboxes visualmente
@@ -1106,21 +1300,23 @@ function marcarComoDevolucion() {
  */
 function conciliarAutomaticamente() {
     const registros = stateMayores.registrosMayor;
+    const config = obtenerConfigVinculacion();
+
     if (registros.length === 0) {
         alert('Primero debe cargar un mayor contable');
         return;
     }
 
-    const cuponesPendientes = registros.filter(r => r.debe > 0 && r.estado !== 'vinculado' && !r.esDevolucion);
-    const liquidacionesPendientes = registros.filter(r => r.haber > 0 && r.estado !== 'vinculado' && !r.esDevolucion);
+    const origenPendientes = obtenerRegistrosOrigen(registros, false);
+    const destinoPendientes = obtenerRegistrosDestino(registros, false);
 
-    if (cuponesPendientes.length === 0) {
-        alert('No hay cupones pendientes de vincular');
+    if (origenPendientes.length === 0) {
+        alert(`No hay ${config.etiquetaOrigen.toLowerCase()} pendientes de vincular`);
         return;
     }
 
-    if (liquidacionesPendientes.length === 0) {
-        alert('No hay liquidaciones pendientes de vincular');
+    if (destinoPendientes.length === 0) {
+        alert(`No hay ${config.etiquetaDestino.toLowerCase()} pendientes de vincular`);
         return;
     }
 
@@ -1150,67 +1346,66 @@ function ejecutarConciliacion() {
     const tolerancia = parseFloat(document.getElementById('toleranciaImporte').value) || 0.01;
     const diasMaximos = parseInt(document.getElementById('diasMaximos').value) || 40;
     const modo = document.getElementById('modoConciliacion').value;
+    const config = obtenerConfigVinculacion();
 
     console.log(`🤖 Iniciando conciliación automática - Modo: ${modo}, Tolerancia: ${tolerancia}, Días máx: ${diasMaximos}`);
 
     const registros = stateMayores.registrosMayor;
 
-    // Obtener cupones y liquidaciones pendientes
-    let cuponesPendientes = registros.filter(r =>
-        r.debe > 0 && r.estado !== 'vinculado' && !r.esDevolucion
-    ).sort((a, b) => (a.fecha || 0) - (b.fecha || 0)); // Ordenar por fecha
+    // Obtener registros de origen y destino pendientes según configuración
+    let origenPendientes = obtenerRegistrosOrigen(registros, false)
+        .sort((a, b) => (a.fecha || 0) - (b.fecha || 0)); // Ordenar por fecha
 
-    let liquidacionesPendientes = registros.filter(r =>
-        r.haber > 0 && r.estado !== 'vinculado' && !r.esDevolucion
-    ).sort((a, b) => (a.fecha || 0) - (b.fecha || 0));
+    let destinoPendientes = obtenerRegistrosDestino(registros, false)
+        .filter(r => !r.esDevolucion)
+        .sort((a, b) => (a.fecha || 0) - (b.fecha || 0));
 
     let vinculacionesExitosas = 0;
-    let cuponesVinculados = new Set();
-    let liquidacionesVinculadas = new Set();
+    let origenVinculados = new Set();
+    let destinoVinculados = new Set();
 
     if (modo === 'N:1') {
-        // Modo N:1: Varios cupones pueden vincularse con una liquidación
-        // La suma de cupones debe coincidir con la liquidación
+        // Modo N:1: Varios orígenes pueden vincularse con un destino
         vinculacionesExitosas = conciliarN1(
-            cuponesPendientes,
-            liquidacionesPendientes,
+            origenPendientes,
+            destinoPendientes,
             tolerancia,
             diasMaximos,
-            cuponesVinculados,
-            liquidacionesVinculadas
+            origenVinculados,
+            destinoVinculados
         );
     } else if (modo === '1:1') {
-        // Modo 1:1: Un cupón con una liquidación
+        // Modo 1:1: Un origen con un destino
         vinculacionesExitosas = conciliar11(
-            cuponesPendientes,
-            liquidacionesPendientes,
+            origenPendientes,
+            destinoPendientes,
             tolerancia,
             diasMaximos,
-            cuponesVinculados,
-            liquidacionesVinculadas
+            origenVinculados,
+            destinoVinculados
         );
     } else if (modo === '1:N') {
-        // Modo 1:N: Un cupón con varias liquidaciones
+        // Modo 1:N: Un origen con varios destinos
         vinculacionesExitosas = conciliar1N(
-            cuponesPendientes,
-            liquidacionesPendientes,
+            origenPendientes,
+            destinoPendientes,
             tolerancia,
             diasMaximos,
-            cuponesVinculados,
-            liquidacionesVinculadas
+            origenVinculados,
+            destinoVinculados
         );
     }
 
     // Actualizar estadísticas
-    const cuponesSinMatch = cuponesPendientes.filter(c => !cuponesVinculados.has(c.id)).length;
-    const liquidacionesSinMatch = liquidacionesPendientes.filter(l => !liquidacionesVinculadas.has(l.id)).length;
+    const origenSinMatch = origenPendientes.filter(c => !origenVinculados.has(c.id)).length;
+    const destinoSinMatch = destinoPendientes.filter(l => !destinoVinculados.has(l.id)).length;
 
     // Mostrar resultados
     document.getElementById('panelConfigConciliacion').style.display = 'none';
     document.getElementById('resultadosConciliacion').style.display = 'block';
     document.getElementById('conciliacionExitosas').textContent = vinculacionesExitosas;
-    document.getElementById('conciliacionPendientes').textContent = cuponesSinMatch;
-    document.getElementById('conciliacionLiquidaciones').textContent = liquidacionesSinMatch;
+    document.getElementById('conciliacionPendientes').textContent = origenSinMatch;
+    document.getElementById('conciliacionLiquidaciones').textContent = destinoSinMatch;
 
     // Analizar vencimientos de los que quedaron
     analizarVencimientos();
@@ -1224,56 +1419,57 @@ function ejecutarConciliacion() {
 }
 
 /**
- * Conciliación N:1 - Varios cupones con una liquidación
+ * Conciliación N:1 - Varios orígenes con un destino
+ * (Ej: Varios cupones con una liquidación, o varias emisiones con un cobro)
  */
-function conciliarN1(cupones, liquidaciones, tolerancia, diasMaximos, cuponesVinculados, liquidacionesVinculadas) {
+function conciliarN1(origenes, destinos, tolerancia, diasMaximos, origenesVinculados, destinosVinculados) {
     let vinculaciones = 0;
 
-    for (const liquidacion of liquidaciones) {
-        if (liquidacionesVinculadas.has(liquidacion.id)) continue;
+    for (const destino of destinos) {
+        if (destinosVinculados.has(destino.id)) continue;
 
-        const montoLiquidacion = liquidacion.haber;
-        const fechaLiquidacion = liquidacion.fecha;
+        const montoDestino = obtenerMontoDestino(destino);
+        const fechaDestino = destino.fecha;
 
-        if (!fechaLiquidacion) continue;
+        if (!fechaDestino) continue;
 
-        // Buscar cupones candidatos (fecha anterior a liquidación, dentro del plazo)
-        const cuponesCandidatos = cupones.filter(c => {
-            if (cuponesVinculados.has(c.id)) return false;
-            if (!c.fecha) return false;
+        // Buscar orígenes candidatos (fecha anterior al destino, dentro del plazo)
+        const origenesCandidatos = origenes.filter(o => {
+            if (origenesVinculados.has(o.id)) return false;
+            if (!o.fecha) return false;
 
-            const diasDiferencia = Math.floor((fechaLiquidacion - c.fecha) / (1000 * 60 * 60 * 24));
+            const diasDiferencia = Math.floor((fechaDestino - o.fecha) / (1000 * 60 * 60 * 24));
             return diasDiferencia >= 0 && diasDiferencia <= diasMaximos;
         });
 
-        if (cuponesCandidatos.length === 0) continue;
+        if (origenesCandidatos.length === 0) continue;
 
-        // Intentar encontrar combinación de cupones que sumen el monto de la liquidación
-        const combinacion = buscarCombinacionSuma(cuponesCandidatos, montoLiquidacion, tolerancia);
+        // Intentar encontrar combinación de orígenes que sumen el monto del destino
+        const combinacion = buscarCombinacionSumaGenerica(origenesCandidatos, montoDestino, tolerancia, obtenerMontoOrigen);
 
         if (combinacion && combinacion.length > 0) {
             // Crear vinculación
             const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
 
-            // Marcar cupones
-            combinacion.forEach(cupon => {
-                cupon.estado = 'vinculado';
-                cupon.vinculadoCon = [liquidacion.id];
-                cupon.vinculacionId = vinculacionId;
-                cuponesVinculados.add(cupon.id);
+            // Marcar orígenes
+            combinacion.forEach(origen => {
+                origen.estado = 'vinculado';
+                origen.vinculadoCon = [destino.id];
+                origen.vinculacionId = vinculacionId;
+                origenesVinculados.add(origen.id);
             });
 
-            // Marcar liquidación
-            liquidacion.estado = 'vinculado';
-            liquidacion.vinculadoCon = combinacion.map(c => c.id);
-            liquidacion.vinculacionId = vinculacionId;
-            liquidacionesVinculadas.add(liquidacion.id);
+            // Marcar destino
+            destino.estado = 'vinculado';
+            destino.vinculadoCon = combinacion.map(o => o.id);
+            destino.vinculacionId = vinculacionId;
+            destinosVinculados.add(destino.id);
 
             // Registrar vinculación
             stateMayores.vinculaciones.push({
                 id: vinculacionId,
-                cupones: combinacion.map(c => c.id),
-                liquidaciones: [liquidacion.id],
+                cupones: combinacion.map(o => o.id),
+                liquidaciones: [destino.id],
                 tipo: 'automatica',
                 fecha: new Date().toISOString()
             });
@@ -1286,45 +1482,46 @@ function conciliarN1(cupones, liquidaciones, tolerancia, diasMaximos, cuponesVin
 }
 
 /**
- * Conciliación 1:1 - Un cupón con una liquidación
+ * Conciliación 1:1 - Un origen con un destino
+ * (Ej: Un cupón con una liquidación, o una emisión con un cobro)
  */
-function conciliar11(cupones, liquidaciones, tolerancia, diasMaximos, cuponesVinculados, liquidacionesVinculadas) {
+function conciliar11(origenes, destinos, tolerancia, diasMaximos, origenesVinculados, destinosVinculados) {
     let vinculaciones = 0;
 
-    for (const cupon of cupones) {
-        if (cuponesVinculados.has(cupon.id)) continue;
-        if (!cupon.fecha) continue;
+    for (const origen of origenes) {
+        if (origenesVinculados.has(origen.id)) continue;
+        if (!origen.fecha) continue;
 
-        const montoCupon = cupon.debe;
+        const montoOrigen = obtenerMontoOrigen(origen);
 
-        // Buscar liquidación que coincida
-        for (const liquidacion of liquidaciones) {
-            if (liquidacionesVinculadas.has(liquidacion.id)) continue;
-            if (!liquidacion.fecha) continue;
+        // Buscar destino que coincida
+        for (const destino of destinos) {
+            if (destinosVinculados.has(destino.id)) continue;
+            if (!destino.fecha) continue;
 
-            const diasDiferencia = Math.floor((liquidacion.fecha - cupon.fecha) / (1000 * 60 * 60 * 24));
+            const diasDiferencia = Math.floor((destino.fecha - origen.fecha) / (1000 * 60 * 60 * 24));
             if (diasDiferencia < 0 || diasDiferencia > diasMaximos) continue;
 
-            const diferencia = Math.abs(montoCupon - liquidacion.haber);
+            const diferencia = Math.abs(montoOrigen - obtenerMontoDestino(destino));
             if (diferencia <= tolerancia) {
                 // Match encontrado
                 const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
 
-                cupon.estado = 'vinculado';
-                cupon.vinculadoCon = [liquidacion.id];
-                cupon.vinculacionId = vinculacionId;
+                origen.estado = 'vinculado';
+                origen.vinculadoCon = [destino.id];
+                origen.vinculacionId = vinculacionId;
 
-                liquidacion.estado = 'vinculado';
-                liquidacion.vinculadoCon = [cupon.id];
-                liquidacion.vinculacionId = vinculacionId;
+                destino.estado = 'vinculado';
+                destino.vinculadoCon = [origen.id];
+                destino.vinculacionId = vinculacionId;
 
-                cuponesVinculados.add(cupon.id);
-                liquidacionesVinculadas.add(liquidacion.id);
+                origenesVinculados.add(origen.id);
+                destinosVinculados.add(destino.id);
 
                 stateMayores.vinculaciones.push({
                     id: vinculacionId,
-                    cupones: [cupon.id],
-                    liquidaciones: [liquidacion.id],
+                    cupones: [origen.id],
+                    liquidaciones: [destino.id],
                     tipo: 'automatica',
                     fecha: new Date().toISOString()
                 });
@@ -1339,50 +1536,51 @@ function conciliar11(cupones, liquidaciones, tolerancia, diasMaximos, cuponesVin
 }
 
 /**
- * Conciliación 1:N - Un cupón con varias liquidaciones
+ * Conciliación 1:N - Un origen con varios destinos
+ * (Ej: Un cupón con varias liquidaciones, o una emisión con varios cobros)
  */
-function conciliar1N(cupones, liquidaciones, tolerancia, diasMaximos, cuponesVinculados, liquidacionesVinculadas) {
+function conciliar1N(origenes, destinos, tolerancia, diasMaximos, origenesVinculados, destinosVinculados) {
     let vinculaciones = 0;
 
-    for (const cupon of cupones) {
-        if (cuponesVinculados.has(cupon.id)) continue;
-        if (!cupon.fecha) continue;
+    for (const origen of origenes) {
+        if (origenesVinculados.has(origen.id)) continue;
+        if (!origen.fecha) continue;
 
-        const montoCupon = cupon.debe;
+        const montoOrigen = obtenerMontoOrigen(origen);
 
-        // Buscar liquidaciones candidatas
-        const liquidacionesCandidatas = liquidaciones.filter(l => {
-            if (liquidacionesVinculadas.has(l.id)) return false;
-            if (!l.fecha) return false;
+        // Buscar destinos candidatos
+        const destinosCandidatos = destinos.filter(d => {
+            if (destinosVinculados.has(d.id)) return false;
+            if (!d.fecha) return false;
 
-            const diasDiferencia = Math.floor((l.fecha - cupon.fecha) / (1000 * 60 * 60 * 24));
+            const diasDiferencia = Math.floor((d.fecha - origen.fecha) / (1000 * 60 * 60 * 24));
             return diasDiferencia >= 0 && diasDiferencia <= diasMaximos;
         });
 
-        if (liquidacionesCandidatas.length === 0) continue;
+        if (destinosCandidatos.length === 0) continue;
 
-        // Buscar combinación de liquidaciones que sumen el monto del cupón
-        const combinacion = buscarCombinacionSumaHaber(liquidacionesCandidatas, montoCupon, tolerancia);
+        // Buscar combinación de destinos que sumen el monto del origen
+        const combinacion = buscarCombinacionSumaGenerica(destinosCandidatos, montoOrigen, tolerancia, obtenerMontoDestino);
 
         if (combinacion && combinacion.length > 0) {
             const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
 
-            cupon.estado = 'vinculado';
-            cupon.vinculadoCon = combinacion.map(l => l.id);
-            cupon.vinculacionId = vinculacionId;
-            cuponesVinculados.add(cupon.id);
+            origen.estado = 'vinculado';
+            origen.vinculadoCon = combinacion.map(d => d.id);
+            origen.vinculacionId = vinculacionId;
+            origenesVinculados.add(origen.id);
 
-            combinacion.forEach(liq => {
-                liq.estado = 'vinculado';
-                liq.vinculadoCon = [cupon.id];
-                liq.vinculacionId = vinculacionId;
-                liquidacionesVinculadas.add(liq.id);
+            combinacion.forEach(dest => {
+                dest.estado = 'vinculado';
+                dest.vinculadoCon = [origen.id];
+                dest.vinculacionId = vinculacionId;
+                destinosVinculados.add(dest.id);
             });
 
             stateMayores.vinculaciones.push({
                 id: vinculacionId,
-                cupones: [cupon.id],
-                liquidaciones: combinacion.map(l => l.id),
+                cupones: [origen.id],
+                liquidaciones: combinacion.map(d => d.id),
                 tipo: 'automatica',
                 fecha: new Date().toISOString()
             });
@@ -1395,28 +1593,33 @@ function conciliar1N(cupones, liquidaciones, tolerancia, diasMaximos, cuponesVin
 }
 
 /**
- * Buscar combinación de cupones que sumen un monto específico
- * Usa un algoritmo greedy con backtracking limitado para eficiencia
+ * Buscar combinación de elementos que sumen un monto específico (versión genérica)
+ * @param {Array} elementos - Lista de elementos
+ * @param {number} montoObjetivo - Monto a alcanzar
+ * @param {number} tolerancia - Tolerancia permitida
+ * @param {Function} obtenerMonto - Función para obtener el monto de un elemento
+ * @returns {Array|null} Combinación encontrada o null
  */
-function buscarCombinacionSuma(elementos, montoObjetivo, tolerancia) {
+function buscarCombinacionSumaGenerica(elementos, montoObjetivo, tolerancia, obtenerMonto) {
     // Primero intentar match exacto con un solo elemento
     for (const elem of elementos) {
-        if (Math.abs(elem.debe - montoObjetivo) <= tolerancia) {
+        if (Math.abs(obtenerMonto(elem) - montoObjetivo) <= tolerancia) {
             return [elem];
         }
     }
 
     // Ordenar por monto descendente para mejor eficiencia
-    const ordenados = [...elementos].sort((a, b) => b.debe - a.debe);
+    const ordenados = [...elementos].sort((a, b) => obtenerMonto(b) - obtenerMonto(a));
 
-    // Intentar combinaciones (limitado a combinaciones razonables)
+    // Intentar combinaciones (algoritmo greedy)
     const resultado = [];
     let sumaActual = 0;
 
     for (const elem of ordenados) {
-        if (sumaActual + elem.debe <= montoObjetivo + tolerancia) {
+        const montoElem = obtenerMonto(elem);
+        if (sumaActual + montoElem <= montoObjetivo + tolerancia) {
             resultado.push(elem);
-            sumaActual += elem.debe;
+            sumaActual += montoElem;
 
             if (Math.abs(sumaActual - montoObjetivo) <= tolerancia) {
                 return resultado;
@@ -1426,7 +1629,7 @@ function buscarCombinacionSuma(elementos, montoObjetivo, tolerancia) {
 
     // Si el greedy no funcionó, intentar subset sum con límite
     if (elementos.length <= 20) {
-        const combinacion = subsetSum(elementos, montoObjetivo, tolerancia);
+        const combinacion = subsetSumGenerico(elementos, montoObjetivo, tolerancia, obtenerMonto);
         if (combinacion) return combinacion;
     }
 
@@ -1434,47 +1637,29 @@ function buscarCombinacionSuma(elementos, montoObjetivo, tolerancia) {
 }
 
 /**
- * Buscar combinación de liquidaciones que sumen un monto específico
+ * Buscar combinación de cupones que sumen un monto específico (legacy - usa debe)
+ */
+function buscarCombinacionSuma(elementos, montoObjetivo, tolerancia) {
+    return buscarCombinacionSumaGenerica(elementos, montoObjetivo, tolerancia, e => e.debe);
+}
+
+/**
+ * Buscar combinación de liquidaciones que sumen un monto específico (legacy - usa haber)
  */
 function buscarCombinacionSumaHaber(elementos, montoObjetivo, tolerancia) {
-    // Primero intentar match exacto con un solo elemento
-    for (const elem of elementos) {
-        if (Math.abs(elem.haber - montoObjetivo) <= tolerancia) {
-            return [elem];
-        }
-    }
-
-    // Ordenar por monto descendente
-    const ordenados = [...elementos].sort((a, b) => b.haber - a.haber);
-
-    // Greedy
-    const resultado = [];
-    let sumaActual = 0;
-
-    for (const elem of ordenados) {
-        if (sumaActual + elem.haber <= montoObjetivo + tolerancia) {
-            resultado.push(elem);
-            sumaActual += elem.haber;
-
-            if (Math.abs(sumaActual - montoObjetivo) <= tolerancia) {
-                return resultado;
-            }
-        }
-    }
-
-    // Subset sum limitado
-    if (elementos.length <= 20) {
-        const combinacion = subsetSumHaber(elementos, montoObjetivo, tolerancia);
-        if (combinacion) return combinacion;
-    }
-
-    return null;
+    return buscarCombinacionSumaGenerica(elementos, montoObjetivo, tolerancia, e => e.haber);
 }
 
 /**
- * Algoritmo de subset sum para cupones (debe)
+ * Algoritmo de subset sum genérico
+ * @param {Array} elementos - Lista de elementos
+ * @param {number} objetivo - Monto objetivo
+ * @param {number} tolerancia - Tolerancia permitida
+ * @param {Function} obtenerMonto - Función para obtener el monto de un elemento
+ * @param {number} maxElementos - Máximo de elementos a considerar
+ * @returns {Array|null} Combinación encontrada o null
  */
-function subsetSum(elementos, objetivo, tolerancia, maxElementos = 10) {
+function subsetSumGenerico(elementos, objetivo, tolerancia, obtenerMonto, maxElementos = 10) {
     const n = Math.min(elementos.length, maxElementos);
 
     // Generar todas las combinaciones posibles (hasta 2^n)
@@ -1485,7 +1670,7 @@ function subsetSum(elementos, objetivo, tolerancia, maxElementos = 10) {
         for (let i = 0; i < n; i++) {
             if (mask & (1 << i)) {
                 combo.push(elementos[i]);
-                suma += elementos[i].debe;
+                suma += obtenerMonto(elementos[i]);
             }
         }
 
@@ -1498,28 +1683,17 @@ function subsetSum(elementos, objetivo, tolerancia, maxElementos = 10) {
 }
 
 /**
- * Algoritmo de subset sum para liquidaciones (haber)
+ * Algoritmo de subset sum para cupones (legacy - usa debe)
+ */
+function subsetSum(elementos, objetivo, tolerancia, maxElementos = 10) {
+    return subsetSumGenerico(elementos, objetivo, tolerancia, e => e.debe, maxElementos);
+}
+
+/**
+ * Algoritmo de subset sum para liquidaciones (legacy - usa haber)
  */
 function subsetSumHaber(elementos, objetivo, tolerancia, maxElementos = 10) {
-    const n = Math.min(elementos.length, maxElementos);
-
-    for (let mask = 1; mask < (1 << n); mask++) {
-        const combo = [];
-        let suma = 0;
-
-        for (let i = 0; i < n; i++) {
-            if (mask & (1 << i)) {
-                combo.push(elementos[i]);
-                suma += elementos[i].haber;
-            }
-        }
-
-        if (Math.abs(suma - objetivo) <= tolerancia) {
-            return combo;
-        }
-    }
-
-    return null;
+    return subsetSumGenerico(elementos, objetivo, tolerancia, e => e.haber, maxElementos);
 }
 
 // ============================================
