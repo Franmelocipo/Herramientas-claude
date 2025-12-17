@@ -2545,7 +2545,7 @@ async function guardarVinculaciones() {
 }
 
 /**
- * Exportar análisis del mayor
+ * Exportar análisis del mayor con separación de vinculaciones
  */
 function exportarAnalisisMayor() {
     if (stateMayores.registrosMayor.length === 0) {
@@ -2553,7 +2553,87 @@ function exportarAnalisisMayor() {
         return;
     }
 
-    const registros = stateMayores.registrosMayor.map(r => ({
+    const config = obtenerConfigVinculacion();
+    const wb = XLSX.utils.book_new();
+
+    // Agrupar registros por vinculación
+    const gruposVinculacion = agruparRegistrosPorVinculacion();
+
+    // Clasificar vinculaciones: totales vs parciales
+    const vinculacionesTotales = [];
+    const vinculacionesParciales = [];
+    const registrosSinVincular = [];
+
+    // Procesar grupo sin vinculación
+    if (gruposVinculacion['sin_vincular']) {
+        gruposVinculacion['sin_vincular'].forEach(r => {
+            registrosSinVincular.push(r);
+        });
+        delete gruposVinculacion['sin_vincular'];
+    }
+
+    // Clasificar cada vinculación
+    for (const [vinculacionId, registros] of Object.entries(gruposVinculacion)) {
+        const analisis = analizarVinculacion(registros);
+
+        if (Math.abs(analisis.diferencia) <= 1) {
+            // Vinculación total (diferencia despreciable)
+            vinculacionesTotales.push({
+                vinculacionId,
+                registros,
+                ...analisis
+            });
+        } else {
+            // Vinculación parcial (tiene diferencia)
+            vinculacionesParciales.push({
+                vinculacionId,
+                registros,
+                ...analisis
+            });
+        }
+    }
+
+    // ===== HOJA 1: RESUMEN Y COMPOSICIÓN DEL SALDO =====
+    const resumenData = generarResumenComposicionSaldo(
+        vinculacionesTotales,
+        vinculacionesParciales,
+        registrosSinVincular,
+        config
+    );
+    const wsResumen = XLSX.utils.aoa_to_sheet(resumenData);
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+
+    // ===== HOJA 2: VINCULACIONES TOTALES =====
+    const datosVinculacionesTotales = generarDatosVinculaciones(
+        vinculacionesTotales,
+        'total',
+        config
+    );
+    if (datosVinculacionesTotales.length > 1) {
+        const wsVincTotales = XLSX.utils.aoa_to_sheet(datosVinculacionesTotales);
+        XLSX.utils.book_append_sheet(wb, wsVincTotales, 'Vinculaciones Totales');
+    }
+
+    // ===== HOJA 3: VINCULACIONES PARCIALES =====
+    const datosVinculacionesParciales = generarDatosVinculaciones(
+        vinculacionesParciales,
+        'parcial',
+        config
+    );
+    if (datosVinculacionesParciales.length > 1) {
+        const wsVincParciales = XLSX.utils.aoa_to_sheet(datosVinculacionesParciales);
+        XLSX.utils.book_append_sheet(wb, wsVincParciales, 'Vinculaciones Parciales');
+    }
+
+    // ===== HOJA 4: PENDIENTES (SIN VINCULAR) =====
+    const datosSinVincular = generarDatosSinVincular(registrosSinVincular, config);
+    if (datosSinVincular.length > 1) {
+        const wsSinVincular = XLSX.utils.aoa_to_sheet(datosSinVincular);
+        XLSX.utils.book_append_sheet(wb, wsSinVincular, 'Pendientes');
+    }
+
+    // ===== HOJA 5: DETALLE COMPLETO (TODOS LOS REGISTROS) =====
+    const registrosCompletos = stateMayores.registrosMayor.map(r => ({
         'Fecha': formatearFecha(r.fecha),
         'Asiento': r.asiento,
         'Descripción': r.descripcion,
@@ -2561,15 +2641,327 @@ function exportarAnalisisMayor() {
         'Haber': r.haber || '',
         'Estado': obtenerEtiquetaEstado(r.estado),
         'Es Devolución': r.esDevolucion ? 'Sí' : 'No',
+        'ID Vinculación': r.vinculacionId || '-',
         'Vinculado Con': r.vinculadoCon?.length || 0
     }));
-
-    const ws = XLSX.utils.json_to_sheet(registros);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Análisis Mayor');
+    const wsCompleto = XLSX.utils.json_to_sheet(registrosCompletos);
+    XLSX.utils.book_append_sheet(wb, wsCompleto, 'Detalle Completo');
 
     const nombreArchivo = `Mayor_${stateMayores.tipoMayorActual?.nombre || 'Analisis'}_${stateMayores.clienteActual?.nombre || 'Cliente'}.xlsx`;
     XLSX.writeFile(wb, nombreArchivo);
+}
+
+/**
+ * Agrupar registros por su ID de vinculación
+ */
+function agruparRegistrosPorVinculacion() {
+    const grupos = {};
+
+    stateMayores.registrosMayor.forEach(r => {
+        const key = r.vinculacionId || 'sin_vincular';
+        if (!grupos[key]) {
+            grupos[key] = [];
+        }
+        grupos[key].push(r);
+    });
+
+    return grupos;
+}
+
+/**
+ * Analizar una vinculación y calcular totales y diferencia
+ */
+function analizarVinculacion(registros) {
+    const config = obtenerConfigVinculacion();
+
+    let totalOrigen = 0;
+    let totalDestino = 0;
+    const registrosOrigen = [];
+    const registrosDestino = [];
+
+    registros.forEach(r => {
+        if (esRegistroOrigen(r)) {
+            totalOrigen += obtenerMontoOrigen(r);
+            registrosOrigen.push(r);
+        } else {
+            totalDestino += obtenerMontoDestino(r);
+            registrosDestino.push(r);
+        }
+    });
+
+    return {
+        totalOrigen,
+        totalDestino,
+        diferencia: totalOrigen - totalDestino,
+        cantidadOrigen: registrosOrigen.length,
+        cantidadDestino: registrosDestino.length,
+        registrosOrigen,
+        registrosDestino
+    };
+}
+
+/**
+ * Generar datos para la hoja de resumen y composición del saldo
+ */
+function generarResumenComposicionSaldo(vincTotales, vincParciales, sinVincular, config) {
+    const datos = [];
+
+    // Calcular totales de registros sin vincular
+    let totalOrigenSinVincular = 0;
+    let totalDestinoSinVincular = 0;
+    sinVincular.forEach(r => {
+        if (esRegistroOrigen(r)) {
+            totalOrigenSinVincular += obtenerMontoOrigen(r);
+        } else {
+            totalDestinoSinVincular += obtenerMontoDestino(r);
+        }
+    });
+
+    // Calcular diferencias de vinculaciones parciales
+    let sumaDiferenciasParciales = 0;
+    vincParciales.forEach(v => {
+        sumaDiferenciasParciales += v.diferencia;
+    });
+
+    // Calcular saldo total del mayor
+    const totalDebe = stateMayores.registrosMayor.reduce((sum, r) => sum + (r.debe || 0), 0);
+    const totalHaber = stateMayores.registrosMayor.reduce((sum, r) => sum + (r.haber || 0), 0);
+    const saldoMayor = totalDebe - totalHaber;
+
+    // Encabezado
+    datos.push(['ANÁLISIS DE MAYOR - RESUMEN Y COMPOSICIÓN DEL SALDO']);
+    datos.push([`Tipo de Mayor: ${stateMayores.tipoMayorActual?.nombre || 'N/A'}`]);
+    datos.push([`Cliente: ${stateMayores.clienteActual?.nombre || 'N/A'}`]);
+    datos.push([`Fecha de exportación: ${new Date().toLocaleDateString('es-AR')}`]);
+    datos.push([]);
+
+    // Resumen general
+    datos.push(['═══════════════════════════════════════════════════════']);
+    datos.push(['RESUMEN GENERAL']);
+    datos.push(['═══════════════════════════════════════════════════════']);
+    datos.push(['Concepto', 'Cantidad', 'Total Debe', 'Total Haber']);
+    datos.push([
+        'Total registros',
+        stateMayores.registrosMayor.length,
+        formatearMonedaExcel(totalDebe),
+        formatearMonedaExcel(totalHaber)
+    ]);
+    datos.push(['Saldo del Mayor (Debe - Haber)', '', '', formatearMonedaExcel(saldoMayor)]);
+    datos.push([]);
+
+    // Resumen de vinculaciones
+    datos.push(['═══════════════════════════════════════════════════════']);
+    datos.push(['RESUMEN DE VINCULACIONES']);
+    datos.push(['═══════════════════════════════════════════════════════']);
+    datos.push(['Tipo', 'Cantidad Vinculaciones', 'Registros Involucrados', 'Diferencia Acumulada']);
+
+    const regVincTotales = vincTotales.reduce((sum, v) => sum + v.registros.length, 0);
+    const regVincParciales = vincParciales.reduce((sum, v) => sum + v.registros.length, 0);
+
+    datos.push([
+        'Vinculaciones Totales (sin diferencia)',
+        vincTotales.length,
+        regVincTotales,
+        formatearMonedaExcel(0)
+    ]);
+    datos.push([
+        'Vinculaciones Parciales (con diferencia)',
+        vincParciales.length,
+        regVincParciales,
+        formatearMonedaExcel(sumaDiferenciasParciales)
+    ]);
+    datos.push([
+        'Registros sin vincular',
+        '-',
+        sinVincular.length,
+        '-'
+    ]);
+    datos.push([]);
+
+    // Composición del saldo
+    datos.push(['═══════════════════════════════════════════════════════']);
+    datos.push(['COMPOSICIÓN DEL SALDO DEL MAYOR']);
+    datos.push(['═══════════════════════════════════════════════════════']);
+    datos.push(['Los elementos vinculados totalmente no afectan el saldo.']);
+    datos.push(['El saldo se compone de:']);
+    datos.push([]);
+    datos.push(['Concepto', '', 'Importe']);
+    datos.push([]);
+
+    // Pendientes sin vincular
+    datos.push([`${config.etiquetaOrigen} sin vincular (pendientes)`, '', formatearMonedaExcel(totalOrigenSinVincular)]);
+    datos.push([`${config.etiquetaDestino} sin vincular (pendientes)`, '', formatearMonedaExcel(-totalDestinoSinVincular)]);
+    datos.push(['Subtotal pendientes sin vincular', '', formatearMonedaExcel(totalOrigenSinVincular - totalDestinoSinVincular)]);
+    datos.push([]);
+
+    // Diferencias de vinculaciones parciales
+    datos.push(['Diferencias de vinculaciones parciales:', '', formatearMonedaExcel(sumaDiferenciasParciales)]);
+
+    // Detalle de diferencias parciales si hay
+    if (vincParciales.length > 0) {
+        vincParciales.forEach((v, idx) => {
+            const descripcionOrigen = v.registrosOrigen[0]?.descripcion?.substring(0, 40) || 'N/A';
+            datos.push([
+                `  - Vinculación ${idx + 1}: ${descripcionOrigen}...`,
+                '',
+                formatearMonedaExcel(v.diferencia)
+            ]);
+        });
+    }
+    datos.push([]);
+
+    // Total composición
+    const saldoCalculado = (totalOrigenSinVincular - totalDestinoSinVincular) + sumaDiferenciasParciales;
+    datos.push(['───────────────────────────────────────────────────────']);
+    datos.push(['TOTAL COMPOSICIÓN DEL SALDO', '', formatearMonedaExcel(saldoCalculado)]);
+    datos.push(['Saldo según mayor contable', '', formatearMonedaExcel(saldoMayor)]);
+
+    const diferenciaConciliacion = Math.abs(saldoCalculado - saldoMayor);
+    if (diferenciaConciliacion <= 1) {
+        datos.push(['Estado', '', 'CONCILIADO ✓']);
+    } else {
+        datos.push(['Diferencia de conciliación', '', formatearMonedaExcel(saldoCalculado - saldoMayor)]);
+    }
+
+    return datos;
+}
+
+/**
+ * Generar datos para hojas de vinculaciones (totales o parciales)
+ */
+function generarDatosVinculaciones(vinculaciones, tipo, config) {
+    const datos = [];
+
+    // Encabezado
+    const titulo = tipo === 'total'
+        ? 'VINCULACIONES TOTALES (SIN DIFERENCIA)'
+        : 'VINCULACIONES PARCIALES (CON DIFERENCIA)';
+    datos.push([titulo]);
+    datos.push([]);
+
+    if (vinculaciones.length === 0) {
+        datos.push(['No hay vinculaciones de este tipo']);
+        return datos;
+    }
+
+    // Procesar cada vinculación
+    vinculaciones.forEach((vinc, idx) => {
+        datos.push(['═══════════════════════════════════════════════════════']);
+        datos.push([`VINCULACIÓN #${idx + 1}`]);
+        datos.push([`ID: ${vinc.vinculacionId}`]);
+        datos.push([`Total ${config.etiquetaOrigen}: ${formatearMonedaExcel(vinc.totalOrigen)}`]);
+        datos.push([`Total ${config.etiquetaDestino}: ${formatearMonedaExcel(vinc.totalDestino)}`]);
+        datos.push([`Diferencia: ${formatearMonedaExcel(vinc.diferencia)}`]);
+        datos.push([]);
+
+        // Encabezados de columnas
+        datos.push(['Fecha', 'Asiento', 'Descripción', 'Debe', 'Haber', 'Tipo']);
+
+        // Primero los orígenes
+        vinc.registrosOrigen.forEach(r => {
+            datos.push([
+                formatearFecha(r.fecha),
+                r.asiento,
+                r.descripcion,
+                r.debe || '',
+                r.haber || '',
+                config.etiquetaSingularOrigen.toUpperCase()
+            ]);
+        });
+
+        // Luego los destinos
+        vinc.registrosDestino.forEach(r => {
+            datos.push([
+                formatearFecha(r.fecha),
+                r.asiento,
+                r.descripcion,
+                r.debe || '',
+                r.haber || '',
+                config.etiquetaSingularDestino.toUpperCase()
+            ]);
+        });
+
+        datos.push([]);
+    });
+
+    return datos;
+}
+
+/**
+ * Generar datos para hoja de registros sin vincular
+ */
+function generarDatosSinVincular(registros, config) {
+    const datos = [];
+
+    datos.push(['REGISTROS PENDIENTES (SIN VINCULAR)']);
+    datos.push(['Estos registros componen parte del saldo del mayor']);
+    datos.push([]);
+
+    if (registros.length === 0) {
+        datos.push(['No hay registros pendientes de vincular']);
+        return datos;
+    }
+
+    // Separar por tipo
+    const origenes = registros.filter(r => esRegistroOrigen(r));
+    const destinos = registros.filter(r => !esRegistroOrigen(r));
+
+    // Orígenes pendientes
+    if (origenes.length > 0) {
+        datos.push(['═══════════════════════════════════════════════════════']);
+        datos.push([`${config.etiquetaOrigen.toUpperCase()} PENDIENTES`]);
+        datos.push(['═══════════════════════════════════════════════════════']);
+        datos.push(['Fecha', 'Asiento', 'Descripción', 'Debe', 'Haber', 'Estado']);
+
+        origenes.forEach(r => {
+            datos.push([
+                formatearFecha(r.fecha),
+                r.asiento,
+                r.descripcion,
+                r.debe || '',
+                r.haber || '',
+                obtenerEtiquetaEstado(r.estado)
+            ]);
+        });
+
+        const totalOrigenes = origenes.reduce((sum, r) => sum + obtenerMontoOrigen(r), 0);
+        datos.push([]);
+        datos.push(['', '', `TOTAL ${config.etiquetaOrigen.toUpperCase()}:`, formatearMonedaExcel(totalOrigenes), '', '']);
+        datos.push([]);
+    }
+
+    // Destinos pendientes
+    if (destinos.length > 0) {
+        datos.push(['═══════════════════════════════════════════════════════']);
+        datos.push([`${config.etiquetaDestino.toUpperCase()} PENDIENTES`]);
+        datos.push(['═══════════════════════════════════════════════════════']);
+        datos.push(['Fecha', 'Asiento', 'Descripción', 'Debe', 'Haber', 'Estado']);
+
+        destinos.forEach(r => {
+            datos.push([
+                formatearFecha(r.fecha),
+                r.asiento,
+                r.descripcion,
+                r.debe || '',
+                r.haber || '',
+                obtenerEtiquetaEstado(r.estado)
+            ]);
+        });
+
+        const totalDestinos = destinos.reduce((sum, r) => sum + obtenerMontoDestino(r), 0);
+        datos.push([]);
+        datos.push(['', '', `TOTAL ${config.etiquetaDestino.toUpperCase()}:`, '', formatearMonedaExcel(totalDestinos), '']);
+    }
+
+    return datos;
+}
+
+/**
+ * Formatear moneda para Excel (sin símbolo $)
+ */
+function formatearMonedaExcel(valor) {
+    if (typeof valor !== 'number' || isNaN(valor)) return 0;
+    return Math.round(valor * 100) / 100;
 }
 
 // ============================================
