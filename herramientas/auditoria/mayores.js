@@ -153,6 +153,21 @@ function obtenerMontoDestino(registro) {
     return config.tipoDestino === 'haber' ? registro.haber : registro.debe;
 }
 
+/**
+ * Determinar si un registro es de tipo "origen" según configuración
+ * @param {Object} registro - Registro del mayor
+ * @returns {boolean} true si es registro de origen
+ */
+function esRegistroOrigen(registro) {
+    if (registro.esDevolucion) return false;
+    const config = obtenerConfigVinculacion();
+    if (config.tipoOrigen === 'debe') {
+        return registro.debe > 0;
+    } else {
+        return registro.haber > 0;
+    }
+}
+
 // ============================================
 // NAVEGACIÓN ENTRE MÓDULOS
 // ============================================
@@ -1754,9 +1769,9 @@ function renderizarTablaMayor() {
     }
 
     tbody.innerHTML = registrosFiltrados.map(r => {
-        // Determinar si el registro está seleccionado
-        const esCupon = r.debe > 0 && !r.esDevolucion;
-        const isSelected = esCupon
+        // Determinar si el registro está seleccionado usando configuración dinámica
+        const esOrigen = esRegistroOrigen(r);
+        const isSelected = esOrigen
             ? stateMayores.cuponesSeleccionados.includes(r.id)
             : stateMayores.liquidacionesSeleccionadas.includes(r.id);
         const checkedAttr = isSelected ? 'checked' : '';
@@ -1799,9 +1814,9 @@ function toggleSeleccionarTodosMayor(checkbox) {
     }
 
     if (checkbox.checked) {
-        // Seleccionar todos los registros visibles
+        // Seleccionar todos los registros visibles usando configuración dinámica
         registrosVisibles.forEach(r => {
-            if (r.debe > 0 && !r.esDevolucion) {
+            if (esRegistroOrigen(r)) {
                 if (!stateMayores.cuponesSeleccionados.includes(r.id)) {
                     stateMayores.cuponesSeleccionados.push(r.id);
                 }
@@ -1833,11 +1848,11 @@ function toggleSeleccionarTodosMayor(checkbox) {
  * Toggle selección de registro en tabla
  */
 function toggleSeleccionRegistroMayor(id, checkbox) {
-    // Actualizar selección según tipo
+    // Actualizar selección según tipo usando configuración dinámica
     const registro = stateMayores.registrosMayor.find(r => r.id === id);
     if (!registro) return;
 
-    if (registro.debe > 0 && !registro.esDevolucion) {
+    if (esRegistroOrigen(registro)) {
         if (checkbox.checked) {
             if (!stateMayores.cuponesSeleccionados.includes(id)) {
                 stateMayores.cuponesSeleccionados.push(id);
