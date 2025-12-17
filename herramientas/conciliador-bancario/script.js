@@ -6540,6 +6540,79 @@ function cambiarTab(tabId) {
 
 // ========== DESCARGA DE REPORTE ==========
 
+/**
+ * Exporta las operaciones en auditoría a un archivo Excel
+ */
+function exportarAuditoriaExcel() {
+    if (state.enAuditoria.length === 0) {
+        mostrarToast('No hay operaciones en auditoría para exportar', 'warning');
+        return;
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    // Hoja principal: Operaciones en Auditoría
+    const dataAuditoria = [];
+
+    // Encabezado con información del contexto
+    dataAuditoria.push(['REPORTE DE OPERACIONES EN AUDITORÍA']);
+    dataAuditoria.push(['']);
+    dataAuditoria.push(['Fecha de exportación:', new Date().toLocaleDateString('es-AR') + ' ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })]);
+    dataAuditoria.push(['Tipo de conciliación:', state.tipoConciliacion === 'creditos' ? 'Créditos' : 'Débitos']);
+    dataAuditoria.push(['Total de operaciones:', state.enAuditoria.length]);
+
+    // Calcular totales
+    const totalDebitos = state.enAuditoria.reduce((sum, e) => sum + (e.debito || 0), 0);
+    const totalCreditos = state.enAuditoria.reduce((sum, e) => sum + (e.credito || 0), 0);
+    dataAuditoria.push(['Total débitos:', totalDebitos]);
+    dataAuditoria.push(['Total créditos:', totalCreditos]);
+    dataAuditoria.push(['']);
+    dataAuditoria.push(['']);
+
+    // Encabezados de la tabla
+    dataAuditoria.push(['Fecha', 'Descripción', 'Origen', 'Débito', 'Crédito', 'Fecha de Marcación', 'Nota de Auditoría']);
+
+    // Datos de cada operación
+    state.enAuditoria.forEach(e => {
+        const fechaAud = new Date(e.fechaAuditoria);
+        dataAuditoria.push([
+            formatearFecha(e.fecha),
+            e.descripcion || '',
+            e.origen || '',
+            e.debito || '',
+            e.credito || '',
+            formatearFecha(fechaAud) + ' ' + fechaAud.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+            e.notaAuditoria || ''
+        ]);
+    });
+
+    // Agregar fila de totales al final
+    dataAuditoria.push(['']);
+    dataAuditoria.push(['', '', 'TOTALES:', totalDebitos, totalCreditos, '', '']);
+
+    const wsAuditoria = XLSX.utils.aoa_to_sheet(dataAuditoria);
+
+    // Ajustar anchos de columna
+    wsAuditoria['!cols'] = [
+        { wch: 12 },  // Fecha
+        { wch: 40 },  // Descripción
+        { wch: 15 },  // Origen
+        { wch: 15 },  // Débito
+        { wch: 15 },  // Crédito
+        { wch: 18 },  // Fecha Marcación
+        { wch: 50 }   // Nota de Auditoría
+    ];
+
+    XLSX.utils.book_append_sheet(wb, wsAuditoria, 'Operaciones en Auditoría');
+
+    // Descargar archivo
+    const fecha = new Date().toISOString().split('T')[0];
+    const tipo = state.tipoConciliacion === 'creditos' ? 'Creditos' : 'Debitos';
+    XLSX.writeFile(wb, `Auditoria_${tipo}_${fecha}.xlsx`);
+
+    mostrarToast(`Se exportaron ${state.enAuditoria.length} operaciones en auditoría`, 'success');
+}
+
 function descargarReporte() {
     const res = state.resultados;
     const wb = XLSX.utils.book_new();

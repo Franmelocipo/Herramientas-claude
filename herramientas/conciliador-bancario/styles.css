@@ -1858,6 +1858,9 @@ body {
 }
 
 .auditoria-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding: 12px 0;
     margin-bottom: 12px;
 }
@@ -1867,6 +1870,40 @@ body {
     font-weight: 600;
     color: #92400e;
     margin: 0;
+}
+
+.btn-exportar-auditoria {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+}
+
+.btn-exportar-auditoria:hover {
+    background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(5, 150, 105, 0.3);
+}
+
+.btn-exportar-auditoria:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+}
+
+.btn-exportar-auditoria:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 
 .auditoria-info {
