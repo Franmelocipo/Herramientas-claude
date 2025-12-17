@@ -7055,6 +7055,11 @@ async function sincronizarConExtracto() {
             }
         });
 
+        // Claves en auditoría (movimientos enviados a revisión)
+        state.enAuditoria.forEach(e => {
+            clavesEnConciliacion.add(generarClave(e));
+        });
+
         console.log('Claves en conciliación (muestra):', Array.from(clavesEnConciliacion).slice(0, 10));
         console.log('Clave del movimiento buscado (496529):', generarClave({origen: '496529', debito: 2872724.42}));
 
@@ -7201,6 +7206,10 @@ async function verificarIntegridadConciliacion() {
             if (e.descripcion !== undefined) {
                 clavesEnConciliacion.add(generarClave(e));
             }
+        });
+        // Incluir movimientos enviados a auditoría
+        state.enAuditoria.forEach(e => {
+            clavesEnConciliacion.add(generarClave(e));
         });
 
         // Encontrar movimientos faltantes
