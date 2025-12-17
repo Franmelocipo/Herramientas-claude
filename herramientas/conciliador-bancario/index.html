@@ -23,6 +23,58 @@
             <span class="nav-text">Volver</span>
         </a>
     </div>
+
+    <!-- Panel de información de conciliación (sticky) -->
+    <div id="panelInfoConciliacion" class="panel-info-conciliacion hidden">
+        <div class="panel-info-content">
+            <div class="panel-info-section panel-info-cliente">
+                <span class="panel-info-icon">👤</span>
+                <div class="panel-info-data">
+                    <span class="panel-info-label">Cliente</span>
+                    <span class="panel-info-value" id="panelClienteNombre">-</span>
+                </div>
+            </div>
+            <div class="panel-info-divider"></div>
+            <div class="panel-info-section panel-info-cuenta">
+                <span class="panel-info-icon">🏦</span>
+                <div class="panel-info-data">
+                    <span class="panel-info-label">Cuenta</span>
+                    <span class="panel-info-value" id="panelCuentaNombre">-</span>
+                </div>
+            </div>
+            <div class="panel-info-divider"></div>
+            <div class="panel-info-section panel-info-tipo">
+                <span class="panel-info-icon" id="panelTipoIcon">📊</span>
+                <div class="panel-info-data">
+                    <span class="panel-info-label">Tipo</span>
+                    <span class="panel-info-value" id="panelTipoNombre">-</span>
+                </div>
+            </div>
+            <div class="panel-info-divider"></div>
+            <div class="panel-info-section panel-info-periodo">
+                <span class="panel-info-icon">📅</span>
+                <div class="panel-info-data">
+                    <span class="panel-info-label">Período</span>
+                    <span class="panel-info-value" id="panelPeriodo">-</span>
+                </div>
+            </div>
+            <div class="panel-info-divider hide-mobile"></div>
+            <div class="panel-info-section panel-info-estado hide-mobile">
+                <span class="panel-info-icon" id="panelEstadoIcon">⏳</span>
+                <div class="panel-info-data">
+                    <span class="panel-info-label">Estado</span>
+                    <span class="panel-info-value" id="panelEstado">Configurando</span>
+                </div>
+            </div>
+        </div>
+        <!-- Fila secundaria para nombre de conciliación guardada -->
+        <div id="panelInfoGuardada" class="panel-info-guardada hidden">
+            <span class="panel-guardada-icon">💾</span>
+            <span class="panel-guardada-label">Conciliación:</span>
+            <span class="panel-guardada-nombre" id="panelNombreConciliacion">-</span>
+        </div>
+    </div>
+
     <div class="container">
         <div class="card">
             <div class="header">
