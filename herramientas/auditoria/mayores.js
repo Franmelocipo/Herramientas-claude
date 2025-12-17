@@ -1776,10 +1776,18 @@ function buscarCombinacionSumaGenerica(elementos, montoObjetivo, tolerancia, obt
     }
 
     // Si el greedy no funcionó, intentar subset sum con límite
-    // CORREGIDO: Pasar elementos.length como maxElementos para considerar todos los elementos
-    if (elementos.length <= 20) {
+    // El límite de 25 elementos permite manejar hasta 2^25 = 33M combinaciones
+    // Para el caso típico de cheques diferidos (15-25 cobros por emisión) esto es suficiente
+    if (elementos.length <= 25) {
+        if (logThis) console.log(`   🔄 Intentando subset sum con ${elementos.length} elementos...`);
         const combinacion = subsetSumGenerico(elementos, montoObjetivo, tolerancia, obtenerMonto, elementos.length);
-        if (combinacion) return combinacion;
+        if (combinacion) {
+            if (logThis) console.log(`   ✅ Subset sum encontró combinación de ${combinacion.length} elementos`);
+            return combinacion;
+        }
+        if (logThis) console.log(`   ❌ Subset sum no encontró combinación`);
+    } else {
+        if (logThis) console.log(`   ⚠️ Demasiados elementos (${elementos.length}) para subset sum, se omite`);
     }
 
     return null;
