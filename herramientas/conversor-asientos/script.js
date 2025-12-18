@@ -16,7 +16,15 @@ const state = {
     planCuentas: [],        // Plan de cuentas del sistema (desde Supabase)
     mapeoImpuestos: {},     // Mapeo de códigos de impuesto a cuentas contables
     planCuentasCliente: null,  // Plan de cuentas del cliente (desde Supabase)
-    mapeoCuentasCliente: {}    // Mapeo de cuentas del cliente -> sistema (desde Supabase)
+    mapeoCuentasCliente: {},   // Mapeo de cuentas del cliente -> sistema (desde Supabase)
+    // Cuentas específicas para préstamos (una por cada columna de importe)
+    cuentasPrestamo: {
+        capital: '',
+        intereses: '',
+        iva: '',
+        percIva: '',
+        otros: ''
+    }
 };
 
 // ============================================
@@ -436,7 +444,8 @@ const sourceTypes = {
     compensaciones: { name: 'Compensaciones ARCA', icon: '🔄' },
     tabla: { name: 'Tabla de Datos', icon: '📊' },
     soscontador: { name: 'Libro Diario SOS Contador', icon: '📒' },
-    puenteweb: { name: 'Libro Diario Puente Web', icon: '🌐' }
+    puenteweb: { name: 'Libro Diario Puente Web', icon: '🌐' },
+    prestamos: { name: 'Cuotas de Préstamos', icon: '🏛️' }
 };
 
 // ============================================
@@ -638,6 +647,14 @@ function reset() {
     state.activeSearchField = null;
     state.expandedGroups = {};
     state.selectedGroups = {};
+    // Resetear cuentas de préstamos
+    state.cuentasPrestamo = {
+        capital: '',
+        intereses: '',
+        iva: '',
+        percIva: '',
+        otros: ''
+    };
 
     elements.fileInput.value = '';
     elements.bankAccountInput.value = '';
@@ -2340,6 +2357,70 @@ function groupSimilarEntries(data) {
             groups[key].items.push(row);
         });
 
+    } else if (state.sourceType === 'prestamos') {
+        // Cuotas de Préstamos Bancarios
+        // Cada cuota se convierte en un asiento con múltiples líneas de débito
+        // y una línea de crédito para la contrapartida
+        data.forEach((row) => {
+            // Obtener número de cuota (puede venir con diferentes nombres de columna)
+            const nroCuota = String(
+                row['Nro de Cuota'] || row['NRO_CUOTA'] || row['Nro Cuota'] ||
+                row['CUOTA'] || row['Cuota'] || row['N°'] || ''
+            ).trim();
+
+            if (!nroCuota) return;
+
+            // Obtener fecha de vencimiento
+            const vencimiento = row['Vencimiento'] || row['VENCIMIENTO'] ||
+                               row['Fecha'] || row['FECHA'] || '';
+
+            // Obtener importes de cada columna
+            const capital = parseAmount(row['Capital'] || row['CAPITAL'] || 0);
+            const intereses = parseAmount(row['Intereses'] || row['INTERESES'] || row['Interes'] || 0);
+            const iva = parseAmount(row['IVA'] || row['Iva'] || 0);
+            const percIva = parseAmount(row['Perc IVA'] || row['PERC_IVA'] || row['Perc. IVA'] ||
+                                       row['Percepcion IVA'] || row['PERCEPCION_IVA'] || 0);
+            const otros = parseAmount(row['Otros'] || row['OTROS'] || row['Otro'] || 0);
+            const totalPagar = parseAmount(row['Total a pagar'] || row['TOTAL_A_PAGAR'] ||
+                                          row['Total'] || row['TOTAL'] || 0);
+
+            // Clave de agrupación: número de cuota
+            const key = `Cuota ${nroCuota}`;
+
+            // Calcular el total si no viene (suma de las partes)
+            const totalCalculado = totalPagar || (capital + intereses + iva + percIva + otros);
+
+            if (!groups[key]) {
+                groups[key] = {
+                    concepto: key,
+                    ejemploCompleto: `Vto: ${vencimiento} | Total: $${totalCalculado.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`,
+                    count: 1,
+                    totalDebe: totalCalculado,
+                    totalHaber: 0,
+                    items: [],
+                    nroCuota: nroCuota,
+                    vencimiento: vencimiento,
+                    // Guardar los montos individuales para la generación de asientos
+                    capital: capital,
+                    intereses: intereses,
+                    iva: iva,
+                    percIva: percIva,
+                    otros: otros,
+                    totalPagar: totalCalculado
+                };
+            }
+
+            groups[key].items.push({
+                ...row,
+                _capital: capital,
+                _intereses: intereses,
+                _iva: iva,
+                _percIva: percIva,
+                _otros: otros,
+                _totalPagar: totalCalculado
+            });
+        });
+
     } else {
         // Extractos bancarios - NUEVA LÓGICA: Agrupación más específica
         // En lugar de agrupar por categorías amplias, agrupamos por descripción exacta
@@ -3082,6 +3163,12 @@ function renderGroupsList() {
         return;
     }
 
+    // PARA PRÉSTAMOS: Renderizar interfaz de asignación por columna
+    if (state.sourceType === 'prestamos') {
+        renderAsignacionPrestamos();
+        return;
+    }
+
     // PARA OTROS TIPOS: Renderizar interfaz estándar de grupos
     elements.groupStats.textContent = `${state.groupedData.length} grupos | ${state.sourceData.length} movimientos`;
 
@@ -3242,6 +3329,317 @@ function renderGroupsList() {
             handleAccountInputKeydown(e, idx);
         });
     });
+}
+
+// ============================================
+// RENDERIZADO DE ASIGNACIÓN DE CUENTAS PARA PRÉSTAMOS
+// ============================================
+function renderAsignacionPrestamos() {
+    const numCuotas = state.groupedData.length;
+    let totalPrestamo = 0;
+    let totalCapital = 0;
+    let totalIntereses = 0;
+    let totalIva = 0;
+    let totalPercIva = 0;
+    let totalOtros = 0;
+
+    state.groupedData.forEach(g => {
+        totalPrestamo += g.totalPagar || 0;
+        totalCapital += g.capital || 0;
+        totalIntereses += g.intereses || 0;
+        totalIva += g.iva || 0;
+        totalPercIva += g.percIva || 0;
+        totalOtros += g.otros || 0;
+    });
+
+    elements.groupStats.textContent = `${numCuotas} cuotas | Total: $${totalPrestamo.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+
+    // Mostrar sección de cuenta de contrapartida (la cuenta desde donde se pagan las cuotas)
+    elements.bankAccountSection.classList.remove('hidden');
+    elements.bankAccountLabel.textContent = 'Cuenta de CONTRAPARTIDA (banco/caja desde donde se pagan las cuotas)';
+    elements.bankAccountInput.placeholder = getSelectedClientId() ? '🔍 Buscar cuenta contrapartida...' : 'Ej: 11020101';
+    elements.bankAccountInput.value = state.bankAccount;
+    elements.compensacionesInfo.classList.add('hidden');
+
+    // Definir las columnas de importes del préstamo
+    const columnasPrestamo = [
+        { key: 'capital', label: 'Capital', total: totalCapital, descripcion: 'Amortización del préstamo' },
+        { key: 'intereses', label: 'Intereses', total: totalIntereses, descripcion: 'Intereses del préstamo' },
+        { key: 'iva', label: 'IVA', total: totalIva, descripcion: 'IVA sobre intereses' },
+        { key: 'percIva', label: 'Perc. IVA', total: totalPercIva, descripcion: 'Percepción de IVA' },
+        { key: 'otros', label: 'Otros', total: totalOtros, descripcion: 'Otros gastos (seguros, comisiones, etc.)' }
+    ];
+
+    // Información explicativa
+    let html = `
+        <div class="prestamo-info-box" style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4caf50;">
+            <h3 style="margin: 0 0 8px 0; color: #2e7d32;">🏛️ Asignación de Cuentas para Préstamo</h3>
+            <p style="margin: 0; color: #333;">
+                Asigne una cuenta contable a cada concepto del préstamo. Cada cuota generará un asiento contable
+                con líneas de <strong>débito</strong> para cada concepto que tenga importe, y una línea de <strong>crédito</strong>
+                para la cuenta de contrapartida (banco/caja).
+            </p>
+        </div>
+    `;
+
+    // Sección de asignación de cuentas por columna
+    html += `
+        <div class="prestamo-cuentas-container" style="background: white; border: 2px solid #c8e6c9; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+            <h4 style="margin: 0 0 16px 0; color: #2e7d32;">Cuentas contables por concepto</h4>
+            <div class="prestamo-cuentas-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+    `;
+
+    columnasPrestamo.forEach((col, idx) => {
+        const cuentaAsignada = state.cuentasPrestamo[col.key] || '';
+        const tieneImporte = col.total > 0;
+
+        html += `
+            <div class="prestamo-cuenta-item ${!tieneImporte ? 'sin-importe' : ''}" style="background: ${tieneImporte ? '#f1f8e9' : '#f5f5f5'}; border: 1px solid ${tieneImporte ? '#aed581' : '#e0e0e0'}; border-radius: 8px; padding: 16px; ${!tieneImporte ? 'opacity: 0.6;' : ''}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div>
+                        <strong style="color: ${tieneImporte ? '#33691e' : '#666'}; font-size: 15px;">${col.label}</strong>
+                        <span style="color: #666; font-size: 12px; display: block;">${col.descripcion}</span>
+                    </div>
+                    <span class="badge" style="background: ${tieneImporte ? '#4caf50' : '#9e9e9e'}; color: white; padding: 4px 10px; border-radius: 12px; font-size: 13px; font-weight: 600;">
+                        $${col.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                    </span>
+                </div>
+                <div class="input-with-dropdown">
+                    <input
+                        type="text"
+                        class="input-text prestamo-cuenta-input"
+                        data-prestamo-col="${col.key}"
+                        data-prestamo-idx="${idx}"
+                        value="${cuentaAsignada}"
+                        placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código de cuenta'}"
+                        ${!tieneImporte ? 'disabled' : ''}
+                        style="width: 100%; padding: 0.75rem; font-size: 0.95rem; ${!tieneImporte ? 'background: #eee; cursor: not-allowed;' : ''}"
+                    >
+                    <div class="account-dropdown hidden" id="dropdown-prestamo-${col.key}"></div>
+                </div>
+                ${!tieneImporte ? '<small style="color: #999; font-size: 11px; display: block; margin-top: 4px;">Sin importe - no requiere cuenta</small>' : ''}
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+        </div>
+    `;
+
+    // Resumen de cuotas
+    html += `
+        <div class="prestamo-cuotas-resumen" style="background: #f5f5f5; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+            <h4 style="margin: 0 0 12px 0; color: #333;">Vista previa de cuotas (${numCuotas})</h4>
+            <div style="max-height: 300px; overflow-y: auto;">
+                <table class="preview-table" style="width: 100%; font-size: 13px;">
+                    <thead>
+                        <tr style="background: #e0e0e0;">
+                            <th style="padding: 8px; text-align: left;">Cuota</th>
+                            <th style="padding: 8px; text-align: left;">Vencimiento</th>
+                            <th style="padding: 8px; text-align: right;">Capital</th>
+                            <th style="padding: 8px; text-align: right;">Intereses</th>
+                            <th style="padding: 8px; text-align: right;">IVA</th>
+                            <th style="padding: 8px; text-align: right;">Perc. IVA</th>
+                            <th style="padding: 8px; text-align: right;">Otros</th>
+                            <th style="padding: 8px; text-align: right; font-weight: bold;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+    `;
+
+    state.groupedData.forEach(g => {
+        html += `
+            <tr>
+                <td style="padding: 8px;">${g.concepto}</td>
+                <td style="padding: 8px;">${g.vencimiento || '-'}</td>
+                <td style="padding: 8px; text-align: right;">${g.capital > 0 ? '$' + g.capital.toLocaleString('es-AR', { minimumFractionDigits: 2 }) : '-'}</td>
+                <td style="padding: 8px; text-align: right;">${g.intereses > 0 ? '$' + g.intereses.toLocaleString('es-AR', { minimumFractionDigits: 2 }) : '-'}</td>
+                <td style="padding: 8px; text-align: right;">${g.iva > 0 ? '$' + g.iva.toLocaleString('es-AR', { minimumFractionDigits: 2 }) : '-'}</td>
+                <td style="padding: 8px; text-align: right;">${g.percIva > 0 ? '$' + g.percIva.toLocaleString('es-AR', { minimumFractionDigits: 2 }) : '-'}</td>
+                <td style="padding: 8px; text-align: right;">${g.otros > 0 ? '$' + g.otros.toLocaleString('es-AR', { minimumFractionDigits: 2 }) : '-'}</td>
+                <td style="padding: 8px; text-align: right; font-weight: bold;">$${g.totalPagar.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+            </tr>
+        `;
+    });
+
+    html += `
+                    </tbody>
+                    <tfoot>
+                        <tr style="background: #e8f5e9; font-weight: bold;">
+                            <td style="padding: 8px;" colspan="2">TOTALES</td>
+                            <td style="padding: 8px; text-align: right;">$${totalCapital.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                            <td style="padding: 8px; text-align: right;">$${totalIntereses.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                            <td style="padding: 8px; text-align: right;">$${totalIva.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                            <td style="padding: 8px; text-align: right;">$${totalPercIva.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                            <td style="padding: 8px; text-align: right;">$${totalOtros.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                            <td style="padding: 8px; text-align: right;">$${totalPrestamo.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    `;
+
+    elements.groupsList.innerHTML = html;
+
+    // Attach event listeners a los inputs de préstamo
+    document.querySelectorAll('.prestamo-cuenta-input:not([disabled])').forEach(input => {
+        const col = input.dataset.prestamoCol;
+        const idx = parseInt(input.dataset.prestamoIdx);
+
+        // Guardar cambios en tiempo real
+        input.addEventListener('input', (e) => {
+            const valor = e.target.value.trim();
+            state.cuentasPrestamo[col] = valor;
+
+            if (getSelectedClientId() && valor.length > 0) {
+                handlePrestamoAccountInputChange(col, idx);
+            }
+        });
+
+        // Mostrar dropdown al enfocar
+        input.addEventListener('focus', () => {
+            if (getSelectedClientId()) {
+                state.activeSearchField = `prestamo-${col}`;
+                showPrestamoAccountDropdown(col, idx);
+            }
+        });
+
+        // Navegación por teclado
+        input.addEventListener('keydown', (e) => {
+            handlePrestamoAccountInputKeydown(e, col, idx);
+        });
+    });
+}
+
+// ============================================
+// FUNCIONES DE BÚSQUEDA PARA PRÉSTAMOS
+// ============================================
+function handlePrestamoAccountInputChange(col, idx) {
+    const input = document.querySelector(`input[data-prestamo-col="${col}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-prestamo-${col}`);
+
+    if (!dropdown) return;
+
+    if (searchTerm.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+
+    // Filtrar plan de cuentas
+    const filteredAccounts = state.planCuentas.filter(account => {
+        const codigo = String(account.codigo || '').toUpperCase();
+        const nombre = String(account.nombre || '').toUpperCase();
+        return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+    }).slice(0, 50);
+
+    if (filteredAccounts.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty" style="padding: 12px; color: #999;">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = filteredAccounts.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectPrestamoAccount('${col}', '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function showPrestamoAccountDropdown(col, idx) {
+    const input = document.querySelector(`input[data-prestamo-col="${col}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-prestamo-${col}`);
+
+    if (!dropdown) return;
+
+    if (state.planCuentas.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty" style="padding: 12px; color: #999;">No hay plan de cuentas cargado</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    let accountsToShow = state.planCuentas;
+    if (searchTerm.length > 0) {
+        accountsToShow = accountsToShow.filter(account => {
+            const codigo = String(account.codigo || '').toUpperCase();
+            const nombre = String(account.nombre || '').toUpperCase();
+            return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+        });
+    }
+
+    accountsToShow = accountsToShow.slice(0, 50);
+
+    if (accountsToShow.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty" style="padding: 12px; color: #999;">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = accountsToShow.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectPrestamoAccount('${col}', '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function selectPrestamoAccount(col, codigo, nombre) {
+    // Guardar la cuenta en el estado
+    state.cuentasPrestamo[col] = codigo;
+
+    // Actualizar el input
+    const input = document.querySelector(`input[data-prestamo-col="${col}"]`);
+    if (input) {
+        input.value = `${codigo} - ${nombre}`;
+    }
+
+    // Ocultar dropdown
+    const dropdown = document.getElementById(`dropdown-prestamo-${col}`);
+    if (dropdown) {
+        dropdown.classList.add('hidden');
+    }
+}
+
+function handlePrestamoAccountInputKeydown(e, col, idx) {
+    const dropdown = document.getElementById(`dropdown-prestamo-${col}`);
+    if (!dropdown || dropdown.classList.contains('hidden')) return;
+
+    const items = dropdown.querySelectorAll('.dropdown-item');
+    let currentIndex = Array.from(items).findIndex(item => item.classList.contains('active'));
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        currentIndex = (currentIndex + 1) % items.length;
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        currentIndex = currentIndex <= 0 ? items.length - 1 : currentIndex - 1;
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentIndex >= 0 && items[currentIndex]) {
+            items[currentIndex].click();
+        }
+        dropdown.classList.add('hidden');
+        return;
+    } else if (e.key === 'Escape') {
+        dropdown.classList.add('hidden');
+        return;
+    } else {
+        return;
+    }
+
+    items.forEach(item => item.classList.remove('active'));
+    if (items[currentIndex]) {
+        items[currentIndex].classList.add('active');
+        items[currentIndex].scrollIntoView({ block: 'nearest' });
+    }
 }
 
 // ============================================
@@ -4620,6 +5018,39 @@ function generateFinalExcel() {
                 }
             });
         }
+    } else if (state.sourceType === 'prestamos') {
+        // VALIDACIÓN ESPECÍFICA PARA PRÉSTAMOS
+        // Validar cuenta de contrapartida (banco/caja desde donde se pagan las cuotas)
+        if (!state.bankAccount) {
+            errors.push('Falta la cuenta de CONTRAPARTIDA (banco/caja desde donde se pagan las cuotas)');
+        }
+
+        // Calcular totales para saber qué columnas requieren cuenta
+        let totalCapital = 0, totalIntereses = 0, totalIva = 0, totalPercIva = 0, totalOtros = 0;
+        state.groupedData.forEach(g => {
+            totalCapital += g.capital || 0;
+            totalIntereses += g.intereses || 0;
+            totalIva += g.iva || 0;
+            totalPercIva += g.percIva || 0;
+            totalOtros += g.otros || 0;
+        });
+
+        // Validar que cada columna con importe tenga cuenta asignada
+        if (totalCapital > 0 && !state.cuentasPrestamo.capital) {
+            errors.push('Falta asignar cuenta para: Capital');
+        }
+        if (totalIntereses > 0 && !state.cuentasPrestamo.intereses) {
+            errors.push('Falta asignar cuenta para: Intereses');
+        }
+        if (totalIva > 0 && !state.cuentasPrestamo.iva) {
+            errors.push('Falta asignar cuenta para: IVA');
+        }
+        if (totalPercIva > 0 && !state.cuentasPrestamo.percIva) {
+            errors.push('Falta asignar cuenta para: Perc. IVA');
+        }
+        if (totalOtros > 0 && !state.cuentasPrestamo.otros) {
+            errors.push('Falta asignar cuenta para: Otros');
+        }
     } else {
         // VALIDACIÓN PARA OTROS TIPOS DE ORIGEN
         // Validar cuenta de contrapartida global (obligatoria EXCEPTO para compensaciones)
@@ -4883,6 +5314,144 @@ function generateFinalExcel() {
                         ExtraContable: 's'
                     });
                 }
+            });
+
+            numeroAsiento++;
+            return; // No continuar con la lógica genérica
+        }
+
+        // LÓGICA ESPECÍFICA PARA PRÉSTAMOS: Un asiento por cuota
+        // Cada cuota genera múltiples líneas de DEBE (Capital, Intereses, IVA, etc.)
+        // y una línea de HABER para la contrapartida (banco/caja)
+        if (state.sourceType === 'prestamos') {
+            // Fecha de la cuota (vencimiento)
+            const fecha = g.vencimiento || '';
+            const nroCuota = g.nroCuota || '';
+
+            // Obtener los importes de cada concepto
+            const capital = g.capital || 0;
+            const intereses = g.intereses || 0;
+            const iva = g.iva || 0;
+            const percIva = g.percIva || 0;
+            const otros = g.otros || 0;
+            const totalCuota = g.totalPagar || (capital + intereses + iva + percIva + otros);
+
+            // Leyenda uniforme para todas las líneas del asiento
+            const leyenda = `Cuota ${nroCuota} préstamo`;
+
+            // Función helper para obtener solo el código de cuenta (sin el nombre)
+            const obtenerCodigo = (valor) => {
+                if (!valor) return '';
+                // Si contiene ' - ', tomar solo la parte del código
+                const partes = valor.split(' - ');
+                return partes[0].trim();
+            };
+
+            // Agregar líneas de DEBE para cada concepto que tenga importe
+            // Capital
+            if (capital > 0 && state.cuentasPrestamo.capital) {
+                const codigoCuenta = obtenerCodigo(state.cuentasPrestamo.capital);
+                allData.push({
+                    Fecha: fecha,
+                    Numero: numeroAsiento,
+                    Cuenta: codigoCuenta,
+                    'Descripción Cuenta': 'Capital préstamo',
+                    Debe: parseFloat(capital.toFixed(2)),
+                    Haber: 0,
+                    'Tipo de auxiliar': 1,
+                    Auxiliar: 1,
+                    Importe: parseFloat(capital.toFixed(2)),
+                    Leyenda: leyenda,
+                    ExtraContable: 's'
+                });
+            }
+
+            // Intereses
+            if (intereses > 0 && state.cuentasPrestamo.intereses) {
+                const codigoCuenta = obtenerCodigo(state.cuentasPrestamo.intereses);
+                allData.push({
+                    Fecha: fecha,
+                    Numero: numeroAsiento,
+                    Cuenta: codigoCuenta,
+                    'Descripción Cuenta': 'Intereses préstamo',
+                    Debe: parseFloat(intereses.toFixed(2)),
+                    Haber: 0,
+                    'Tipo de auxiliar': 1,
+                    Auxiliar: 1,
+                    Importe: parseFloat(intereses.toFixed(2)),
+                    Leyenda: leyenda,
+                    ExtraContable: 's'
+                });
+            }
+
+            // IVA
+            if (iva > 0 && state.cuentasPrestamo.iva) {
+                const codigoCuenta = obtenerCodigo(state.cuentasPrestamo.iva);
+                allData.push({
+                    Fecha: fecha,
+                    Numero: numeroAsiento,
+                    Cuenta: codigoCuenta,
+                    'Descripción Cuenta': 'IVA CF préstamo',
+                    Debe: parseFloat(iva.toFixed(2)),
+                    Haber: 0,
+                    'Tipo de auxiliar': 1,
+                    Auxiliar: 1,
+                    Importe: parseFloat(iva.toFixed(2)),
+                    Leyenda: leyenda,
+                    ExtraContable: 's'
+                });
+            }
+
+            // Percepción IVA
+            if (percIva > 0 && state.cuentasPrestamo.percIva) {
+                const codigoCuenta = obtenerCodigo(state.cuentasPrestamo.percIva);
+                allData.push({
+                    Fecha: fecha,
+                    Numero: numeroAsiento,
+                    Cuenta: codigoCuenta,
+                    'Descripción Cuenta': 'Percepción IVA préstamo',
+                    Debe: parseFloat(percIva.toFixed(2)),
+                    Haber: 0,
+                    'Tipo de auxiliar': 1,
+                    Auxiliar: 1,
+                    Importe: parseFloat(percIva.toFixed(2)),
+                    Leyenda: leyenda,
+                    ExtraContable: 's'
+                });
+            }
+
+            // Otros
+            if (otros > 0 && state.cuentasPrestamo.otros) {
+                const codigoCuenta = obtenerCodigo(state.cuentasPrestamo.otros);
+                allData.push({
+                    Fecha: fecha,
+                    Numero: numeroAsiento,
+                    Cuenta: codigoCuenta,
+                    'Descripción Cuenta': 'Otros gastos préstamo',
+                    Debe: parseFloat(otros.toFixed(2)),
+                    Haber: 0,
+                    'Tipo de auxiliar': 1,
+                    Auxiliar: 1,
+                    Importe: parseFloat(otros.toFixed(2)),
+                    Leyenda: leyenda,
+                    ExtraContable: 's'
+                });
+            }
+
+            // Línea de HABER (contrapartida - banco/caja)
+            const codigoContrapartida = obtenerCodigo(contrapartida);
+            allData.push({
+                Fecha: fecha,
+                Numero: numeroAsiento,
+                Cuenta: codigoContrapartida,
+                'Descripción Cuenta': 'Banco/Caja',
+                Debe: 0,
+                Haber: parseFloat(totalCuota.toFixed(2)),
+                'Tipo de auxiliar': 1,
+                Auxiliar: 1,
+                Importe: parseFloat((-totalCuota).toFixed(2)),
+                Leyenda: leyenda,
+                ExtraContable: 's'
             });
 
             numeroAsiento++;
@@ -5714,6 +6283,68 @@ function downloadTemplateSpecific() {
                 ['- Los importes están en formato argentino (punto = miles, coma = decimal)'],
                 ['- "-" en Debe/Haber significa cero'],
                 ['- El mapeo de cuentas se guarda en el navegador para reutilizarlo']
+            ];
+            break;
+
+        case 'prestamos':
+            datos = [
+                ['Nro de Cuota', 'Vencimiento', 'Capital', 'Intereses', 'IVA', 'Perc IVA', 'Otros', 'Total a pagar'],
+                [1, '22/06/2024', 1000561.77, 385000.42, 40425.04, 5775.01, 385.00, 1432147.24],
+                [2, '22/07/2024', 1010567.39, 375423.18, 39419.43, 5631.35, 375.42, 1431416.77],
+                [3, '22/08/2024', 1020573.06, 365770.81, 38405.94, 5486.56, 365.77, 1430601.14],
+                [4, '22/09/2024', 1030578.79, 356043.26, 37384.54, 5340.65, 356.04, 1429703.28],
+                [5, '22/10/2024', 1040584.58, 346240.47, 36355.25, 5193.61, 346.24, 1428720.15],
+                [6, '22/11/2024', 1050590.43, 336362.38, 35318.05, 5045.44, 336.36, 1427652.66]
+            ];
+            fileName = 'plantilla_cuotas_prestamo.xlsx';
+            instrucciones = [
+                ['PLANTILLA CUOTAS DE PRÉSTAMOS BANCARIOS'],
+                [''],
+                ['Este formato permite convertir cronogramas de préstamos bancarios'],
+                ['en asientos contables. Cada cuota genera un asiento completo.'],
+                [''],
+                ['COLUMNAS REQUERIDAS:'],
+                [''],
+                ['- Nro de Cuota: Número secuencial de la cuota (1, 2, 3...)'],
+                ['- Vencimiento: Fecha de vencimiento de la cuota (DD/MM/YYYY)'],
+                ['- Capital: Amortización del capital del préstamo'],
+                ['- Intereses: Intereses devengados de la cuota'],
+                ['- IVA: IVA sobre los intereses (si aplica)'],
+                ['- Perc IVA: Percepción de IVA (si aplica)'],
+                ['- Otros: Otros conceptos (seguros, comisiones, etc.)'],
+                ['- Total a pagar: Suma total de la cuota'],
+                [''],
+                ['GENERACIÓN DE ASIENTOS:'],
+                [''],
+                ['Cada cuota genera UN asiento contable con las siguientes líneas:'],
+                [''],
+                ['DEBE (por cada concepto con importe):'],
+                ['  - Capital: Cuenta de deuda bancaria (pasivo)'],
+                ['  - Intereses: Cuenta de gastos por intereses'],
+                ['  - IVA: Cuenta de IVA Crédito Fiscal'],
+                ['  - Perc IVA: Cuenta de percepciones'],
+                ['  - Otros: Cuenta de otros gastos bancarios'],
+                [''],
+                ['HABER:'],
+                ['  - Contrapartida: Cuenta del banco desde donde se paga'],
+                [''],
+                ['EJEMPLO DE ASIENTO GENERADO:'],
+                [''],
+                ['Para la cuota 1 del ejemplo:'],
+                [''],
+                ['  Deuda Bancaria (Pasivo)     D: 1.000.561,77'],
+                ['  Intereses Pagados (Gasto)  D:   385.000,42'],
+                ['  IVA Crédito Fiscal         D:    40.425,04'],
+                ['  Percepción IVA             D:     5.775,01'],
+                ['  Otros Gastos Bancarios     D:       385,00'],
+                ['    a Banco (Activo)         H: 1.432.147,24'],
+                [''],
+                ['NOTAS IMPORTANTES:'],
+                [''],
+                ['- Las columnas sin importe (o con importe 0) no generan línea de asiento'],
+                ['- Solo se requiere asignar cuentas a las columnas que tienen valores'],
+                ['- El formato de importes puede ser argentino (1.000.561,77) o estándar (1000561.77)'],
+                ['- La fecha se usa como fecha del asiento contable']
             ];
             break;
 
