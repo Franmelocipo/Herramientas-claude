@@ -2809,3 +2809,156 @@ body {
         justify-content: flex-end;
     }
 }
+
+/* ============================================
+   ESTILOS PARA LISTADO DE CHEQUES RECIBIDOS
+   ============================================ */
+
+/* Panel de comparación de sumas */
+.comparacion-sumas-panel {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
+}
+
+.comparacion-sumas-panel h4 {
+    font-size: 14px;
+    color: #475569;
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+.comparacion-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.comparacion-item {
+    background: white;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    text-align: center;
+}
+
+.comparacion-item.diferencia {
+    border-color: #94a3b8;
+    background: #f1f5f9;
+}
+
+.comparacion-label {
+    display: block;
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 4px;
+}
+
+.comparacion-valor {
+    display: block;
+    font-size: 16px;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.comparacion-valor.debe {
+    color: #16a34a;
+}
+
+.comparacion-valor.coincide {
+    color: #16a34a;
+}
+
+.comparacion-valor.no-coincide {
+    color: #dc2626;
+}
+
+.mensaje-comparacion {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.mensaje-comparacion.success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+}
+
+.mensaje-comparacion.warning {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+}
+
+.mensaje-comparacion.error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+/* Botón de advertencia */
+.btn-warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-warning:hover {
+    background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+    transform: translateY(-1px);
+}
+
+/* Comparación resumida en modal de confirmación */
+.comparacion-resumida {
+    margin-top: 12px;
+    padding: 12px;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+}
+
+.comparacion-resumida p {
+    margin: 4px 0;
+    font-size: 14px;
+}
+
+/* Indicador de listado de cheques incorporado */
+.listado-cheques-incorporado {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border: 1px solid #93c5fd;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.listado-cheques-incorporado .icono {
+    font-size: 16px;
+}
+
+.listado-cheques-incorporado .texto {
+    font-size: 13px;
+    color: #1e40af;
+}
+
+.listado-cheques-incorporado .cantidad {
+    font-weight: 600;
+}
+
+/* Responsive para comparación */
+@media (max-width: 600px) {
+    .comparacion-grid {
+        grid-template-columns: 1fr;
+    }
+}

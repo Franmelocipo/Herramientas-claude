@@ -175,6 +175,7 @@
                     <!-- Toolbar -->
                     <div class="btn-group mb-4 toolbar">
                         <button onclick="mostrarSubirMayor()" class="btn-primary">📤 Cargar Mayor</button>
+                        <button id="btnCargarListadoCheques" onclick="mostrarCargarListadoCheques()" class="btn-secondary" style="display: none;">📋 Cargar Listado Cheques</button>
                         <button id="btnGestionConciliacionesMayor" onclick="abrirGestionConciliacionesMayor()" class="btn-secondary" disabled>📂 Gestionar Conciliaciones</button>
                         <button onclick="exportarAnalisisMayor()" class="btn-template">📥 Exportar Análisis</button>
                     </div>
@@ -730,6 +731,73 @@
             <div class="btn-group">
                 <button onclick="cerrarSubirMayor()" class="btn-secondary">Cancelar</button>
                 <button onclick="procesarMayor()" class="btn-primary">Procesar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Cargar Listado de Cheques Recibidos -->
+    <div id="modalCargarListadoCheques" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📋 Cargar Listado de Cheques Recibidos</h2>
+                <button class="close-btn" onclick="cerrarCargarListadoCheques()">✕</button>
+            </div>
+            <div class="info-box mb-4">
+                <strong>Objetivo:</strong> Enriquecer el análisis del mayor incorporando el detalle de cada cheque recibido.
+                Los registros del debe que agrupan múltiples cheques serán reemplazados por el detalle individual de cada cheque.
+            </div>
+            <div class="info-box mb-4" style="background: #fef3c7; border-color: #f59e0b;">
+                <strong>Formato esperado del archivo Excel:</strong><br>
+                Interno | Numero | Fecha Emision | Fecha Recepcion | Fecha cobro | FechaRechazo | FechaDeposito | FechaTransferencia | Origen | Destino | Importe | Estado
+            </div>
+            <label>Archivo Excel con listado de cheques:</label>
+            <input type="file" id="listadoChequesFile" accept=".xlsx,.xls" class="input-text mb-4" onchange="handleListadoChequesFileChange(event)">
+            <div id="listadoChequesFileInfo" class="file-info"></div>
+            <div id="listadoChequesPreviewInfo" class="preview-info" style="display: none;"></div>
+
+            <!-- Comparación de sumas -->
+            <div id="comparacionSumasPanel" class="comparacion-sumas-panel" style="display: none;">
+                <h4>Comparación de Totales</h4>
+                <div class="comparacion-grid">
+                    <div class="comparacion-item">
+                        <span class="comparacion-label">Total Debe del Mayor:</span>
+                        <span class="comparacion-valor debe" id="totalDebeMayorComparacion">$0,00</span>
+                    </div>
+                    <div class="comparacion-item">
+                        <span class="comparacion-label">Total Listado Cheques:</span>
+                        <span class="comparacion-valor" id="totalListadoChequesComparacion">$0,00</span>
+                    </div>
+                    <div class="comparacion-item diferencia">
+                        <span class="comparacion-label">Diferencia:</span>
+                        <span class="comparacion-valor" id="diferenciaComparacion">$0,00</span>
+                    </div>
+                </div>
+                <div id="mensajeComparacion" class="mensaje-comparacion"></div>
+            </div>
+
+            <div class="btn-group mt-4">
+                <button onclick="cerrarCargarListadoCheques()" class="btn-secondary">Cancelar</button>
+                <button id="btnProcesarListadoCheques" onclick="procesarListadoCheques()" class="btn-primary" disabled>Incorporar Cheques</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Confirmación Diferencia Listado Cheques -->
+    <div id="modalConfirmarDiferenciaListado" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>⚠️ Diferencia Detectada</h3>
+            <div class="info-box mb-4" style="background: #fef3c7; border-color: #f59e0b;">
+                <p>La suma del listado de cheques no coincide con la suma de registros en el debe del mayor.</p>
+                <div class="comparacion-resumida">
+                    <p><strong>Total Debe Mayor:</strong> <span id="confirmTotalDebeMayor">$0,00</span></p>
+                    <p><strong>Total Listado:</strong> <span id="confirmTotalListado">$0,00</span></p>
+                    <p><strong>Diferencia:</strong> <span id="confirmDiferencia" style="color: #dc2626;">$0,00</span></p>
+                </div>
+            </div>
+            <p class="mb-4">¿Desea incorporar el listado de cheques de todas formas?</p>
+            <div class="btn-group">
+                <button onclick="cerrarConfirmarDiferenciaListado()" class="btn-secondary">Cancelar</button>
+                <button onclick="confirmarIncorporarListadoConDiferencia()" class="btn-warning">Incorporar de todas formas</button>
             </div>
         </div>
     </div>
