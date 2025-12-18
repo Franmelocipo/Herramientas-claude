@@ -24,6 +24,7 @@ let state = {
     resultados: null,
     eliminados: [], // Movimientos del Mayor eliminados del proceso de conciliación
     enAuditoria: [], // Movimientos del Extracto marcados para auditoría
+    extractoExcluido: [], // Movimientos del Extracto excluidos del análisis
     // Integración con auditoría
     fuenteExtracto: 'archivo', // 'archivo' o 'auditoria'
     clienteSeleccionado: null,
@@ -317,9 +318,12 @@ const elements = {
     countExtractoPendiente: document.getElementById('countExtractoPendiente'),
     countEliminados: document.getElementById('countEliminados'),
     countEnAuditoria: document.getElementById('countEnAuditoria'),
+    countExtractoExcluido: document.getElementById('countExtractoExcluido'),
     tablaEliminados: document.getElementById('tablaEliminados'),
     tablaEnAuditoria: document.getElementById('tablaEnAuditoria'),
+    tablaExtractoExcluido: document.getElementById('tablaExtractoExcluido'),
     btnEliminarSeleccionados: document.getElementById('btnEliminarSeleccionados'),
+    btnExcluirExtractoSeleccionados: document.getElementById('btnExcluirExtractoSeleccionados'),
 
     // Modal de progreso
     overlayProgreso: document.getElementById('overlay-progreso'),
@@ -2140,9 +2144,10 @@ function mostrarVistaInicialPendientes() {
         extractoNoConciliado: extractoFiltrado
     };
 
-    // Limpiar lista de eliminados y auditoría
+    // Limpiar lista de eliminados, auditoría y extracto excluido
     state.eliminados = [];
     state.enAuditoria = [];
+    state.extractoExcluido = [];
 
     // Actualizar contadores y totales
     const totalMayorPendiente = mayorFiltrado.reduce((sum, m) => sum + m.importe, 0);
@@ -2173,6 +2178,7 @@ function mostrarVistaInicialPendientes() {
     llenarTablaMayorPendiente(mayorFiltrado);
     llenarTablaExtractoPendiente(extractoFiltrado);
     llenarTablaEliminados();
+    llenarTablaExtractoExcluido();
 
     // Poblar selector de tipos para el filtro de Mayor
     poblarSelectorTiposMayor();
@@ -2987,6 +2993,7 @@ function mostrarResultados() {
     llenarTablaExtractoPendiente(res.extractoNoConciliado);
     llenarTablaEliminados();
     llenarTablaEnAuditoria();
+    llenarTablaExtractoExcluido();
 
     // Poblar selector de tipos para el filtro de Mayor
     poblarSelectorTiposMayor();
@@ -3812,6 +3819,10 @@ function actualizarBarraSeleccion() {
 
     // Actualizar botón de eliminar seleccionados
     actualizarBotonEliminarSeleccionados();
+
+    // Actualizar botones de extracto
+    actualizarBotonMoverAuditoria();
+    actualizarBotonExcluirExtracto();
 }
 
 /**
@@ -4534,6 +4545,311 @@ function actualizarBotonMoverAuditoria() {
     } else {
         btn.classList.add('hidden');
     }
+}
+
+// ========== EXCLUSIÓN DE MOVIMIENTOS DEL EXTRACTO ==========
+
+// Estado de selección para extracto excluido
+let seleccionExtractoExcluido = [];
+
+/**
+ * Excluir múltiples movimientos seleccionados del extracto
+ */
+function excluirExtractoSeleccionados() {
+    if (!state.resultados) return;
+
+    const idsAExcluir = [...seleccion.extracto];
+    if (idsAExcluir.length === 0) {
+        mostrarMensaje('No hay movimientos seleccionados', 'warning');
+        return;
+    }
+
+    const movimientos = state.resultados.extractoNoConciliado.filter(m => idsAExcluir.includes(m.id));
+
+    // Agregar a extractoExcluido con metadata
+    movimientos.forEach(movimiento => {
+        state.extractoExcluido.push({
+            ...movimiento,
+            fechaExclusion: new Date().toISOString()
+        });
+    });
+
+    // Quitar de extractoNoConciliado
+    state.resultados.extractoNoConciliado = state.resultados.extractoNoConciliado.filter(
+        m => !idsAExcluir.includes(m.id)
+    );
+
+    // Limpiar selección
+    seleccion.extracto = [];
+
+    // Actualizar vistas
+    actualizarVistasExtractoExcluido();
+
+    mostrarMensaje(`${movimientos.length} movimiento(s) excluido(s) del análisis`, 'success');
+}
+
+/**
+ * Restaurar un movimiento excluido al extracto pendiente
+ * @param {string} id - ID del movimiento a restaurar
+ */
+function restaurarExtractoExcluido(id) {
+    const movimiento = state.extractoExcluido.find(m => m.id === id);
+    if (!movimiento) return;
+
+    // Quitar metadata de exclusión y restaurar a extractoNoConciliado
+    const { fechaExclusion, ...movimientoOriginal } = movimiento;
+
+    state.resultados.extractoNoConciliado.push(movimientoOriginal);
+
+    // Quitar de extractoExcluido
+    state.extractoExcluido = state.extractoExcluido.filter(m => m.id !== id);
+
+    // Quitar de selección si estaba seleccionado
+    seleccionExtractoExcluido = seleccionExtractoExcluido.filter(i => i !== id);
+
+    // Actualizar vistas
+    actualizarVistasExtractoExcluido();
+
+    mostrarMensaje('Movimiento restaurado al extracto pendiente', 'success');
+}
+
+/**
+ * Restaurar todos los movimientos excluidos
+ */
+function restaurarTodosExtractoExcluidos() {
+    if (state.extractoExcluido.length === 0) {
+        mostrarMensaje('No hay movimientos excluidos para restaurar', 'warning');
+        return;
+    }
+
+    const cantidad = state.extractoExcluido.length;
+
+    // Restaurar todos los movimientos
+    state.extractoExcluido.forEach(movimiento => {
+        const { fechaExclusion, ...movimientoOriginal } = movimiento;
+        state.resultados.extractoNoConciliado.push(movimientoOriginal);
+    });
+
+    // Vaciar la lista de excluidos
+    state.extractoExcluido = [];
+    seleccionExtractoExcluido = [];
+
+    // Actualizar vistas
+    actualizarVistasExtractoExcluido();
+
+    mostrarMensaje(`${cantidad} movimiento(s) restaurado(s) al extracto pendiente`, 'success');
+}
+
+/**
+ * Restaurar movimientos excluidos seleccionados
+ */
+function restaurarExtractoExcluidosSeleccionados() {
+    if (seleccionExtractoExcluido.length === 0) {
+        mostrarMensaje('No hay movimientos seleccionados', 'warning');
+        return;
+    }
+
+    const idsARestaurar = [...seleccionExtractoExcluido];
+    const movimientos = state.extractoExcluido.filter(m => idsARestaurar.includes(m.id));
+
+    // Restaurar los movimientos seleccionados
+    movimientos.forEach(movimiento => {
+        const { fechaExclusion, ...movimientoOriginal } = movimiento;
+        state.resultados.extractoNoConciliado.push(movimientoOriginal);
+    });
+
+    // Quitar de extractoExcluido
+    state.extractoExcluido = state.extractoExcluido.filter(m => !idsARestaurar.includes(m.id));
+
+    // Limpiar selección
+    seleccionExtractoExcluido = [];
+
+    // Actualizar vistas
+    actualizarVistasExtractoExcluido();
+
+    mostrarMensaje(`${movimientos.length} movimiento(s) restaurado(s) al extracto pendiente`, 'success');
+}
+
+/**
+ * Seleccionar/deseleccionar todos los movimientos de extracto excluido
+ * @param {boolean} seleccionar - true para seleccionar, false para deseleccionar
+ */
+function seleccionarTodosExtractoExcluido(seleccionar) {
+    if (seleccionar) {
+        seleccionExtractoExcluido = state.extractoExcluido.map(m => m.id);
+    } else {
+        seleccionExtractoExcluido = [];
+    }
+
+    // Actualizar checkboxes en la tabla
+    const checkboxes = document.querySelectorAll('#tablaExtractoExcluido input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+        cb.checked = seleccionar;
+    });
+
+    // Actualizar botones
+    actualizarBotonesExtractoExcluido();
+}
+
+/**
+ * Toggle selección de un movimiento de extracto excluido
+ * @param {string} id - ID del movimiento
+ * @param {boolean} seleccionado - true si está seleccionado
+ */
+function toggleSeleccionExtractoExcluido(id, seleccionado) {
+    if (seleccionado) {
+        if (!seleccionExtractoExcluido.includes(id)) {
+            seleccionExtractoExcluido.push(id);
+        }
+    } else {
+        seleccionExtractoExcluido = seleccionExtractoExcluido.filter(i => i !== id);
+    }
+
+    // Actualizar checkbox "seleccionar todos"
+    const selectAll = document.getElementById('selectAllExtractoExcluido');
+    if (selectAll) {
+        selectAll.checked = seleccionExtractoExcluido.length === state.extractoExcluido.length && state.extractoExcluido.length > 0;
+    }
+
+    // Actualizar botones
+    actualizarBotonesExtractoExcluido();
+}
+
+/**
+ * Actualizar vistas después de excluir/restaurar movimientos del extracto
+ */
+function actualizarVistasExtractoExcluido() {
+    // Actualizar tabla de extracto pendiente
+    renderizarExtractoPendienteFiltrado();
+
+    // Actualizar tabla de extracto excluido
+    llenarTablaExtractoExcluido();
+
+    // Actualizar contadores
+    actualizarContadorExtractoPendiente();
+
+    // Actualizar barra de selección
+    actualizarBarraSeleccion();
+
+    // Actualizar botones de acción
+    actualizarBotonMoverAuditoria();
+    actualizarBotonExcluirExtracto();
+    actualizarBotonesExtractoExcluido();
+}
+
+/**
+ * Actualizar botón de excluir extracto (seleccionados)
+ */
+function actualizarBotonExcluirExtracto() {
+    const btn = document.getElementById('btnExcluirExtractoSeleccionados');
+    if (!btn) return;
+
+    const cantidad = seleccion.extracto.length;
+
+    if (cantidad > 0) {
+        btn.classList.remove('hidden');
+        btn.innerHTML = `🚫 Excluir del análisis (${cantidad})`;
+    } else {
+        btn.classList.add('hidden');
+    }
+}
+
+/**
+ * Actualizar botones en la pestaña de extracto excluido
+ */
+function actualizarBotonesExtractoExcluido() {
+    const btnRestaurarTodos = document.getElementById('btnRestaurarTodosExcluidos');
+    const btnRestaurarSeleccionados = document.getElementById('btnRestaurarExcluidosSeleccionados');
+
+    // Botón restaurar todos
+    if (btnRestaurarTodos) {
+        if (state.extractoExcluido.length > 0) {
+            btnRestaurarTodos.classList.remove('hidden');
+        } else {
+            btnRestaurarTodos.classList.add('hidden');
+        }
+    }
+
+    // Botón restaurar seleccionados
+    if (btnRestaurarSeleccionados) {
+        const cantidad = seleccionExtractoExcluido.length;
+        if (cantidad > 0) {
+            btnRestaurarSeleccionados.classList.remove('hidden');
+            btnRestaurarSeleccionados.innerHTML = `↩️ Restaurar seleccionados (${cantidad})`;
+        } else {
+            btnRestaurarSeleccionados.classList.add('hidden');
+        }
+    }
+}
+
+/**
+ * Llenar la tabla de extracto excluido
+ */
+function llenarTablaExtractoExcluido() {
+    if (!elements.tablaExtractoExcluido) return;
+
+    let html = '';
+
+    // Actualizar contadores (en pestaña y en header)
+    if (elements.countExtractoExcluido) {
+        elements.countExtractoExcluido.textContent = `(${state.extractoExcluido.length})`;
+    }
+    const countExtractoExcluidoTab = document.getElementById('countExtractoExcluidoTab');
+    if (countExtractoExcluidoTab) {
+        countExtractoExcluidoTab.textContent = `(${state.extractoExcluido.length})`;
+    }
+
+    if (state.extractoExcluido.length === 0) {
+        elements.tablaExtractoExcluido.innerHTML = `
+            <tr><td colspan="8" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos excluidos del extracto</td></tr>
+        `;
+        // Resetear checkbox de seleccionar todos
+        const selectAll = document.getElementById('selectAllExtractoExcluido');
+        if (selectAll) selectAll.checked = false;
+        return;
+    }
+
+    // Ordenar por fecha de exclusión (más recientes primero)
+    const excluidos = [...state.extractoExcluido].sort((a, b) => {
+        return new Date(b.fechaExclusion) - new Date(a.fechaExclusion);
+    });
+
+    excluidos.forEach(m => {
+        const fechaExclusionFormateada = m.fechaExclusion
+            ? new Date(m.fechaExclusion).toLocaleDateString('es-AR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            })
+            : '-';
+
+        const isSelected = seleccionExtractoExcluido.includes(m.id);
+
+        html += `
+            <tr data-id="${m.id}" class="${isSelected ? 'row-selected' : ''}">
+                <td class="col-checkbox">
+                    <input type="checkbox"
+                           ${isSelected ? 'checked' : ''}
+                           onchange="toggleSeleccionExtractoExcluido('${m.id}', this.checked)">
+                </td>
+                <td>${formatearFecha(m.fecha)}</td>
+                <td title="${m.descripcion}">${truncar(m.descripcion, 40)}</td>
+                <td>${m.origen || '-'}</td>
+                <td class="text-right ${m.debito > 0 ? 'text-danger' : ''}">${m.debito > 0 ? formatearNumero(m.debito) : '-'}</td>
+                <td class="text-right ${m.credito > 0 ? 'text-success' : ''}">${m.credito > 0 ? formatearNumero(m.credito) : '-'}</td>
+                <td class="text-muted fecha-exclusion">${fechaExclusionFormateada}</td>
+                <td class="col-action-restaurar">
+                    <button class="btn-restaurar" onclick="restaurarExtractoExcluido('${m.id}')" title="Restaurar al extracto pendiente">
+                        ↩️ Restaurar
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    elements.tablaExtractoExcluido.innerHTML = html;
 }
 
 // ========== FILTROS DE BÚSQUEDA ==========
@@ -6957,6 +7273,17 @@ async function guardarConciliacion() {
                     fechaAuditoria: e.fechaAuditoria,
                     notaAuditoria: e.notaAuditoria
                 })),
+                // Guardar movimientos del extracto excluidos del análisis
+                extractoExcluido: state.extractoExcluido.map(e => ({
+                    id: e.id,
+                    fecha: e.fecha,
+                    descripcion: e.descripcion,
+                    origen: e.origen,
+                    debito: e.debito,
+                    credito: e.credito,
+                    importe: e.importe,
+                    fechaExclusion: e.fechaExclusion
+                })),
                 // Guardar desconciliaciones manuales para que no se vuelvan a conciliar en reprocesos
                 desconciliacionesManuales: desconciliacionesManuales
             },
@@ -7470,11 +7797,13 @@ async function cargarConciliacionGuardada(conciliacionId) {
                 };
                 state.eliminados = data.datos.eliminados || [];
                 state.enAuditoria = data.datos.enAuditoria || [];
+                state.extractoExcluido = data.datos.extractoExcluido || [];
 
                 // Restaurar desconciliaciones manuales
                 desconciliacionesManuales = data.datos.desconciliacionesManuales || [];
                 console.log('Desconciliaciones manuales restauradas:', desconciliacionesManuales.length);
                 console.log('Movimientos en auditoría restaurados:', state.enAuditoria.length);
+                console.log('Movimientos del extracto excluidos restaurados:', state.extractoExcluido.length);
             }
 
             // Restaurar historial
@@ -8051,6 +8380,7 @@ function limpiarVistaConciliacion() {
     state.resultados = null;
     state.eliminados = [];
     state.enAuditoria = [];
+    state.extractoExcluido = [];
 
     // Ocultar sección de resultados
     const resultsSection = document.getElementById('resultsSection');
