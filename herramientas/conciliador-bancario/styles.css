@@ -8,7 +8,8 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background: linear-gradient(135deg, #f7fafc 0%, #e2e8f0 100%);
     min-height: 100vh;
-    padding: 40px 20px;
+    padding: 20px;
+    padding-top: 60px; /* Espacio para el panel sticky de conciliación */
 }
 
 .nav-bar {
@@ -4813,109 +4814,140 @@ body {
 }
 
 /* ========================================
-   PANEL DE INFORMACIÓN DE CONCILIACIÓN (FIXED)
+   PANEL DE INFORMACIÓN DE CONCILIACIÓN
+   Panel sticky horizontal siempre visible
    ======================================== */
+#panelInfoConciliacion,
 .panel-info-conciliacion {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
     right: 0 !important;
+    width: 100% !important;
     z-index: 9999 !important;
-    background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
-    color: white;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+    background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%) !important;
+    color: white !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3) !important;
+    display: block !important;
 }
 
+#panelInfoConciliacion.hidden,
 .panel-info-conciliacion.hidden {
     display: none !important;
 }
 
 /* Spacer para compensar el panel fixed */
+#panelInfoSpacer,
 .panel-info-spacer {
     height: 0;
     transition: height 0.2s ease;
 }
 
+#panelInfoSpacer.active,
 .panel-info-spacer.active {
-    height: 44px;
+    height: 50px;
 }
 
+/* Contenedor del panel - SIEMPRE HORIZONTAL */
+#panelInfoConciliacion .panel-info-content,
+.panel-info-conciliacion .panel-info-content,
 .panel-info-content {
     display: flex !important;
     flex-direction: row !important;
+    flex-wrap: nowrap !important;
     align-items: center !important;
     justify-content: center !important;
-    padding: 10px 20px;
-    gap: 8px;
-    flex-wrap: nowrap !important;
-    overflow-x: auto;
+    padding: 12px 20px !important;
+    gap: 12px !important;
+    overflow-x: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
 }
 
+/* Secciones individuales - inline horizontal */
+#panelInfoConciliacion .panel-info-section,
+.panel-info-conciliacion .panel-info-section,
 .panel-info-section {
     display: inline-flex !important;
     flex-direction: row !important;
     align-items: center !important;
-    gap: 5px;
-    padding: 4px 8px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
+    gap: 6px !important;
+    padding: 6px 12px !important;
+    background: rgba(255, 255, 255, 0.15) !important;
+    border-radius: 6px !important;
     flex-shrink: 0 !important;
     white-space: nowrap !important;
 }
 
+/* Iconos */
+#panelInfoConciliacion .panel-info-icon,
+.panel-info-conciliacion .panel-info-icon,
 .panel-info-icon {
-    font-size: 14px;
-    flex-shrink: 0;
-    line-height: 1;
+    font-size: 16px !important;
+    flex-shrink: 0 !important;
+    line-height: 1 !important;
 }
 
+/* Valores de texto */
+#panelInfoConciliacion .panel-info-value,
+.panel-info-conciliacion .panel-info-value,
 .panel-info-value {
-    font-size: 12px;
-    font-weight: 600;
+    font-size: 13px !important;
+    font-weight: 600 !important;
     white-space: nowrap !important;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 200px;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 200px !important;
     display: inline !important;
 }
 
+/* Dividers verticales entre secciones */
+#panelInfoConciliacion .panel-info-divider,
+.panel-info-conciliacion .panel-info-divider,
 .panel-info-divider {
-    width: 1px;
-    height: 18px;
-    background: rgba(255, 255, 255, 0.3);
-    flex-shrink: 0;
+    width: 1px !important;
+    height: 20px !important;
+    background: rgba(255, 255, 255, 0.3) !important;
+    flex-shrink: 0 !important;
+    display: block !important;
 }
 
-/* Sección de conciliación guardada - inline */
+/* Sección de conciliación guardada - inline horizontal */
+#panelInfoConciliacion .panel-info-guardada,
+.panel-info-conciliacion .panel-info-guardada,
 .panel-info-guardada {
     display: inline-flex !important;
     flex-direction: row !important;
     align-items: center !important;
-    gap: 5px;
-    padding: 4px 8px;
-    background: rgba(251, 191, 36, 0.25);
-    border-radius: 4px;
-    font-size: 12px;
+    gap: 6px !important;
+    padding: 6px 12px !important;
+    background: rgba(251, 191, 36, 0.25) !important;
+    border-radius: 6px !important;
+    font-size: 13px !important;
     flex-shrink: 0 !important;
     white-space: nowrap !important;
+    margin-left: 8px !important;
 }
 
+#panelInfoConciliacion .panel-info-guardada.hidden,
+.panel-info-conciliacion .panel-info-guardada.hidden,
 .panel-info-guardada.hidden {
     display: none !important;
 }
 
 .panel-guardada-icon {
-    font-size: 14px;
-    line-height: 1;
+    font-size: 16px !important;
+    line-height: 1 !important;
 }
 
 .panel-guardada-nombre {
-    font-weight: 600;
-    color: #fbbf24;
-    max-width: 180px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-weight: 600 !important;
+    color: #fbbf24 !important;
+    max-width: 180px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
 }
 
 /* Estado del panel - indicadores de color */
@@ -4940,67 +4972,86 @@ body {
     color: #fca5a5;
 }
 
-/* Responsive para el panel - solo ajustar tamaños, nunca cambiar a vertical */
+/* Responsive para el panel - SIEMPRE HORIZONTAL, solo ajustar tamaños */
 @media (max-width: 1024px) {
+    #panelInfoConciliacion .panel-info-value,
     .panel-info-value {
-        max-width: 150px;
+        max-width: 150px !important;
     }
 }
 
 @media (max-width: 768px) {
+    /* Mantener horizontal pero con scroll */
+    #panelInfoConciliacion .panel-info-content,
     .panel-info-content {
-        padding: 8px 12px;
-        gap: 6px;
+        padding: 10px 12px !important;
+        gap: 8px !important;
         justify-content: flex-start !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
     }
 
+    #panelInfoConciliacion .panel-info-section,
     .panel-info-section {
-        padding: 3px 6px;
+        padding: 4px 8px !important;
+        flex-direction: row !important;
     }
 
+    #panelInfoConciliacion .panel-info-icon,
     .panel-info-icon {
-        font-size: 12px;
+        font-size: 14px !important;
     }
 
+    #panelInfoConciliacion .panel-info-value,
     .panel-info-value {
-        font-size: 11px;
-        max-width: 100px;
+        font-size: 11px !important;
+        max-width: 100px !important;
     }
 
+    #panelInfoConciliacion .panel-info-divider,
     .panel-info-divider {
-        display: none;
+        display: none !important;
     }
 
     .hide-mobile {
         display: none !important;
     }
 
+    #panelInfoSpacer.active,
     .panel-info-spacer.active {
-        height: 40px;
+        height: 46px !important;
     }
 }
 
 @media (max-width: 480px) {
+    #panelInfoConciliacion .panel-info-content,
     .panel-info-content {
-        padding: 6px 8px;
-        gap: 4px;
+        padding: 8px 10px !important;
+        gap: 6px !important;
+        flex-direction: row !important;
     }
 
+    #panelInfoConciliacion .panel-info-section,
     .panel-info-section {
-        padding: 2px 4px;
+        padding: 3px 6px !important;
+        flex-direction: row !important;
     }
 
+    #panelInfoConciliacion .panel-info-value,
     .panel-info-value {
-        max-width: 70px;
-        font-size: 10px;
+        max-width: 70px !important;
+        font-size: 10px !important;
     }
 
     .panel-guardada-nombre {
-        max-width: 60px;
+        max-width: 60px !important;
     }
 
+    #panelInfoSpacer.active,
     .panel-info-spacer.active {
-        height: 36px;
+        height: 42px !important;
     }
 }
 
