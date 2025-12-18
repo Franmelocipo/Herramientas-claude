@@ -2374,6 +2374,12 @@ function groupSimilarEntries(data) {
             const vencimiento = row['Vencimiento'] || row['VENCIMIENTO'] ||
                                row['Fecha'] || row['FECHA'] || '';
 
+            // Obtener descripción del préstamo (para la leyenda)
+            const descripcion = String(
+                row['Descripción'] || row['Descripcion'] || row['DESCRIPCION'] ||
+                row['DESCRIPCIÓN'] || row['Detalle'] || row['DETALLE'] || ''
+            ).trim();
+
             // Obtener importes de cada columna
             const capital = parseAmount(row['Capital'] || row['CAPITAL'] || 0);
             const intereses = parseAmount(row['Intereses'] || row['INTERESES'] || row['Interes'] || 0);
@@ -2400,6 +2406,8 @@ function groupSimilarEntries(data) {
                     items: [],
                     nroCuota: nroCuota,
                     vencimiento: vencimiento,
+                    // Descripción del préstamo para la leyenda
+                    descripcion: descripcion,
                     // Guardar los montos individuales para la generación de asientos
                     capital: capital,
                     intereses: intereses,
@@ -5327,6 +5335,7 @@ function generateFinalExcel() {
             // Fecha de la cuota (vencimiento)
             const fecha = g.vencimiento || '';
             const nroCuota = g.nroCuota || '';
+            const descripcion = g.descripcion || '';
 
             // Obtener los importes de cada concepto
             const capital = g.capital || 0;
@@ -5337,7 +5346,10 @@ function generateFinalExcel() {
             const totalCuota = g.totalPagar || (capital + intereses + iva + percIva + otros);
 
             // Leyenda uniforme para todas las líneas del asiento
-            const leyenda = `Cuota ${nroCuota} préstamo`;
+            // Incluye la descripción del préstamo si está disponible
+            const leyenda = descripcion
+                ? `Cuota ${nroCuota} - ${descripcion}`
+                : `Cuota ${nroCuota} préstamo`;
 
             // Función helper para obtener solo el código de cuenta (sin el nombre)
             const obtenerCodigo = (valor) => {
@@ -6288,13 +6300,13 @@ function downloadTemplateSpecific() {
 
         case 'prestamos':
             datos = [
-                ['Nro de Cuota', 'Vencimiento', 'Capital', 'Intereses', 'IVA', 'Perc IVA', 'Otros', 'Total a pagar'],
-                [1, '22/06/2024', 1000561.77, 385000.42, 40425.04, 5775.01, 385.00, 1432147.24],
-                [2, '22/07/2024', 1010567.39, 375423.18, 39419.43, 5631.35, 375.42, 1431416.77],
-                [3, '22/08/2024', 1020573.06, 365770.81, 38405.94, 5486.56, 365.77, 1430601.14],
-                [4, '22/09/2024', 1030578.79, 356043.26, 37384.54, 5340.65, 356.04, 1429703.28],
-                [5, '22/10/2024', 1040584.58, 346240.47, 36355.25, 5193.61, 346.24, 1428720.15],
-                [6, '22/11/2024', 1050590.43, 336362.38, 35318.05, 5045.44, 336.36, 1427652.66]
+                ['Nro de Cuota', 'Vencimiento', 'Descripción', 'Capital', 'Intereses', 'IVA', 'Perc IVA', 'Otros', 'Total a pagar'],
+                [1, '22/06/2024', 'Préstamo Banco Nación - Capital de trabajo', 1000561.77, 385000.42, 40425.04, 5775.01, 385.00, 1432147.24],
+                [2, '22/07/2024', 'Préstamo Banco Nación - Capital de trabajo', 1010567.39, 375423.18, 39419.43, 5631.35, 375.42, 1431416.77],
+                [3, '22/08/2024', 'Préstamo Banco Nación - Capital de trabajo', 1020573.06, 365770.81, 38405.94, 5486.56, 365.77, 1430601.14],
+                [4, '22/09/2024', 'Préstamo Banco Nación - Capital de trabajo', 1030578.79, 356043.26, 37384.54, 5340.65, 356.04, 1429703.28],
+                [5, '22/10/2024', 'Préstamo Banco Nación - Capital de trabajo', 1040584.58, 346240.47, 36355.25, 5193.61, 346.24, 1428720.15],
+                [6, '22/11/2024', 'Préstamo Banco Nación - Capital de trabajo', 1050590.43, 336362.38, 35318.05, 5045.44, 336.36, 1427652.66]
             ];
             fileName = 'plantilla_cuotas_prestamo.xlsx';
             instrucciones = [
@@ -6307,6 +6319,8 @@ function downloadTemplateSpecific() {
                 [''],
                 ['- Nro de Cuota: Número secuencial de la cuota (1, 2, 3...)'],
                 ['- Vencimiento: Fecha de vencimiento de la cuota (DD/MM/YYYY)'],
+                ['- Descripción: Datos identificatorios del préstamo (ej: "Préstamo Banco Nación - Capital de trabajo")'],
+                ['  Esta descripción se incorpora al campo Leyenda del asiento generado'],
                 ['- Capital: Amortización del capital del préstamo'],
                 ['- Intereses: Intereses devengados de la cuota'],
                 ['- IVA: IVA sobre los intereses (si aplica)'],
