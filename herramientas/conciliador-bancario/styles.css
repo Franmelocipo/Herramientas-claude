@@ -2022,6 +2022,141 @@ body {
     display: none;
 }
 
+/* ========== SECCIÓN EXTRACTO EXCLUIDO ========== */
+
+.tab-extracto-excluido {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%) !important;
+    border-color: #ef4444 !important;
+    color: #991b1b !important;
+}
+
+.tab-extracto-excluido.active {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+    color: white !important;
+    border-color: #dc2626 !important;
+}
+
+.extracto-excluido-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    margin-bottom: 12px;
+}
+
+.extracto-excluido-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #991b1b;
+    margin: 0;
+}
+
+.extracto-excluido-header .header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.extracto-excluido-info {
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+}
+
+.extracto-excluido-info p {
+    margin: 0;
+    font-size: 13px;
+    color: #991b1b;
+}
+
+.fecha-exclusion {
+    font-size: 11px;
+}
+
+.btn-excluir-extracto {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border: 1px solid #ef4444;
+    color: #991b1b;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-excluir-extracto:hover {
+    background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.btn-excluir-extracto.hidden {
+    display: none;
+}
+
+.btn-restaurar-todos {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    border: 1px solid #10b981;
+    color: #065f46;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-restaurar-todos:hover {
+    background: linear-gradient(135deg, #a7f3d0 0%, #6ee7b7 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.btn-restaurar-todos.hidden {
+    display: none;
+}
+
+.btn-restaurar-seleccionados {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    border: 1px solid #3b82f6;
+    color: #1e40af;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-restaurar-seleccionados:hover {
+    background: linear-gradient(135deg, #bfdbfe 0%, #93c5fd 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.btn-restaurar-seleccionados.hidden {
+    display: none;
+}
+
+#tab-extracto-excluido .row-selected {
+    background: #fef2f2 !important;
+}
+
+#tab-extracto-excluido tr:hover {
+    background: #fef2f2;
+}
+
 /* ========== MODAL DE NOTA AUDITORÍA ========== */
 
 #overlay-nota-auditoria {

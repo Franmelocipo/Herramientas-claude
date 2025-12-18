@@ -465,6 +465,7 @@
                     <button class="tab-btn" data-tab="mayor-pendiente">Mayor Pendiente</button>
                     <button class="tab-btn" data-tab="extracto-pendiente">Extracto Pendiente</button>
                     <button class="tab-btn tab-auditoria" data-tab="en-auditoria">En Auditoría <span id="countEnAuditoria">(0)</span></button>
+                    <button class="tab-btn tab-extracto-excluido" data-tab="extracto-excluido">Extracto Excluido <span id="countExtractoExcluido">(0)</span></button>
                     <button class="tab-btn" data-tab="eliminados">Eliminados <span id="countEliminados">(0)</span></button>
                 </div>
 
@@ -862,6 +863,9 @@
                     <div class="panel-header-pendiente">
                         <h3>Extracto Pendiente <span id="countExtractoPendiente">(0)</span></h3>
                         <div class="header-actions">
+                            <button id="btnExcluirExtractoSeleccionados" class="btn-excluir-extracto hidden" onclick="excluirExtractoSeleccionados()">
+                                🚫 Excluir del análisis (0)
+                            </button>
                             <button id="btnMoverAuditoriaSeleccionados" class="btn-mover-auditoria hidden" onclick="moverSeleccionadosAAuditoria()">
                                 🔍 Marcar para auditoría (0)
                             </button>
@@ -974,6 +978,43 @@
                             </thead>
                             <tbody id="tablaEnAuditoria">
                                 <tr><td colspan="8" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos en auditoría</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tabla Extracto Excluido -->
+                <div class="tab-content" id="tab-extracto-excluido">
+                    <div class="extracto-excluido-header">
+                        <h3>Movimientos del Extracto Excluidos <span id="countExtractoExcluidoTab">(0)</span></h3>
+                        <div class="header-actions">
+                            <button id="btnRestaurarTodosExcluidos" class="btn-restaurar-todos hidden" onclick="restaurarTodosExtractoExcluidos()">
+                                ↩️ Restaurar todos
+                            </button>
+                            <button id="btnRestaurarExcluidosSeleccionados" class="btn-restaurar-seleccionados hidden" onclick="restaurarExtractoExcluidosSeleccionados()">
+                                ↩️ Restaurar seleccionados (0)
+                            </button>
+                        </div>
+                    </div>
+                    <div class="extracto-excluido-info">
+                        <p>Estos movimientos del extracto bancario fueron excluidos del proceso de conciliación. Puede restaurarlos individualmente o de forma masiva.</p>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="results-table table-selectable">
+                            <thead>
+                                <tr>
+                                    <th class="col-checkbox"><input type="checkbox" id="selectAllExtractoExcluido" title="Seleccionar todos" onchange="seleccionarTodosExtractoExcluido(this.checked)"></th>
+                                    <th>Fecha</th>
+                                    <th>Descripción</th>
+                                    <th>Origen</th>
+                                    <th class="text-right">Débito</th>
+                                    <th class="text-right">Crédito</th>
+                                    <th>Fecha Exclusión</th>
+                                    <th class="header-action">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaExtractoExcluido">
+                                <tr><td colspan="8" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos excluidos del extracto</td></tr>
                             </tbody>
                         </table>
                     </div>
