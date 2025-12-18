@@ -74,6 +74,32 @@ const TIPOS_MAYOR_DEFAULT = [
             iconoDestino: '📥',
             descripcionVinculacion: 'Las emisiones de cheques (haber) deben vincularse con los cobros por terceros (debe).'
         }
+    },
+    {
+        id: 'cheques_terceros_recibidos',
+        nombre: 'Cheques de Terceros Recibidos',
+        descripcion: 'Análisis de cheques de terceros recibidos y su posterior uso o depósito',
+        logica: 'vinculacion',
+        icono: '🏦',
+        configuracion: {
+            diasVencimiento: 365,  // Plazo amplio ya que el tiempo entre ingreso y uso es variable
+            debeEsCupon: true,     // Los ingresos de cheques van al debe
+            haberEsLiquidacion: true,  // El uso de cheques va al haber
+            // Configuración genérica de vinculación
+            tipoOrigen: 'debe',      // Los cheques recibidos se registran en el DEBE
+            tipoDestino: 'haber',    // El uso/depósito de cheques se registra en el HABER
+            etiquetaOrigen: 'Ingresos',
+            etiquetaDestino: 'Usos',
+            etiquetaSingularOrigen: 'ingreso',
+            etiquetaSingularDestino: 'uso',
+            articuloOrigen: 'un',        // Artículo singular para origen (ingreso = masculino)
+            articuloDestino: 'un',       // Artículo singular para destino (uso = masculino)
+            articuloPluralOrigen: 'varios',   // Artículo plural para origen
+            articuloPluralDestino: 'varios',  // Artículo plural para destino
+            iconoOrigen: '📥',
+            iconoDestino: '📤',
+            descripcionVinculacion: 'Los ingresos de cheques (debe) deben vincularse con sus usos o depósitos (haber). El tiempo entre un movimiento y otro es variable.'
+        }
     }
 ];
 
