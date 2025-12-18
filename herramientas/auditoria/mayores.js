@@ -13,7 +13,11 @@ const stateMayores = {
     liquidacionesSeleccionadas: [],
     clientesCache: [],
     conciliacionCargadaId: null,  // ID de la conciliación actualmente cargada
-    conciliacionCargadaNombre: null  // Nombre de la conciliación actualmente cargada
+    conciliacionCargadaNombre: null,  // Nombre de la conciliación actualmente cargada
+    // Estado del listado de cheques recibidos
+    listadoChequesIncorporado: false,
+    listadoChequesCargados: [],
+    listadoChequesTemporal: []  // Datos temporales mientras se valida
 };
 
 // Variables para gestión de conciliaciones
@@ -493,6 +497,12 @@ function seleccionarTipoMayor(tipoId) {
         panelVinculacion.style.display = 'none';
     }
 
+    // Mostrar/ocultar botón de cargar listado de cheques según el tipo
+    const btnCargarListadoCheques = document.getElementById('btnCargarListadoCheques');
+    if (btnCargarListadoCheques) {
+        btnCargarListadoCheques.style.display = tipoId === 'cheques_terceros_recibidos' ? 'inline-flex' : 'none';
+    }
+
     // Ocultar info del mayor (hasta que se cargue)
     document.getElementById('infoMayorCargado').style.display = 'none';
 
@@ -501,6 +511,8 @@ function seleccionarTipoMayor(tipoId) {
     stateMayores.vinculaciones = [];
     stateMayores.conciliacionCargadaId = null;
     stateMayores.conciliacionCargadaNombre = null;
+    stateMayores.listadoChequesIncorporado = false;
+    stateMayores.listadoChequesCargados = [];
     renderizarTablaMayor();
     renderizarVinculacion();
 
@@ -3611,6 +3623,395 @@ function eliminarTipoMayor(id) {
 
     renderizarListaTiposMayor();
     renderizarTiposMayor();
+}
+
+// ============================================
+// FUNCIONES PARA LISTADO DE CHEQUES RECIBIDOS
+// ============================================
+
+/**
+ * Mostrar modal para cargar listado de cheques
+ */
+function mostrarCargarListadoCheques() {
+    // Verificar que hay un mayor cargado
+    if (stateMayores.registrosMayor.length === 0) {
+        alert('Primero debe cargar un mayor contable antes de incorporar el listado de cheques.');
+        return;
+    }
+
+    document.getElementById('modalCargarListadoCheques').classList.remove('hidden');
+    document.getElementById('listadoChequesFile').value = '';
+    document.getElementById('listadoChequesFileInfo').innerHTML = '';
+    document.getElementById('listadoChequesPreviewInfo').style.display = 'none';
+    document.getElementById('comparacionSumasPanel').style.display = 'none';
+    document.getElementById('btnProcesarListadoCheques').disabled = true;
+    stateMayores.listadoChequesTemporal = [];
+}
+
+/**
+ * Cerrar modal de cargar listado de cheques
+ */
+function cerrarCargarListadoCheques() {
+    document.getElementById('modalCargarListadoCheques').classList.add('hidden');
+    stateMayores.listadoChequesTemporal = [];
+}
+
+/**
+ * Manejar cambio de archivo de listado de cheques
+ */
+function handleListadoChequesFileChange(event) {
+    const file = event.target.files[0];
+    const fileInfo = document.getElementById('listadoChequesFileInfo');
+    const previewInfo = document.getElementById('listadoChequesPreviewInfo');
+    const comparacionPanel = document.getElementById('comparacionSumasPanel');
+    const btnProcesar = document.getElementById('btnProcesarListadoCheques');
+
+    if (!file) {
+        fileInfo.innerHTML = '';
+        previewInfo.style.display = 'none';
+        comparacionPanel.style.display = 'none';
+        btnProcesar.disabled = true;
+        return;
+    }
+
+    fileInfo.innerHTML = `<strong>Archivo:</strong> ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+
+    // Leer y procesar el archivo
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+
+            if (jsonData.length === 0) {
+                previewInfo.innerHTML = '<span style="color: red;">El archivo está vacío</span>';
+                previewInfo.style.display = 'block';
+                comparacionPanel.style.display = 'none';
+                btnProcesar.disabled = true;
+                return;
+            }
+
+            // Procesar los cheques
+            const cheques = procesarDatosListadoCheques(jsonData);
+            stateMayores.listadoChequesTemporal = cheques;
+
+            // Mostrar preview
+            const headers = Object.keys(jsonData[0]);
+            previewInfo.innerHTML = `
+                <strong>Vista previa:</strong><br>
+                Columnas detectadas: ${headers.join(', ')}<br>
+                Cheques encontrados: ${cheques.length}
+            `;
+            previewInfo.style.display = 'block';
+
+            // Calcular y mostrar comparación
+            mostrarComparacionSumas(cheques);
+
+        } catch (error) {
+            console.error('Error leyendo archivo de cheques:', error);
+            previewInfo.innerHTML = '<span style="color: red;">Error al leer el archivo: ' + error.message + '</span>';
+            previewInfo.style.display = 'block';
+            comparacionPanel.style.display = 'none';
+            btnProcesar.disabled = true;
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+/**
+ * Procesar datos del listado de cheques
+ * @param {Array} jsonData - Datos del archivo Excel
+ * @returns {Array} Lista de cheques procesados
+ */
+function procesarDatosListadoCheques(jsonData) {
+    return jsonData.map((row, index) => {
+        // Buscar columnas con flexibilidad en nombres
+        const interno = buscarColumna(row, 'Interno', 'interno', 'INTERNO', 'Id', 'ID');
+        const numero = buscarColumna(row, 'Numero', 'numero', 'NUMERO', 'Nro', 'NRO', 'Número');
+        const fechaEmision = buscarColumna(row, 'Fecha Emision', 'FechaEmision', 'Fecha_Emision', 'Emision', 'EMISION');
+        const fechaRecepcion = buscarColumna(row, 'Fecha Recepcion', 'FechaRecepcion', 'Fecha_Recepcion', 'Recepcion', 'RECEPCION');
+        const fechaCobro = buscarColumna(row, 'Fecha cobro', 'FechaCobro', 'Fecha_Cobro', 'Cobro', 'COBRO');
+        const fechaRechazo = buscarColumna(row, 'FechaRechazo', 'Fecha Rechazo', 'Fecha_Rechazo', 'Rechazo', 'RECHAZO');
+        const fechaDeposito = buscarColumna(row, 'FechaDeposito', 'Fecha Deposito', 'Fecha_Deposito', 'Deposito', 'DEPOSITO');
+        const fechaTransferencia = buscarColumna(row, 'FechaTransferencia', 'Fecha Transferencia', 'Fecha_Transferencia', 'Transferencia', 'TRANSFERENCIA');
+        const origen = buscarColumna(row, 'Origen', 'origen', 'ORIGEN', 'Cliente', 'CLIENTE');
+        const destino = buscarColumna(row, 'Destino', 'destino', 'DESTINO', 'Proveedor', 'PROVEEDOR');
+        const importeRaw = buscarColumna(row, 'Importe', 'importe', 'IMPORTE', 'Monto', 'MONTO', 'Valor', 'VALOR');
+        const estado = buscarColumna(row, 'Estado', 'estado', 'ESTADO');
+
+        // Parsear importe
+        const importe = parsearNumeroArgentino(importeRaw);
+
+        return {
+            id: `cheque_${index}_${Date.now()}`,
+            interno: interno ? interno.toString() : '',
+            numero: numero ? numero.toString() : '',
+            fechaEmision: parsearFecha(fechaEmision),
+            fechaEmisionOriginal: fechaEmision || '',
+            fechaRecepcion: parsearFecha(fechaRecepcion),
+            fechaRecepcionOriginal: fechaRecepcion || '',
+            fechaCobro: parsearFecha(fechaCobro),
+            fechaCobroOriginal: fechaCobro || '',
+            fechaRechazo: parsearFecha(fechaRechazo),
+            fechaRechazoOriginal: fechaRechazo || '',
+            fechaDeposito: parsearFecha(fechaDeposito),
+            fechaDepositoOriginal: fechaDeposito || '',
+            fechaTransferencia: parsearFecha(fechaTransferencia),
+            fechaTransferenciaOriginal: fechaTransferencia || '',
+            origen: origen || '',
+            destino: destino || '',
+            importe: importe,
+            estado: estado || ''
+        };
+    }).filter(c => c.importe > 0);  // Filtrar cheques sin importe
+}
+
+/**
+ * Mostrar comparación de sumas entre listado de cheques y debe del mayor
+ * @param {Array} cheques - Lista de cheques procesados
+ */
+function mostrarComparacionSumas(cheques) {
+    const comparacionPanel = document.getElementById('comparacionSumasPanel');
+    const btnProcesar = document.getElementById('btnProcesarListadoCheques');
+
+    // Calcular total del debe del mayor (solo registros no vinculados del debe)
+    const registrosDebe = stateMayores.registrosMayor.filter(r => r.debe > 0 && !r.esDevolucion);
+    const totalDebeMayor = registrosDebe.reduce((sum, r) => sum + r.debe, 0);
+
+    // Calcular total del listado de cheques
+    const totalListadoCheques = cheques.reduce((sum, c) => sum + c.importe, 0);
+
+    // Calcular diferencia
+    const diferencia = Math.abs(totalDebeMayor - totalListadoCheques);
+    const coinciden = diferencia < 1;  // Tolerancia de $1
+
+    // Actualizar UI
+    document.getElementById('totalDebeMayorComparacion').textContent = formatearMoneda(totalDebeMayor);
+    document.getElementById('totalListadoChequesComparacion').textContent = formatearMoneda(totalListadoCheques);
+
+    const diferenciaEl = document.getElementById('diferenciaComparacion');
+    diferenciaEl.textContent = formatearMoneda(diferencia);
+    diferenciaEl.className = 'comparacion-valor ' + (coinciden ? 'coincide' : 'no-coincide');
+
+    // Mostrar mensaje
+    const mensajeEl = document.getElementById('mensajeComparacion');
+    if (coinciden) {
+        mensajeEl.innerHTML = '✅ <strong>Los totales coinciden.</strong> Puede incorporar el listado de cheques al análisis.';
+        mensajeEl.className = 'mensaje-comparacion success';
+        btnProcesar.disabled = false;
+    } else {
+        const porcentajeDif = ((diferencia / totalDebeMayor) * 100).toFixed(2);
+        mensajeEl.innerHTML = `⚠️ <strong>Los totales no coinciden.</strong> Diferencia de ${formatearMoneda(diferencia)} (${porcentajeDif}%). Puede incorporar de todas formas si lo desea.`;
+        mensajeEl.className = 'mensaje-comparacion warning';
+        btnProcesar.disabled = false;
+    }
+
+    comparacionPanel.style.display = 'block';
+}
+
+/**
+ * Procesar e incorporar listado de cheques al mayor
+ */
+function procesarListadoCheques() {
+    const cheques = stateMayores.listadoChequesTemporal;
+
+    if (cheques.length === 0) {
+        alert('No hay cheques para incorporar.');
+        return;
+    }
+
+    // Verificar si coinciden las sumas
+    const registrosDebe = stateMayores.registrosMayor.filter(r => r.debe > 0 && !r.esDevolucion);
+    const totalDebeMayor = registrosDebe.reduce((sum, r) => sum + r.debe, 0);
+    const totalListadoCheques = cheques.reduce((sum, c) => sum + c.importe, 0);
+    const diferencia = Math.abs(totalDebeMayor - totalListadoCheques);
+    const coinciden = diferencia < 1;
+
+    if (!coinciden) {
+        // Mostrar modal de confirmación
+        document.getElementById('confirmTotalDebeMayor').textContent = formatearMoneda(totalDebeMayor);
+        document.getElementById('confirmTotalListado').textContent = formatearMoneda(totalListadoCheques);
+        document.getElementById('confirmDiferencia').textContent = formatearMoneda(diferencia);
+        document.getElementById('modalConfirmarDiferenciaListado').classList.remove('hidden');
+        return;
+    }
+
+    // Si coinciden, incorporar directamente
+    incorporarListadoChequesAlMayor();
+}
+
+/**
+ * Cerrar modal de confirmación de diferencia
+ */
+function cerrarConfirmarDiferenciaListado() {
+    document.getElementById('modalConfirmarDiferenciaListado').classList.add('hidden');
+}
+
+/**
+ * Confirmar incorporación del listado con diferencia
+ */
+function confirmarIncorporarListadoConDiferencia() {
+    cerrarConfirmarDiferenciaListado();
+    incorporarListadoChequesAlMayor();
+}
+
+/**
+ * Incorporar el listado de cheques al mayor, reemplazando los registros del debe
+ */
+function incorporarListadoChequesAlMayor() {
+    const cheques = stateMayores.listadoChequesTemporal;
+
+    if (cheques.length === 0) {
+        alert('No hay cheques para incorporar.');
+        return;
+    }
+
+    // Obtener registros del debe (que serán reemplazados)
+    const registrosDebe = stateMayores.registrosMayor.filter(r => r.debe > 0 && !r.esDevolucion);
+
+    // Obtener registros del haber (que se mantienen)
+    const registrosHaber = stateMayores.registrosMayor.filter(r => r.haber > 0 || r.esDevolucion);
+
+    // Buscar asientos relacionados - Agrupar cheques por fecha de recepción y asignar asiento
+    // La lógica es: para cada fecha de recepción, buscar el asiento del mayor que corresponda
+    const asientosOriginales = [...new Set(registrosDebe.map(r => r.asiento))];
+
+    // Crear nuevos registros a partir del listado de cheques
+    const nuevosRegistrosDebe = cheques.map((cheque, index) => {
+        // Buscar un asiento que corresponda a la fecha de recepción del cheque
+        let asientoAsignado = '';
+
+        // Buscar registro del debe con fecha cercana a la fecha de recepción
+        if (cheque.fechaRecepcion) {
+            const registroMasCercano = registrosDebe.find(r => {
+                if (!r.fecha) return false;
+                const diffDias = Math.abs((r.fecha - cheque.fechaRecepcion) / (1000 * 60 * 60 * 24));
+                return diffDias <= 3;  // Tolerancia de 3 días
+            });
+
+            if (registroMasCercano) {
+                asientoAsignado = registroMasCercano.asiento;
+            }
+        }
+
+        // Si no se encontró asiento, usar el primero disponible o generar uno genérico
+        if (!asientoAsignado && asientosOriginales.length > 0) {
+            asientoAsignado = asientosOriginales[0];
+        }
+
+        // Construir descripción enriquecida
+        const descripcionParts = [];
+        if (cheque.numero) descripcionParts.push(`CHQ ${cheque.numero}`);
+        if (cheque.origen) descripcionParts.push(`de ${cheque.origen}`);
+        if (cheque.fechaEmisionOriginal) descripcionParts.push(`em. ${cheque.fechaEmisionOriginal}`);
+        if (cheque.estado) descripcionParts.push(`[${cheque.estado}]`);
+
+        const descripcion = descripcionParts.length > 0
+            ? descripcionParts.join(' - ')
+            : `Cheque ${cheque.interno || index + 1}`;
+
+        return {
+            id: `reg_cheque_${index}_${Date.now()}`,
+            fecha: cheque.fechaRecepcion || cheque.fechaEmision,
+            fechaOriginal: cheque.fechaRecepcionOriginal || cheque.fechaEmisionOriginal,
+            asiento: asientoAsignado,
+            descripcion: descripcion,
+            debe: cheque.importe,
+            haber: 0,
+            estado: 'pendiente',
+            vinculadoCon: [],
+            tipo: 'debe',
+            esDevolucion: false,
+            // Datos adicionales del cheque para referencia
+            datosChequeFuente: {
+                interno: cheque.interno,
+                numero: cheque.numero,
+                fechaEmision: cheque.fechaEmisionOriginal,
+                fechaRecepcion: cheque.fechaRecepcionOriginal,
+                fechaCobro: cheque.fechaCobroOriginal,
+                fechaDeposito: cheque.fechaDepositoOriginal,
+                fechaTransferencia: cheque.fechaTransferenciaOriginal,
+                origen: cheque.origen,
+                destino: cheque.destino,
+                estado: cheque.estado
+            }
+        };
+    });
+
+    // Combinar nuevos registros del debe con registros del haber existentes
+    stateMayores.registrosMayor = [...nuevosRegistrosDebe, ...registrosHaber];
+
+    // Ordenar por fecha
+    stateMayores.registrosMayor.sort((a, b) => {
+        if (!a.fecha && !b.fecha) return 0;
+        if (!a.fecha) return 1;
+        if (!b.fecha) return -1;
+        return a.fecha - b.fecha;
+    });
+
+    // Actualizar estado
+    stateMayores.listadoChequesIncorporado = true;
+    stateMayores.listadoChequesCargados = [...cheques];
+    stateMayores.listadoChequesTemporal = [];
+
+    // Resetear vinculaciones existentes
+    stateMayores.vinculaciones = [];
+    stateMayores.cuponesSeleccionados = [];
+    stateMayores.liquidacionesSeleccionadas = [];
+
+    // Cerrar modal
+    cerrarCargarListadoCheques();
+
+    // Actualizar UI
+    actualizarEstadisticasMayor();
+    renderizarTablaMayor();
+    analizarVencimientos();
+    renderizarVinculacion();
+
+    // Mostrar indicador de listado incorporado
+    mostrarIndicadorListadoIncorporado();
+
+    console.log(`✅ Listado de cheques incorporado: ${cheques.length} cheques reemplazaron ${registrosDebe.length} registros del debe`);
+    alert(`Se incorporaron ${cheques.length} cheques al análisis, reemplazando ${registrosDebe.length} registros del debe.`);
+}
+
+/**
+ * Mostrar indicador de que el listado de cheques fue incorporado
+ */
+function mostrarIndicadorListadoIncorporado() {
+    const infoMayor = document.getElementById('infoMayorCargado');
+
+    // Verificar si ya existe el indicador
+    let indicador = document.getElementById('indicadorListadoCheques');
+
+    if (!indicador) {
+        indicador = document.createElement('div');
+        indicador.id = 'indicadorListadoCheques';
+        indicador.className = 'listado-cheques-incorporado';
+        infoMayor.appendChild(indicador);
+    }
+
+    const cantidadCheques = stateMayores.listadoChequesCargados.length;
+    indicador.innerHTML = `
+        <span class="icono">📋</span>
+        <span class="texto">
+            Listado de cheques incorporado: <span class="cantidad">${cantidadCheques} cheques</span> detallados
+        </span>
+    `;
+    indicador.style.display = 'flex';
+}
+
+/**
+ * Ocultar indicador de listado incorporado
+ */
+function ocultarIndicadorListadoIncorporado() {
+    const indicador = document.getElementById('indicadorListadoCheques');
+    if (indicador) {
+        indicador.style.display = 'none';
+    }
 }
 
 console.log('✅ Módulo de Mayores Contables cargado');
