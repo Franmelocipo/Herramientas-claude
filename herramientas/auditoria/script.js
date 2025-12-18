@@ -18,7 +18,9 @@ const state = {
     // Modo rango de fechas
     modoRango: false,
     extractosRango: [], // Lista de extractos cargados en modo rango
-    rangoActual: { desde: null, hasta: null }
+    rangoActual: { desde: null, hasta: null },
+    // Extractos seleccionados para eliminación masiva
+    extractosSeleccionados: [] // Array de { id, cuentaId, mes, anio }
 };
 
 // Categorías predefinidas por defecto (se cargan desde BD o localStorage)
@@ -290,7 +292,15 @@ function renderizarCuentasConExtractos(cuentas) {
                                         if (extracto) {
                                             return `
                                                 <div class="extracto-cell extracto-cargado"
-                                                     title="${mesesCompletos[idx]} ${anio} - ${movimientos} movimientos">
+                                                     title="${mesesCompletos[idx]} ${anio} - ${movimientos} movimientos"
+                                                     data-extracto-id="${extracto.id}"
+                                                     data-cuenta-id="${cuenta.id}"
+                                                     data-mes="${mesesCompletos[idx]}"
+                                                     data-anio="${anio}">
+                                                    <input type="checkbox"
+                                                           class="extracto-checkbox"
+                                                           onclick="event.stopPropagation(); toggleSeleccionExtracto('${extracto.id}', '${cuenta.id}', '${mesesCompletos[idx]}', ${anio})"
+                                                           title="Seleccionar para eliminación masiva">
                                                     <div class="extracto-content" onclick="verDetalleExtracto('${extracto.id}', '${cuenta.id}')">
                                                         <div class="extracto-mes">${mes}</div>
                                                         <div class="extracto-mov">${movimientos} mov</div>
@@ -1043,6 +1053,142 @@ async function eliminarExtractoDirecto(id, cuentaId, nombreMes, anio) {
     } catch (error) {
         console.error('Error eliminando extracto:', error);
         alert('Error al eliminar el extracto');
+    }
+}
+
+// ============================================
+// ELIMINACIÓN MASIVA DE EXTRACTOS
+// ============================================
+
+/**
+ * Toggle selección de un extracto para eliminación masiva
+ */
+function toggleSeleccionExtracto(id, cuentaId, mes, anio) {
+    const index = state.extractosSeleccionados.findIndex(e => e.id === id);
+
+    if (index === -1) {
+        // Agregar a la selección
+        state.extractosSeleccionados.push({ id, cuentaId, mes, anio });
+    } else {
+        // Quitar de la selección
+        state.extractosSeleccionados.splice(index, 1);
+    }
+
+    actualizarBarraSeleccionExtractos();
+}
+
+/**
+ * Actualizar la barra de selección de extractos
+ */
+function actualizarBarraSeleccionExtractos() {
+    const barra = document.getElementById('barraSeleccionExtractos');
+    const contador = document.getElementById('contadorExtractosSeleccionados');
+
+    if (!barra || !contador) return;
+
+    const cantidad = state.extractosSeleccionados.length;
+
+    if (cantidad > 0) {
+        barra.classList.remove('hidden');
+        contador.textContent = `${cantidad} extracto${cantidad > 1 ? 's' : ''} seleccionado${cantidad > 1 ? 's' : ''}`;
+    } else {
+        barra.classList.add('hidden');
+    }
+
+    // Actualizar estado visual de los checkboxes
+    document.querySelectorAll('.extracto-checkbox').forEach(checkbox => {
+        const cell = checkbox.closest('.extracto-cell');
+        if (cell) {
+            const extractoId = cell.dataset.extractoId;
+            const isSelected = state.extractosSeleccionados.some(e => e.id === extractoId);
+            checkbox.checked = isSelected;
+
+            if (isSelected) {
+                cell.classList.add('extracto-seleccionado');
+            } else {
+                cell.classList.remove('extracto-seleccionado');
+            }
+        }
+    });
+}
+
+/**
+ * Deseleccionar todos los extractos
+ */
+function deseleccionarTodosExtractos() {
+    state.extractosSeleccionados = [];
+    actualizarBarraSeleccionExtractos();
+}
+
+/**
+ * Eliminar todos los extractos seleccionados
+ */
+async function eliminarExtractosSeleccionados() {
+    const cantidad = state.extractosSeleccionados.length;
+
+    if (cantidad === 0) {
+        alert('No hay extractos seleccionados');
+        return;
+    }
+
+    // Mostrar resumen de lo que se va a eliminar
+    const resumen = state.extractosSeleccionados
+        .map(e => `• ${e.mes} ${e.anio}`)
+        .join('\n');
+
+    const confirmacion = confirm(
+        `¿Eliminar ${cantidad} extracto${cantidad > 1 ? 's' : ''}?\n\n${resumen}\n\nEsta acción no se puede deshacer.`
+    );
+
+    if (!confirmacion) return;
+
+    let eliminados = 0;
+    let errores = 0;
+
+    // Mostrar indicador de progreso
+    const barra = document.getElementById('barraSeleccionExtractos');
+    const contador = document.getElementById('contadorExtractosSeleccionados');
+    if (contador) {
+        contador.textContent = `Eliminando extractos... 0/${cantidad}`;
+    }
+
+    for (const extracto of state.extractosSeleccionados) {
+        try {
+            if (window.supabaseDB) {
+                const { error } = await window.supabaseDB
+                    .from('extractos_mensuales')
+                    .delete()
+                    .eq('id', extracto.id);
+                if (error) throw error;
+            } else {
+                const extractos = JSON.parse(localStorage.getItem(`extractos_${extracto.cuentaId}`) || '[]');
+                const nuevos = extractos.filter(e => e.id !== extracto.id);
+                localStorage.setItem(`extractos_${extracto.cuentaId}`, JSON.stringify(nuevos));
+            }
+            eliminados++;
+            if (contador) {
+                contador.textContent = `Eliminando extractos... ${eliminados}/${cantidad}`;
+            }
+        } catch (error) {
+            console.error('Error eliminando extracto:', extracto, error);
+            errores++;
+        }
+    }
+
+    // Limpiar selección
+    state.extractosSeleccionados = [];
+    actualizarBarraSeleccionExtractos();
+
+    // Recargar el dashboard
+    if (state.clienteActual?.id) {
+        await cargarCuentasConExtractos(state.clienteActual.id);
+    }
+
+    // Mostrar resultado
+    if (errores > 0) {
+        alert(`✅ ${eliminados} extracto${eliminados > 1 ? 's' : ''} eliminado${eliminados > 1 ? 's' : ''}.\n⚠️ ${errores} error${errores > 1 ? 'es' : ''} durante la eliminación.`);
+    } else {
+        alert(`✅ ${eliminados} extracto${eliminados > 1 ? 's' : ''} eliminado${eliminados > 1 ? 's' : ''} correctamente.`);
     }
 }
 
