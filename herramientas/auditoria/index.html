@@ -107,6 +107,18 @@
                 <h3>Seleccione un Cliente</h3>
                 <p>Elija un cliente del selector superior para ver sus cuentas bancarias y extractos mensuales.</p>
             </div>
+
+            <!-- Barra flotante de selección de extractos para eliminación masiva -->
+            <div id="barraSeleccionExtractos" class="barra-seleccion-extractos hidden">
+                <div class="seleccion-extractos-info">
+                    <span class="seleccion-icono">📋</span>
+                    <span id="contadorExtractosSeleccionados">0 extractos seleccionados</span>
+                </div>
+                <div class="seleccion-extractos-acciones">
+                    <button onclick="deseleccionarTodosExtractos()" class="btn-secondary btn-sm">Deseleccionar todos</button>
+                    <button onclick="eliminarExtractosSeleccionados()" class="btn-danger btn-sm">🗑️ Eliminar seleccionados</button>
+                </div>
+            </div>
         </div>
 
         <!-- ============================================ -->

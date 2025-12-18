@@ -293,6 +293,113 @@ body {
     transform: scale(1.15);
 }
 
+/* Checkbox de selección de extracto */
+.extracto-checkbox {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 3;
+    accent-color: #3b82f6;
+}
+
+.extracto-cargado:hover .extracto-checkbox,
+.extracto-checkbox:checked {
+    opacity: 1;
+}
+
+/* Extracto seleccionado */
+.extracto-seleccionado {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
+    border: 2px solid #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.extracto-seleccionado .extracto-mes {
+    color: #1d4ed8 !important;
+}
+
+.extracto-seleccionado .extracto-mov {
+    color: #3b82f6 !important;
+}
+
+.extracto-seleccionado .extracto-checkbox {
+    opacity: 1;
+}
+
+/* Barra flotante de selección de extractos */
+.barra-seleccion-extractos {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+.barra-seleccion-extractos.hidden {
+    display: none;
+}
+
+.seleccion-extractos-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+}
+
+.seleccion-extractos-info .seleccion-icono {
+    font-size: 18px;
+}
+
+.seleccion-extractos-acciones {
+    display: flex;
+    gap: 10px;
+}
+
+.seleccion-extractos-acciones .btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.seleccion-extractos-acciones .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.seleccion-extractos-acciones .btn-danger {
+    background: #dc2626;
+    border: none;
+    color: white;
+}
+
+.seleccion-extractos-acciones .btn-danger:hover {
+    background: #b91c1c;
+}
+
 .extracto-vacio {
     background: #f8fafc;
     border: 1px dashed #cbd5e1;
