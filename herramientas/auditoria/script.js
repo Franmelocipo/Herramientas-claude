@@ -83,7 +83,7 @@ async function cargarClientes() {
         }
 
         if (supabaseClient) {
-            const { data, error } = await supabaseClient
+            const { data, error } = await window.supabaseDBClient
                 .from('clientes')
                 .select('*')
                 .order('razon_social');
@@ -184,7 +184,7 @@ async function cargarCuentasConExtractos(clienteId) {
 
         if (window.supabaseDB) {
             // Cargar cuentas bancarias
-            const { data: cuentasData, error: cuentasError } = await supabase
+            const { data: cuentasData, error: cuentasError } = await window.supabaseDB
                 .from('cuentas_bancarias')
                 .select('*')
                 .eq('cliente_id', clienteId)
@@ -195,7 +195,7 @@ async function cargarCuentasConExtractos(clienteId) {
 
             // Cargar extractos para cada cuenta
             for (let cuenta of cuentas) {
-                const { data: extractosData } = await supabase
+                const { data: extractosData } = await window.supabaseDB
                     .from('extractos_mensuales')
                     .select('id, mes, anio, data, created_at, updated_at')
                     .eq('cuenta_id', cuenta.id)
@@ -400,14 +400,14 @@ async function guardarCuentaBancaria() {
         if (window.supabaseDB) {
             if (id) {
                 // Actualizar
-                const { error } = await supabase
+                const { error } = await window.supabaseDB
                     .from('cuentas_bancarias')
                     .update(cuentaData)
                     .eq('id', id);
                 if (error) throw error;
             } else {
                 // Crear
-                const { error } = await supabase
+                const { error } = await window.supabaseDB
                     .from('cuentas_bancarias')
                     .insert([cuentaData]);
                 if (error) throw error;
@@ -443,7 +443,7 @@ async function editarCuentaBancaria(id) {
         const clienteId = state.clienteActual?.id;
 
         if (window.supabaseDB) {
-            const { data, error } = await supabase
+            const { data, error } = await window.supabaseDB
                 .from('cuentas_bancarias')
                 .select('*')
                 .eq('id', id)
@@ -551,7 +551,7 @@ async function cargarExtractosMensuales(cuentaId) {
         let extractos = [];
 
         if (window.supabaseDB) {
-            const { data, error } = await supabase
+            const { data, error } = await window.supabaseDB
                 .from('extractos_mensuales')
                 .select('*')
                 .eq('cuenta_id', cuentaId)
@@ -896,7 +896,7 @@ async function procesarExtracto() {
 
             // Verificar si ya existe extracto para ese período
             if (window.supabaseDB) {
-                const { data: existente } = await supabase
+                const { data: existente } = await window.supabaseDB
                     .from('extractos_mensuales')
                     .select('id')
                     .eq('cuenta_id', cuentaId)
@@ -913,7 +913,7 @@ async function procesarExtracto() {
                 }
 
                 // Guardar en Supabase
-                const { error } = await supabase
+                const { error } = await window.supabaseDB
                     .from('extractos_mensuales')
                     .insert([{
                         cuenta_id: cuentaId,
@@ -988,7 +988,7 @@ async function eliminarExtracto(id) {
 
     try {
         if (window.supabaseDB) {
-            const { error } = await supabase
+            const { error } = await window.supabaseDB
                 .from('extractos_mensuales')
                 .delete()
                 .eq('id', id);
@@ -1023,7 +1023,7 @@ async function eliminarExtractoDirecto(id, cuentaId, nombreMes, anio) {
 
     try {
         if (window.supabaseDB) {
-            const { error } = await supabase
+            const { error } = await window.supabaseDB
                 .from('extractos_mensuales')
                 .delete()
                 .eq('id', id);
@@ -1068,7 +1068,7 @@ async function verDetalleExtracto(id, cuentaId) {
         let extracto;
 
         if (window.supabaseDB) {
-            const { data, error } = await supabase
+            const { data, error } = await window.supabaseDB
                 .from('extractos_mensuales')
                 .select('*')
                 .eq('id', id)
@@ -1499,7 +1499,7 @@ async function guardarCambiosExtracto() {
 
     try {
         if (window.supabaseDB) {
-            const { error } = await supabase
+            const { error } = await window.supabaseDB
                 .from('extractos_mensuales')
                 .update({
                     data: state.movimientosEditados,
@@ -1560,7 +1560,7 @@ async function guardarCambiosExtractoModoRango() {
         // Actualizar cada extracto
         if (window.supabaseDB) {
             for (const extractoId of Object.keys(movimientosPorExtracto)) {
-                const { error } = await supabase
+                const { error } = await window.supabaseDB
                     .from('extractos_mensuales')
                     .update({
                         data: movimientosPorExtracto[extractoId],
@@ -1905,7 +1905,7 @@ async function cargarExtractosPorRango() {
 
         if (window.supabaseDB) {
             // Cargar extractos de la cuenta en el rango especificado
-            const { data, error } = await supabase
+            const { data, error } = await window.supabaseDB
                 .from('extractos_mensuales')
                 .select('*')
                 .eq('cuenta_id', cuentaId)
@@ -2291,7 +2291,7 @@ async function cargarCategorias() {
         }
 
         if (supabaseClient) {
-            const { data, error } = await supabaseClient
+            const { data, error } = await window.supabaseDBClient
                 .from('categorias_movimientos')
                 .select('*')
                 .order('orden');
@@ -2402,7 +2402,7 @@ async function agregarCategoria() {
 
     try {
         if (window.supabaseDB) {
-            const { error } = await supabase
+            const { error } = await window.supabaseDB
                 .from('categorias_movimientos')
                 .insert([nuevaCategoria]);
 
@@ -2496,7 +2496,7 @@ async function guardarEdicionCategoria() {
         if (window.supabaseDB) {
             // Eliminar la antigua y crear la nueva (por si cambió el ID)
             await window.supabaseDB.from('categorias_movimientos').delete().eq('id', idOriginal);
-            const { error } = await supabase
+            const { error } = await window.supabaseDB
                 .from('categorias_movimientos')
                 .insert([categoriaActualizada]);
 
@@ -2536,7 +2536,7 @@ async function eliminarCategoria(id) {
 
     try {
         if (window.supabaseDB) {
-            const { error } = await supabase
+            const { error } = await window.supabaseDB
                 .from('categorias_movimientos')
                 .delete()
                 .eq('id', id);
