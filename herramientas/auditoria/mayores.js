@@ -21,6 +21,50 @@ let conciliacionesMayorGuardadasLista = [];
 let conciliacionMayorSeleccionadaId = null;
 let conciliacionMayorAEliminarId = null;
 
+// ============================================
+// FUNCIONES DE PROGRESO DE CONCILIACIÓN
+// ============================================
+
+/**
+ * Mostrar panel de progreso de conciliación
+ */
+function mostrarProgresoConciliacion() {
+    document.getElementById('panelConfigConciliacion').style.display = 'none';
+    document.getElementById('resultadosConciliacion').style.display = 'none';
+    document.getElementById('panelProgresoConciliacion').style.display = 'block';
+    actualizarProgresoConciliacion(0, 'Preparando conciliación...');
+}
+
+/**
+ * Ocultar panel de progreso de conciliación
+ */
+function ocultarProgresoConciliacion() {
+    document.getElementById('panelProgresoConciliacion').style.display = 'none';
+}
+
+/**
+ * Actualizar barra de progreso de conciliación
+ * @param {number} porcentaje - Porcentaje de progreso (0-100)
+ * @param {string} detalle - Texto descriptivo del estado actual
+ */
+function actualizarProgresoConciliacion(porcentaje, detalle) {
+    const barra = document.getElementById('progresoConciliacionBarra');
+    const texto = document.getElementById('progresoConciliacionTexto');
+    const detalleEl = document.getElementById('progresoConciliacionDetalle');
+
+    if (barra) barra.style.width = `${porcentaje}%`;
+    if (texto) texto.textContent = `${Math.round(porcentaje)}%`;
+    if (detalleEl) detalleEl.textContent = detalle;
+}
+
+/**
+ * Pausa para permitir que la UI se actualice
+ * @returns {Promise} Promesa que se resuelve en el siguiente frame
+ */
+function permitirActualizacionUI() {
+    return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 // Tipos de mayores predefinidos
 const TIPOS_MAYOR_DEFAULT = [
     {
@@ -1429,13 +1473,17 @@ function cerrarResultadosConciliacion() {
 }
 
 /**
- * Ejecutar conciliación automática
+ * Ejecutar conciliación automática (versión asíncrona con barra de progreso)
  */
-function ejecutarConciliacion() {
+async function ejecutarConciliacion() {
     const tolerancia = parseFloat(document.getElementById('toleranciaImporte').value) || 0.01;
     const diasMaximos = parseInt(document.getElementById('diasMaximos').value) || 40;
     const modo = document.getElementById('modoConciliacion').value;
     const config = obtenerConfigVinculacion();
+
+    // Mostrar barra de progreso
+    mostrarProgresoConciliacion();
+    await permitirActualizacionUI();
 
     console.log(`🤖 Iniciando conciliación automática - Modo: ${modo}, Tolerancia: ${tolerancia}, Días máx: ${diasMaximos}`);
     console.log(`📋 Configuración: tipoOrigen=${config.tipoOrigen}, tipoDestino=${config.tipoDestino}`);
@@ -1445,6 +1493,9 @@ function ejecutarConciliacion() {
 
     const registros = stateMayores.registrosMayor;
     console.log(`📊 Total registros cargados: ${registros.length}`);
+
+    actualizarProgresoConciliacion(5, 'Analizando registros cargados...');
+    await permitirActualizacionUI();
 
     // Debug: Verificar estado de las fechas
     const conFechaValida = registros.filter(r => r.fecha instanceof Date && !isNaN(r.fecha.getTime())).length;
@@ -1457,6 +1508,9 @@ function ejecutarConciliacion() {
             console.log(`   ⚠️ Ejemplo fecha inválida: tipo=${typeof ejemploInvalida.fecha}, valor=${ejemploInvalida.fecha}`);
         }
     }
+
+    actualizarProgresoConciliacion(10, 'Clasificando registros de origen y destino...');
+    await permitirActualizacionUI();
 
     // Obtener registros de origen y destino pendientes según configuración
     let origenPendientes = obtenerRegistrosOrigen(registros, false)
@@ -1480,48 +1534,90 @@ function ejecutarConciliacion() {
         console.log(`   Ejemplo destino: fecha=${muestra.fecha}, monto=${obtenerMontoDestino(muestra)}, leyenda=${muestra.leyenda?.substring(0, 50)}`);
     }
 
+    actualizarProgresoConciliacion(15, `Iniciando conciliación ${modo}...`);
+    await permitirActualizacionUI();
+
     let vinculacionesExitosas = 0;
     let origenVinculados = new Set();
     let destinoVinculados = new Set();
 
+    // Callback para actualizar progreso durante la conciliación
+    const actualizarProgresoCallback = async (procesados, total, vinculacionesActuales) => {
+        const porcentajeBase = 15;
+        const porcentajeMax = 90;
+        const porcentaje = porcentajeBase + ((procesados / total) * (porcentajeMax - porcentajeBase));
+        const modoTexto = modo === 'N:1' ? 'N:1' : modo === '1:1' ? '1:1' : '1:N';
+        actualizarProgresoConciliacion(
+            porcentaje,
+            `Procesando ${modo}: ${procesados}/${total} registros (${vinculacionesActuales} vinculaciones encontradas)`
+        );
+        await permitirActualizacionUI();
+    };
+
     if (modo === 'N:1') {
         // Modo N:1: Varios orígenes pueden vincularse con un destino
-        vinculacionesExitosas = conciliarN1(
+        vinculacionesExitosas = await conciliarN1Async(
             origenPendientes,
             destinoPendientes,
             tolerancia,
             diasMaximos,
             origenVinculados,
-            destinoVinculados
+            destinoVinculados,
+            actualizarProgresoCallback
         );
     } else if (modo === '1:1') {
         // Modo 1:1: Un origen con un destino
-        vinculacionesExitosas = conciliar11(
+        vinculacionesExitosas = await conciliar11Async(
             origenPendientes,
             destinoPendientes,
             tolerancia,
             diasMaximos,
             origenVinculados,
-            destinoVinculados
+            destinoVinculados,
+            actualizarProgresoCallback
         );
     } else if (modo === '1:N') {
         // Modo 1:N: Un origen con varios destinos
-        vinculacionesExitosas = conciliar1N(
+        vinculacionesExitosas = await conciliar1NAsync(
             origenPendientes,
             destinoPendientes,
             tolerancia,
             diasMaximos,
             origenVinculados,
-            destinoVinculados
+            destinoVinculados,
+            actualizarProgresoCallback
         );
     }
+
+    actualizarProgresoConciliacion(92, 'Calculando estadísticas...');
+    await permitirActualizacionUI();
 
     // Actualizar estadísticas
     const origenSinMatch = origenPendientes.filter(c => !origenVinculados.has(c.id)).length;
     const destinoSinMatch = destinoPendientes.filter(l => !destinoVinculados.has(l.id)).length;
 
-    // Mostrar resultados
-    document.getElementById('panelConfigConciliacion').style.display = 'none';
+    actualizarProgresoConciliacion(95, 'Analizando vencimientos...');
+    await permitirActualizacionUI();
+
+    // Analizar vencimientos de los que quedaron
+    analizarVencimientos();
+
+    actualizarProgresoConciliacion(98, 'Actualizando interfaz...');
+    await permitirActualizacionUI();
+
+    // Actualizar UI
+    renderizarVinculacion();
+    renderizarTablaMayor();
+    actualizarEstadisticasVinculacion();
+
+    actualizarProgresoConciliacion(100, '¡Conciliación completada!');
+    await permitirActualizacionUI();
+
+    // Esperar un momento antes de mostrar resultados
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Ocultar progreso y mostrar resultados
+    ocultarProgresoConciliacion();
     document.getElementById('resultadosConciliacion').style.display = 'block';
     document.getElementById('conciliacionExitosas').textContent = vinculacionesExitosas;
     document.getElementById('conciliacionPendientes').textContent = origenSinMatch;
@@ -1532,15 +1628,247 @@ function ejecutarConciliacion() {
     document.getElementById('labelOrigenSinMatch').textContent = `${configResultados.etiquetaOrigen} sin match`;
     document.getElementById('labelDestinoSinMatch').textContent = `${configResultados.etiquetaDestino} sin match`;
 
-    // Analizar vencimientos de los que quedaron
-    analizarVencimientos();
-
-    // Actualizar UI
-    renderizarVinculacion();
-    renderizarTablaMayor();
-    actualizarEstadisticasVinculacion();
-
     console.log(`✅ Conciliación completada: ${vinculacionesExitosas} vinculaciones`);
+}
+
+/**
+ * Conciliación N:1 Asíncrona - Varios orígenes con un destino
+ * @param {Array} origenes - Registros de origen
+ * @param {Array} destinos - Registros de destino
+ * @param {number} tolerancia - Tolerancia de importe
+ * @param {number} diasMaximos - Días máximos entre fecha origen y destino
+ * @param {Set} origenesVinculados - Set de IDs de orígenes vinculados
+ * @param {Set} destinosVinculados - Set de IDs de destinos vinculados
+ * @param {Function} onProgreso - Callback para actualizar progreso
+ * @returns {Promise<number>} Número de vinculaciones exitosas
+ */
+async function conciliarN1Async(origenes, destinos, tolerancia, diasMaximos, origenesVinculados, destinosVinculados, onProgreso) {
+    let vinculaciones = 0;
+    const total = destinos.length;
+    const intervaloActualizacion = Math.max(1, Math.floor(total / 50)); // Actualizar cada 2%
+
+    for (let i = 0; i < destinos.length; i++) {
+        const destino = destinos[i];
+        if (destinosVinculados.has(destino.id)) continue;
+
+        const montoDestino = obtenerMontoDestino(destino);
+        const fechaDestino = destino.fecha;
+
+        if (!fechaDestino) continue;
+
+        // Buscar orígenes candidatos (fecha anterior al destino, dentro del plazo)
+        const origenesCandidatos = origenes.filter(o => {
+            if (origenesVinculados.has(o.id)) return false;
+            if (!o.fecha) return false;
+
+            const diasDiferencia = Math.floor((fechaDestino - o.fecha) / (1000 * 60 * 60 * 24));
+            return diasDiferencia >= 0 && diasDiferencia <= diasMaximos;
+        });
+
+        if (origenesCandidatos.length === 0) continue;
+
+        // Intentar encontrar combinación de orígenes que sumen el monto del destino
+        const combinacion = buscarCombinacionSumaGenerica(origenesCandidatos, montoDestino, tolerancia, obtenerMontoOrigen);
+
+        if (combinacion && combinacion.length > 0) {
+            // Crear vinculación
+            const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
+
+            // Marcar orígenes
+            combinacion.forEach(origen => {
+                origen.estado = 'vinculado';
+                origen.vinculadoCon = [destino.id];
+                origen.vinculacionId = vinculacionId;
+                origenesVinculados.add(origen.id);
+            });
+
+            // Marcar destino
+            destino.estado = 'vinculado';
+            destino.vinculadoCon = combinacion.map(o => o.id);
+            destino.vinculacionId = vinculacionId;
+            destinosVinculados.add(destino.id);
+
+            // Registrar vinculación
+            stateMayores.vinculaciones.push({
+                id: vinculacionId,
+                cupones: combinacion.map(o => o.id),
+                liquidaciones: [destino.id],
+                tipo: 'automatica',
+                fecha: new Date().toISOString()
+            });
+
+            vinculaciones++;
+        }
+
+        // Actualizar progreso periódicamente
+        if (i % intervaloActualizacion === 0 || i === total - 1) {
+            await onProgreso(i + 1, total, vinculaciones);
+        }
+    }
+
+    return vinculaciones;
+}
+
+/**
+ * Conciliación 1:1 Asíncrona - Un origen con un destino
+ * @param {Array} origenes - Registros de origen
+ * @param {Array} destinos - Registros de destino
+ * @param {number} tolerancia - Tolerancia de importe
+ * @param {number} diasMaximos - Días máximos entre fecha origen y destino
+ * @param {Set} origenesVinculados - Set de IDs de orígenes vinculados
+ * @param {Set} destinosVinculados - Set de IDs de destinos vinculados
+ * @param {Function} onProgreso - Callback para actualizar progreso
+ * @returns {Promise<number>} Número de vinculaciones exitosas
+ */
+async function conciliar11Async(origenes, destinos, tolerancia, diasMaximos, origenesVinculados, destinosVinculados, onProgreso) {
+    let vinculaciones = 0;
+    const total = origenes.length;
+    const intervaloActualizacion = Math.max(1, Math.floor(total / 50)); // Actualizar cada 2%
+
+    for (let i = 0; i < origenes.length; i++) {
+        const origen = origenes[i];
+        if (origenesVinculados.has(origen.id)) continue;
+        if (!origen.fecha) continue;
+
+        const montoOrigen = obtenerMontoOrigen(origen);
+
+        // Buscar destino que coincida
+        for (const destino of destinos) {
+            if (destinosVinculados.has(destino.id)) continue;
+            if (!destino.fecha) continue;
+
+            const diasDiferencia = Math.floor((destino.fecha - origen.fecha) / (1000 * 60 * 60 * 24));
+            if (diasDiferencia < 0 || diasDiferencia > diasMaximos) continue;
+
+            const diferencia = Math.abs(montoOrigen - obtenerMontoDestino(destino));
+            if (diferencia <= tolerancia) {
+                // Match encontrado
+                const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
+
+                origen.estado = 'vinculado';
+                origen.vinculadoCon = [destino.id];
+                origen.vinculacionId = vinculacionId;
+
+                destino.estado = 'vinculado';
+                destino.vinculadoCon = [origen.id];
+                destino.vinculacionId = vinculacionId;
+
+                origenesVinculados.add(origen.id);
+                destinosVinculados.add(destino.id);
+
+                stateMayores.vinculaciones.push({
+                    id: vinculacionId,
+                    cupones: [origen.id],
+                    liquidaciones: [destino.id],
+                    tipo: 'automatica',
+                    fecha: new Date().toISOString()
+                });
+
+                vinculaciones++;
+                break;
+            }
+        }
+
+        // Actualizar progreso periódicamente
+        if (i % intervaloActualizacion === 0 || i === total - 1) {
+            await onProgreso(i + 1, total, vinculaciones);
+        }
+    }
+
+    return vinculaciones;
+}
+
+/**
+ * Conciliación 1:N Asíncrona - Un origen con varios destinos
+ * @param {Array} origenes - Registros de origen
+ * @param {Array} destinos - Registros de destino
+ * @param {number} tolerancia - Tolerancia de importe
+ * @param {number} diasMaximos - Días máximos entre fecha origen y destino
+ * @param {Set} origenesVinculados - Set de IDs de orígenes vinculados
+ * @param {Set} destinosVinculados - Set de IDs de destinos vinculados
+ * @param {Function} onProgreso - Callback para actualizar progreso
+ * @returns {Promise<number>} Número de vinculaciones exitosas
+ */
+async function conciliar1NAsync(origenes, destinos, tolerancia, diasMaximos, origenesVinculados, destinosVinculados, onProgreso) {
+    let vinculaciones = 0;
+    let origenesEvaluados = 0;
+    let origenesSinFecha = 0;
+    let origenesSinCandidatos = 0;
+    const total = origenes.length;
+    const intervaloActualizacion = Math.max(1, Math.floor(total / 50)); // Actualizar cada 2%
+
+    console.log(`🔍 conciliar1NAsync: Evaluando ${origenes.length} orígenes contra ${destinos.length} destinos`);
+
+    for (let i = 0; i < origenes.length; i++) {
+        const origen = origenes[i];
+        if (origenesVinculados.has(origen.id)) continue;
+        if (!origen.fecha) {
+            origenesSinFecha++;
+            continue;
+        }
+        origenesEvaluados++;
+
+        const montoOrigen = obtenerMontoOrigen(origen);
+
+        // Buscar destinos candidatos
+        const destinosCandidatos = destinos.filter(d => {
+            if (destinosVinculados.has(d.id)) return false;
+            if (!d.fecha) return false;
+
+            const diasDiferencia = Math.floor((d.fecha - origen.fecha) / (1000 * 60 * 60 * 24));
+            return diasDiferencia >= 0 && diasDiferencia <= diasMaximos;
+        });
+
+        if (destinosCandidatos.length === 0) {
+            origenesSinCandidatos++;
+            if (origenesSinCandidatos <= 3) {
+                const fechaOrigen = origen.fecha instanceof Date ? origen.fecha.toISOString().split('T')[0] : origen.fecha;
+                console.log(`   ⚠️ Origen sin candidatos: monto=${montoOrigen.toFixed(2)}, fecha=${fechaOrigen}`);
+            }
+            continue;
+        }
+
+        // Buscar combinación de destinos que sumen el monto del origen
+        const combinacion = buscarCombinacionSumaGenerica(destinosCandidatos, montoOrigen, tolerancia, obtenerMontoDestino);
+
+        if (combinacion && combinacion.length > 0) {
+            // Crear vinculación
+            const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
+
+            // Marcar origen
+            origen.estado = 'vinculado';
+            origen.vinculadoCon = combinacion.map(d => d.id);
+            origen.vinculacionId = vinculacionId;
+            origenesVinculados.add(origen.id);
+
+            // Marcar destinos
+            combinacion.forEach(destino => {
+                destino.estado = 'vinculado';
+                destino.vinculadoCon = [origen.id];
+                destino.vinculacionId = vinculacionId;
+                destinosVinculados.add(destino.id);
+            });
+
+            // Registrar vinculación
+            stateMayores.vinculaciones.push({
+                id: vinculacionId,
+                cupones: [origen.id],
+                liquidaciones: combinacion.map(d => d.id),
+                tipo: 'automatica',
+                fecha: new Date().toISOString()
+            });
+
+            vinculaciones++;
+        }
+
+        // Actualizar progreso periódicamente
+        if (i % intervaloActualizacion === 0 || i === total - 1) {
+            await onProgreso(i + 1, total, vinculaciones);
+        }
+    }
+
+    console.log(`📊 Resumen 1:N: evaluados=${origenesEvaluados}, sinFecha=${origenesSinFecha}, sinCandidatos=${origenesSinCandidatos}`);
+    return vinculaciones;
 }
 
 /**
