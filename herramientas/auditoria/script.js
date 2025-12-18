@@ -83,7 +83,7 @@ async function cargarClientes() {
         }
 
         if (supabaseClient) {
-            const { data, error } = await window.supabaseDBClient
+            const { data, error } = await supabaseClient
                 .from('clientes')
                 .select('*')
                 .order('razon_social');
@@ -2291,7 +2291,7 @@ async function cargarCategorias() {
         }
 
         if (supabaseClient) {
-            const { data, error } = await window.supabaseDBClient
+            const { data, error } = await supabaseClient
                 .from('categorias_movimientos')
                 .select('*')
                 .order('orden');
