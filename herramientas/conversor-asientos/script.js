@@ -2390,15 +2390,21 @@ function groupSimilarEntries(data) {
             const totalPagar = parseAmount(row['Total a pagar'] || row['TOTAL_A_PAGAR'] ||
                                           row['Total'] || row['TOTAL'] || 0);
 
-            // Clave de agrupación: número de cuota
-            const key = `Cuota ${nroCuota}`;
+            // Clave de agrupación: número de cuota + descripción + vencimiento
+            // Esto permite que cada línea de la plantilla genere un asiento separado
+            // incluso si tienen el mismo número de cuota (préstamos diferentes)
+            const key = `Cuota ${nroCuota}|${descripcion}|${vencimiento}`;
 
             // Calcular el total si no viene (suma de las partes)
             const totalCalculado = totalPagar || (capital + intereses + iva + percIva + otros);
 
             if (!groups[key]) {
+                // Concepto legible para mostrar en la UI
+                const conceptoLegible = descripcion
+                    ? `Cuota ${nroCuota} - ${descripcion}`
+                    : `Cuota ${nroCuota}`;
                 groups[key] = {
-                    concepto: key,
+                    concepto: conceptoLegible,
                     ejemploCompleto: `Vto: ${vencimiento} | Total: $${totalCalculado.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`,
                     count: 1,
                     totalDebe: totalCalculado,
