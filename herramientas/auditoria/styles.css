@@ -2038,6 +2038,80 @@ body {
     border-top: 1px solid #e2e8f0;
 }
 
+/* Panel de progreso de conciliación */
+.progreso-conciliacion {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border: 2px solid #93c5fd;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 16px;
+}
+
+.progreso-conciliacion h5 {
+    margin: 0 0 16px 0;
+    color: #1e40af;
+    font-size: 1rem;
+}
+
+.progreso-contenedor {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.progreso-barra-contenedor {
+    flex: 1;
+    height: 24px;
+    background: #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.progreso-barra {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%);
+    border-radius: 12px;
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.progreso-barra::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.3),
+        transparent
+    );
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.progreso-texto {
+    min-width: 50px;
+    font-weight: 600;
+    color: #1e40af;
+    text-align: right;
+}
+
+.progreso-detalle {
+    color: #475569;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
 /* Resultados de conciliación */
 .resultados-conciliacion {
     background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
