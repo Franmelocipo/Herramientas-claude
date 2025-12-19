@@ -4129,37 +4129,121 @@ function incorporarListadoChequesAlMayor() {
     // Array para cheques no asociados
     const chequesNoAsociados = [];
 
-    // Asociar cada cheque al registro del debe correspondiente
+    /**
+     * Normalizar texto para comparación (quitar tildes, espacios extra, mayúsculas)
+     */
+    function normalizarTexto(texto) {
+        if (!texto) return '';
+        return texto
+            .toString()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') // Quitar tildes
+            .replace(/[^a-z0-9\s]/g, ' ')    // Solo letras, números y espacios
+            .replace(/\s+/g, ' ')            // Normalizar espacios múltiples
+            .trim();
+    }
+
+    /**
+     * Calcular similitud entre origen del cheque y descripción del asiento
+     * Retorna un valor entre 0 y 1
+     */
+    function calcularSimilitudTexto(origenCheque, descripcionAsiento) {
+        const origenNorm = normalizarTexto(origenCheque);
+        const descripcionNorm = normalizarTexto(descripcionAsiento);
+
+        if (!origenNorm || !descripcionNorm) return 0;
+
+        // Verificar si el origen está contenido en la descripción o viceversa
+        if (descripcionNorm.includes(origenNorm) || origenNorm.includes(descripcionNorm)) {
+            return 1;
+        }
+
+        // Dividir en palabras y contar coincidencias
+        const palabrasOrigen = origenNorm.split(' ').filter(p => p.length > 2);
+        const palabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 2);
+
+        if (palabrasOrigen.length === 0) return 0;
+
+        let coincidencias = 0;
+        for (const palabra of palabrasOrigen) {
+            if (palabrasDescripcion.some(pd => pd.includes(palabra) || palabra.includes(pd))) {
+                coincidencias++;
+            }
+        }
+
+        return coincidencias / palabrasOrigen.length;
+    }
+
+    /**
+     * Calcular score de asociación entre un cheque y un registro del debe
+     * Considera: fecha, origen/descripción
+     * Retorna un objeto con score y detalles
+     */
+    function calcularScoreAsociacion(cheque, registro) {
+        let score = 0;
+        const detalles = { fecha: 0, texto: 0 };
+
+        // Score por fecha (máx 50 puntos)
+        const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
+        if (fechaCheque && registro.fecha) {
+            const diffDias = Math.abs((registro.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
+            if (diffDias === 0) {
+                detalles.fecha = 50;  // Fecha exacta
+            } else if (diffDias <= 1) {
+                detalles.fecha = 45;  // 1 día de diferencia
+            } else if (diffDias <= 3) {
+                detalles.fecha = 35;  // 2-3 días
+            } else if (diffDias <= 7) {
+                detalles.fecha = 20;  // 4-7 días
+            } else if (diffDias <= 30) {
+                detalles.fecha = 10;  // 8-30 días
+            }
+        }
+
+        // Score por similitud de texto origen/descripción (máx 50 puntos)
+        const similitud = calcularSimilitudTexto(cheque.origen, registro.descripcion);
+        detalles.texto = Math.round(similitud * 50);
+
+        score = detalles.fecha + detalles.texto;
+
+        return { score, detalles };
+    }
+
+    // Asociar cada cheque al registro del debe correspondiente usando scoring
     cheques.forEach((cheque, index) => {
         let registroAsociado = null;
+        let mejorScore = 0;
 
         // Primero intentar asociar por número de asiento exacto (si el cheque tiene asiento)
         if (cheque.asiento) {
             registroAsociado = registrosDebe.find(r => r.asiento === cheque.asiento);
         }
 
-        // Si no se encontró, buscar por fecha de recepción cercana
-        if (!registroAsociado && cheque.fechaRecepcion) {
-            registroAsociado = registrosDebe.find(r => {
-                if (!r.fecha) return false;
-                const diffDias = Math.abs((r.fecha - cheque.fechaRecepcion) / (1000 * 60 * 60 * 24));
-                return diffDias <= 3;  // Tolerancia de 3 días
-            });
-        }
+        // Si no se encontró por asiento, usar scoring para encontrar el mejor match
+        if (!registroAsociado) {
+            registrosDebe.forEach(registro => {
+                const { score } = calcularScoreAsociacion(cheque, registro);
 
-        // Si aún no se encontró, buscar el registro con fecha más cercana
-        if (!registroAsociado && (cheque.fechaRecepcion || cheque.fechaEmision)) {
-            const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
-            let menorDiff = Infinity;
-            registrosDebe.forEach(r => {
-                if (r.fecha) {
-                    const diff = Math.abs((r.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
-                    if (diff < menorDiff) {
-                        menorDiff = diff;
-                        registroAsociado = r;
-                    }
+                // Requiere al menos algo de coincidencia (score mínimo de 35 = fecha cercana)
+                // O si tiene buena coincidencia de texto (>25) acepta con menos coincidencia de fecha
+                if (score > mejorScore && score >= 35) {
+                    mejorScore = score;
+                    registroAsociado = registro;
                 }
             });
+
+            // Si no encontró con el umbral normal, bajar el umbral si hay coincidencia de texto
+            if (!registroAsociado) {
+                registrosDebe.forEach(registro => {
+                    const { score, detalles } = calcularScoreAsociacion(cheque, registro);
+                    // Si hay buena coincidencia de texto (>=25), aceptar con score total >= 25
+                    if (score > mejorScore && detalles.texto >= 25 && score >= 25) {
+                        mejorScore = score;
+                        registroAsociado = registro;
+                    }
+                });
+            }
         }
 
         // Crear objeto de cheque enriquecido
