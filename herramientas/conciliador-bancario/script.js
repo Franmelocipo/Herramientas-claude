@@ -8055,6 +8055,10 @@ async function verificarIntegridadConciliacion() {
         state.enAuditoria.forEach(e => {
             clavesEnConciliacion.add(generarClave(e));
         });
+        // Incluir movimientos excluidos del análisis
+        state.extractoExcluido.forEach(e => {
+            clavesEnConciliacion.add(generarClave(e));
+        });
 
         // Encontrar movimientos faltantes
         const movimientosFaltantes = movimientosFiltrados.filter(m => !clavesEnConciliacion.has(generarClave(m)));
