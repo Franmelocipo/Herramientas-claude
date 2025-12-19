@@ -2318,6 +2318,21 @@ async function ejecutarConciliacion() {
             extractoFiltrado = state.datosExtracto.filter(e => e.debito > 0).map(e => ({...e, importe: e.debito, usado: false}));
         }
 
+        // IMPORTANTE: Excluir movimientos eliminados del mayor y excluidos del extracto
+        // Estos movimientos fueron marcados por el usuario para no ser considerados en la conciliación
+        const idsEliminados = new Set(state.eliminados.map(m => m.id));
+        const idsExtractoExcluido = new Set(state.extractoExcluido.map(e => e.id));
+
+        if (idsEliminados.size > 0 || idsExtractoExcluido.size > 0) {
+            const cantMayorAntesExcluidos = mayorFiltrado.length;
+            const cantExtractoAntesExcluidos = extractoFiltrado.length;
+
+            mayorFiltrado = mayorFiltrado.filter(m => !idsEliminados.has(m.id));
+            extractoFiltrado = extractoFiltrado.filter(e => !idsExtractoExcluido.has(e.id));
+
+            console.log(`Filtrado excluidos: mayor ${mayorFiltrado.length}/${cantMayorAntesExcluidos} (${idsEliminados.size} eliminados), extracto ${extractoFiltrado.length}/${cantExtractoAntesExcluidos} (${idsExtractoExcluido.size} excluidos)`);
+        }
+
         // OPTIMIZACIÓN: Excluir movimientos ya conciliados manualmente
         if (teniaConciliacionesManuales) {
             const cantMayorAntes = mayorFiltrado.length;
