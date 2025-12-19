@@ -2282,10 +2282,253 @@ function renderizarTablaMayor() {
 }
 
 /**
+ * Renderizar tabla del mayor con vista especial de asientos y cheques asociados
+ * Muestra los asientos del debe originales con colores según estado de cheques
+ */
+function renderizarTablaMayorConAsientos() {
+    const tbody = document.getElementById('tablaMayorBody');
+    const mostrarSoloNoVinculados = document.getElementById('mostrarSoloNoVinculados')?.checked || false;
+
+    // Si no hay listado de cheques incorporado, usar renderizado normal
+    if (!stateMayores.listadoChequesIncorporado || !stateMayores.asientosDebeOriginales) {
+        renderizarTablaMayor();
+        return;
+    }
+
+    // Obtener asientos del debe originales enriquecidos
+    const asientosDebe = stateMayores.asientosDebeOriginales || [];
+
+    // Obtener registros del haber del mayor actual
+    const registrosHaber = stateMayores.registrosMayor.filter(r => r.haber > 0 || r.esDevolucion);
+
+    // Obtener cheques no asociados
+    const chequesNoAsociados = stateMayores.chequesNoAsociados || [];
+
+    // Filtrar si es necesario
+    let asientosDebeFiltered = asientosDebe;
+    let registrosHaberFiltered = registrosHaber;
+
+    if (mostrarSoloNoVinculados) {
+        // Filtrar asientos que tienen cheques sin vincular
+        asientosDebeFiltered = asientosDebe.filter(asiento => {
+            const chequesPendientes = asiento.chequesAsociados.filter(ch => {
+                const regCheque = stateMayores.registrosMayor.find(r => r.id === ch.id);
+                return !regCheque || regCheque.estado !== 'vinculado';
+            });
+            return chequesPendientes.length > 0 || asiento.estadoCheques === 'sin_cheques';
+        });
+        registrosHaberFiltered = registrosHaber.filter(r => r.estado !== 'vinculado');
+    }
+
+    if (asientosDebeFiltered.length === 0 && registrosHaberFiltered.length === 0 && chequesNoAsociados.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-state" style="text-align: center; padding: 40px;">No hay registros para mostrar</td></tr>`;
+        return;
+    }
+
+    let html = '';
+
+    // Renderizar sección de asientos del debe con cheques
+    if (asientosDebeFiltered.length > 0) {
+        html += `<tr class="seccion-header seccion-debe">
+            <td colspan="8" style="background: #fef2f2; font-weight: bold; padding: 12px; border-bottom: 2px solid #dc2626;">
+                📥 ASIENTOS DEL DEBE (Ingresos de Cheques) - ${asientosDebeFiltered.length} asientos
+            </td>
+        </tr>`;
+
+        asientosDebeFiltered.forEach(asiento => {
+            const estadoClass = getClaseEstadoCheques(asiento.estadoCheques);
+            const estadoIcono = getIconoEstadoCheques(asiento.estadoCheques);
+            const cantidadCheques = asiento.chequesAsociados.length;
+            const sumaCheques = asiento.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+            const expandido = stateMayores.asientosExpandidos?.[asiento.id] || false;
+
+            // Fila del asiento principal
+            html += `
+            <tr class="asiento-row ${estadoClass}" data-id="${asiento.id}">
+                <td class="checkbox-col" style="width: 40px;">
+                    <button class="btn-expandir" onclick="toggleExpandirAsiento('${asiento.id}')" title="Ver cheques asociados">
+                        ${expandido ? '▼' : '▶'}
+                    </button>
+                </td>
+                <td>${formatearFecha(asiento.fecha)}</td>
+                <td>${asiento.asiento}</td>
+                <td title="${asiento.descripcion}">${truncarTexto(asiento.descripcion, 40)}</td>
+                <td class="text-right" style="color: #dc2626; font-weight: bold;">${formatearMoneda(asiento.debe)}</td>
+                <td class="text-right"></td>
+                <td>
+                    <span class="estado-cheques ${estadoClass}">
+                        ${estadoIcono} ${cantidadCheques} cheque${cantidadCheques !== 1 ? 's' : ''}
+                    </span>
+                </td>
+                <td class="info-diferencia">
+                    ${asiento.estadoCheques === 'parcial'
+                        ? `<span class="diferencia" title="Diferencia entre asiento y suma de cheques">Dif: ${formatearMoneda(asiento.diferenciaCheques)}</span>`
+                        : asiento.estadoCheques === 'completo'
+                            ? '<span class="coincide">✓ Coincide</span>'
+                            : '<span class="sin-cheques">Sin cheques</span>'
+                    }
+                </td>
+            </tr>`;
+
+            // Filas de cheques asociados (sublistado)
+            if (expandido && asiento.chequesAsociados.length > 0) {
+                html += `<tr class="cheques-container-row"><td colspan="8" style="padding: 0;">
+                    <div class="cheques-sublistado">
+                        <table class="tabla-cheques-asociados">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;"></th>
+                                    <th>Número</th>
+                                    <th>Origen</th>
+                                    <th>F. Emisión</th>
+                                    <th>F. Recepción</th>
+                                    <th>Importe</th>
+                                    <th>Estado Cheque</th>
+                                    <th>Estado Conc.</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+
+                asiento.chequesAsociados.forEach(cheque => {
+                    // Buscar el registro del cheque para ver su estado de conciliación
+                    const regCheque = stateMayores.registrosMayor.find(r => r.id === cheque.id);
+                    const estadoConciliacion = regCheque?.estado || 'pendiente';
+                    const isSelected = regCheque && stateMayores.cuponesSeleccionados.includes(regCheque.id);
+
+                    html += `
+                        <tr class="cheque-row ${estadoConciliacion}" data-cheque-id="${cheque.id}">
+                            <td>
+                                <input type="checkbox" ${isSelected ? 'checked' : ''}
+                                    onchange="toggleSeleccionRegistroMayor('${cheque.id}', this)"
+                                    ${!regCheque ? 'disabled' : ''}>
+                            </td>
+                            <td><strong>CHQ ${cheque.numero || cheque.interno || '-'}</strong></td>
+                            <td title="${cheque.origen || ''}">${truncarTexto(cheque.origen || '-', 25)}</td>
+                            <td>${cheque.fechaEmisionOriginal || '-'}</td>
+                            <td>${cheque.fechaRecepcionOriginal || '-'}</td>
+                            <td class="text-right" style="color: #dc2626;">${formatearMoneda(cheque.importe)}</td>
+                            <td><span class="estado-cheque-badge">${cheque.estado || '-'}</span></td>
+                            <td><span class="registro-estado ${estadoConciliacion}">${obtenerEtiquetaEstado(estadoConciliacion)}</span></td>
+                        </tr>`;
+                });
+
+                html += `</tbody></table></div></td></tr>`;
+            }
+        });
+    }
+
+    // Renderizar cheques no asociados (si hay)
+    if (chequesNoAsociados.length > 0) {
+        html += `<tr class="seccion-header seccion-sin-asiento">
+            <td colspan="8" style="background: #fef3c7; font-weight: bold; padding: 12px; border-bottom: 2px solid #f59e0b;">
+                ⚠️ CHEQUES SIN ASIENTO ASOCIADO - ${chequesNoAsociados.length} cheques
+            </td>
+        </tr>`;
+
+        chequesNoAsociados.forEach(cheque => {
+            const regCheque = stateMayores.registrosMayor.find(r => r.id === cheque.id);
+            const estadoConciliacion = regCheque?.estado || 'pendiente';
+            const isSelected = regCheque && stateMayores.cuponesSeleccionados.includes(regCheque.id);
+
+            html += `
+            <tr class="cheque-sin-asiento ${estadoConciliacion}" data-cheque-id="${cheque.id}">
+                <td class="checkbox-col">
+                    <input type="checkbox" ${isSelected ? 'checked' : ''}
+                        onchange="toggleSeleccionRegistroMayor('${cheque.id}', this)"
+                        ${!regCheque ? 'disabled' : ''}>
+                </td>
+                <td>${cheque.fechaRecepcionOriginal || cheque.fechaEmisionOriginal || '-'}</td>
+                <td>-</td>
+                <td><strong>CHQ ${cheque.numero || cheque.interno || '-'}</strong> de ${truncarTexto(cheque.origen || '-', 20)}</td>
+                <td class="text-right" style="color: #dc2626;">${formatearMoneda(cheque.importe)}</td>
+                <td></td>
+                <td><span class="registro-estado ${estadoConciliacion}">${obtenerEtiquetaEstado(estadoConciliacion)}</span></td>
+                <td><span class="estado-cheque-badge">${cheque.estado || '-'}</span></td>
+            </tr>`;
+        });
+    }
+
+    // Renderizar sección del haber (usos de cheques)
+    if (registrosHaberFiltered.length > 0) {
+        html += `<tr class="seccion-header seccion-haber">
+            <td colspan="8" style="background: #f0fdf4; font-weight: bold; padding: 12px; border-bottom: 2px solid #16a34a; margin-top: 20px;">
+                📤 REGISTROS DEL HABER (Usos/Depósitos de Cheques) - ${registrosHaberFiltered.length} registros
+            </td>
+        </tr>`;
+
+        registrosHaberFiltered.forEach(r => {
+            const isSelected = stateMayores.liquidacionesSeleccionadas.includes(r.id);
+            const checkedAttr = isSelected ? 'checked' : '';
+            const rowClass = isSelected ? `${r.estado} row-selected` : r.estado;
+
+            html += `
+            <tr class="${rowClass}" data-id="${r.id}">
+                <td class="checkbox-col">
+                    <input type="checkbox" ${checkedAttr} onchange="toggleSeleccionRegistroMayor('${r.id}', this)">
+                </td>
+                <td>${formatearFecha(r.fecha)}</td>
+                <td>${r.asiento}</td>
+                <td title="${r.descripcion}">${truncarTexto(r.descripcion, 50)}</td>
+                <td class="text-right"></td>
+                <td class="text-right" style="color: #16a34a;">${formatearMoneda(r.haber)}</td>
+                <td><span class="registro-estado ${r.estado}">${obtenerEtiquetaEstado(r.estado)}</span></td>
+                <td>${r.vinculadoCon?.length > 0 ? `${r.vinculadoCon.length} reg.` : '-'}</td>
+            </tr>`;
+        });
+    }
+
+    tbody.innerHTML = html;
+
+    // Inicializar estado de expansión si no existe
+    if (!stateMayores.asientosExpandidos) {
+        stateMayores.asientosExpandidos = {};
+    }
+}
+
+/**
+ * Toggle expandir/colapsar asiento para ver cheques asociados
+ */
+function toggleExpandirAsiento(asientoId) {
+    if (!stateMayores.asientosExpandidos) {
+        stateMayores.asientosExpandidos = {};
+    }
+    stateMayores.asientosExpandidos[asientoId] = !stateMayores.asientosExpandidos[asientoId];
+    renderizarTablaMayorConAsientos();
+}
+
+/**
+ * Obtener clase CSS según estado de cheques del asiento
+ */
+function getClaseEstadoCheques(estadoCheques) {
+    switch (estadoCheques) {
+        case 'completo': return 'cheques-completo';
+        case 'parcial': return 'cheques-parcial';
+        case 'sin_cheques': return 'cheques-sin';
+        default: return '';
+    }
+}
+
+/**
+ * Obtener icono según estado de cheques del asiento
+ */
+function getIconoEstadoCheques(estadoCheques) {
+    switch (estadoCheques) {
+        case 'completo': return '✅';
+        case 'parcial': return '⚠️';
+        case 'sin_cheques': return '❌';
+        default: return '❓';
+    }
+}
+
+/**
  * Filtrar registros del mayor
  */
 function filtrarRegistrosMayor() {
-    renderizarTablaMayor();
+    if (stateMayores.listadoChequesIncorporado) {
+        renderizarTablaMayorConAsientos();
+    } else {
+        renderizarTablaMayor();
+    }
 }
 
 /**
@@ -3859,7 +4102,9 @@ function confirmarIncorporarListadoConDiferencia() {
 }
 
 /**
- * Incorporar el listado de cheques al mayor, reemplazando los registros del debe
+ * Incorporar el listado de cheques al mayor, asociándolos a los asientos existentes
+ * Los asientos del debe se mantienen y los cheques se asocian como sublistado.
+ * Se crean registros individuales de cheques para la conciliación.
  */
 function incorporarListadoChequesAlMayor() {
     const cheques = stateMayores.listadoChequesTemporal;
@@ -3869,63 +4114,168 @@ function incorporarListadoChequesAlMayor() {
         return;
     }
 
-    // Obtener registros del debe (que serán reemplazados)
+    // Obtener registros del debe (que mantendremos y enriqueceremos)
     const registrosDebe = stateMayores.registrosMayor.filter(r => r.debe > 0 && !r.esDevolucion);
 
-    // Obtener registros del haber (que se mantienen)
+    // Obtener registros del haber (que se mantienen sin cambios)
     const registrosHaber = stateMayores.registrosMayor.filter(r => r.haber > 0 || r.esDevolucion);
 
-    // Buscar asientos relacionados - Agrupar cheques por fecha de recepción y asignar asiento
-    // La lógica es: para cada fecha de recepción, buscar el asiento del mayor que corresponda
-    const asientosOriginales = [...new Set(registrosDebe.map(r => r.asiento))];
+    // Asociar cheques a cada registro del debe por número de asiento y/o fecha cercana
+    registrosDebe.forEach(registro => {
+        registro.chequesAsociados = [];
+        registro.esAsientoConCheques = true;  // Marcar para identificación en renderizado
+    });
 
-    // Crear nuevos registros a partir del listado de cheques
-    const nuevosRegistrosDebe = cheques.map((cheque, index) => {
-        // Buscar un asiento que corresponda a la fecha de recepción del cheque
-        let asientoAsignado = '';
+    // Array para cheques no asociados
+    const chequesNoAsociados = [];
 
-        // Buscar registro del debe con fecha cercana a la fecha de recepción
-        if (cheque.fechaRecepcion) {
-            const registroMasCercano = registrosDebe.find(r => {
+    // Asociar cada cheque al registro del debe correspondiente
+    cheques.forEach((cheque, index) => {
+        let registroAsociado = null;
+
+        // Primero intentar asociar por número de asiento exacto (si el cheque tiene asiento)
+        if (cheque.asiento) {
+            registroAsociado = registrosDebe.find(r => r.asiento === cheque.asiento);
+        }
+
+        // Si no se encontró, buscar por fecha de recepción cercana
+        if (!registroAsociado && cheque.fechaRecepcion) {
+            registroAsociado = registrosDebe.find(r => {
                 if (!r.fecha) return false;
                 const diffDias = Math.abs((r.fecha - cheque.fechaRecepcion) / (1000 * 60 * 60 * 24));
                 return diffDias <= 3;  // Tolerancia de 3 días
             });
-
-            if (registroMasCercano) {
-                asientoAsignado = registroMasCercano.asiento;
-            }
         }
 
-        // Si no se encontró asiento, usar el primero disponible o generar uno genérico
-        if (!asientoAsignado && asientosOriginales.length > 0) {
-            asientoAsignado = asientosOriginales[0];
+        // Si aún no se encontró, buscar el registro con fecha más cercana
+        if (!registroAsociado && (cheque.fechaRecepcion || cheque.fechaEmision)) {
+            const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
+            let menorDiff = Infinity;
+            registrosDebe.forEach(r => {
+                if (r.fecha) {
+                    const diff = Math.abs((r.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
+                    if (diff < menorDiff) {
+                        menorDiff = diff;
+                        registroAsociado = r;
+                    }
+                }
+            });
         }
 
-        // Construir descripción enriquecida
+        // Crear objeto de cheque enriquecido
+        const chequeEnriquecido = {
+            id: `cheque_${index}_${Date.now()}`,
+            interno: cheque.interno,
+            numero: cheque.numero,
+            fechaEmision: cheque.fechaEmision,
+            fechaEmisionOriginal: cheque.fechaEmisionOriginal,
+            fechaRecepcion: cheque.fechaRecepcion,
+            fechaRecepcionOriginal: cheque.fechaRecepcionOriginal,
+            fechaCobro: cheque.fechaCobro,
+            fechaCobroOriginal: cheque.fechaCobroOriginal,
+            fechaDeposito: cheque.fechaDeposito,
+            fechaDepositoOriginal: cheque.fechaDepositoOriginal,
+            fechaTransferencia: cheque.fechaTransferencia,
+            fechaTransferenciaOriginal: cheque.fechaTransferenciaOriginal,
+            origen: cheque.origen,
+            destino: cheque.destino,
+            importe: cheque.importe,
+            estado: cheque.estado,
+            asientoAsociado: registroAsociado ? registroAsociado.asiento : null
+        };
+
+        if (registroAsociado) {
+            registroAsociado.chequesAsociados.push(chequeEnriquecido);
+        } else {
+            chequesNoAsociados.push(chequeEnriquecido);
+        }
+    });
+
+    // Calcular estado de completitud de cheques para cada registro del debe
+    registrosDebe.forEach(registro => {
+        const sumaCheques = registro.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+        const tolerancia = 0.01;  // Tolerancia de 1 centavo
+
+        if (registro.chequesAsociados.length === 0) {
+            registro.estadoCheques = 'sin_cheques';
+        } else if (Math.abs(registro.debe - sumaCheques) <= tolerancia) {
+            registro.estadoCheques = 'completo';
+        } else {
+            registro.estadoCheques = 'parcial';
+            registro.diferenciaCheques = registro.debe - sumaCheques;
+        }
+    });
+
+    // Crear registros individuales de cheques para la conciliación
+    // Estos reemplazan los registros del debe originales para el proceso de conciliación
+    const registrosCheques = [];
+
+    registrosDebe.forEach(registro => {
+        registro.chequesAsociados.forEach(cheque => {
+            // Construir descripción enriquecida
+            const descripcionParts = [];
+            if (cheque.numero) descripcionParts.push(`CHQ ${cheque.numero}`);
+            if (cheque.origen) descripcionParts.push(`de ${cheque.origen}`);
+            if (cheque.fechaEmisionOriginal) descripcionParts.push(`em. ${cheque.fechaEmisionOriginal}`);
+            if (cheque.estado) descripcionParts.push(`[${cheque.estado}]`);
+
+            const descripcion = descripcionParts.length > 0
+                ? descripcionParts.join(' - ')
+                : `Cheque ${cheque.interno || cheque.id}`;
+
+            registrosCheques.push({
+                id: cheque.id,
+                fecha: cheque.fechaRecepcion || cheque.fechaEmision,
+                fechaOriginal: cheque.fechaRecepcionOriginal || cheque.fechaEmisionOriginal,
+                asiento: registro.asiento,
+                descripcion: descripcion,
+                debe: cheque.importe,
+                haber: 0,
+                estado: 'pendiente',
+                vinculadoCon: [],
+                tipo: 'debe',
+                esDevolucion: false,
+                esChequeIndividual: true,  // Marcar como cheque individual
+                asientoOrigenId: registro.id,  // Referencia al asiento original
+                datosChequeFuente: {
+                    interno: cheque.interno,
+                    numero: cheque.numero,
+                    fechaEmision: cheque.fechaEmisionOriginal,
+                    fechaRecepcion: cheque.fechaRecepcionOriginal,
+                    fechaCobro: cheque.fechaCobroOriginal,
+                    fechaDeposito: cheque.fechaDepositoOriginal,
+                    fechaTransferencia: cheque.fechaTransferenciaOriginal,
+                    origen: cheque.origen,
+                    destino: cheque.destino,
+                    estado: cheque.estado
+                }
+            });
+        });
+    });
+
+    // Los cheques no asociados también se agregan como registros para conciliar
+    chequesNoAsociados.forEach(cheque => {
         const descripcionParts = [];
         if (cheque.numero) descripcionParts.push(`CHQ ${cheque.numero}`);
         if (cheque.origen) descripcionParts.push(`de ${cheque.origen}`);
         if (cheque.fechaEmisionOriginal) descripcionParts.push(`em. ${cheque.fechaEmisionOriginal}`);
         if (cheque.estado) descripcionParts.push(`[${cheque.estado}]`);
+        descripcionParts.push('[SIN ASIENTO]');
 
-        const descripcion = descripcionParts.length > 0
-            ? descripcionParts.join(' - ')
-            : `Cheque ${cheque.interno || index + 1}`;
-
-        return {
-            id: `reg_cheque_${index}_${Date.now()}`,
+        registrosCheques.push({
+            id: cheque.id,
             fecha: cheque.fechaRecepcion || cheque.fechaEmision,
             fechaOriginal: cheque.fechaRecepcionOriginal || cheque.fechaEmisionOriginal,
-            asiento: asientoAsignado,
-            descripcion: descripcion,
+            asiento: '',
+            descripcion: descripcionParts.join(' - '),
             debe: cheque.importe,
             haber: 0,
             estado: 'pendiente',
             vinculadoCon: [],
             tipo: 'debe',
             esDevolucion: false,
-            // Datos adicionales del cheque para referencia
+            esChequeIndividual: true,
+            asientoOrigenId: null,
             datosChequeFuente: {
                 interno: cheque.interno,
                 numero: cheque.numero,
@@ -3938,11 +4288,16 @@ function incorporarListadoChequesAlMayor() {
                 destino: cheque.destino,
                 estado: cheque.estado
             }
-        };
+        });
     });
 
-    // Combinar nuevos registros del debe con registros del haber existentes
-    stateMayores.registrosMayor = [...nuevosRegistrosDebe, ...registrosHaber];
+    // Guardar los registros del debe originales enriquecidos para visualización
+    stateMayores.asientosDebeOriginales = registrosDebe;
+    stateMayores.chequesNoAsociados = chequesNoAsociados;
+
+    // Combinar registros de cheques individuales con registros del haber
+    // Los cheques individuales son los que se usan para la conciliación
+    stateMayores.registrosMayor = [...registrosCheques, ...registrosHaber];
 
     // Ordenar por fecha
     stateMayores.registrosMayor.sort((a, b) => {
@@ -3967,15 +4322,31 @@ function incorporarListadoChequesAlMayor() {
 
     // Actualizar UI
     actualizarEstadisticasMayor();
-    renderizarTablaMayor();
+    renderizarTablaMayorConAsientos();  // Usar nueva función de renderizado
     analizarVencimientos();
     renderizarVinculacion();
 
     // Mostrar indicador de listado incorporado
     mostrarIndicadorListadoIncorporado();
 
-    console.log(`✅ Listado de cheques incorporado: ${cheques.length} cheques reemplazaron ${registrosDebe.length} registros del debe`);
-    alert(`Se incorporaron ${cheques.length} cheques al análisis, reemplazando ${registrosDebe.length} registros del debe.`);
+    // Estadísticas de asociación
+    const asientosCompletos = registrosDebe.filter(r => r.estadoCheques === 'completo').length;
+    const asientosSinCheques = registrosDebe.filter(r => r.estadoCheques === 'sin_cheques').length;
+    const asientosParciales = registrosDebe.filter(r => r.estadoCheques === 'parcial').length;
+
+    console.log(`✅ Listado de cheques incorporado:`);
+    console.log(`   - ${cheques.length} cheques procesados`);
+    console.log(`   - ${asientosCompletos} asientos completos (verde)`);
+    console.log(`   - ${asientosParciales} asientos con diferencias (amarillo)`);
+    console.log(`   - ${asientosSinCheques} asientos sin cheques (rojo)`);
+    console.log(`   - ${chequesNoAsociados.length} cheques sin asiento asociado`);
+
+    alert(`Se incorporaron ${cheques.length} cheques al análisis.\n\n` +
+          `📊 Estado de asientos:\n` +
+          `✅ ${asientosCompletos} completos\n` +
+          `⚠️ ${asientosParciales} con diferencias\n` +
+          `❌ ${asientosSinCheques} sin cheques\n\n` +
+          `Los cheques individuales están listos para conciliar.`);
 }
 
 /**
@@ -3995,10 +4366,22 @@ function mostrarIndicadorListadoIncorporado() {
     }
 
     const cantidadCheques = stateMayores.listadoChequesCargados.length;
+    const asientos = stateMayores.asientosDebeOriginales || [];
+    const asientosCompletos = asientos.filter(a => a.estadoCheques === 'completo').length;
+    const asientosParciales = asientos.filter(a => a.estadoCheques === 'parcial').length;
+    const asientosSinCheques = asientos.filter(a => a.estadoCheques === 'sin_cheques').length;
+    const chequesNoAsociados = (stateMayores.chequesNoAsociados || []).length;
+
     indicador.innerHTML = `
         <span class="icono">📋</span>
         <span class="texto">
-            Listado de cheques incorporado: <span class="cantidad">${cantidadCheques} cheques</span> detallados
+            Listado incorporado: <span class="cantidad">${cantidadCheques} cheques</span> en ${asientos.length} asientos
+            <span class="estado-resumen">
+                <span class="estado-completo" title="Asientos con todos sus cheques">✅ ${asientosCompletos}</span>
+                ${asientosParciales > 0 ? `<span class="estado-parcial" title="Asientos con diferencias">⚠️ ${asientosParciales}</span>` : ''}
+                ${asientosSinCheques > 0 ? `<span class="estado-sin" title="Asientos sin cheques asociados">❌ ${asientosSinCheques}</span>` : ''}
+                ${chequesNoAsociados > 0 ? `<span class="estado-sin-asiento" title="Cheques sin asiento">📌 ${chequesNoAsociados} s/asiento</span>` : ''}
+            </span>
         </span>
     `;
     indicador.style.display = 'flex';
