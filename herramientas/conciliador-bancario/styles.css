@@ -2027,6 +2027,51 @@ body {
     text-align: center;
 }
 
+.col-action-extracto {
+    width: 90px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.btn-editar-mini {
+    background: #e0f2fe;
+    border: 1px solid #7dd3fc;
+    color: #0369a1;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-right: 4px;
+}
+
+.btn-editar-mini:hover {
+    background: #bae6fd;
+    border-color: #38bdf8;
+}
+
+.descripcion-auditoria-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.descripcion-auditoria-container span {
+    flex: 1;
+}
+
+.btn-editar-descripcion-inline {
+    padding: 2px 4px;
+    font-size: 11px;
+    margin-right: 0;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.btn-editar-descripcion-inline:hover {
+    opacity: 1;
+}
+
 .btn-mover-auditoria {
     background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
     border: 1px solid #f59e0b;
