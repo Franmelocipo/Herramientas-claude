@@ -2448,8 +2448,8 @@ function renderizarTablaMayorConAsientos() {
                             </td>
                             <td><strong>CHQ ${cheque.numero || cheque.interno || '-'}</strong></td>
                             <td title="${cheque.origen || ''}">${truncarTexto(cheque.origen || '-', 25)}</td>
-                            <td>${cheque.fechaEmisionOriginal || '-'}</td>
-                            <td>${cheque.fechaRecepcionOriginal || '-'}</td>
+                            <td>${formatearFecha(cheque.fechaEmision)}</td>
+                            <td>${formatearFecha(cheque.fechaRecepcion)}</td>
                             <td class="text-right" style="color: #dc2626;">${formatearMoneda(cheque.importe)}</td>
                             <td><span class="estado-cheque-badge">${cheque.estado || '-'}</span></td>
                             <td><span class="registro-estado ${estadoConciliacion}">${obtenerEtiquetaEstado(estadoConciliacion)}</span></td>
@@ -2497,7 +2497,7 @@ function renderizarTablaMayorConAsientos() {
                         onchange="toggleSeleccionRegistroMayor('${cheque.id}', this)"
                         ${!regCheque ? 'disabled' : ''}>
                 </td>
-                <td>${cheque.fechaRecepcionOriginal || cheque.fechaEmisionOriginal || '-'}</td>
+                <td>${formatearFecha(cheque.fechaRecepcion) !== '-' ? formatearFecha(cheque.fechaRecepcion) : formatearFecha(cheque.fechaEmision)}</td>
                 <td>-</td>
                 <td><strong>CHQ ${cheque.numero || cheque.interno || '-'}</strong> de ${truncarTexto(cheque.origen || '-', 20)}</td>
                 <td class="text-right" style="color: #dc2626;">${formatearMoneda(cheque.importe)}</td>
@@ -2753,19 +2753,26 @@ function reprocesarChequesNoAsociados() {
 
     function calcularScoreAsociacion(cheque, registro) {
         let score = 0;
-        const detalles = { fecha: 0, texto: 0 };
+        const detalles = { fecha: 0, texto: 0, diffDias: Infinity };
+        // Tolerancia máxima de días: +/- 2 días
+        const TOLERANCIA_DIAS_CHEQUES = 2;
+
         const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
         if (fechaCheque && registro.fecha) {
-            const diffDias = Math.abs((registro.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
-            if (diffDias === 0) detalles.fecha = 50;
-            else if (diffDias <= 1) detalles.fecha = 45;
-            else if (diffDias <= 3) detalles.fecha = 35;
-            else if (diffDias <= 7) detalles.fecha = 20;
-            else if (diffDias <= 10) detalles.fecha = 10;
+            detalles.diffDias = Math.abs((registro.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
+            // Solo asignar score si está dentro de la tolerancia de +/- 2 días
+            if (detalles.diffDias <= TOLERANCIA_DIAS_CHEQUES) {
+                if (detalles.diffDias === 0) detalles.fecha = 50;
+                else if (detalles.diffDias <= 1) detalles.fecha = 45;
+                else if (detalles.diffDias <= 2) detalles.fecha = 35;
+            }
+            // Si diffDias > 2, detalles.fecha queda en 0
         }
         const similitud = calcularSimilitudTexto(cheque.origen, registro.descripcion);
         detalles.texto = Math.round(similitud * 50);
-        score = detalles.fecha + detalles.texto;
+        // Si la fecha está fuera de tolerancia, el score es 0
+        const dentroToleranciaFecha = detalles.diffDias <= TOLERANCIA_DIAS_CHEQUES;
+        score = dentroToleranciaFecha ? (detalles.fecha + detalles.texto) : 0;
         return { score, detalles };
     }
 
@@ -4577,10 +4584,14 @@ async function incorporarListadoChequesAlMayor() {
      * NUEVA LÓGICA:
      * - Exige coincidencia de texto entre origen del cheque y leyenda del mayor
      * - Prioriza por cercanía de fechas como criterio secundario
+     * - RESTRICCIÓN: Tolerancia de fechas de +/- 2 días máximo
      * Retorna un objeto con score, detalles y flag de match de texto
      */
     function calcularScoreAsociacion(cheque, registro) {
         const detalles = { fecha: 0, texto: 0, diffDias: Infinity };
+
+        // Tolerancia máxima de días entre fecha de recepción del cheque y fecha del registro
+        const TOLERANCIA_DIAS_CHEQUES = 2;
 
         // Primero calcular similitud de texto origen/descripción (REQUISITO OBLIGATORIO)
         const similitud = calcularSimilitudTexto(cheque.origen, registro.descripcion);
@@ -4592,32 +4603,33 @@ async function incorporarListadoChequesAlMayor() {
 
         // Score por fecha (para priorización entre matches de texto)
         // Usamos diferencia en días - menor es mejor
+        // RESTRICCIÓN: Solo se consideran válidos matches dentro de +/- 2 días
         const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
         if (fechaCheque && registro.fecha) {
             detalles.diffDias = Math.abs((registro.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
-            // Score de fecha: 100 para fecha exacta, decrece con la distancia
-            if (detalles.diffDias === 0) {
-                detalles.fecha = 100;
-            } else if (detalles.diffDias <= 1) {
-                detalles.fecha = 90;
-            } else if (detalles.diffDias <= 3) {
-                detalles.fecha = 70;
-            } else if (detalles.diffDias <= 7) {
-                detalles.fecha = 50;
-            } else if (detalles.diffDias <= 14) {
-                detalles.fecha = 30;
-            } else if (detalles.diffDias <= 30) {
-                detalles.fecha = 10;
+
+            // Solo asignar score si está dentro de la tolerancia de +/- 2 días
+            if (detalles.diffDias <= TOLERANCIA_DIAS_CHEQUES) {
+                // Score de fecha: 100 para fecha exacta, decrece con la distancia
+                if (detalles.diffDias === 0) {
+                    detalles.fecha = 100;
+                } else if (detalles.diffDias <= 1) {
+                    detalles.fecha = 90;
+                } else if (detalles.diffDias <= 2) {
+                    detalles.fecha = 70;
+                }
             } else {
+                // Fuera de tolerancia: no hay match válido de fecha
                 detalles.fecha = 0;
             }
         }
 
         // El score ahora prioriza: primero match de texto, luego cercanía de fecha
-        // Si no hay match de texto, el score es 0
-        const score = tieneMatchTexto ? detalles.fecha : 0;
+        // Si no hay match de texto O si la fecha está fuera de tolerancia, el score es 0
+        const dentroToleranciaFecha = detalles.diffDias <= TOLERANCIA_DIAS_CHEQUES;
+        const score = (tieneMatchTexto && dentroToleranciaFecha) ? detalles.fecha : 0;
 
-        return { score, detalles, tieneMatchTexto };
+        return { score, detalles, tieneMatchTexto: tieneMatchTexto && dentroToleranciaFecha };
     }
 
     /**
@@ -4749,7 +4761,7 @@ async function incorporarListadoChequesAlMayor() {
             const descripcionParts = [];
             if (cheque.numero) descripcionParts.push(`CHQ ${cheque.numero}`);
             if (cheque.origen) descripcionParts.push(`de ${cheque.origen}`);
-            if (cheque.fechaEmisionOriginal) descripcionParts.push(`em. ${cheque.fechaEmisionOriginal}`);
+            if (cheque.fechaEmision) descripcionParts.push(`em. ${formatearFecha(cheque.fechaEmision)}`);
             if (cheque.estado) descripcionParts.push(`[${cheque.estado}]`);
 
             const descripcion = descripcionParts.length > 0
@@ -4759,7 +4771,7 @@ async function incorporarListadoChequesAlMayor() {
             registrosCheques.push({
                 id: cheque.id,
                 fecha: cheque.fechaRecepcion || cheque.fechaEmision,
-                fechaOriginal: cheque.fechaRecepcionOriginal || cheque.fechaEmisionOriginal,
+                fechaOriginal: formatearFecha(cheque.fechaRecepcion) !== '-' ? formatearFecha(cheque.fechaRecepcion) : formatearFecha(cheque.fechaEmision),
                 asiento: registro.asiento,
                 descripcion: descripcion,
                 debe: cheque.importe,
@@ -4791,14 +4803,14 @@ async function incorporarListadoChequesAlMayor() {
         const descripcionParts = [];
         if (cheque.numero) descripcionParts.push(`CHQ ${cheque.numero}`);
         if (cheque.origen) descripcionParts.push(`de ${cheque.origen}`);
-        if (cheque.fechaEmisionOriginal) descripcionParts.push(`em. ${cheque.fechaEmisionOriginal}`);
+        if (cheque.fechaEmision) descripcionParts.push(`em. ${formatearFecha(cheque.fechaEmision)}`);
         if (cheque.estado) descripcionParts.push(`[${cheque.estado}]`);
         descripcionParts.push('[SIN ASIENTO]');
 
         registrosCheques.push({
             id: cheque.id,
             fecha: cheque.fechaRecepcion || cheque.fechaEmision,
-            fechaOriginal: cheque.fechaRecepcionOriginal || cheque.fechaEmisionOriginal,
+            fechaOriginal: formatearFecha(cheque.fechaRecepcion) !== '-' ? formatearFecha(cheque.fechaRecepcion) : formatearFecha(cheque.fechaEmision),
             asiento: '',
             descripcion: descripcionParts.join(' - '),
             debe: cheque.importe,
