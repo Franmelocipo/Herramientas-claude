@@ -4198,10 +4198,22 @@ function incorporarListadoChequesAlMayor() {
 
     /**
      * Normalizar texto para comparación (quitar tildes, espacios extra, mayúsculas)
+     * También elimina siglas de tipos societarios que se repiten entre distintos originantes
      */
     function normalizarTexto(texto) {
         if (!texto) return '';
-        return texto
+
+        // Siglas de tipos societarios a excluir (se repiten y no aportan a la identificación)
+        const siglasExcluir = [
+            'srl', 's r l',
+            'sas', 's a s',
+            'sa', 's a',
+            'sca', 's c a',
+            'sci', 's c i',
+            'se', 's e'
+        ];
+
+        let resultado = texto
             .toString()
             .toLowerCase()
             .normalize('NFD')
@@ -4209,6 +4221,18 @@ function incorporarListadoChequesAlMayor() {
             .replace(/[^a-z0-9\s]/g, ' ')    // Solo letras, números y espacios
             .replace(/\s+/g, ' ')            // Normalizar espacios múltiples
             .trim();
+
+        // Eliminar siglas de tipos societarios (como palabras completas al final o en medio)
+        for (const sigla of siglasExcluir) {
+            // Eliminar al final del texto
+            const regexFin = new RegExp(`\\s+${sigla}$`, 'g');
+            resultado = resultado.replace(regexFin, '');
+            // Eliminar en medio del texto (rodeada de espacios)
+            const regexMedio = new RegExp(`\\s+${sigla}\\s+`, 'g');
+            resultado = resultado.replace(regexMedio, ' ');
+        }
+
+        return resultado.trim();
     }
 
     /**
