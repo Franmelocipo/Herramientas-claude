@@ -2385,6 +2385,7 @@ function renderizarTablaMayorConAsientos() {
                                     <th>Importe</th>
                                     <th>Estado Cheque</th>
                                     <th>Estado Conc.</th>
+                                    <th style="width: 60px;">Acción</th>
                                 </tr>
                             </thead>
                             <tbody>`;
@@ -2409,6 +2410,11 @@ function renderizarTablaMayorConAsientos() {
                             <td class="text-right" style="color: #dc2626;">${formatearMoneda(cheque.importe)}</td>
                             <td><span class="estado-cheque-badge">${cheque.estado || '-'}</span></td>
                             <td><span class="registro-estado ${estadoConciliacion}">${obtenerEtiquetaEstado(estadoConciliacion)}</span></td>
+                            <td>
+                                <button class="btn-liberar-cheque" onclick="liberarChequeDeAsiento('${cheque.id}', '${asiento.id}')" title="Liberar cheque de este asiento">
+                                    ✕
+                                </button>
+                            </td>
                         </tr>`;
                 });
 
@@ -2518,6 +2524,67 @@ function getIconoEstadoCheques(estadoCheques) {
         case 'sin_cheques': return '❌';
         default: return '❓';
     }
+}
+
+/**
+ * Liberar un cheque de su vinculación con un asiento del debe
+ * El cheque pasa a la sección "Sin asiento asociado"
+ * @param {string} chequeId - ID del cheque a liberar
+ * @param {string} asientoId - ID del asiento del cual liberar el cheque
+ */
+function liberarChequeDeAsiento(chequeId, asientoId) {
+    // Buscar el asiento en los asientos del debe originales
+    const asiento = stateMayores.asientosDebeOriginales?.find(a => a.id === asientoId);
+    if (!asiento) {
+        console.error('No se encontró el asiento:', asientoId);
+        return;
+    }
+
+    // Buscar el cheque en los cheques asociados del asiento
+    const indexCheque = asiento.chequesAsociados.findIndex(ch => ch.id === chequeId);
+    if (indexCheque === -1) {
+        console.error('No se encontró el cheque en el asiento:', chequeId);
+        return;
+    }
+
+    // Extraer el cheque del array
+    const cheque = asiento.chequesAsociados.splice(indexCheque, 1)[0];
+    cheque.asientoAsociado = null;  // Limpiar referencia al asiento
+
+    // Agregar a cheques no asociados
+    if (!stateMayores.chequesNoAsociados) {
+        stateMayores.chequesNoAsociados = [];
+    }
+    stateMayores.chequesNoAsociados.push(cheque);
+
+    // Recalcular estado del asiento
+    const sumaCheques = asiento.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+    const tolerancia = 0.01;
+
+    if (asiento.chequesAsociados.length === 0) {
+        asiento.estadoCheques = 'sin_cheques';
+    } else if (Math.abs(asiento.debe - sumaCheques) <= tolerancia) {
+        asiento.estadoCheques = 'completo';
+    } else {
+        asiento.estadoCheques = 'parcial';
+        asiento.diferenciaCheques = asiento.debe - sumaCheques;
+    }
+
+    // Actualizar el registro del cheque en registrosMayor para marcarlo como sin asiento
+    const regCheque = stateMayores.registrosMayor.find(r => r.id === chequeId);
+    if (regCheque) {
+        regCheque.asientoOrigenId = null;
+        // Actualizar descripción para indicar que no tiene asiento
+        if (!regCheque.descripcion.includes('[SIN ASIENTO]')) {
+            regCheque.descripcion += ' [SIN ASIENTO]';
+        }
+    }
+
+    console.log(`✅ Cheque ${cheque.numero || chequeId} liberado del asiento ${asiento.asiento}`);
+
+    // Re-renderizar la tabla
+    renderizarTablaMayorConAsientos();
+    actualizarEstadisticasMayor();
 }
 
 /**
@@ -4210,6 +4277,19 @@ function incorporarListadoChequesAlMayor() {
         return { score, detalles };
     }
 
+    /**
+     * Verificar si agregar un cheque a un registro excedería el monto del debe
+     * @param {Object} registro - Registro del debe
+     * @param {number} importeCheque - Importe del cheque a agregar
+     * @returns {boolean} True si excedería el monto
+     */
+    function excederiaMontoDelDebe(registro, importeCheque) {
+        const tolerancia = 0.50;  // Tolerancia de 50 centavos para redondeos
+        const sumaActual = registro.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+        const nuevaSuma = sumaActual + importeCheque;
+        return nuevaSuma > (registro.debe + tolerancia);
+    }
+
     // Asociar cada cheque al registro del debe correspondiente usando scoring
     cheques.forEach((cheque, index) => {
         let registroAsociado = null;
@@ -4217,12 +4297,21 @@ function incorporarListadoChequesAlMayor() {
 
         // Primero intentar asociar por número de asiento exacto (si el cheque tiene asiento)
         if (cheque.asiento) {
-            registroAsociado = registrosDebe.find(r => r.asiento === cheque.asiento);
+            const registroPorAsiento = registrosDebe.find(r => r.asiento === cheque.asiento);
+            // Solo asociar si no excede el monto del debe
+            if (registroPorAsiento && !excederiaMontoDelDebe(registroPorAsiento, cheque.importe)) {
+                registroAsociado = registroPorAsiento;
+            }
         }
 
         // Si no se encontró por asiento, usar scoring para encontrar el mejor match
         if (!registroAsociado) {
             registrosDebe.forEach(registro => {
+                // IMPORTANTE: No asociar si excedería el monto del debe
+                if (excederiaMontoDelDebe(registro, cheque.importe)) {
+                    return;  // Skip este registro
+                }
+
                 const { score } = calcularScoreAsociacion(cheque, registro);
 
                 // Requiere al menos algo de coincidencia (score mínimo de 35 = fecha cercana)
@@ -4236,6 +4325,11 @@ function incorporarListadoChequesAlMayor() {
             // Si no encontró con el umbral normal, bajar el umbral si hay coincidencia de texto
             if (!registroAsociado) {
                 registrosDebe.forEach(registro => {
+                    // IMPORTANTE: No asociar si excedería el monto del debe
+                    if (excederiaMontoDelDebe(registro, cheque.importe)) {
+                        return;  // Skip este registro
+                    }
+
                     const { score, detalles } = calcularScoreAsociacion(cheque, registro);
                     // Si hay buena coincidencia de texto (>=25), aceptar con score total >= 25
                     if (score > mejorScore && detalles.texto >= 25 && score >= 25) {
