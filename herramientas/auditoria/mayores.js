@@ -4636,8 +4636,9 @@ async function incorporarListadoChequesAlMayor() {
      * Calcular similitud entre origen del cheque y descripción del asiento
      * Retorna un valor entre 0 y 1
      *
-     * MEJORA: Si la única coincidencia es una palabra común (ej: "repuestos"),
-     * se requiere al menos una segunda palabra coincidente para evitar falsos positivos.
+     * EXIGENCIA: Se requieren al menos 2 palabras coincidentes para considerar
+     * válida la vinculación entre un cheque y un registro del debe.
+     * Esto evita falsos positivos por coincidencias accidentales de una sola palabra.
      */
     function calcularSimilitudTexto(origenCheque, descripcionAsiento) {
         const origenNorm = normalizarTexto(origenCheque);
@@ -4657,7 +4658,6 @@ async function incorporarListadoChequesAlMayor() {
         if (palabrasOrigen.length === 0) return 0;
 
         let coincidencias = 0;
-        let coincidenciasNoComunes = 0;  // Contador de coincidencias que NO son palabras comunes
 
         for (const palabra of palabrasOrigen) {
             // Comparación más estricta: la palabra debe coincidir exactamente o
@@ -4669,19 +4669,16 @@ async function incorporarListadoChequesAlMayor() {
                 return pd.includes(palabra) || palabra.includes(pd);
             })) {
                 coincidencias++;
-                // Verificar si esta palabra NO es una palabra común
-                if (!PALABRAS_COMUNES.includes(palabra)) {
-                    coincidenciasNoComunes++;
-                }
             }
         }
 
-        // VALIDACIÓN ADICIONAL: Si todas las coincidencias son palabras comunes,
-        // requerir al menos 2 coincidencias para considerar válida la vinculación.
-        // Esto evita falsos positivos como "Repuestos del Sur" vs "Repuestos Regina"
-        // donde solo coincide "repuestos".
-        if (coincidencias > 0 && coincidenciasNoComunes === 0 && coincidencias < 2) {
-            return 0;  // Solo hay coincidencias de palabras comunes y son menos de 2
+        // VALIDACIÓN OBLIGATORIA: Exigir al menos 2 palabras coincidentes
+        // para considerar válida la vinculación entre cheques y registros del debe.
+        // Esto evita falsos positivos por coincidencias accidentales de una sola palabra
+        // (ej: "Repuestos del Sur" vs "Repuestos Regina" donde solo coincide "repuestos").
+        const MINIMO_PALABRAS_COINCIDENTES = 2;
+        if (coincidencias < MINIMO_PALABRAS_COINCIDENTES) {
+            return 0;  // No hay suficientes palabras coincidentes
         }
 
         return coincidencias / palabrasOrigen.length;
