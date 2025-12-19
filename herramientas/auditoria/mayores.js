@@ -556,6 +556,17 @@ function seleccionarTipoMayor(tipoId) {
     stateMayores.conciliacionCargadaNombre = null;
     stateMayores.listadoChequesIncorporado = false;
     stateMayores.listadoChequesCargados = [];
+
+    // Ocultar y resetear filtro de asociaciones parciales
+    const filtroParcialesLabel = document.getElementById('filtroParcialesLabel');
+    if (filtroParcialesLabel) {
+        filtroParcialesLabel.style.display = 'none';
+    }
+    const checkboxParciales = document.getElementById('mostrarSoloParciales');
+    if (checkboxParciales) {
+        checkboxParciales.checked = false;
+    }
+
     renderizarTablaMayor();
     renderizarVinculacion();
 
@@ -2331,6 +2342,7 @@ function renderizarTablaMayor() {
 function renderizarTablaMayorConAsientos() {
     const tbody = document.getElementById('tablaMayorBody');
     const mostrarSoloNoVinculados = document.getElementById('mostrarSoloNoVinculados')?.checked || false;
+    const mostrarSoloParciales = document.getElementById('mostrarSoloParciales')?.checked || false;
 
     // Si no hay listado de cheques incorporado, usar renderizado normal
     if (!stateMayores.listadoChequesIncorporado || !stateMayores.asientosDebeOriginales) {
@@ -2350,8 +2362,15 @@ function renderizarTablaMayorConAsientos() {
     // Filtrar si es necesario
     let asientosDebeFiltered = asientosDebe;
     let registrosHaberFiltered = registrosHaber;
+    let chequesNoAsociadosFiltered = chequesNoAsociados;
 
-    if (mostrarSoloNoVinculados) {
+    // Filtro: Solo asociaciones parciales (prioridad alta)
+    if (mostrarSoloParciales) {
+        asientosDebeFiltered = asientosDebe.filter(asiento => asiento.estadoCheques === 'parcial');
+        // Al filtrar por parciales, no mostrar registros del haber ni cheques sin asociar
+        registrosHaberFiltered = [];
+        chequesNoAsociadosFiltered = [];
+    } else if (mostrarSoloNoVinculados) {
         // Filtrar asientos que tienen cheques sin vincular
         asientosDebeFiltered = asientosDebe.filter(asiento => {
             const chequesPendientes = asiento.chequesAsociados.filter(ch => {
@@ -2363,7 +2382,7 @@ function renderizarTablaMayorConAsientos() {
         registrosHaberFiltered = registrosHaber.filter(r => r.estado !== 'vinculado');
     }
 
-    if (asientosDebeFiltered.length === 0 && registrosHaberFiltered.length === 0 && chequesNoAsociados.length === 0) {
+    if (asientosDebeFiltered.length === 0 && registrosHaberFiltered.length === 0 && chequesNoAsociadosFiltered.length === 0) {
         tbody.innerHTML = `<tr><td colspan="8" class="empty-state" style="text-align: center; padding: 40px;">No hay registros para mostrar</td></tr>`;
         return;
     }
@@ -2467,7 +2486,7 @@ function renderizarTablaMayorConAsientos() {
     }
 
     // Renderizar cheques no asociados (si hay)
-    if (chequesNoAsociados.length > 0) {
+    if (chequesNoAsociadosFiltered.length > 0) {
         // Generar opciones de asientos del debe para el select de vinculación manual
         const opcionesAsientos = asientosDebe
             .filter(a => a.estadoCheques !== 'completo')  // Solo asientos que no están completos
@@ -2477,7 +2496,7 @@ function renderizarTablaMayorConAsientos() {
         html += `<tr class="seccion-header seccion-sin-asiento">
             <td colspan="8" style="background: #fef3c7; font-weight: bold; padding: 12px; border-bottom: 2px solid #f59e0b;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>⚠️ CHEQUES SIN ASIENTO ASOCIADO - ${chequesNoAsociados.length} cheques</span>
+                    <span>⚠️ CHEQUES SIN ASIENTO ASOCIADO - ${chequesNoAsociadosFiltered.length} cheques</span>
                     <button class="btn-reprocesar-cheques" onclick="reprocesarChequesNoAsociados()" title="Intentar vincular automáticamente los cheques pendientes">
                         🔄 Reprocesar vinculación
                     </button>
@@ -2485,7 +2504,7 @@ function renderizarTablaMayorConAsientos() {
             </td>
         </tr>`;
 
-        chequesNoAsociados.forEach(cheque => {
+        chequesNoAsociadosFiltered.forEach(cheque => {
             const regCheque = stateMayores.registrosMayor.find(r => r.id === cheque.id);
             const estadoConciliacion = regCheque?.estado || 'pendiente';
             const isSelected = regCheque && stateMayores.cuponesSeleccionados.includes(regCheque.id);
@@ -2552,13 +2571,102 @@ function renderizarTablaMayorConAsientos() {
 
 /**
  * Toggle expandir/colapsar asiento para ver cheques asociados
+ * Optimizado: solo manipula el DOM del asiento específico sin re-renderizar toda la tabla
  */
 function toggleExpandirAsiento(asientoId) {
     if (!stateMayores.asientosExpandidos) {
         stateMayores.asientosExpandidos = {};
     }
-    stateMayores.asientosExpandidos[asientoId] = !stateMayores.asientosExpandidos[asientoId];
-    renderizarTablaMayorConAsientos();
+
+    const expandido = !stateMayores.asientosExpandidos[asientoId];
+    stateMayores.asientosExpandidos[asientoId] = expandido;
+
+    // Buscar la fila del asiento en el DOM
+    const asientoRow = document.querySelector(`tr.asiento-row[data-id="${asientoId}"]`);
+    if (!asientoRow) {
+        return;
+    }
+
+    // Actualizar el botón de expandir/colapsar
+    const btnExpandir = asientoRow.querySelector('.btn-expandir');
+    if (btnExpandir) {
+        btnExpandir.textContent = expandido ? '▼' : '▶';
+    }
+
+    // Buscar si ya existe una fila de cheques asociados
+    const nextRow = asientoRow.nextElementSibling;
+    const existeFilaCheques = nextRow && nextRow.classList.contains('cheques-container-row');
+
+    if (expandido) {
+        // Expandir: insertar la fila de cheques si no existe
+        if (!existeFilaCheques) {
+            const asiento = stateMayores.asientosDebeOriginales?.find(a => a.id === asientoId);
+            if (asiento && asiento.chequesAsociados.length > 0) {
+                const filaCheques = crearFilaChequesAsociados(asiento);
+                asientoRow.insertAdjacentHTML('afterend', filaCheques);
+            }
+        }
+    } else {
+        // Colapsar: remover la fila de cheques si existe
+        if (existeFilaCheques) {
+            nextRow.remove();
+        }
+    }
+}
+
+/**
+ * Crea el HTML de la fila con los cheques asociados a un asiento
+ * @param {Object} asiento - El asiento con sus cheques asociados
+ * @returns {string} HTML de la fila de cheques
+ */
+function crearFilaChequesAsociados(asiento) {
+    let html = `<tr class="cheques-container-row"><td colspan="8" style="padding: 0;">
+        <div class="cheques-sublistado">
+            <table class="tabla-cheques-asociados">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;"></th>
+                        <th>Número</th>
+                        <th>Origen</th>
+                        <th>F. Emisión</th>
+                        <th>F. Recepción</th>
+                        <th>Importe</th>
+                        <th>Estado Cheque</th>
+                        <th>Estado Conc.</th>
+                        <th style="width: 60px;">Acción</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+    asiento.chequesAsociados.forEach(cheque => {
+        const regCheque = stateMayores.registrosMayor.find(r => r.id === cheque.id);
+        const estadoConciliacion = regCheque?.estado || 'pendiente';
+        const isSelected = regCheque && stateMayores.cuponesSeleccionados.includes(regCheque.id);
+
+        html += `
+            <tr class="cheque-row ${estadoConciliacion}" data-cheque-id="${cheque.id}">
+                <td>
+                    <input type="checkbox" ${isSelected ? 'checked' : ''}
+                        onchange="toggleSeleccionRegistroMayor('${cheque.id}', this)"
+                        ${!regCheque ? 'disabled' : ''}>
+                </td>
+                <td><strong>CHQ ${cheque.numero || cheque.interno || '-'}</strong></td>
+                <td title="${cheque.origen || ''}">${truncarTexto(cheque.origen || '-', 25)}</td>
+                <td>${formatearFecha(cheque.fechaEmision)}</td>
+                <td>${formatearFecha(cheque.fechaRecepcion)}</td>
+                <td class="text-right" style="color: #dc2626;">${formatearMoneda(cheque.importe)}</td>
+                <td><span class="estado-cheque-badge">${cheque.estado || '-'}</span></td>
+                <td><span class="registro-estado ${estadoConciliacion}">${obtenerEtiquetaEstado(estadoConciliacion)}</span></td>
+                <td>
+                    <button class="btn-liberar-cheque" onclick="liberarChequeDeAsiento('${cheque.id}', '${asiento.id}')" title="Liberar cheque de este asiento">
+                        ✕
+                    </button>
+                </td>
+            </tr>`;
+    });
+
+    html += `</tbody></table></div></td></tr>`;
+    return html;
 }
 
 /**
@@ -4876,6 +4984,12 @@ async function incorporarListadoChequesAlMayor() {
 
     // Mostrar indicador de listado incorporado
     mostrarIndicadorListadoIncorporado();
+
+    // Mostrar filtro de asociaciones parciales
+    const filtroParcialesLabel = document.getElementById('filtroParcialesLabel');
+    if (filtroParcialesLabel) {
+        filtroParcialesLabel.style.display = 'inline';
+    }
 
     // Estadísticas de asociación
     const asientosCompletos = registrosDebe.filter(r => r.estadoCheques === 'completo').length;
