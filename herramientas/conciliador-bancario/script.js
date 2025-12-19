@@ -3117,6 +3117,7 @@ function llenarTablaExtractoPendiente(pendientes) {
 
     pendientesOrdenados.forEach(e => {
         const checked = seleccion.extracto.includes(e.id) ? 'checked' : '';
+        const esDeAuditoria = e.id && (e.id.toString().includes('_') || e.id.toString().startsWith('EA'));
         html += `
             <tr class="${checked ? 'row-selected' : ''}" data-id="${e.id}">
                 <td class="col-checkbox">
@@ -3127,7 +3128,10 @@ function llenarTablaExtractoPendiente(pendientes) {
                 <td>${e.origen}</td>
                 <td class="text-right">${e.debito > 0 ? formatearNumero(e.debito) : ''}</td>
                 <td class="text-right">${e.credito > 0 ? formatearNumero(e.credito) : ''}</td>
-                <td class="col-action-auditoria">
+                <td class="col-action-extracto">
+                    ${esDeAuditoria ? `<button class="btn-editar-mini" onclick="editarDescripcionExtracto('${e.id}')" title="Editar descripción">
+                        ✏️
+                    </button>` : ''}
                     <button class="btn-auditoria-mini" onclick="moverAuditoria('${e.id}')" title="Marcar para auditoría">
                         🔍
                     </button>
@@ -4501,6 +4505,332 @@ function cerrarModalNotaAuditoria() {
     if (modal) modal.classList.remove('active');
 }
 
+// ========== EDICIÓN DE DESCRIPCIÓN DEL EXTRACTO ==========
+
+/**
+ * Variable para almacenar el callback de edición de descripción
+ */
+let callbackEditarDescripcion = null;
+
+/**
+ * Editar la descripción de un movimiento del extracto
+ * @param {string} id - ID del movimiento a editar
+ */
+function editarDescripcionExtracto(id) {
+    // Buscar el movimiento en todas las fuentes posibles
+    let movimiento = null;
+
+    // Buscar en extractoNoConciliado
+    if (state.resultados && state.resultados.extractoNoConciliado) {
+        movimiento = state.resultados.extractoNoConciliado.find(m => m.id === id);
+    }
+
+    // Buscar en datosExtracto si no se encontró
+    if (!movimiento && state.datosExtracto) {
+        movimiento = state.datosExtracto.find(m => m.id === id);
+    }
+
+    // Buscar en enAuditoria
+    if (!movimiento && state.enAuditoria) {
+        movimiento = state.enAuditoria.find(m => m.id === id);
+    }
+
+    if (!movimiento) {
+        mostrarMensaje('No se encontró el movimiento', 'error');
+        return;
+    }
+
+    mostrarModalEditarDescripcion(movimiento, async (nuevaDescripcion) => {
+        if (nuevaDescripcion === movimiento.descripcion) {
+            mostrarMensaje('No se realizaron cambios', 'info');
+            return;
+        }
+
+        try {
+            // Guardar en Supabase
+            await guardarDescripcionEnAuditoria(movimiento.id, nuevaDescripcion);
+
+            // Actualizar localmente en todas las fuentes
+            actualizarDescripcionLocal(movimiento.id, nuevaDescripcion);
+
+            mostrarMensaje('Descripción actualizada correctamente', 'success');
+        } catch (error) {
+            console.error('Error al guardar descripción:', error);
+            mostrarMensaje('Error al guardar la descripción: ' + error.message, 'error');
+        }
+    });
+}
+
+/**
+ * Mostrar modal para editar la descripción de un movimiento
+ * @param {Object} movimiento - Movimiento a editar
+ * @param {Function} callback - Función a ejecutar con la nueva descripción
+ */
+function mostrarModalEditarDescripcion(movimiento, callback) {
+    // Crear el modal dinámicamente si no existe
+    let modal = document.getElementById('modal-editar-descripcion');
+    let overlay = document.getElementById('overlay-editar-descripcion');
+
+    if (!modal) {
+        overlay = document.createElement('div');
+        overlay.id = 'overlay-editar-descripcion';
+        overlay.className = 'modal-overlay';
+        overlay.onclick = () => cerrarModalEditarDescripcion();
+
+        modal = document.createElement('div');
+        modal.id = 'modal-editar-descripcion';
+        modal.className = 'modal modal-nota-auditoria';
+        modal.innerHTML = `
+            <div class="modal-header">
+                <h3 id="titulo-modal-editar">Editar Descripción del Movimiento</h3>
+                <button class="modal-close" onclick="cerrarModalEditarDescripcion()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="info-movimiento-editar" class="info-movimiento-auditoria"></div>
+                <div class="form-group">
+                    <label for="inputDescripcionExtracto">Descripción:</label>
+                    <textarea id="inputDescripcionExtracto" class="input-nota-auditoria" rows="3" placeholder="Ingrese la nueva descripción..."></textarea>
+                </div>
+                <div class="aviso-auditoria">
+                    <span class="aviso-icono">💡</span>
+                    <span>Los cambios se guardarán en la base de datos de auditoría y se reflejarán en futuras conciliaciones.</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancelar-auditoria" onclick="cerrarModalEditarDescripcion()">Cancelar</button>
+                <button class="btn-confirmar-auditoria" id="btnGuardarDescripcion" onclick="confirmarEditarDescripcion()">💾 Guardar</button>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+        document.body.appendChild(modal);
+    }
+
+    // Rellenar información del movimiento
+    const infoContainer = document.getElementById('info-movimiento-editar');
+    const importe = movimiento.debito > 0 ? movimiento.debito : movimiento.credito;
+    const tipoImporte = movimiento.debito > 0 ? 'Débito' : 'Crédito';
+
+    infoContainer.innerHTML = `
+        <div class="info-row"><strong>Fecha:</strong> ${formatearFecha(movimiento.fecha)}</div>
+        <div class="info-row"><strong>Origen:</strong> ${movimiento.origen || '-'}</div>
+        <div class="info-row"><strong>${tipoImporte}:</strong> ${formatearNumero(importe)}</div>
+        <div class="info-row"><strong>Descripción actual:</strong> ${movimiento.descripcion || '(sin descripción)'}</div>
+    `;
+
+    // Establecer valor actual
+    const inputDescripcion = document.getElementById('inputDescripcionExtracto');
+    inputDescripcion.value = movimiento.descripcion || '';
+
+    // Guardar callback
+    callbackEditarDescripcion = callback;
+
+    // Mostrar modal
+    overlay.classList.add('active');
+    modal.classList.add('active');
+    inputDescripcion.focus();
+    inputDescripcion.select();
+}
+
+/**
+ * Cerrar modal de edición de descripción
+ */
+function cerrarModalEditarDescripcion() {
+    const overlay = document.getElementById('overlay-editar-descripcion');
+    const modal = document.getElementById('modal-editar-descripcion');
+
+    if (overlay) overlay.classList.remove('active');
+    if (modal) modal.classList.remove('active');
+
+    callbackEditarDescripcion = null;
+}
+
+/**
+ * Confirmar la edición de descripción
+ */
+function confirmarEditarDescripcion() {
+    const inputDescripcion = document.getElementById('inputDescripcionExtracto');
+    const nuevaDescripcion = inputDescripcion.value.trim();
+
+    if (callbackEditarDescripcion) {
+        callbackEditarDescripcion(nuevaDescripcion);
+    }
+
+    cerrarModalEditarDescripcion();
+}
+
+/**
+ * Guardar la descripción editada en la tabla extractos_mensuales de Supabase
+ * @param {string} id - ID del movimiento (formato: extractoId_indice o EA + indice)
+ * @param {string} nuevaDescripcion - Nueva descripción a guardar
+ */
+async function guardarDescripcionEnAuditoria(id, nuevaDescripcion) {
+    if (!supabaseClient) {
+        throw new Error('No hay conexión con la base de datos');
+    }
+
+    // Parsear el ID para obtener el extractoId y el índice del movimiento
+    let extractoId = null;
+    let indiceMovimiento = null;
+
+    if (id.includes('_')) {
+        // Formato: extractoId_indice (ej: "abc123_5")
+        const partes = id.split('_');
+        extractoId = partes[0];
+        indiceMovimiento = parseInt(partes[1]);
+    } else if (id.startsWith('EA')) {
+        // Formato: EA + indice - necesitamos buscar el extracto en la caché
+        // Este caso es más complejo, necesitamos encontrar el extracto correcto
+        indiceMovimiento = parseInt(id.replace('EA', ''));
+
+        // Obtener extractoId del rango actual
+        if (auditoriaCache.extractosDisponibles && auditoriaCache.extractosDisponibles.length > 0) {
+            // Buscar en los extractos del rango seleccionado
+            const rangoDesde = document.getElementById('rangoExtractoDesde')?.value;
+            const rangoHasta = document.getElementById('rangoExtractoHasta')?.value;
+
+            if (rangoDesde && rangoHasta) {
+                const [anioDesde, mesDesde] = rangoDesde.split('-').map(Number);
+                const [anioHasta, mesHasta] = rangoHasta.split('-').map(Number);
+
+                // Filtrar extractos en el rango
+                const extractosEnRango = auditoriaCache.extractosDisponibles.filter(ext => {
+                    const extKey = ext.anio * 100 + ext.mes;
+                    const desdeKey = anioDesde * 100 + mesDesde;
+                    const hastaKey = anioHasta * 100 + mesHasta;
+                    return extKey >= desdeKey && extKey <= hastaKey;
+                });
+
+                // Encontrar en qué extracto está el movimiento
+                let contadorGlobal = 0;
+                for (const ext of extractosEnRango) {
+                    const movimientos = ext.data || [];
+                    if (indiceMovimiento >= contadorGlobal && indiceMovimiento < contadorGlobal + movimientos.length) {
+                        extractoId = ext.id;
+                        indiceMovimiento = indiceMovimiento - contadorGlobal;
+                        break;
+                    }
+                    contadorGlobal += movimientos.length;
+                }
+            }
+        }
+    }
+
+    if (!extractoId) {
+        throw new Error('No se pudo identificar el extracto del movimiento');
+    }
+
+    // Obtener el extracto actual de Supabase
+    const { data: extracto, error: fetchError } = await supabaseClient
+        .from('extractos_mensuales')
+        .select('id, data')
+        .eq('id', extractoId)
+        .single();
+
+    if (fetchError) {
+        throw new Error('Error al obtener el extracto: ' + fetchError.message);
+    }
+
+    if (!extracto || !extracto.data) {
+        throw new Error('No se encontró el extracto o no tiene movimientos');
+    }
+
+    // Actualizar la descripción del movimiento específico
+    const movimientos = [...extracto.data];
+    if (indiceMovimiento < 0 || indiceMovimiento >= movimientos.length) {
+        throw new Error('Índice de movimiento fuera de rango');
+    }
+
+    movimientos[indiceMovimiento] = {
+        ...movimientos[indiceMovimiento],
+        descripcion: nuevaDescripcion
+    };
+
+    // Guardar en Supabase
+    const { error: updateError } = await supabaseClient
+        .from('extractos_mensuales')
+        .update({
+            data: movimientos,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', extractoId);
+
+    if (updateError) {
+        throw new Error('Error al guardar los cambios: ' + updateError.message);
+    }
+
+    console.log('✅ Descripción actualizada en extractos_mensuales:', {
+        extractoId,
+        indiceMovimiento,
+        nuevaDescripcion
+    });
+}
+
+/**
+ * Actualizar la descripción localmente en todas las fuentes del state
+ * @param {string} id - ID del movimiento
+ * @param {string} nuevaDescripcion - Nueva descripción
+ */
+function actualizarDescripcionLocal(id, nuevaDescripcion) {
+    // Actualizar en datosExtracto
+    if (state.datosExtracto) {
+        const mov = state.datosExtracto.find(m => m.id === id);
+        if (mov) mov.descripcion = nuevaDescripcion;
+    }
+
+    // Actualizar en resultados.extractoNoConciliado
+    if (state.resultados && state.resultados.extractoNoConciliado) {
+        const mov = state.resultados.extractoNoConciliado.find(m => m.id === id);
+        if (mov) mov.descripcion = nuevaDescripcion;
+    }
+
+    // Actualizar en enAuditoria
+    if (state.enAuditoria) {
+        const mov = state.enAuditoria.find(m => m.id === id);
+        if (mov) mov.descripcion = nuevaDescripcion;
+    }
+
+    // Actualizar en extractoExcluido
+    if (state.extractoExcluido) {
+        const mov = state.extractoExcluido.find(m => m.id === id);
+        if (mov) mov.descripcion = nuevaDescripcion;
+    }
+
+    // Actualizar en conciliados
+    if (state.resultados && state.resultados.conciliados) {
+        state.resultados.conciliados.forEach(conc => {
+            if (conc.extracto) {
+                conc.extracto.forEach(e => {
+                    if (e.id === id) e.descripcion = nuevaDescripcion;
+                });
+            }
+        });
+    }
+
+    // Actualizar en caché de auditoría
+    if (auditoriaCache.extractosDisponibles) {
+        for (const ext of auditoriaCache.extractosDisponibles) {
+            if (ext.data) {
+                ext.data.forEach((mov, idx) => {
+                    // Verificar si el ID coincide
+                    const movId = `${ext.id}_${idx}`;
+                    if (movId === id && mov) {
+                        mov.descripcion = nuevaDescripcion;
+                    }
+                });
+            }
+        }
+    }
+
+    // Re-renderizar las tablas afectadas
+    if (state.resultados) {
+        llenarTablaExtractoPendiente(state.resultados.extractoNoConciliado);
+        llenarTablaConciliados(state.resultados.conciliados);
+    }
+    llenarTablaEnAuditoria();
+    llenarTablaExtractoExcluido();
+}
+
 /**
  * Llenar la tabla de movimientos en auditoría
  */
@@ -4544,11 +4874,19 @@ function llenarTablaEnAuditoria() {
         const fechaAud = new Date(m.fechaAuditoria);
         const fechaAuditoriaFormateada = formatearFecha(fechaAud) + ' ' +
             fechaAud.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+        const esDeAuditoria = m.id && (m.id.toString().includes('_') || m.id.toString().startsWith('EA'));
 
         html += `
             <tr data-id="${m.id}" class="fila-auditoria">
                 <td>${formatearFecha(m.fecha)}</td>
-                <td title="${m.descripcion}">${truncar(m.descripcion, 35)}</td>
+                <td title="${m.descripcion}">
+                    <div class="descripcion-auditoria-container">
+                        <span>${truncar(m.descripcion, 30)}</span>
+                        ${esDeAuditoria ? `<button class="btn-editar-mini btn-editar-descripcion-inline" onclick="editarDescripcionExtracto('${m.id}')" title="Editar descripción">
+                            ✏️
+                        </button>` : ''}
+                    </div>
+                </td>
                 <td title="${m.origen || ''}">${truncar(m.origen || '-', 15)}</td>
                 <td class="text-right ${m.debito > 0 ? 'text-danger' : ''}">${m.debito > 0 ? formatearNumero(m.debito) : '-'}</td>
                 <td class="text-right ${m.credito > 0 ? 'text-success' : ''}">${m.credito > 0 ? formatearNumero(m.credito) : '-'}</td>
@@ -4910,6 +5248,7 @@ function llenarTablaExtractoExcluido() {
             : '-';
 
         const isSelected = seleccionExtractoExcluido.includes(m.id);
+        const esDeAuditoria = m.id && (m.id.toString().includes('_') || m.id.toString().startsWith('EA'));
 
         html += `
             <tr data-id="${m.id}" class="${isSelected ? 'row-selected' : ''}">
@@ -4919,7 +5258,14 @@ function llenarTablaExtractoExcluido() {
                            onchange="toggleSeleccionExtractoExcluido('${m.id}', this.checked)">
                 </td>
                 <td>${formatearFecha(m.fecha)}</td>
-                <td title="${m.descripcion}">${truncar(m.descripcion, 40)}</td>
+                <td title="${m.descripcion}">
+                    <div class="descripcion-auditoria-container">
+                        <span>${truncar(m.descripcion, 35)}</span>
+                        ${esDeAuditoria ? `<button class="btn-editar-mini btn-editar-descripcion-inline" onclick="editarDescripcionExtracto('${m.id}')" title="Editar descripción">
+                            ✏️
+                        </button>` : ''}
+                    </div>
+                </td>
                 <td>${m.origen || '-'}</td>
                 <td class="text-right ${m.debito > 0 ? 'text-danger' : ''}">${m.debito > 0 ? formatearNumero(m.debito) : '-'}</td>
                 <td class="text-right ${m.credito > 0 ? 'text-success' : ''}">${m.credito > 0 ? formatearNumero(m.credito) : '-'}</td>
@@ -5440,6 +5786,7 @@ function renderizarExtractoPendienteFiltrado() {
 
     pendientes.forEach(e => {
         const checked = seleccion.extracto.includes(e.id) ? 'checked' : '';
+        const esDeAuditoria = e.id && (e.id.toString().includes('_') || e.id.toString().startsWith('EA'));
         html += `
             <tr class="${checked ? 'row-selected' : ''}" data-id="${e.id}">
                 <td class="col-checkbox">
@@ -5450,7 +5797,10 @@ function renderizarExtractoPendienteFiltrado() {
                 <td>${e.origen}</td>
                 <td class="text-right">${e.debito > 0 ? formatearNumero(e.debito) : ''}</td>
                 <td class="text-right">${e.credito > 0 ? formatearNumero(e.credito) : ''}</td>
-                <td class="col-action-auditoria">
+                <td class="col-action-extracto">
+                    ${esDeAuditoria ? `<button class="btn-editar-mini" onclick="editarDescripcionExtracto('${e.id}')" title="Editar descripción">
+                        ✏️
+                    </button>` : ''}
                     <button class="btn-auditoria-mini" onclick="moverAuditoria('${e.id}')" title="Marcar para auditoría">
                         🔍
                     </button>
@@ -6860,6 +7210,7 @@ function renderizarTablaExtractoOrdenada() {
     let html = '';
     movimientos.forEach(e => {
         const checked = seleccion.extracto.includes(e.id) ? 'checked' : '';
+        const esDeAuditoria = e.id && (e.id.toString().includes('_') || e.id.toString().startsWith('EA'));
         html += `
             <tr class="${checked ? 'row-selected' : ''}" data-id="${e.id}">
                 <td class="col-checkbox">
@@ -6870,7 +7221,10 @@ function renderizarTablaExtractoOrdenada() {
                 <td>${e.origen}</td>
                 <td class="text-right">${e.debito > 0 ? formatearNumero(e.debito) : ''}</td>
                 <td class="text-right">${e.credito > 0 ? formatearNumero(e.credito) : ''}</td>
-                <td class="col-action-auditoria">
+                <td class="col-action-extracto">
+                    ${esDeAuditoria ? `<button class="btn-editar-mini" onclick="editarDescripcionExtracto('${e.id}')" title="Editar descripción">
+                        ✏️
+                    </button>` : ''}
                     <button class="btn-auditoria-mini" onclick="moverAuditoria('${e.id}')" title="Marcar para auditoría">
                         🔍
                     </button>
