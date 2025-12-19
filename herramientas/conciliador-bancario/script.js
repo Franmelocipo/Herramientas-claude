@@ -4683,8 +4683,13 @@ async function guardarDescripcionEnAuditoria(id, nuevaDescripcion) {
         // Este caso es más complejo, necesitamos encontrar el extracto correcto
         indiceMovimiento = parseInt(id.replace('EA', ''));
 
+        // Usar extractos de auditoriaData (flujo principal) o auditoriaCache (flujo alternativo)
+        const extractosDisponibles = (auditoriaData.extractosDisponibles && auditoriaData.extractosDisponibles.length > 0)
+            ? auditoriaData.extractosDisponibles
+            : auditoriaCache.extractosDisponibles;
+
         // Obtener extractoId del rango actual
-        if (auditoriaCache.extractosDisponibles && auditoriaCache.extractosDisponibles.length > 0) {
+        if (extractosDisponibles && extractosDisponibles.length > 0) {
             // Buscar en los extractos del rango seleccionado
             const rangoDesde = document.getElementById('rangoExtractoDesde')?.value;
             const rangoHasta = document.getElementById('rangoExtractoHasta')?.value;
@@ -4694,7 +4699,7 @@ async function guardarDescripcionEnAuditoria(id, nuevaDescripcion) {
                 const [anioHasta, mesHasta] = rangoHasta.split('-').map(Number);
 
                 // Filtrar extractos en el rango
-                const extractosEnRango = auditoriaCache.extractosDisponibles.filter(ext => {
+                const extractosEnRango = extractosDisponibles.filter(ext => {
                     const extKey = ext.anio * 100 + ext.mes;
                     const desdeKey = anioDesde * 100 + mesDesde;
                     const hastaKey = anioHasta * 100 + mesHasta;
