@@ -2469,7 +2469,7 @@ function renderizarTablaMayorConAsientos() {
     // Renderizar cheques no asociados (si hay)
     if (chequesNoAsociados.length > 0) {
         // Generar opciones de asientos del debe para el select de vinculación manual
-        const opcionesAsientos = asientosDebeOriginales
+        const opcionesAsientos = asientosDebe
             .filter(a => a.estadoCheques !== 'completo')  // Solo asientos que no están completos
             .map(a => `<option value="${a.id}">${a.asiento} - ${truncarTexto(a.descripcion, 30)} ($${formatearMoneda(a.debe)})</option>`)
             .join('');
