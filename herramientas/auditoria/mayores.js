@@ -69,6 +69,49 @@ function permitirActualizacionUI() {
     return new Promise(resolve => setTimeout(resolve, 0));
 }
 
+// ============================================
+// FUNCIONES DE PROGRESO DE INCORPORACIÓN DE CHEQUES
+// ============================================
+
+/**
+ * Mostrar panel de progreso de incorporación de cheques
+ */
+function mostrarProgresoCheques() {
+    const panel = document.getElementById('panelProgresoCheques');
+    const botones = document.getElementById('botonesModalCheques');
+
+    if (panel) panel.style.display = 'block';
+    if (botones) botones.style.display = 'none';
+
+    actualizarProgresoCheques(0, 'Preparando incorporación de cheques...');
+}
+
+/**
+ * Ocultar panel de progreso de incorporación de cheques
+ */
+function ocultarProgresoCheques() {
+    const panel = document.getElementById('panelProgresoCheques');
+    const botones = document.getElementById('botonesModalCheques');
+
+    if (panel) panel.style.display = 'none';
+    if (botones) botones.style.display = 'flex';
+}
+
+/**
+ * Actualizar barra de progreso de incorporación de cheques
+ * @param {number} porcentaje - Porcentaje de progreso (0-100)
+ * @param {string} detalle - Texto descriptivo del estado actual
+ */
+function actualizarProgresoCheques(porcentaje, detalle) {
+    const barra = document.getElementById('progresoChequeBarra');
+    const texto = document.getElementById('progresoChequeTexto');
+    const detalleEl = document.getElementById('progresoChequeDetalle');
+
+    if (barra) barra.style.width = `${porcentaje}%`;
+    if (texto) texto.textContent = `${Math.round(porcentaje)}%`;
+    if (detalleEl) detalleEl.textContent = detalle;
+}
+
 // Tipos de mayores predefinidos
 const TIPOS_MAYOR_DEFAULT = [
     {
@@ -4370,7 +4413,7 @@ function confirmarIncorporarListadoConDiferencia() {
  * Los asientos del debe se mantienen y los cheques se asocian como sublistado.
  * Se crean registros individuales de cheques para la conciliación.
  */
-function incorporarListadoChequesAlMayor() {
+async function incorporarListadoChequesAlMayor() {
     const cheques = stateMayores.listadoChequesTemporal;
 
     if (cheques.length === 0) {
@@ -4378,11 +4421,22 @@ function incorporarListadoChequesAlMayor() {
         return;
     }
 
+    // Mostrar barra de progreso
+    mostrarProgresoCheques();
+    actualizarProgresoCheques(0, 'Iniciando procesamiento...');
+    await permitirActualizacionUI();
+
     // Obtener registros del debe (que mantendremos y enriqueceremos)
+    actualizarProgresoCheques(5, 'Separando registros del mayor...');
+    await permitirActualizacionUI();
+
     const registrosDebe = stateMayores.registrosMayor.filter(r => r.debe > 0 && !r.esDevolucion);
 
     // Obtener registros del haber (que se mantienen sin cambios)
     const registrosHaber = stateMayores.registrosMayor.filter(r => r.haber > 0 || r.esDevolucion);
+
+    actualizarProgresoCheques(10, `Preparando ${registrosDebe.length} asientos del debe...`);
+    await permitirActualizacionUI();
 
     // Asociar cheques a cada registro del debe por número de asiento y/o fecha cercana
     registrosDebe.forEach(registro => {
@@ -4513,9 +4567,23 @@ function incorporarListadoChequesAlMayor() {
     }
 
     // Asociar cada cheque al registro del debe correspondiente usando scoring
-    cheques.forEach((cheque, index) => {
+    actualizarProgresoCheques(15, `Asociando ${cheques.length} cheques a asientos...`);
+    await permitirActualizacionUI();
+
+    const totalCheques = cheques.length;
+    const intervaloActualizacion = Math.max(1, Math.floor(totalCheques / 50)); // Actualizar cada 2% aprox
+
+    for (let index = 0; index < totalCheques; index++) {
+        const cheque = cheques[index];
         let registroAsociado = null;
         let mejorScore = 0;
+
+        // Actualizar progreso periódicamente (cada intervaloActualizacion cheques)
+        if (index % intervaloActualizacion === 0) {
+            const porcentaje = 15 + ((index / totalCheques) * 50); // 15% a 65%
+            actualizarProgresoCheques(porcentaje, `Procesando cheque ${index + 1} de ${totalCheques}...`);
+            await permitirActualizacionUI();
+        }
 
         // Primero intentar asociar por número de asiento exacto (si el cheque tiene asiento)
         if (cheque.asiento) {
@@ -4528,10 +4596,10 @@ function incorporarListadoChequesAlMayor() {
 
         // Si no se encontró por asiento, usar scoring para encontrar el mejor match
         if (!registroAsociado) {
-            registrosDebe.forEach(registro => {
+            for (const registro of registrosDebe) {
                 // IMPORTANTE: No asociar si excedería el monto del debe
                 if (excederiaMontoDelDebe(registro, cheque.importe)) {
-                    return;  // Skip este registro
+                    continue;  // Skip este registro
                 }
 
                 const { score } = calcularScoreAsociacion(cheque, registro);
@@ -4542,14 +4610,14 @@ function incorporarListadoChequesAlMayor() {
                     mejorScore = score;
                     registroAsociado = registro;
                 }
-            });
+            }
 
             // Si no encontró con el umbral normal, bajar el umbral si hay coincidencia de texto
             if (!registroAsociado) {
-                registrosDebe.forEach(registro => {
+                for (const registro of registrosDebe) {
                     // IMPORTANTE: No asociar si excedería el monto del debe
                     if (excederiaMontoDelDebe(registro, cheque.importe)) {
-                        return;  // Skip este registro
+                        continue;  // Skip este registro
                     }
 
                     const { score, detalles } = calcularScoreAsociacion(cheque, registro);
@@ -4558,7 +4626,7 @@ function incorporarListadoChequesAlMayor() {
                         mejorScore = score;
                         registroAsociado = registro;
                     }
-                });
+                }
             }
         }
 
@@ -4589,9 +4657,12 @@ function incorporarListadoChequesAlMayor() {
         } else {
             chequesNoAsociados.push(chequeEnriquecido);
         }
-    });
+    }
 
     // Calcular estado de completitud de cheques para cada registro del debe
+    actualizarProgresoCheques(70, 'Calculando estados de asientos...');
+    await permitirActualizacionUI();
+
     registrosDebe.forEach(registro => {
         const sumaCheques = registro.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
         const tolerancia = 0.01;  // Tolerancia de 1 centavo
@@ -4608,6 +4679,9 @@ function incorporarListadoChequesAlMayor() {
 
     // Crear registros individuales de cheques para la conciliación
     // Estos reemplazan los registros del debe originales para el proceso de conciliación
+    actualizarProgresoCheques(75, 'Creando registros individuales de cheques...');
+    await permitirActualizacionUI();
+
     const registrosCheques = [];
 
     registrosDebe.forEach(registro => {
@@ -4692,6 +4766,9 @@ function incorporarListadoChequesAlMayor() {
     });
 
     // Guardar los registros del debe originales enriquecidos para visualización
+    actualizarProgresoCheques(85, 'Organizando registros...');
+    await permitirActualizacionUI();
+
     stateMayores.asientosDebeOriginales = registrosDebe;
     stateMayores.chequesNoAsociados = chequesNoAsociados;
 
@@ -4717,10 +4794,10 @@ function incorporarListadoChequesAlMayor() {
     stateMayores.cuponesSeleccionados = [];
     stateMayores.liquidacionesSeleccionadas = [];
 
-    // Cerrar modal
-    cerrarCargarListadoCheques();
-
     // Actualizar UI
+    actualizarProgresoCheques(90, 'Actualizando interfaz...');
+    await permitirActualizacionUI();
+
     actualizarEstadisticasMayor();
     renderizarTablaMayorConAsientos();  // Usar nueva función de renderizado
     analizarVencimientos();
@@ -4734,12 +4811,19 @@ function incorporarListadoChequesAlMayor() {
     const asientosSinCheques = registrosDebe.filter(r => r.estadoCheques === 'sin_cheques').length;
     const asientosParciales = registrosDebe.filter(r => r.estadoCheques === 'parcial').length;
 
+    actualizarProgresoCheques(100, '¡Completado!');
+    await permitirActualizacionUI();
+
     console.log(`✅ Listado de cheques incorporado:`);
     console.log(`   - ${cheques.length} cheques procesados`);
     console.log(`   - ${asientosCompletos} asientos completos (verde)`);
     console.log(`   - ${asientosParciales} asientos con diferencias (amarillo)`);
     console.log(`   - ${asientosSinCheques} asientos sin cheques (rojo)`);
     console.log(`   - ${chequesNoAsociados.length} cheques sin asiento asociado`);
+
+    // Ocultar progreso y cerrar modal
+    ocultarProgresoCheques();
+    cerrarCargarListadoCheques();
 
     alert(`Se incorporaron ${cheques.length} cheques al análisis.\n\n` +
           `📊 Estado de asientos:\n` +

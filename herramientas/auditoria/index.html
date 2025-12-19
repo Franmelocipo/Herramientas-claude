@@ -775,7 +775,21 @@
                 <div id="mensajeComparacion" class="mensaje-comparacion"></div>
             </div>
 
-            <div class="btn-group mt-4">
+            <!-- Panel de progreso de incorporación de cheques -->
+            <div id="panelProgresoCheques" class="progreso-conciliacion progreso-cheques" style="display: none;">
+                <h5>⏳ Incorporando Cheques al Mayor</h5>
+                <div class="progreso-contenedor">
+                    <div class="progreso-barra-contenedor">
+                        <div id="progresoChequeBarra" class="progreso-barra"></div>
+                    </div>
+                    <span id="progresoChequeTexto" class="progreso-texto">0%</span>
+                </div>
+                <div id="progresoChequeDetalle" class="progreso-detalle">
+                    Preparando...
+                </div>
+            </div>
+
+            <div id="botonesModalCheques" class="btn-group mt-4">
                 <button onclick="cerrarCargarListadoCheques()" class="btn-secondary">Cancelar</button>
                 <button id="btnProcesarListadoCheques" onclick="procesarListadoCheques()" class="btn-primary" disabled>Incorporar Cheques</button>
             </div>
