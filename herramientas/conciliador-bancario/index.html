@@ -722,6 +722,10 @@
                 <div class="tab-content" id="tab-mayor-pendiente">
                     <div class="panel-header-pendiente">
                         <h3>Mayor Pendiente <span id="countMayorPendiente">(0)</span></h3>
+                        <div class="totalizadores-pendiente">
+                            <span class="total-item">Debe: <strong id="totalMayorDebe">$0,00</strong></span>
+                            <span class="total-item">Haber: <strong id="totalMayorHaber">$0,00</strong></span>
+                        </div>
                         <div class="header-actions">
                             <button id="btnEliminarSeleccionados" class="btn-eliminar-seleccionados hidden" onclick="mostrarModalEliminar('seleccionados')">
                                 🗑️ Eliminar seleccionados (0)
@@ -832,6 +836,9 @@
                 <div class="tab-content" id="tab-eliminados">
                     <div class="eliminados-header">
                         <h3>Movimientos Eliminados <span id="countEliminadosTab">(0)</span></h3>
+                        <div class="totalizadores-pendiente">
+                            <span class="total-item">Total: <strong id="totalEliminados">$0,00</strong></span>
+                        </div>
                     </div>
                     <div class="eliminados-info">
                         <p>Estos movimientos fueron excluidos del proceso de conciliación.</p>
@@ -862,6 +869,10 @@
                 <div class="tab-content" id="tab-extracto-pendiente">
                     <div class="panel-header-pendiente">
                         <h3>Extracto Pendiente <span id="countExtractoPendiente">(0)</span></h3>
+                        <div class="totalizadores-pendiente">
+                            <span class="total-item">Débito: <strong id="totalExtractoDebito">$0,00</strong></span>
+                            <span class="total-item">Crédito: <strong id="totalExtractoCredito">$0,00</strong></span>
+                        </div>
                         <div class="header-actions">
                             <button id="btnExcluirExtractoSeleccionados" class="btn-excluir-extracto hidden" onclick="excluirExtractoSeleccionados()">
                                 🚫 Excluir del análisis (0)
@@ -955,6 +966,10 @@
                 <div class="tab-content" id="tab-en-auditoria">
                     <div class="auditoria-header">
                         <h3>Movimientos En Auditoría <span id="countEnAuditoriaTab">(0)</span></h3>
+                        <div class="totalizadores-pendiente">
+                            <span class="total-item">Débito: <strong id="totalAuditoriaDebito">$0,00</strong></span>
+                            <span class="total-item">Crédito: <strong id="totalAuditoriaCredito">$0,00</strong></span>
+                        </div>
                         <button id="btnExportarAuditoria" class="btn-exportar-auditoria" onclick="exportarAuditoriaExcel()" title="Exportar operaciones en auditoría a Excel">
                             📥 Exportar a Excel
                         </button>
@@ -987,6 +1002,10 @@
                 <div class="tab-content" id="tab-extracto-excluido">
                     <div class="extracto-excluido-header">
                         <h3>Movimientos del Extracto Excluidos <span id="countExtractoExcluidoTab">(0)</span></h3>
+                        <div class="totalizadores-pendiente">
+                            <span class="total-item">Débito: <strong id="totalExcluidoDebito">$0,00</strong></span>
+                            <span class="total-item">Crédito: <strong id="totalExcluidoCredito">$0,00</strong></span>
+                        </div>
                         <div class="header-actions">
                             <button id="btnRestaurarTodosExcluidos" class="btn-restaurar-todos hidden" onclick="restaurarTodosExtractoExcluidos()">
                                 ↩️ Restaurar todos
