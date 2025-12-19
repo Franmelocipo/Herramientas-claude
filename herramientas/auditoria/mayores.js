@@ -2733,12 +2733,20 @@ function reprocesarChequesNoAsociados() {
         const descripcionNorm = normalizarTexto(descripcionAsiento);
         if (!origenNorm || !descripcionNorm) return 0;
         if (descripcionNorm.includes(origenNorm) || origenNorm.includes(descripcionNorm)) return 1;
-        const palabrasOrigen = origenNorm.split(' ').filter(p => p.length > 2);
-        const palabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 2);
+        // Usar palabras de más de 3 caracteres para evitar falsos positivos con "san", "de", etc.
+        const palabrasOrigen = origenNorm.split(' ').filter(p => p.length > 3);
+        const palabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 3);
         if (palabrasOrigen.length === 0) return 0;
         let coincidencias = 0;
         for (const palabra of palabrasOrigen) {
-            if (palabrasDescripcion.some(pd => pd.includes(palabra) || palabra.includes(pd))) coincidencias++;
+            // Comparación más estricta: la palabra debe coincidir exactamente o
+            // una debe contener a la otra solo si la diferencia de longitud es <= 2
+            if (palabrasDescripcion.some(pd => {
+                if (pd === palabra) return true;
+                const diffLen = Math.abs(pd.length - palabra.length);
+                if (diffLen > 2) return false;
+                return pd.includes(palabra) || palabra.includes(pd);
+            })) coincidencias++;
         }
         return coincidencias / palabrasOrigen.length;
     }
@@ -2780,8 +2788,8 @@ function reprocesarChequesNoAsociados() {
             if (excederiaMontoDelDebe(asiento, cheque.importe)) return;
 
             const { score, detalles } = calcularScoreAsociacion(cheque, asiento);
-            // Umbral más bajo para reproceso: score >= 30 o texto >= 25
-            if (score > mejorScore && (score >= 30 || detalles.texto >= 25)) {
+            // Umbral para reproceso: score >= 40 o texto >= 35 (70% similitud mínima)
+            if (score > mejorScore && (score >= 40 || detalles.texto >= 35)) {
                 mejorScore = score;
                 mejorAsiento = asiento;
             }
@@ -4501,15 +4509,22 @@ async function incorporarListadoChequesAlMayor() {
             return 1;
         }
 
-        // Dividir en palabras y contar coincidencias
-        const palabrasOrigen = origenNorm.split(' ').filter(p => p.length > 2);
-        const palabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 2);
+        // Dividir en palabras - usar más de 3 caracteres para evitar falsos positivos con "san", "de", etc.
+        const palabrasOrigen = origenNorm.split(' ').filter(p => p.length > 3);
+        const palabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 3);
 
         if (palabrasOrigen.length === 0) return 0;
 
         let coincidencias = 0;
         for (const palabra of palabrasOrigen) {
-            if (palabrasDescripcion.some(pd => pd.includes(palabra) || palabra.includes(pd))) {
+            // Comparación más estricta: la palabra debe coincidir exactamente o
+            // una debe contener a la otra solo si la diferencia de longitud es <= 2
+            if (palabrasDescripcion.some(pd => {
+                if (pd === palabra) return true;
+                const diffLen = Math.abs(pd.length - palabra.length);
+                if (diffLen > 2) return false;
+                return pd.includes(palabra) || palabra.includes(pd);
+            })) {
                 coincidencias++;
             }
         }
