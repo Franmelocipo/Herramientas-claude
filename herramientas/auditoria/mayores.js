@@ -4519,38 +4519,50 @@ async function incorporarListadoChequesAlMayor() {
 
     /**
      * Calcular score de asociación entre un cheque y un registro del debe
-     * Considera: fecha, origen/descripción
-     * Retorna un objeto con score y detalles
+     * NUEVA LÓGICA:
+     * - Exige coincidencia de texto entre origen del cheque y leyenda del mayor
+     * - Prioriza por cercanía de fechas como criterio secundario
+     * Retorna un objeto con score, detalles y flag de match de texto
      */
     function calcularScoreAsociacion(cheque, registro) {
-        let score = 0;
-        const detalles = { fecha: 0, texto: 0 };
+        const detalles = { fecha: 0, texto: 0, diffDias: Infinity };
 
-        // Score por fecha (máx 50 puntos) - Tolerancia máxima: 10 días
+        // Primero calcular similitud de texto origen/descripción (REQUISITO OBLIGATORIO)
+        const similitud = calcularSimilitudTexto(cheque.origen, registro.descripcion);
+        detalles.texto = Math.round(similitud * 100);  // Porcentaje de similitud
+
+        // Umbral mínimo de coincidencia de texto (50% de las palabras deben coincidir)
+        const UMBRAL_MINIMO_TEXTO = 50;
+        const tieneMatchTexto = detalles.texto >= UMBRAL_MINIMO_TEXTO;
+
+        // Score por fecha (para priorización entre matches de texto)
+        // Usamos diferencia en días - menor es mejor
         const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
         if (fechaCheque && registro.fecha) {
-            const diffDias = Math.abs((registro.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
-            if (diffDias === 0) {
-                detalles.fecha = 50;  // Fecha exacta
-            } else if (diffDias <= 1) {
-                detalles.fecha = 45;  // 1 día de diferencia
-            } else if (diffDias <= 3) {
-                detalles.fecha = 35;  // 2-3 días
-            } else if (diffDias <= 7) {
-                detalles.fecha = 20;  // 4-7 días
-            } else if (diffDias <= 10) {
-                detalles.fecha = 10;  // 8-10 días
+            detalles.diffDias = Math.abs((registro.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
+            // Score de fecha: 100 para fecha exacta, decrece con la distancia
+            if (detalles.diffDias === 0) {
+                detalles.fecha = 100;
+            } else if (detalles.diffDias <= 1) {
+                detalles.fecha = 90;
+            } else if (detalles.diffDias <= 3) {
+                detalles.fecha = 70;
+            } else if (detalles.diffDias <= 7) {
+                detalles.fecha = 50;
+            } else if (detalles.diffDias <= 14) {
+                detalles.fecha = 30;
+            } else if (detalles.diffDias <= 30) {
+                detalles.fecha = 10;
+            } else {
+                detalles.fecha = 0;
             }
-            // Más de 10 días = 0 puntos (no se considera viable)
         }
 
-        // Score por similitud de texto origen/descripción (máx 50 puntos)
-        const similitud = calcularSimilitudTexto(cheque.origen, registro.descripcion);
-        detalles.texto = Math.round(similitud * 50);
+        // El score ahora prioriza: primero match de texto, luego cercanía de fecha
+        // Si no hay match de texto, el score es 0
+        const score = tieneMatchTexto ? detalles.fecha : 0;
 
-        score = detalles.fecha + detalles.texto;
-
-        return { score, detalles };
+        return { score, detalles, tieneMatchTexto };
     }
 
     /**
@@ -4595,37 +4607,29 @@ async function incorporarListadoChequesAlMayor() {
         }
 
         // Si no se encontró por asiento, usar scoring para encontrar el mejor match
+        // NUEVA LÓGICA: Exigir coincidencia de texto (origen vs leyenda), luego priorizar por fecha
         if (!registroAsociado) {
+            let mejorDiffDias = Infinity;
+
             for (const registro of registrosDebe) {
                 // IMPORTANTE: No asociar si excedería el monto del debe
                 if (excederiaMontoDelDebe(registro, cheque.importe)) {
                     continue;  // Skip este registro
                 }
 
-                const { score } = calcularScoreAsociacion(cheque, registro);
+                const { score, detalles, tieneMatchTexto } = calcularScoreAsociacion(cheque, registro);
 
-                // Requiere al menos algo de coincidencia (score mínimo de 35 = fecha cercana)
-                // O si tiene buena coincidencia de texto (>25) acepta con menos coincidencia de fecha
-                if (score > mejorScore && score >= 35) {
+                // REQUISITO OBLIGATORIO: Debe haber coincidencia de texto entre origen y leyenda
+                if (!tieneMatchTexto) {
+                    continue;  // Skip si no hay match de texto
+                }
+
+                // Entre los que tienen match de texto, priorizar por cercanía de fechas
+                // (menor diffDias es mejor)
+                if (detalles.diffDias < mejorDiffDias) {
+                    mejorDiffDias = detalles.diffDias;
                     mejorScore = score;
                     registroAsociado = registro;
-                }
-            }
-
-            // Si no encontró con el umbral normal, bajar el umbral si hay coincidencia de texto
-            if (!registroAsociado) {
-                for (const registro of registrosDebe) {
-                    // IMPORTANTE: No asociar si excedería el monto del debe
-                    if (excederiaMontoDelDebe(registro, cheque.importe)) {
-                        continue;  // Skip este registro
-                    }
-
-                    const { score, detalles } = calcularScoreAsociacion(cheque, registro);
-                    // Si hay buena coincidencia de texto (>=25), aceptar con score total >= 25
-                    if (score > mejorScore && detalles.texto >= 25 && score >= 25) {
-                        mejorScore = score;
-                        registroAsociado = registro;
-                    }
                 }
             }
         }
