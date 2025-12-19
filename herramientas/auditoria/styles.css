@@ -2112,6 +2112,24 @@ body {
     text-align: center;
 }
 
+/* Panel de progreso de incorporación de cheques */
+.progreso-cheques {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 2px solid #fcd34d;
+}
+
+.progreso-cheques h5 {
+    color: #92400e;
+}
+
+.progreso-cheques .progreso-barra {
+    background: linear-gradient(90deg, #f59e0b 0%, #d97706 50%, #b45309 100%);
+}
+
+.progreso-cheques .progreso-texto {
+    color: #92400e;
+}
+
 /* Resultados de conciliación */
 .resultados-conciliacion {
     background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
