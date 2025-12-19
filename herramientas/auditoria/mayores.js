@@ -4495,8 +4495,34 @@ async function incorporarListadoChequesAlMayor() {
     }
 
     /**
+     * Palabras comunes/frecuentes que por sí solas no deben validar una vinculación.
+     * Cuando la única coincidencia es una de estas palabras, se requiere al menos
+     * una segunda palabra coincidente para considerar la vinculación válida.
+     */
+    const PALABRAS_COMUNES = [
+        'repuestos', 'repuesto',
+        'automotores', 'automotor', 'automotriz',
+        'distribuidora', 'distribuidor', 'distribuciones',
+        'comercial', 'comercializadora',
+        'servicios', 'servicio',
+        'transporte', 'transportes',
+        'construccion', 'construcciones', 'constructora',
+        'industria', 'industrial', 'industrias',
+        'agropecuaria', 'agropecuario',
+        'inmobiliaria', 'inmobiliario',
+        'metalurgica', 'metalurgico',
+        'empresa', 'empresas',
+        'grupo', 'compania',
+        'norte', 'sur', 'este', 'oeste', 'centro',
+        'argentina', 'buenos', 'aires'
+    ];
+
+    /**
      * Calcular similitud entre origen del cheque y descripción del asiento
      * Retorna un valor entre 0 y 1
+     *
+     * MEJORA: Si la única coincidencia es una palabra común (ej: "repuestos"),
+     * se requiere al menos una segunda palabra coincidente para evitar falsos positivos.
      */
     function calcularSimilitudTexto(origenCheque, descripcionAsiento) {
         const origenNorm = normalizarTexto(origenCheque);
@@ -4516,6 +4542,8 @@ async function incorporarListadoChequesAlMayor() {
         if (palabrasOrigen.length === 0) return 0;
 
         let coincidencias = 0;
+        let coincidenciasNoComunes = 0;  // Contador de coincidencias que NO son palabras comunes
+
         for (const palabra of palabrasOrigen) {
             // Comparación más estricta: la palabra debe coincidir exactamente o
             // una debe contener a la otra solo si la diferencia de longitud es <= 2
@@ -4526,7 +4554,19 @@ async function incorporarListadoChequesAlMayor() {
                 return pd.includes(palabra) || palabra.includes(pd);
             })) {
                 coincidencias++;
+                // Verificar si esta palabra NO es una palabra común
+                if (!PALABRAS_COMUNES.includes(palabra)) {
+                    coincidenciasNoComunes++;
+                }
             }
+        }
+
+        // VALIDACIÓN ADICIONAL: Si todas las coincidencias son palabras comunes,
+        // requerir al menos 2 coincidencias para considerar válida la vinculación.
+        // Esto evita falsos positivos como "Repuestos del Sur" vs "Repuestos Regina"
+        // donde solo coincide "repuestos".
+        if (coincidencias > 0 && coincidenciasNoComunes === 0 && coincidencias < 2) {
+            return 0;  // Solo hay coincidencias de palabras comunes y son menos de 2
         }
 
         return coincidencias / palabrasOrigen.length;
