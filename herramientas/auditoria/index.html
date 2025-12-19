@@ -347,10 +347,14 @@
                     <div class="preview-container mt-4">
                         <div class="preview-header">
                             <h4>Registros del Mayor</h4>
-                            <div class="preview-actions">
+                            <div class="preview-actions" style="display: flex; gap: 16px; flex-wrap: wrap;">
                                 <label>
                                     <input type="checkbox" id="mostrarSoloNoVinculados" onchange="filtrarRegistrosMayor()">
                                     Mostrar solo no vinculados
+                                </label>
+                                <label id="filtroParcialesLabel" style="display: none;">
+                                    <input type="checkbox" id="mostrarSoloParciales" onchange="filtrarRegistrosMayor()">
+                                    ⚠️ Solo asociaciones parciales
                                 </label>
                             </div>
                         </div>
