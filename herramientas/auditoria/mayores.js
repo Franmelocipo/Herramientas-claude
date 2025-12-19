@@ -2425,9 +2425,20 @@ function renderizarTablaMayorConAsientos() {
 
     // Renderizar cheques no asociados (si hay)
     if (chequesNoAsociados.length > 0) {
+        // Generar opciones de asientos del debe para el select de vinculación manual
+        const opcionesAsientos = asientosDebeOriginales
+            .filter(a => a.estadoCheques !== 'completo')  // Solo asientos que no están completos
+            .map(a => `<option value="${a.id}">${a.asiento} - ${truncarTexto(a.descripcion, 30)} ($${formatearMoneda(a.debe)})</option>`)
+            .join('');
+
         html += `<tr class="seccion-header seccion-sin-asiento">
             <td colspan="8" style="background: #fef3c7; font-weight: bold; padding: 12px; border-bottom: 2px solid #f59e0b;">
-                ⚠️ CHEQUES SIN ASIENTO ASOCIADO - ${chequesNoAsociados.length} cheques
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>⚠️ CHEQUES SIN ASIENTO ASOCIADO - ${chequesNoAsociados.length} cheques</span>
+                    <button class="btn-reprocesar-cheques" onclick="reprocesarChequesNoAsociados()" title="Intentar vincular automáticamente los cheques pendientes">
+                        🔄 Reprocesar vinculación
+                    </button>
+                </div>
             </td>
         </tr>`;
 
@@ -2447,7 +2458,12 @@ function renderizarTablaMayorConAsientos() {
                 <td>-</td>
                 <td><strong>CHQ ${cheque.numero || cheque.interno || '-'}</strong> de ${truncarTexto(cheque.origen || '-', 20)}</td>
                 <td class="text-right" style="color: #dc2626;">${formatearMoneda(cheque.importe)}</td>
-                <td></td>
+                <td>
+                    <select class="select-vincular-asiento" onchange="vincularChequeManual('${cheque.id}', this.value)" title="Vincular manualmente a un asiento">
+                        <option value="">Vincular a...</option>
+                        ${opcionesAsientos}
+                    </select>
+                </td>
                 <td><span class="registro-estado ${estadoConciliacion}">${obtenerEtiquetaEstado(estadoConciliacion)}</span></td>
                 <td><span class="estado-cheque-badge">${cheque.estado || '-'}</span></td>
             </tr>`;
@@ -2585,6 +2601,187 @@ function liberarChequeDeAsiento(chequeId, asientoId) {
     // Re-renderizar la tabla
     renderizarTablaMayorConAsientos();
     actualizarEstadisticasMayor();
+}
+
+/**
+ * Vincular manualmente un cheque no asociado a un asiento del debe
+ * @param {string} chequeId - ID del cheque a vincular
+ * @param {string} asientoId - ID del asiento destino
+ */
+function vincularChequeManual(chequeId, asientoId) {
+    if (!asientoId) return;  // No se seleccionó ningún asiento
+
+    // Buscar el cheque en los no asociados
+    const indexCheque = stateMayores.chequesNoAsociados?.findIndex(ch => ch.id === chequeId);
+    if (indexCheque === -1 || indexCheque === undefined) {
+        console.error('No se encontró el cheque:', chequeId);
+        return;
+    }
+
+    // Buscar el asiento destino
+    const asiento = stateMayores.asientosDebeOriginales?.find(a => a.id === asientoId);
+    if (!asiento) {
+        console.error('No se encontró el asiento:', asientoId);
+        return;
+    }
+
+    // Extraer el cheque de los no asociados
+    const cheque = stateMayores.chequesNoAsociados.splice(indexCheque, 1)[0];
+    cheque.asientoAsociado = asiento.asiento;
+
+    // Agregar al asiento
+    asiento.chequesAsociados.push(cheque);
+
+    // Recalcular estado del asiento
+    const sumaCheques = asiento.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+    const tolerancia = 0.01;
+
+    if (Math.abs(asiento.debe - sumaCheques) <= tolerancia) {
+        asiento.estadoCheques = 'completo';
+    } else {
+        asiento.estadoCheques = 'parcial';
+        asiento.diferenciaCheques = asiento.debe - sumaCheques;
+    }
+
+    // Actualizar el registro del cheque en registrosMayor
+    const regCheque = stateMayores.registrosMayor.find(r => r.id === chequeId);
+    if (regCheque) {
+        regCheque.asientoOrigenId = asiento.id;
+        // Quitar marca de sin asiento si la tenía
+        regCheque.descripcion = regCheque.descripcion.replace(' [SIN ASIENTO]', '');
+    }
+
+    console.log(`✅ Cheque ${cheque.numero || chequeId} vinculado manualmente al asiento ${asiento.asiento}`);
+
+    // Re-renderizar la tabla
+    renderizarTablaMayorConAsientos();
+    actualizarEstadisticasMayor();
+}
+
+/**
+ * Reprocesar cheques no asociados intentando vincularlos automáticamente
+ * Usa el algoritmo de scoring para encontrar mejores matches
+ */
+function reprocesarChequesNoAsociados() {
+    const chequesNoAsociados = stateMayores.chequesNoAsociados || [];
+    const asientosDelDebe = stateMayores.asientosDebeOriginales || [];
+
+    if (chequesNoAsociados.length === 0) {
+        alert('No hay cheques pendientes de vinculación.');
+        return;
+    }
+
+    // Funciones auxiliares (copiadas del algoritmo principal)
+    const siglasExcluir = ['srl', 's r l', 'sas', 's a s', 'sa', 's a', 'sca', 's c a', 'sci', 's c i', 'se', 's e'];
+
+    function normalizarTexto(texto) {
+        if (!texto) return '';
+        let resultado = texto.toString().toLowerCase().normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        for (const sigla of siglasExcluir) {
+            resultado = resultado.replace(new RegExp(`\\s+${sigla}$`, 'g'), '');
+            resultado = resultado.replace(new RegExp(`\\s+${sigla}\\s+`, 'g'), ' ');
+        }
+        return resultado.trim();
+    }
+
+    function calcularSimilitudTexto(origenCheque, descripcionAsiento) {
+        const origenNorm = normalizarTexto(origenCheque);
+        const descripcionNorm = normalizarTexto(descripcionAsiento);
+        if (!origenNorm || !descripcionNorm) return 0;
+        if (descripcionNorm.includes(origenNorm) || origenNorm.includes(descripcionNorm)) return 1;
+        const palabrasOrigen = origenNorm.split(' ').filter(p => p.length > 2);
+        const palabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 2);
+        if (palabrasOrigen.length === 0) return 0;
+        let coincidencias = 0;
+        for (const palabra of palabrasOrigen) {
+            if (palabrasDescripcion.some(pd => pd.includes(palabra) || palabra.includes(pd))) coincidencias++;
+        }
+        return coincidencias / palabrasOrigen.length;
+    }
+
+    function calcularScoreAsociacion(cheque, registro) {
+        let score = 0;
+        const detalles = { fecha: 0, texto: 0 };
+        const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
+        if (fechaCheque && registro.fecha) {
+            const diffDias = Math.abs((registro.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
+            if (diffDias === 0) detalles.fecha = 50;
+            else if (diffDias <= 1) detalles.fecha = 45;
+            else if (diffDias <= 3) detalles.fecha = 35;
+            else if (diffDias <= 7) detalles.fecha = 20;
+            else if (diffDias <= 10) detalles.fecha = 10;
+        }
+        const similitud = calcularSimilitudTexto(cheque.origen, registro.descripcion);
+        detalles.texto = Math.round(similitud * 50);
+        score = detalles.fecha + detalles.texto;
+        return { score, detalles };
+    }
+
+    function excederiaMontoDelDebe(registro, importeCheque) {
+        const tolerancia = 0.50;
+        const sumaActual = registro.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+        return (sumaActual + importeCheque) > (registro.debe + tolerancia);
+    }
+
+    let vinculados = 0;
+    const chequesParaRemover = [];
+
+    // Intentar vincular cada cheque no asociado
+    chequesNoAsociados.forEach((cheque, index) => {
+        let mejorAsiento = null;
+        let mejorScore = 0;
+
+        asientosDelDebe.forEach(asiento => {
+            if (asiento.estadoCheques === 'completo') return;
+            if (excederiaMontoDelDebe(asiento, cheque.importe)) return;
+
+            const { score, detalles } = calcularScoreAsociacion(cheque, asiento);
+            // Umbral más bajo para reproceso: score >= 30 o texto >= 25
+            if (score > mejorScore && (score >= 30 || detalles.texto >= 25)) {
+                mejorScore = score;
+                mejorAsiento = asiento;
+            }
+        });
+
+        if (mejorAsiento) {
+            // Vincular el cheque al asiento
+            cheque.asientoAsociado = mejorAsiento.asiento;
+            mejorAsiento.chequesAsociados.push(cheque);
+
+            // Recalcular estado del asiento
+            const sumaCheques = mejorAsiento.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+            if (Math.abs(mejorAsiento.debe - sumaCheques) <= 0.01) {
+                mejorAsiento.estadoCheques = 'completo';
+            } else {
+                mejorAsiento.estadoCheques = 'parcial';
+                mejorAsiento.diferenciaCheques = mejorAsiento.debe - sumaCheques;
+            }
+
+            // Actualizar registro en registrosMayor
+            const regCheque = stateMayores.registrosMayor.find(r => r.id === cheque.id);
+            if (regCheque) {
+                regCheque.asientoOrigenId = mejorAsiento.id;
+                regCheque.descripcion = regCheque.descripcion.replace(' [SIN ASIENTO]', '');
+            }
+
+            chequesParaRemover.push(index);
+            vinculados++;
+        }
+    });
+
+    // Remover cheques vinculados del array de no asociados (en orden inverso para no afectar índices)
+    chequesParaRemover.sort((a, b) => b - a).forEach(idx => {
+        stateMayores.chequesNoAsociados.splice(idx, 1);
+    });
+
+    console.log(`🔄 Reproceso completado: ${vinculados} cheques vinculados`);
+
+    // Re-renderizar
+    renderizarTablaMayorConAsientos();
+    actualizarEstadisticasMayor();
+
+    alert(`Reproceso completado:\n✅ ${vinculados} cheques vinculados\n⏳ ${chequesNoAsociados.length} cheques siguen pendientes`);
 }
 
 /**
@@ -4275,7 +4472,7 @@ function incorporarListadoChequesAlMayor() {
         let score = 0;
         const detalles = { fecha: 0, texto: 0 };
 
-        // Score por fecha (máx 50 puntos)
+        // Score por fecha (máx 50 puntos) - Tolerancia máxima: 10 días
         const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
         if (fechaCheque && registro.fecha) {
             const diffDias = Math.abs((registro.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
@@ -4287,9 +4484,10 @@ function incorporarListadoChequesAlMayor() {
                 detalles.fecha = 35;  // 2-3 días
             } else if (diffDias <= 7) {
                 detalles.fecha = 20;  // 4-7 días
-            } else if (diffDias <= 30) {
-                detalles.fecha = 10;  // 8-30 días
+            } else if (diffDias <= 10) {
+                detalles.fecha = 10;  // 8-10 días
             }
+            // Más de 10 días = 0 puntos (no se considera viable)
         }
 
         // Score por similitud de texto origen/descripción (máx 50 puntos)

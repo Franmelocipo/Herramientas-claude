@@ -3214,6 +3214,55 @@ body {
     transform: scale(0.95);
 }
 
+/* Botón para reprocesar cheques pendientes */
+.btn-reprocesar-cheques {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid #d97706;
+    border-radius: 6px;
+    background: #fff;
+    color: #d97706;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-reprocesar-cheques:hover {
+    background: #fef3c7;
+    border-color: #b45309;
+    color: #b45309;
+}
+
+.btn-reprocesar-cheques:active {
+    transform: scale(0.97);
+}
+
+/* Select para vincular manualmente cheque a asiento */
+.select-vincular-asiento {
+    padding: 4px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 11px;
+    color: #374151;
+    cursor: pointer;
+    max-width: 180px;
+    transition: all 0.2s ease;
+}
+
+.select-vincular-asiento:hover {
+    border-color: #9ca3af;
+}
+
+.select-vincular-asiento:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
 /* Badge de estado del cheque */
 .estado-cheque-badge {
     display: inline-block;
