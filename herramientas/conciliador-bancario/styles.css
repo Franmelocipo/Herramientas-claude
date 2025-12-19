@@ -806,6 +806,29 @@ body {
     font-weight: 500;
 }
 
+/* Totalizadores de importes */
+.totalizadores-pendiente {
+    display: flex;
+    gap: 16px;
+    font-size: 13px;
+    color: #374151;
+    background: #f9fafb;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+}
+
+.totalizadores-pendiente .total-item {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.totalizadores-pendiente .total-item strong {
+    color: #1f2937;
+    font-weight: 600;
+}
+
 /* Columna de checkbox */
 .col-checkbox {
     width: 35px;
@@ -1800,8 +1823,13 @@ body {
 
 /* Pestaña Eliminados */
 .eliminados-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding: 12px 0;
     margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 12px;
 }
 
 .eliminados-header h3 {
@@ -1873,6 +1901,8 @@ body {
     align-items: center;
     padding: 12px 0;
     margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 12px;
 }
 
 .auditoria-header h3 {
@@ -2042,6 +2072,8 @@ body {
     align-items: center;
     padding: 12px 0;
     margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 12px;
 }
 
 .extracto-excluido-header h3 {

@@ -325,6 +325,17 @@ const elements = {
     btnEliminarSeleccionados: document.getElementById('btnEliminarSeleccionados'),
     btnExcluirExtractoSeleccionados: document.getElementById('btnExcluirExtractoSeleccionados'),
 
+    // Totalizadores de importes
+    totalMayorDebe: document.getElementById('totalMayorDebe'),
+    totalMayorHaber: document.getElementById('totalMayorHaber'),
+    totalExtractoDebito: document.getElementById('totalExtractoDebito'),
+    totalExtractoCredito: document.getElementById('totalExtractoCredito'),
+    totalEliminados: document.getElementById('totalEliminados'),
+    totalAuditoriaDebito: document.getElementById('totalAuditoriaDebito'),
+    totalAuditoriaCredito: document.getElementById('totalAuditoriaCredito'),
+    totalExcluidoDebito: document.getElementById('totalExcluidoDebito'),
+    totalExcluidoCredito: document.getElementById('totalExcluidoCredito'),
+
     // Modal de progreso
     overlayProgreso: document.getElementById('overlay-progreso'),
     modalProgreso: document.getElementById('modal-progreso'),
@@ -3019,6 +3030,18 @@ function llenarTablaMayorPendiente(pendientes) {
     // Actualizar contador en header
     elements.countMayorPendiente.textContent = `(${pendientes.length})`;
 
+    // Calcular totales de Debe y Haber
+    const totalDebe = pendientes.reduce((sum, m) => sum + (m.debe || 0), 0);
+    const totalHaber = pendientes.reduce((sum, m) => sum + (m.haber || 0), 0);
+
+    // Actualizar totalizadores
+    if (elements.totalMayorDebe) {
+        elements.totalMayorDebe.textContent = formatearNumero(totalDebe);
+    }
+    if (elements.totalMayorHaber) {
+        elements.totalMayorHaber.textContent = formatearNumero(totalHaber);
+    }
+
     // Aplicar ordenamiento
     const pendientesOrdenados = aplicarOrdenamiento(pendientes, 'mayor');
 
@@ -3061,6 +3084,18 @@ function llenarTablaExtractoPendiente(pendientes) {
 
     // Actualizar contador en header
     elements.countExtractoPendiente.textContent = `(${pendientes.length})`;
+
+    // Calcular totales de Débito y Crédito
+    const totalDebito = pendientes.reduce((sum, e) => sum + (e.debito || 0), 0);
+    const totalCredito = pendientes.reduce((sum, e) => sum + (e.credito || 0), 0);
+
+    // Actualizar totalizadores
+    if (elements.totalExtractoDebito) {
+        elements.totalExtractoDebito.textContent = formatearNumero(totalDebito);
+    }
+    if (elements.totalExtractoCredito) {
+        elements.totalExtractoCredito.textContent = formatearNumero(totalCredito);
+    }
 
     // Aplicar ordenamiento
     const pendientesOrdenados = aplicarOrdenamiento(pendientes, 'extracto');
@@ -4174,6 +4209,16 @@ function llenarTablaEliminados() {
         countEliminadosTab.textContent = `(${state.eliminados.length})`;
     }
 
+    // Calcular total de importes eliminados
+    const totalImporte = state.eliminados.reduce((sum, m) => {
+        return sum + (m.importe || m.debe || m.haber || 0);
+    }, 0);
+
+    // Actualizar totalizador
+    if (elements.totalEliminados) {
+        elements.totalEliminados.textContent = formatearNumero(totalImporte);
+    }
+
     if (state.eliminados.length === 0) {
         elements.tablaEliminados.innerHTML = '<tr><td colspan="9" class="text-muted" style="text-align:center;padding:20px;">No hay movimientos eliminados</td></tr>';
         return;
@@ -4456,6 +4501,18 @@ function llenarTablaEnAuditoria() {
     const countEnAuditoriaTab = document.getElementById('countEnAuditoriaTab');
     if (countEnAuditoriaTab) {
         countEnAuditoriaTab.textContent = `(${state.enAuditoria.length})`;
+    }
+
+    // Calcular totales de Débito y Crédito
+    const totalDebito = state.enAuditoria.reduce((sum, m) => sum + (m.debito || 0), 0);
+    const totalCredito = state.enAuditoria.reduce((sum, m) => sum + (m.credito || 0), 0);
+
+    // Actualizar totalizadores
+    if (elements.totalAuditoriaDebito) {
+        elements.totalAuditoriaDebito.textContent = formatearNumero(totalDebito);
+    }
+    if (elements.totalAuditoriaCredito) {
+        elements.totalAuditoriaCredito.textContent = formatearNumero(totalCredito);
     }
 
     if (state.enAuditoria.length === 0) {
@@ -4797,6 +4854,18 @@ function llenarTablaExtractoExcluido() {
     const countExtractoExcluidoTab = document.getElementById('countExtractoExcluidoTab');
     if (countExtractoExcluidoTab) {
         countExtractoExcluidoTab.textContent = `(${state.extractoExcluido.length})`;
+    }
+
+    // Calcular totales de Débito y Crédito
+    const totalDebito = state.extractoExcluido.reduce((sum, m) => sum + (m.debito || 0), 0);
+    const totalCredito = state.extractoExcluido.reduce((sum, m) => sum + (m.credito || 0), 0);
+
+    // Actualizar totalizadores
+    if (elements.totalExcluidoDebito) {
+        elements.totalExcluidoDebito.textContent = formatearNumero(totalDebito);
+    }
+    if (elements.totalExcluidoCredito) {
+        elements.totalExcluidoCredito.textContent = formatearNumero(totalCredito);
     }
 
     if (state.extractoExcluido.length === 0) {
