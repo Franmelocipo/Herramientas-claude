@@ -6489,12 +6489,47 @@ function seleccionarMesConciliacion(mesKey) {
     // Verificar si ya hay datos procesados para este mes
     const estadoMes = stateMayores.mesesProcesados[mesKey];
     if (estadoMes && estadoMes.asientosDelMes) {
-        // Cargar estado guardado
+        // Verificar si hay nuevos cheques que se agregaron después de procesar el mes
+        const chequesActualesDelMes = obtenerChequesDelMes(mesKey);
+        const idsChequesEnEstado = new Set([
+            ...(estadoMes.chequesDelMes || []).map(c => c.id),
+            ...(estadoMes.chequesNoAsociadosDelMes || []).map(c => c.id),
+            ...estadoMes.asientosDelMes.flatMap(a => (a.chequesAsociados || []).map(c => c.id))
+        ]);
+
+        // Filtrar cheques nuevos que no están en el estado
+        const chequesNuevos = chequesActualesDelMes.filter(c => !idsChequesEnEstado.has(c.id));
+
+        if (chequesNuevos.length > 0) {
+            // Agregar los nuevos cheques a chequesNoAsociadosDelMes
+            estadoMes.chequesDelMes = [...(estadoMes.chequesDelMes || []), ...chequesNuevos];
+            estadoMes.chequesNoAsociadosDelMes = [...(estadoMes.chequesNoAsociadosDelMes || []), ...chequesNuevos];
+            console.log(`📥 Se agregaron ${chequesNuevos.length} cheques nuevos al mes ${mesKey}`);
+        }
+
+        // Cargar estado guardado (ahora con los nuevos cheques si los hay)
         renderizarConciliacionMes(estadoMes.asientosDelMes, estadoMes.chequesNoAsociadosDelMes || []);
     } else {
         // Preparar datos para conciliación
         prepararConciliacionMes(mesKey);
     }
+}
+
+/**
+ * Obtener cheques que corresponden a un mes específico
+ * @param {string} mesKey - Clave del mes en formato YYYY-MM
+ * @returns {Array} - Cheques del mes
+ */
+function obtenerChequesDelMes(mesKey) {
+    const cheques = stateMayores.listadoChequesCargados || [];
+    return cheques.filter(cheque => {
+        const fecha = cheque.fechaRecepcion || cheque.fechaEmision;
+        if (!fecha) return false;
+        const fechaDate = fecha instanceof Date ? fecha : new Date(fecha);
+        if (isNaN(fechaDate.getTime())) return false;
+        const mesKeyCheque = `${fechaDate.getFullYear()}-${String(fechaDate.getMonth() + 1).padStart(2, '0')}`;
+        return mesKeyCheque === mesKey;
+    });
 }
 
 /**
