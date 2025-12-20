@@ -4685,3 +4685,82 @@ body {
         margin-top: 8px;
     }
 }
+
+/* ============================================
+   MODAL AGREGAR CHEQUE MANUALMENTE
+   ============================================ */
+
+.form-grid-cheque {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.form-grid-cheque .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.form-grid-cheque .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-grid-cheque .form-field label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #374151;
+}
+
+.form-grid-cheque .form-field .input-text {
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-grid-cheque .form-field .input-text:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-grid-cheque .form-field .input-text::placeholder {
+    color: #9ca3af;
+}
+
+#modalAgregarCheque .modal-content {
+    max-width: 700px;
+}
+
+#modalAgregarCheque .btn-group {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+/* Error message styling */
+#errorAgregarCheque {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* Responsive para formulario de cheques */
+@media (max-width: 600px) {
+    .form-grid-cheque .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    #modalAgregarCheque .modal-content {
+        margin: 10px;
+        max-height: calc(100vh - 20px);
+        overflow-y: auto;
+    }
+}

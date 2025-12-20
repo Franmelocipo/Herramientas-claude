@@ -5761,6 +5761,213 @@ function guardarMesesProcesados() {
     }
 }
 
+// ============================================
+// FUNCIONES PARA AGREGAR CHEQUES MANUALMENTE
+// ============================================
+
+/**
+ * Iniciar un listado de cheques manual (sin archivo Excel)
+ * Crea un listado vacío y abre el modal para agregar el primer cheque
+ */
+function iniciarListadoManual() {
+    // Verificar que hay un mayor cargado
+    if (stateMayores.registrosMayor.length === 0) {
+        alert('Primero debe cargar un mayor contable antes de agregar cheques.');
+        return;
+    }
+
+    // Inicializar el listado vacío
+    stateMayores.listadoChequesIncorporado = true;
+    stateMayores.listadoChequesCargados = [];
+    stateMayores.mesesDisponibles = [];
+    stateMayores.mesesProcesados = {};
+
+    // Actualizar UI
+    actualizarEstadoListadoCheques();
+    actualizarResumenListadoCheques();
+
+    // Mostrar panel de conciliación por mes
+    const panelPaso2Mes = document.getElementById('panelConciliacionPorMes');
+    if (panelPaso2Mes) {
+        panelPaso2Mes.style.display = 'block';
+        renderizarListaMeses();
+    }
+
+    // Abrir modal para agregar el primer cheque
+    mostrarModalAgregarCheque();
+}
+
+/**
+ * Mostrar modal para agregar un cheque manualmente
+ */
+function mostrarModalAgregarCheque() {
+    // Verificar que hay un mayor cargado
+    if (stateMayores.registrosMayor.length === 0) {
+        alert('Primero debe cargar un mayor contable antes de agregar cheques.');
+        return;
+    }
+
+    // Verificar que el listado está iniciado
+    if (!stateMayores.listadoChequesIncorporado) {
+        // Iniciar listado vacío automáticamente
+        stateMayores.listadoChequesIncorporado = true;
+        stateMayores.listadoChequesCargados = [];
+        stateMayores.mesesDisponibles = [];
+        stateMayores.mesesProcesados = {};
+        actualizarEstadoListadoCheques();
+    }
+
+    // Limpiar formulario
+    limpiarFormularioCheque();
+
+    // Ocultar mensaje de error
+    const errorEl = document.getElementById('errorAgregarCheque');
+    if (errorEl) {
+        errorEl.style.display = 'none';
+        errorEl.textContent = '';
+    }
+
+    // Mostrar modal
+    document.getElementById('modalAgregarCheque').classList.remove('hidden');
+}
+
+/**
+ * Cerrar modal de agregar cheque
+ */
+function cerrarModalAgregarCheque() {
+    document.getElementById('modalAgregarCheque').classList.add('hidden');
+    limpiarFormularioCheque();
+}
+
+/**
+ * Limpiar formulario de agregar cheque
+ */
+function limpiarFormularioCheque() {
+    document.getElementById('chequeNumero').value = '';
+    document.getElementById('chequeInterno').value = '';
+    document.getElementById('chequeImporte').value = '';
+    document.getElementById('chequeEstado').value = '';
+    document.getElementById('chequeOrigen').value = '';
+    document.getElementById('chequeDestino').value = '';
+    document.getElementById('chequeFechaEmision').value = '';
+    document.getElementById('chequeFechaRecepcion').value = '';
+    document.getElementById('chequeFechaCobro').value = '';
+    document.getElementById('chequeFechaDeposito').value = '';
+    document.getElementById('chequeFechaTransferencia').value = '';
+    document.getElementById('chequeFechaRechazo').value = '';
+}
+
+/**
+ * Validar y agregar cheque al listado
+ */
+function confirmarAgregarCheque() {
+    const errorEl = document.getElementById('errorAgregarCheque');
+
+    // Obtener valores del formulario
+    const numero = document.getElementById('chequeNumero').value.trim();
+    const interno = document.getElementById('chequeInterno').value.trim();
+    const importeRaw = document.getElementById('chequeImporte').value.trim();
+    const estado = document.getElementById('chequeEstado').value;
+    const origen = document.getElementById('chequeOrigen').value.trim();
+    const destino = document.getElementById('chequeDestino').value.trim();
+    const fechaEmision = document.getElementById('chequeFechaEmision').value;
+    const fechaRecepcion = document.getElementById('chequeFechaRecepcion').value;
+    const fechaCobro = document.getElementById('chequeFechaCobro').value;
+    const fechaDeposito = document.getElementById('chequeFechaDeposito').value;
+    const fechaTransferencia = document.getElementById('chequeFechaTransferencia').value;
+    const fechaRechazo = document.getElementById('chequeFechaRechazo').value;
+
+    // Validar campos obligatorios
+    const errores = [];
+
+    if (!numero) {
+        errores.push('El número de cheque es obligatorio');
+    }
+
+    if (!importeRaw) {
+        errores.push('El importe es obligatorio');
+    }
+
+    if (!origen) {
+        errores.push('El origen (librador) es obligatorio');
+    }
+
+    if (!fechaRecepcion) {
+        errores.push('La fecha de recepción es obligatoria');
+    }
+
+    // Validar importe
+    const importe = parsearNumeroArgentino(importeRaw);
+    if (importeRaw && (isNaN(importe) || importe <= 0)) {
+        errores.push('El importe debe ser un número válido mayor a cero');
+    }
+
+    // Mostrar errores si hay
+    if (errores.length > 0) {
+        errorEl.innerHTML = errores.map(e => `• ${e}`).join('<br>');
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    // Ocultar errores
+    errorEl.style.display = 'none';
+
+    // Crear objeto cheque
+    const nuevoCheque = {
+        id: `cheque_manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        interno: interno,
+        numero: numero,
+        fechaEmision: fechaEmision ? new Date(fechaEmision) : null,
+        fechaEmisionOriginal: fechaEmision || '',
+        fechaRecepcion: fechaRecepcion ? new Date(fechaRecepcion) : null,
+        fechaRecepcionOriginal: fechaRecepcion || '',
+        fechaCobro: fechaCobro ? new Date(fechaCobro) : null,
+        fechaCobroOriginal: fechaCobro || '',
+        fechaDeposito: fechaDeposito ? new Date(fechaDeposito) : null,
+        fechaDepositoOriginal: fechaDeposito || '',
+        fechaTransferencia: fechaTransferencia ? new Date(fechaTransferencia) : null,
+        fechaTransferenciaOriginal: fechaTransferencia || '',
+        fechaRechazo: fechaRechazo ? new Date(fechaRechazo) : null,
+        fechaRechazoOriginal: fechaRechazo || '',
+        origen: origen,
+        destino: destino,
+        importe: importe,
+        estado: estado,
+        asientoAsociado: null,
+        agregadoManualmente: true  // Marca para identificar cheques agregados manualmente
+    };
+
+    // Agregar al listado
+    stateMayores.listadoChequesCargados.push(nuevoCheque);
+
+    // Recalcular meses disponibles
+    stateMayores.mesesDisponibles = calcularMesesDeCheques(stateMayores.listadoChequesCargados);
+
+    // Actualizar UI
+    actualizarEstadoListadoCheques();
+    actualizarResumenListadoCheques();
+
+    // Actualizar lista de meses
+    const panelPaso2Mes = document.getElementById('panelConciliacionPorMes');
+    if (panelPaso2Mes) {
+        panelPaso2Mes.style.display = 'block';
+        renderizarListaMeses();
+    }
+
+    // Si hay un mes seleccionado, actualizar su vista también
+    if (stateMayores.mesSeleccionado) {
+        renderizarConciliacionMes(stateMayores.mesSeleccionado);
+    }
+
+    console.log(`✅ Cheque agregado manualmente: ${numero} - ${formatearMoneda(importe)} de ${origen}`);
+
+    // Cerrar modal
+    cerrarModalAgregarCheque();
+
+    // Mostrar confirmación
+    alert(`✅ Cheque agregado correctamente:\n\nNúmero: ${numero}\nImporte: ${formatearMoneda(importe)}\nOrigen: ${origen}`);
+}
+
 /**
  * Renderizar la lista de meses disponibles para conciliar
  */
