@@ -4027,12 +4027,163 @@ body {
 
 .cheques-no-asociados-header {
     margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
 }
 
 .cheques-no-asociados-header h5 {
     margin: 0;
     color: #d97706;
     font-size: 14px;
+}
+
+/* Botón vincular seleccionados */
+.btn-vincular-seleccionados {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-left: auto;
+}
+
+.btn-vincular-seleccionados:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
+}
+
+.btn-vincular-seleccionados:active {
+    transform: translateY(0);
+}
+
+/* Columna de checkbox */
+.th-checkbox,
+.td-checkbox {
+    width: 40px;
+    text-align: center;
+    padding: 8px !important;
+}
+
+.th-checkbox input[type="checkbox"],
+.td-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #3b82f6;
+}
+
+/* Fila seleccionada */
+.tabla-cheques-no-asociados tr.fila-seleccionada {
+    background-color: #dbeafe !important;
+}
+
+.tabla-cheques-no-asociados tr.fila-seleccionada:hover {
+    background-color: #bfdbfe !important;
+}
+
+/* Estilos para el modal de vinculación múltiple */
+.info-cheques-seleccionados {
+    display: flex;
+    gap: 20px;
+    padding: 12px 16px;
+    background: #f0f9ff;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    border: 1px solid #bae6fd;
+}
+
+.resumen-seleccion {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.resumen-seleccion .label {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.resumen-seleccion .valor {
+    font-weight: 600;
+    color: #0369a1;
+    font-size: 14px;
+}
+
+.cheque-seleccionado-item {
+    background: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cheque-seleccionado-item .opcion-info {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.cheque-seleccionado-item .opcion-numero {
+    font-weight: 600;
+    color: #1e40af;
+    font-size: 12px;
+}
+
+.cheque-seleccionado-item .opcion-descripcion {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.cheque-seleccionado-item .opcion-monto {
+    font-weight: 600;
+    color: #059669;
+    font-size: 13px;
+}
+
+/* Estilos para opciones de asientos en modal múltiple */
+.opcion-monto-container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.opcion-pendiente {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.opcion-estado .badge-estado {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.opcion-estado .badge-estado.sin-cheques {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.opcion-estado .badge-estado.parcial {
+    background: #e0e7ff;
+    color: #4f46e5;
+}
+
+.opcion-estado .badge-estado.completo {
+    background: #d1fae5;
+    color: #059669;
 }
 
 /* Resumen del listado cargado */

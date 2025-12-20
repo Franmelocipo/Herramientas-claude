@@ -369,6 +369,9 @@
                                     <div class="cheques-no-asociados-header">
                                         <h5>⚠️ Cheques sin asociar del mes</h5>
                                         <span class="contador-cheques-no-asociados" id="contadorChequesNoAsociados"></span>
+                                        <button id="btnVincularSeleccionados" class="btn-vincular-seleccionados" onclick="abrirModalVincularMultiples()" style="display: none;" title="Vincular cheques seleccionados">
+                                            🔗 Vincular seleccionados (<span id="contadorSeleccionados">0</span>)
+                                        </button>
                                     </div>
                                     <!-- Filtros para cheques sin asociar -->
                                     <div class="filtros-cheques-no-asociados">
@@ -381,6 +384,9 @@
                                         <table class="preview-table tabla-cheques-no-asociados">
                                             <thead>
                                                 <tr>
+                                                    <th class="th-checkbox">
+                                                        <input type="checkbox" id="checkboxSeleccionarTodosCheques" onchange="toggleSeleccionarTodosCheques(this.checked)" title="Seleccionar todos">
+                                                    </th>
                                                     <th class="sortable" data-sort="numero" onclick="ordenarChequesNoAsociados('numero')">Número <span class="sort-icon">⇅</span></th>
                                                     <th class="sortable" data-sort="origen" onclick="ordenarChequesNoAsociados('origen')">Origen <span class="sort-icon">⇅</span></th>
                                                     <th class="sortable" data-sort="fechaRecepcion" onclick="ordenarChequesNoAsociados('fechaRecepcion')">F. Recepción <span class="sort-icon">⇅</span></th>
@@ -1222,6 +1228,62 @@
             <button class="btn-cancelar" onclick="cerrarModalVincularManual()">Cancelar</button>
             <button id="btn-confirmar-vincular" class="btn-confirmar-eliminar" style="background: #3b82f6;" onclick="confirmarVinculacionManual()" disabled>
                 🔗 Vincular Seleccionado
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal para vinculación múltiple de cheques -->
+    <div id="overlay-vincular-multiples" class="overlay-eliminar"></div>
+    <div id="modal-vincular-multiples" class="modal-eliminar modal-vincular-manual" style="max-width: 700px;">
+        <div class="modal-eliminar-header">
+            <h3 id="titulo-modal-vincular-multiples">🔗 Vincular Cheques Seleccionados</h3>
+            <button class="modal-close-btn" onclick="cerrarModalVincularMultiples()">✕</button>
+        </div>
+        <div class="modal-eliminar-body">
+            <!-- Resumen de cheques seleccionados -->
+            <div class="info-cheques-seleccionados">
+                <div class="resumen-seleccion">
+                    <span class="label">Cheques seleccionados:</span>
+                    <span id="cantidadChequesSeleccionados" class="valor">0</span>
+                </div>
+                <div class="resumen-seleccion">
+                    <span class="label">Importe total:</span>
+                    <span id="importeTotalSeleccionados" class="valor">$0,00</span>
+                </div>
+            </div>
+
+            <!-- Lista de cheques seleccionados -->
+            <div class="vincular-lista-container" style="max-height: 150px; margin-bottom: 15px;">
+                <div class="vincular-lista-header">
+                    <span>Cheques a vincular</span>
+                </div>
+                <div id="listaChequesAVincular" class="vincular-lista-opciones" style="max-height: 120px;">
+                    <!-- Se llena dinámicamente -->
+                </div>
+            </div>
+
+            <!-- Filtros de búsqueda para asientos -->
+            <div class="vincular-filtros">
+                <div class="filtro-busqueda">
+                    <input type="text" id="filtro-busqueda-vincular-multiples" class="input-text" placeholder="Buscar asiento por descripción, número..." oninput="filtrarAsientosParaVincularMultiples()">
+                </div>
+            </div>
+
+            <!-- Lista de asientos disponibles -->
+            <div class="vincular-lista-container">
+                <div class="vincular-lista-header">
+                    <span>Asientos disponibles</span>
+                    <span id="vincular-multiples-lista-count" class="badge-count">0</span>
+                </div>
+                <div id="listaAsientosVincularMultiples" class="vincular-lista-opciones">
+                    <!-- Se llena dinámicamente -->
+                </div>
+            </div>
+        </div>
+        <div class="modal-eliminar-footer">
+            <button class="btn-cancelar" onclick="cerrarModalVincularMultiples()">Cancelar</button>
+            <button id="btn-confirmar-vincular-multiples" class="btn-confirmar-eliminar" style="background: #3b82f6;" onclick="confirmarVinculacionMultiple()" disabled>
+                🔗 Vincular al Asiento Seleccionado
             </button>
         </div>
     </div>

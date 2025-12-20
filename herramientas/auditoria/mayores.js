@@ -6002,12 +6002,21 @@ let chequesNoAsociadosOrdenamiento = {
 };
 let chequesNoAsociadosOriginales = [];
 
+// Estado para selección múltiple de cheques
+let chequesSeleccionados = new Set();
+let asientosDisponiblesParaVincular = [];
+let asientoSeleccionadoParaVincularMultiples = null;
+
 /**
  * Renderizar tabla de cheques no asociados del mes
  */
 function renderizarChequesNoAsociadosMes(cheques) {
     // Guardar referencia original para filtros
     chequesNoAsociadosOriginales = [...cheques];
+
+    // Limpiar selección al cambiar de mes
+    chequesSeleccionados.clear();
+    actualizarContadorSeleccionados();
 
     // Actualizar contador
     const contador = document.getElementById('contadorChequesNoAsociados');
@@ -6027,11 +6036,14 @@ function renderizarTablaChequesNoAsociados(cheques) {
     if (cheques.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" style="text-align: center; color: #64748b; padding: 20px;">
+                <td colspan="7" style="text-align: center; color: #64748b; padding: 20px;">
                     No hay cheques que coincidan con los filtros
                 </td>
             </tr>
         `;
+        // Resetear checkbox de seleccionar todos
+        const checkboxTodos = document.getElementById('checkboxSeleccionarTodosCheques');
+        if (checkboxTodos) checkboxTodos.checked = false;
         return;
     }
 
@@ -6039,22 +6051,34 @@ function renderizarTablaChequesNoAsociados(cheques) {
         const fechaRecepcion = cheque.fechaRecepcion
             ? formatearFecha(cheque.fechaRecepcion instanceof Date ? cheque.fechaRecepcion : new Date(cheque.fechaRecepcion))
             : '-';
+        const chequeId = cheque.id || cheque.interno;
+        const isChecked = chequesSeleccionados.has(chequeId);
 
         return `
-            <tr>
+            <tr class="${isChecked ? 'fila-seleccionada' : ''}">
+                <td class="td-checkbox">
+                    <input type="checkbox"
+                           class="checkbox-cheque"
+                           data-cheque-id="${chequeId}"
+                           ${isChecked ? 'checked' : ''}
+                           onchange="toggleSeleccionCheque('${chequeId}', this.checked)">
+                </td>
                 <td>${cheque.numero || cheque.interno || '-'}</td>
                 <td title="${cheque.origen || ''}">${truncarTexto(cheque.origen || '', 25)}</td>
                 <td>${fechaRecepcion}</td>
                 <td class="text-right">${formatearMoneda(cheque.importe)}</td>
                 <td>${cheque.estado || '-'}</td>
                 <td>
-                    <button class="btn-accion-fila btn-vincular" onclick="mostrarAsientosParaVincular('${cheque.id || cheque.interno}')" title="Vincular a asiento">
+                    <button class="btn-accion-fila btn-vincular" onclick="mostrarAsientosParaVincular('${chequeId}')" title="Vincular a asiento">
                         🔗 Vincular
                     </button>
                 </td>
             </tr>
         `;
     }).join('');
+
+    // Actualizar estado del checkbox "seleccionar todos"
+    actualizarCheckboxSeleccionarTodos(cheques);
 }
 
 /**
@@ -6807,6 +6831,334 @@ function vincularChequeAAsientoMes(cheque, asientoId) {
     // Renderizar actualización
     renderizarConciliacionMes(estadoMes.asientosDelMes, estadoMes.chequesNoAsociadosDelMes);
     renderizarListaMeses();
+}
+
+// ==========================================
+// FUNCIONES PARA SELECCIÓN MÚLTIPLE DE CHEQUES
+// ==========================================
+
+/**
+ * Toggle selección de un cheque individual
+ */
+function toggleSeleccionCheque(chequeId, isSelected) {
+    if (isSelected) {
+        chequesSeleccionados.add(chequeId);
+    } else {
+        chequesSeleccionados.delete(chequeId);
+    }
+
+    // Actualizar visual de la fila
+    const checkbox = document.querySelector(`input[data-cheque-id="${chequeId}"]`);
+    if (checkbox) {
+        const fila = checkbox.closest('tr');
+        if (fila) {
+            fila.classList.toggle('fila-seleccionada', isSelected);
+        }
+    }
+
+    actualizarContadorSeleccionados();
+    actualizarCheckboxSeleccionarTodos(chequesNoAsociadosOriginales);
+}
+
+/**
+ * Toggle seleccionar/deseleccionar todos los cheques
+ */
+function toggleSeleccionarTodosCheques(seleccionar) {
+    const checkboxes = document.querySelectorAll('.checkbox-cheque');
+
+    if (seleccionar) {
+        // Seleccionar todos los cheques visibles
+        checkboxes.forEach(cb => {
+            const chequeId = cb.dataset.chequeId;
+            chequesSeleccionados.add(chequeId);
+            cb.checked = true;
+            const fila = cb.closest('tr');
+            if (fila) fila.classList.add('fila-seleccionada');
+        });
+    } else {
+        // Deseleccionar todos
+        chequesSeleccionados.clear();
+        checkboxes.forEach(cb => {
+            cb.checked = false;
+            const fila = cb.closest('tr');
+            if (fila) fila.classList.remove('fila-seleccionada');
+        });
+    }
+
+    actualizarContadorSeleccionados();
+}
+
+/**
+ * Actualizar estado del checkbox "seleccionar todos"
+ */
+function actualizarCheckboxSeleccionarTodos(cheques) {
+    const checkboxTodos = document.getElementById('checkboxSeleccionarTodosCheques');
+    if (!checkboxTodos) return;
+
+    const checkboxesVisibles = document.querySelectorAll('.checkbox-cheque');
+    const todosSeleccionados = checkboxesVisibles.length > 0 &&
+        Array.from(checkboxesVisibles).every(cb => cb.checked);
+    const algunosSeleccionados = Array.from(checkboxesVisibles).some(cb => cb.checked);
+
+    checkboxTodos.checked = todosSeleccionados;
+    checkboxTodos.indeterminate = algunosSeleccionados && !todosSeleccionados;
+}
+
+/**
+ * Actualizar contador de cheques seleccionados y visibilidad del botón
+ */
+function actualizarContadorSeleccionados() {
+    const contador = document.getElementById('contadorSeleccionados');
+    const boton = document.getElementById('btnVincularSeleccionados');
+
+    if (contador) {
+        contador.textContent = chequesSeleccionados.size;
+    }
+
+    if (boton) {
+        boton.style.display = chequesSeleccionados.size > 0 ? 'inline-flex' : 'none';
+    }
+}
+
+/**
+ * Abrir modal para vincular múltiples cheques
+ */
+function abrirModalVincularMultiples() {
+    if (chequesSeleccionados.size === 0) {
+        mostrarNotificacion('Seleccione al menos un cheque para vincular', 'warning');
+        return;
+    }
+
+    const mesKey = stateMayores.mesActualConciliacion;
+    if (!mesKey) return;
+
+    const estadoMes = stateMayores.mesesProcesados[mesKey];
+    if (!estadoMes) return;
+
+    // Obtener los cheques seleccionados
+    const chequesParaVincular = estadoMes.chequesNoAsociadosDelMes.filter(ch =>
+        chequesSeleccionados.has(ch.id || ch.interno)
+    );
+
+    // Calcular importe total
+    const importeTotal = chequesParaVincular.reduce((sum, ch) => sum + (ch.importe || 0), 0);
+
+    // Actualizar resumen en el modal
+    document.getElementById('cantidadChequesSeleccionados').textContent = chequesParaVincular.length;
+    document.getElementById('importeTotalSeleccionados').textContent = formatearMoneda(importeTotal);
+
+    // Renderizar lista de cheques seleccionados
+    const listaChequesContainer = document.getElementById('listaChequesAVincular');
+    listaChequesContainer.innerHTML = chequesParaVincular.map(cheque => `
+        <div class="vincular-opcion-item cheque-seleccionado-item">
+            <div class="opcion-info">
+                <span class="opcion-numero">#${cheque.numero || cheque.interno}</span>
+                <span class="opcion-descripcion">${truncarTexto(cheque.origen || '', 30)}</span>
+            </div>
+            <div class="opcion-monto">${formatearMoneda(cheque.importe)}</div>
+        </div>
+    `).join('');
+
+    // Obtener asientos disponibles del mes
+    asientosDisponiblesParaVincular = estadoMes.asientosDelMes.filter(a =>
+        a.estadoCheques !== 'completo'
+    );
+
+    // Limpiar filtro y selección anterior
+    const filtroInput = document.getElementById('filtro-busqueda-vincular-multiples');
+    if (filtroInput) filtroInput.value = '';
+    asientoSeleccionadoParaVincularMultiples = null;
+
+    // Renderizar asientos disponibles
+    renderizarAsientosParaVincularMultiples(asientosDisponiblesParaVincular);
+
+    // Deshabilitar botón de confirmar hasta que se seleccione un asiento
+    document.getElementById('btn-confirmar-vincular-multiples').disabled = true;
+
+    // Mostrar modal
+    document.getElementById('overlay-vincular-multiples').style.display = 'block';
+    document.getElementById('modal-vincular-multiples').style.display = 'block';
+}
+
+/**
+ * Cerrar modal de vinculación múltiple
+ */
+function cerrarModalVincularMultiples() {
+    document.getElementById('overlay-vincular-multiples').style.display = 'none';
+    document.getElementById('modal-vincular-multiples').style.display = 'none';
+    asientoSeleccionadoParaVincularMultiples = null;
+}
+
+/**
+ * Renderizar asientos disponibles para vincular múltiples cheques
+ */
+function renderizarAsientosParaVincularMultiples(asientos) {
+    const container = document.getElementById('listaAsientosVincularMultiples');
+    const countBadge = document.getElementById('vincular-multiples-lista-count');
+
+    if (countBadge) {
+        countBadge.textContent = asientos.length;
+    }
+
+    if (asientos.length === 0) {
+        container.innerHTML = `
+            <div class="vincular-sin-opciones">
+                No hay asientos disponibles para vincular
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = asientos.map(asiento => {
+        const montoPendiente = asiento.debe - (asiento.chequesAsociados?.reduce((sum, ch) => sum + ch.importe, 0) || 0);
+        const isSelected = asientoSeleccionadoParaVincularMultiples === asiento.id;
+
+        return `
+            <div class="vincular-opcion-item ${isSelected ? 'opcion-seleccionada' : ''}"
+                 onclick="seleccionarAsientoParaVincularMultiples('${asiento.id}')">
+                <div class="opcion-radio">
+                    <input type="radio" name="asiento-vincular-multiples"
+                           ${isSelected ? 'checked' : ''}
+                           onclick="event.stopPropagation(); seleccionarAsientoParaVincularMultiples('${asiento.id}')">
+                </div>
+                <div class="opcion-info">
+                    <span class="opcion-numero">Asiento ${asiento.numeroAsiento || asiento.id}</span>
+                    <span class="opcion-descripcion">${truncarTexto(asiento.descripcion || '', 40)}</span>
+                </div>
+                <div class="opcion-monto-container">
+                    <span class="opcion-monto">${formatearMoneda(asiento.debe)}</span>
+                    <span class="opcion-pendiente">Pendiente: ${formatearMoneda(montoPendiente)}</span>
+                </div>
+                <div class="opcion-estado">
+                    <span class="badge-estado ${asiento.estadoCheques || 'sin-cheques'}">${
+                        asiento.estadoCheques === 'parcial' ? 'Parcial' :
+                        asiento.estadoCheques === 'completo' ? 'Completo' : 'Sin cheques'
+                    }</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Filtrar asientos en el modal de vinculación múltiple
+ */
+function filtrarAsientosParaVincularMultiples() {
+    const filtro = (document.getElementById('filtro-busqueda-vincular-multiples')?.value || '').toLowerCase().trim();
+
+    const asientosFiltrados = asientosDisponiblesParaVincular.filter(asiento => {
+        if (!filtro) return true;
+
+        const numero = (asiento.numeroAsiento || asiento.id || '').toString().toLowerCase();
+        const descripcion = (asiento.descripcion || '').toLowerCase();
+
+        return numero.includes(filtro) || descripcion.includes(filtro);
+    });
+
+    renderizarAsientosParaVincularMultiples(asientosFiltrados);
+}
+
+/**
+ * Seleccionar un asiento para vincular múltiples cheques
+ */
+function seleccionarAsientoParaVincularMultiples(asientoId) {
+    asientoSeleccionadoParaVincularMultiples = asientoId;
+
+    // Actualizar visual
+    document.querySelectorAll('#listaAsientosVincularMultiples .vincular-opcion-item').forEach(item => {
+        item.classList.remove('opcion-seleccionada');
+        const radio = item.querySelector('input[type="radio"]');
+        if (radio) radio.checked = false;
+    });
+
+    const itemSeleccionado = document.querySelector(`#listaAsientosVincularMultiples .vincular-opcion-item[onclick*="'${asientoId}'"]`);
+    if (itemSeleccionado) {
+        itemSeleccionado.classList.add('opcion-seleccionada');
+        const radio = itemSeleccionado.querySelector('input[type="radio"]');
+        if (radio) radio.checked = true;
+    }
+
+    // Habilitar botón de confirmar
+    document.getElementById('btn-confirmar-vincular-multiples').disabled = false;
+}
+
+/**
+ * Confirmar vinculación de múltiples cheques a un asiento
+ */
+function confirmarVinculacionMultiple() {
+    if (!asientoSeleccionadoParaVincularMultiples) {
+        mostrarNotificacion('Seleccione un asiento para vincular', 'warning');
+        return;
+    }
+
+    const mesKey = stateMayores.mesActualConciliacion;
+    if (!mesKey) return;
+
+    const estadoMes = stateMayores.mesesProcesados[mesKey];
+    if (!estadoMes) return;
+
+    const asiento = estadoMes.asientosDelMes.find(a => a.id === asientoSeleccionadoParaVincularMultiples);
+    if (!asiento) {
+        mostrarNotificacion('No se encontró el asiento seleccionado', 'error');
+        return;
+    }
+
+    // Obtener cheques seleccionados
+    const chequesParaVincular = estadoMes.chequesNoAsociadosDelMes.filter(ch =>
+        chequesSeleccionados.has(ch.id || ch.interno)
+    );
+
+    if (chequesParaVincular.length === 0) {
+        mostrarNotificacion('No hay cheques para vincular', 'warning');
+        return;
+    }
+
+    // Vincular cada cheque al asiento
+    let vinculados = 0;
+    chequesParaVincular.forEach(cheque => {
+        const chequeEnriquecido = {
+            id: cheque.id || `cheque_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            ...cheque
+        };
+        asiento.chequesAsociados.push(chequeEnriquecido);
+
+        // Remover de cheques no asociados
+        const idx = estadoMes.chequesNoAsociadosDelMes.findIndex(c =>
+            (c.id || c.interno) === (cheque.id || cheque.interno)
+        );
+        if (idx !== -1) {
+            estadoMes.chequesNoAsociadosDelMes.splice(idx, 1);
+        }
+        vinculados++;
+    });
+
+    // Recalcular estado del asiento
+    const sumaCheques = asiento.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+    if (Math.abs(asiento.debe - sumaCheques) <= 0.01) {
+        asiento.estadoCheques = 'completo';
+    } else {
+        asiento.estadoCheques = 'parcial';
+        asiento.diferenciaCheques = asiento.debe - sumaCheques;
+    }
+
+    // Actualizar estado del mes
+    estadoMes.procesado = true;
+    estadoMes.completo = estadoMes.chequesNoAsociadosDelMes.length === 0 &&
+                         estadoMes.asientosDelMes.every(a => a.estadoCheques === 'completo');
+    estadoMes.pendientes = estadoMes.asientosDelMes.filter(a => a.estadoCheques !== 'completo').length;
+
+    // Limpiar selección
+    chequesSeleccionados.clear();
+    actualizarContadorSeleccionados();
+
+    // Cerrar modal
+    cerrarModalVincularMultiples();
+
+    // Renderizar actualización
+    renderizarConciliacionMes(estadoMes.asientosDelMes, estadoMes.chequesNoAsociadosDelMes);
+    renderizarListaMeses();
+
+    mostrarNotificacion(`${vinculados} cheque(s) vinculado(s) al asiento exitosamente`, 'success');
 }
 
 console.log('✅ Módulo de Mayores Contables cargado');
