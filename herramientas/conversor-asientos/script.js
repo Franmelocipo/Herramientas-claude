@@ -442,6 +442,7 @@ const sourceTypes = {
     registros: { name: 'Registros del Cliente', icon: '📝' },
     veps: { name: 'VEPs ARCA', icon: '🧾' },
     compensaciones: { name: 'Compensaciones ARCA', icon: '🔄' },
+    retenciones: { name: 'Mis Retenciones ARCA', icon: '📋' },
     tabla: { name: 'Tabla de Datos', icon: '📊' },
     soscontador: { name: 'Libro Diario SOS Contador', icon: '📒' },
     puenteweb: { name: 'Libro Diario Puente Web', icon: '🌐' },
@@ -903,6 +904,7 @@ function selectSourceType(type) {
         registros: 'Descargar Plantilla Registros',
         veps: 'Descargar Plantilla VEPs',
         compensaciones: 'Descargar Plantilla Compensaciones',
+        retenciones: 'Descargar Plantilla Retenciones',
         tabla: 'Descargar Plantilla Tabla de Datos',
         soscontador: 'Descargar Plantilla SOS Contador',
         puenteweb: 'Descargar Plantilla Puente Web'
