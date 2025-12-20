@@ -4322,8 +4322,11 @@ body {
     max-width: 650px;
     width: 95%;
     max-height: 90vh;
-    display: flex;
     flex-direction: column;
+}
+
+.modal-vincular-manual[style*="display: block"] {
+    display: flex !important;
 }
 
 .modal-vincular-manual .modal-eliminar-body {
