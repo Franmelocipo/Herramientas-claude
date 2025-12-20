@@ -2435,6 +2435,41 @@ function groupSimilarEntries(data) {
             });
         });
 
+    } else if (state.sourceType === 'retenciones') {
+        // Mis Retenciones ARCA - Agrupar por Impuesto + Descripción Impuesto
+        // Cada línea genera UN asiento independiente
+        // La agrupación es solo para asignación de cuentas
+        data.forEach((row) => {
+            // Obtener columnas del archivo de retenciones ARCA
+            const impuesto = String(row['Impuesto'] || '').trim();
+            const descripcionImpuesto = String(row['Descripción Impuesto'] || row['Descripcion Impuesto'] || '').trim();
+
+            if (!impuesto) return;
+
+            // Clave de agrupación: Impuesto + Descripción Impuesto
+            const key = `${impuesto} - ${descripcionImpuesto}`;
+
+            // Obtener importe (puede venir con formato argentino)
+            const importe = parseAmount(row['Importe Ret,/Perc,'] || row['Importe Ret./Perc.'] || row['Importe'] || 0);
+
+            if (!groups[key]) {
+                groups[key] = {
+                    concepto: key,
+                    ejemploCompleto: `Impuesto ${impuesto}: ${descripcionImpuesto}`,
+                    count: 0,
+                    totalDebe: 0,
+                    totalHaber: 0,
+                    items: [],
+                    impuesto: impuesto,
+                    descripcionImpuesto: descripcionImpuesto
+                };
+            }
+
+            groups[key].count++;
+            groups[key].totalDebe += importe;
+            groups[key].items.push(row);
+        });
+
     } else {
         // Extractos bancarios - NUEVA LÓGICA: Agrupación más específica
         // En lugar de agrupar por categorías amplias, agrupamos por descripción exacta
@@ -3156,6 +3191,320 @@ function handleBancoCuentaInputKeydown(e, idx, banco) {
 }
 
 // ============================================
+// FUNCIONES PARA MIS RETENCIONES ARCA
+// ============================================
+
+/**
+ * Extrae los impuestos únicos de las retenciones cargadas
+ * Agrupa por Impuesto + Descripción Impuesto
+ * @returns {Array} Array con información de cada impuesto único
+ */
+function extraerImpuestosUnicosRetenciones() {
+    const impuestosMap = new Map();
+
+    state.groupedData.forEach(grupo => {
+        grupo.items.forEach(item => {
+            const impuesto = String(item['Impuesto'] || '').trim();
+            const descripcionImpuesto = String(item['Descripción Impuesto'] || item['Descripcion Impuesto'] || '').trim();
+            const importe = parseAmount(item['Importe Ret,/Perc,'] || item['Importe Ret./Perc.'] || item['Importe'] || 0);
+
+            if (impuesto) {
+                const key = `${impuesto} - ${descripcionImpuesto}`;
+
+                if (!impuestosMap.has(key)) {
+                    impuestosMap.set(key, {
+                        codigo: impuesto,
+                        descripcion: descripcionImpuesto,
+                        key: key,
+                        contador: 0,
+                        totalImporte: 0
+                    });
+                }
+
+                const info = impuestosMap.get(key);
+                info.contador++;
+                info.totalImporte += Math.abs(importe);
+            }
+        });
+    });
+
+    return Array.from(impuestosMap.values())
+        .sort((a, b) => b.contador - a.contador);
+}
+
+/**
+ * Renderiza la interfaz de asignación de cuentas para Retenciones ARCA
+ * Agrupa por Impuesto + Descripción Impuesto (débito) y usa contrapartida global (crédito)
+ */
+function renderAsignacionRetenciones() {
+    const impuestosUnicos = extraerImpuestosUnicosRetenciones();
+
+    // Guardar en state para uso posterior
+    state.impuestosUnicosRetenciones = impuestosUnicos;
+
+    // Contar total de retenciones (líneas)
+    let totalRetenciones = 0;
+    state.groupedData.forEach(g => {
+        totalRetenciones += g.items.length;
+    });
+
+    // Inicializar mapas de asignación si no existen
+    if (!state.cuentasPorImpuestoRetenciones) {
+        state.cuentasPorImpuestoRetenciones = {};
+    }
+    if (!state.nombresCuentasPorImpuestoRetenciones) {
+        state.nombresCuentasPorImpuestoRetenciones = {};
+    }
+
+    console.log('Estructura Retenciones ARCA:', {
+        totalRetenciones: totalRetenciones,
+        totalAsientos: totalRetenciones,
+        impuestosUnicos: impuestosUnicos.length
+    });
+
+    elements.groupStats.textContent = `${totalRetenciones} retenciones → ${totalRetenciones} asientos | ${impuestosUnicos.length} tipos de impuesto`;
+
+    // Mostrar sección de cuenta de contrapartida
+    elements.bankAccountSection.classList.remove('hidden');
+    elements.bankAccountLabel.textContent = 'Cuenta de CONTRAPARTIDA (activo contra el cual se compensan las retenciones)';
+    elements.bankAccountInput.placeholder = getSelectedClientId() ? '🔍 Buscar cuenta contrapartida...' : 'Ej: 11020101';
+    elements.bankAccountInput.value = state.bankAccount || '';
+    elements.compensacionesInfo.classList.add('hidden');
+
+    // HTML principal
+    let html = `
+        <div class="asignacion-retenciones-container">
+            <div class="descripcion-info-box" style="background: #fff3e0; padding: 16px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ff9800;">
+                <h3 style="margin: 0 0 8px 0; color: #e65100;">Asignar Cuentas Contables - Retenciones ARCA</h3>
+                <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+                    <p style="margin: 0; color: #333;">
+                        <strong>${totalRetenciones} retenciones</strong> → Generarán <strong>${totalRetenciones} asientos</strong>
+                    </p>
+                    <p style="margin: 0; color: #333;">
+                        <strong>${impuestosUnicos.length}</strong> tipos de impuesto diferentes
+                    </p>
+                </div>
+                <p style="margin: 8px 0 0 0; color: #666; font-size: 13px;">
+                    Cada retención genera un asiento independiente con la cuenta del impuesto al DEBE y la contrapartida al HABER.
+                </p>
+            </div>
+
+            <!-- SECCIÓN IMPUESTOS (DÉBITO) -->
+            <div class="seccion-cuentas" style="margin-bottom: 24px;">
+                <h4 style="color: #e65100; border-bottom: 2px solid #e65100; padding-bottom: 8px; margin-bottom: 16px;">
+                    Tipos de Retención (Débito)
+                </h4>
+                <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
+                    Asigna una cuenta para cada tipo de impuesto/retención. Se aplicará a <strong>TODAS</strong> las retenciones de ese tipo.
+                </p>
+    `;
+
+    // Renderizar impuestos
+    impuestosUnicos.forEach((impuesto, idx) => {
+        const cuentaAsignada = state.cuentasPorImpuestoRetenciones[impuesto.key] || '';
+        const nombreCuenta = state.nombresCuentasPorImpuestoRetenciones[impuesto.key] || '';
+        let valorInput = cuentaAsignada;
+        if (cuentaAsignada && nombreCuenta) {
+            valorInput = `${cuentaAsignada} - ${nombreCuenta}`;
+        }
+
+        html += `
+            <div class="asignacion-item" style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+                <div style="display: flex; align-items: flex-start; gap: 16px;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <strong style="color: #e65100; font-size: 15px;">${impuesto.codigo} - ${impuesto.descripcion}</strong>
+                            <span class="badge" style="background: #ff9800; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
+                                ${impuesto.contador} retención(es)
+                            </span>
+                        </div>
+                        <div style="color: #666; font-size: 13px;">
+                            Total: $${impuesto.totalImporte.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        </div>
+                    </div>
+                    <div style="min-width: 400px;">
+                        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Cuenta contable (Débito)</label>
+                        <div class="input-with-dropdown">
+                            <input
+                                type="text"
+                                class="input-text retencion-cuenta-input"
+                                data-impuesto-key="${impuesto.key}"
+                                data-retencion-idx="${idx}"
+                                value="${valorInput}"
+                                placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código de cuenta'}"
+                                style="width: 100%; padding: 0.75rem; font-size: 0.95rem; ${valorInput ? 'border-color: #4caf50; background: #e8f5e9;' : ''}"
+                            >
+                            <div class="account-dropdown hidden" id="dropdown-retencion-${idx}"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+        </div>
+    `;
+
+    elements.groupsList.innerHTML = html;
+
+    // Attach event listeners para inputs de retenciones
+    document.querySelectorAll('.retencion-cuenta-input').forEach(input => {
+        const impuestoKey = input.dataset.impuestoKey;
+        const idx = parseInt(input.dataset.retencionIdx);
+
+        input.addEventListener('input', (e) => {
+            if (getSelectedClientId()) {
+                handleRetencionCuentaInputChange(idx, impuestoKey);
+            }
+        });
+
+        input.addEventListener('focus', () => {
+            if (getSelectedClientId()) {
+                state.activeSearchField = `retencion-${idx}`;
+                showRetencionCuentaDropdown(idx, impuestoKey);
+            }
+        });
+
+        input.addEventListener('keydown', (e) => {
+            handleRetencionCuentaInputKeydown(e, idx, impuestoKey);
+        });
+    });
+}
+
+// Funciones de búsqueda para Retenciones ARCA
+function handleRetencionCuentaInputChange(idx, impuestoKey) {
+    const input = document.querySelector(`input[data-retencion-idx="${idx}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-retencion-${idx}`);
+
+    if (!dropdown) return;
+
+    if (searchTerm.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+
+    const filteredAccounts = state.planCuentas.filter(account => {
+        const codigo = String(account.codigo || '').toUpperCase();
+        const nombre = String(account.nombre || '').toUpperCase();
+        return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+    }).slice(0, 50);
+
+    if (filteredAccounts.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = filteredAccounts.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectRetencionCuenta('${impuestoKey.replace(/'/g, "\\'")}', ${idx}, '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function showRetencionCuentaDropdown(idx, impuestoKey) {
+    const input = document.querySelector(`input[data-retencion-idx="${idx}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-retencion-${idx}`);
+
+    if (!dropdown) return;
+
+    if (state.planCuentas.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No hay plan de cuentas cargado</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    let accountsToShow = state.planCuentas;
+    if (searchTerm.length > 0) {
+        accountsToShow = accountsToShow.filter(account => {
+            const codigo = String(account.codigo || '').toUpperCase();
+            const nombre = String(account.nombre || '').toUpperCase();
+            return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+        });
+    }
+
+    accountsToShow = accountsToShow.slice(0, 50);
+
+    if (accountsToShow.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = accountsToShow.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectRetencionCuenta('${impuestoKey.replace(/'/g, "\\'")}', ${idx}, '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function selectRetencionCuenta(impuestoKey, idx, codigo, nombre) {
+    state.cuentasPorImpuestoRetenciones[impuestoKey] = codigo;
+    state.nombresCuentasPorImpuestoRetenciones[impuestoKey] = nombre;
+
+    const input = document.querySelector(`input[data-retencion-idx="${idx}"]`);
+    if (input) {
+        input.value = `${codigo} - ${nombre}`;
+        input.style.borderColor = '#4caf50';
+        input.style.background = '#e8f5e9';
+    }
+
+    const dropdown = document.getElementById(`dropdown-retencion-${idx}`);
+    if (dropdown) {
+        dropdown.classList.add('hidden');
+    }
+
+    console.log(`Retención ${impuestoKey} → Cuenta ${codigo} - ${nombre}`);
+}
+
+function handleRetencionCuentaInputKeydown(e, idx, impuestoKey) {
+    const dropdown = document.getElementById(`dropdown-retencion-${idx}`);
+    if (!dropdown || dropdown.classList.contains('hidden')) return;
+
+    const items = dropdown.querySelectorAll('.dropdown-item');
+    if (items.length === 0) return;
+
+    const currentActive = dropdown.querySelector('.dropdown-item.active');
+    let currentIndex = currentActive ? parseInt(currentActive.dataset.index) : -1;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        currentIndex = Math.min(currentIndex + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        currentIndex = Math.max(currentIndex - 1, 0);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentIndex >= 0 && items[currentIndex]) {
+            items[currentIndex].click();
+        }
+        return;
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        dropdown.classList.add('hidden');
+        return;
+    } else {
+        return;
+    }
+
+    items.forEach(item => item.classList.remove('active'));
+    if (items[currentIndex]) {
+        items[currentIndex].classList.add('active');
+        items[currentIndex].scrollIntoView({ block: 'nearest' });
+    }
+}
+
+// ============================================
 // RENDERIZADO DE LISTA DE GRUPOS
 // ============================================
 function renderGroupsList() {
@@ -3180,6 +3529,12 @@ function renderGroupsList() {
     // PARA PRÉSTAMOS: Renderizar interfaz de asignación por columna
     if (state.sourceType === 'prestamos') {
         renderAsignacionPrestamos();
+        return;
+    }
+
+    // PARA RETENCIONES ARCA: Renderizar interfaz de asignación por tipo de impuesto
+    if (state.sourceType === 'retenciones') {
+        renderAsignacionRetenciones();
         return;
     }
 
@@ -5065,6 +5420,22 @@ function generateFinalExcel() {
         if (totalOtros > 0 && !state.cuentasPrestamo.otros) {
             errors.push('Falta asignar cuenta para: Otros');
         }
+    } else if (state.sourceType === 'retenciones') {
+        // VALIDACIÓN ESPECÍFICA PARA RETENCIONES ARCA
+        // Validar cuenta de contrapartida
+        if (!state.bankAccount) {
+            errors.push('Falta la cuenta de CONTRAPARTIDA (activo contra el cual se compensan las retenciones)');
+        }
+
+        // Validar que todos los tipos de impuesto tengan cuenta asignada
+        if (state.impuestosUnicosRetenciones && state.impuestosUnicosRetenciones.length > 0) {
+            state.impuestosUnicosRetenciones.forEach(imp => {
+                const cuentaAsignada = state.cuentasPorImpuestoRetenciones?.[imp.key];
+                if (!cuentaAsignada || cuentaAsignada.trim() === '') {
+                    errors.push(`Tipo de retención "${imp.key}": falta asignar cuenta`);
+                }
+            });
+        }
     } else {
         // VALIDACIÓN PARA OTROS TIPOS DE ORIGEN
         // Validar cuenta de contrapartida global (obligatoria EXCEPTO para compensaciones)
@@ -5282,6 +5653,87 @@ function generateFinalExcel() {
             });
 
             numeroAsiento++;
+            return; // No continuar con la lógica genérica
+        }
+
+        // LÓGICA ESPECÍFICA PARA RETENCIONES ARCA: Un asiento por cada línea de retención
+        // Cada retención genera: DEBE (cuenta del impuesto) + HABER (contrapartida)
+        // Leyenda: I (Descripción Operación) + D (Descripción Impuesto) + B (Razón Social) + A (CUIT) + H (Nro Certificado)
+        if (state.sourceType === 'retenciones') {
+            // Procesar cada retención del grupo (cada item es una retención individual)
+            g.items.forEach(item => {
+                // Obtener datos de las columnas
+                const cuitAgente = String(item['CUIT Agente Ret./Perc.'] || item['CUIT Agente Ret,/Perc,'] || '').trim();
+                const razonSocial = String(item['Denominación o Razón Social'] || item['Denominacion o Razon Social'] || '').trim();
+                const impuesto = String(item['Impuesto'] || '').trim();
+                const descripcionImpuesto = String(item['Descripción Impuesto'] || item['Descripcion Impuesto'] || '').trim();
+                const fechaRetencion = item['Fecha Ret./Perc.'] || item['Fecha Ret,/Perc,'] || '';
+                const nroCertificado = String(item['Número Certificado'] || item['Numero Certificado'] || '').trim();
+                const descripcionOperacion = String(item['Descripción Operación'] || item['Descripcion Operacion'] || '').trim();
+                const importe = parseAmount(item['Importe Ret,/Perc,'] || item['Importe Ret./Perc.'] || item['Importe'] || 0);
+
+                if (importe <= 0) return; // Saltar si no hay importe
+
+                // Construir la leyenda: I + D + B + A + H
+                // I: Descripción Operación, D: Descripción Impuesto, B: Razón Social, A: CUIT, H: Nro Certificado
+                const leyendaParts = [];
+                if (descripcionOperacion) leyendaParts.push(descripcionOperacion);
+                if (descripcionImpuesto) leyendaParts.push(descripcionImpuesto);
+                if (razonSocial) leyendaParts.push(razonSocial);
+                if (cuitAgente) leyendaParts.push(cuitAgente);
+                if (nroCertificado) leyendaParts.push(`Cert. ${nroCertificado}`);
+                const leyenda = leyendaParts.join(' / ');
+
+                // Obtener la cuenta para este tipo de impuesto
+                const impuestoKey = `${impuesto} - ${descripcionImpuesto}`;
+                const cuentaImpuesto = state.cuentasPorImpuestoRetenciones?.[impuestoKey] || '';
+                const nombreCuentaImpuesto = state.nombresCuentasPorImpuestoRetenciones?.[impuestoKey] || '';
+
+                // Formatear fecha (puede venir en varios formatos)
+                let fechaFormateada = '';
+                if (fechaRetencion) {
+                    // Si viene como fecha de Excel, convertirla
+                    if (typeof fechaRetencion === 'number') {
+                        const date = new Date((fechaRetencion - 25569) * 86400000);
+                        fechaFormateada = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+                    } else {
+                        fechaFormateada = String(fechaRetencion);
+                    }
+                }
+
+                // Línea de DÉBITO (cuenta del impuesto - activo o gasto)
+                allData.push({
+                    Fecha: fechaFormateada,
+                    Numero: numeroAsiento,
+                    Cuenta: cuentaImpuesto,
+                    'Descripción Cuenta': nombreCuentaImpuesto,
+                    Debe: parseFloat(importe.toFixed(2)),
+                    Haber: 0,
+                    'Tipo de auxiliar': 1,
+                    Auxiliar: 1,
+                    Importe: parseFloat(importe.toFixed(2)),
+                    Leyenda: leyenda,
+                    ExtraContable: 's'
+                });
+
+                // Línea de HABER (contrapartida)
+                allData.push({
+                    Fecha: fechaFormateada,
+                    Numero: numeroAsiento,
+                    Cuenta: contrapartida,
+                    'Descripción Cuenta': '',
+                    Debe: 0,
+                    Haber: parseFloat(importe.toFixed(2)),
+                    'Tipo de auxiliar': 1,
+                    Auxiliar: 1,
+                    Importe: parseFloat((-importe).toFixed(2)),
+                    Leyenda: leyenda,
+                    ExtraContable: 's'
+                });
+
+                numeroAsiento++;
+            });
+
             return; // No continuar con la lógica genérica
         }
 
