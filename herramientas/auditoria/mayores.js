@@ -3138,6 +3138,110 @@ function getConciliacionesMayorKey() {
 }
 
 /**
+ * Función de debug: Listar todas las claves de conciliaciones en localStorage
+ * Se puede ejecutar desde la consola del navegador: listarConciliacionesGuardadas()
+ */
+function listarConciliacionesGuardadas() {
+    const claves = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('conciliaciones_mayor_')) {
+            try {
+                const datos = JSON.parse(localStorage.getItem(key));
+                claves.push({
+                    clave: key,
+                    cantidad: Array.isArray(datos) ? datos.length : 0,
+                    conciliaciones: Array.isArray(datos) ? datos.map(c => ({
+                        id: c.id,
+                        nombre: c.nombre,
+                        fechaGuardado: c.fechaGuardado,
+                        registros: (c.registros || []).length
+                    })) : []
+                });
+            } catch (e) {
+                claves.push({ clave: key, error: 'No se pudo parsear' });
+            }
+        }
+    }
+
+    console.log('📋 Conciliaciones guardadas en localStorage:');
+    if (claves.length === 0) {
+        console.log('   No se encontraron conciliaciones guardadas');
+    } else {
+        claves.forEach(item => {
+            console.log(`\n   🔑 ${item.clave}`);
+            if (item.error) {
+                console.log(`      ❌ ${item.error}`);
+            } else {
+                console.log(`      📊 ${item.cantidad} conciliación(es):`);
+                item.conciliaciones.forEach(c => {
+                    console.log(`         - "${c.nombre}" (${c.registros} registros) - ${c.fechaGuardado}`);
+                });
+            }
+        });
+    }
+
+    return claves;
+}
+
+/**
+ * Mostrar todas las conciliaciones del sistema en el modal de gestión
+ */
+function mostrarTodasLasConciliaciones() {
+    const lista = document.getElementById('gestion-conciliaciones-mayor-lista');
+    const todasLasConciliaciones = listarConciliacionesGuardadas();
+
+    if (todasLasConciliaciones.length === 0) {
+        lista.innerHTML = `
+            <div class="conciliaciones-vacio">
+                <div class="conciliaciones-vacio-icon">📭</div>
+                <p>No hay ninguna conciliación guardada en el sistema</p>
+                <p style="font-size: 12px; color: #6c757d; margin-top: 10px;">
+                    El localStorage no contiene datos de conciliaciones. Esto puede ocurrir si:
+                    <br>• Se limpió el caché del navegador
+                    <br>• Se está usando otro navegador o modo incógnito
+                    <br>• Nunca se guardó una conciliación
+                </p>
+            </div>
+        `;
+    } else {
+        let html = `
+            <div style="margin-bottom: 15px; padding: 10px; background: #e7f3ff; border-radius: 6px; font-size: 12px;">
+                <strong>🔍 Todas las conciliaciones guardadas en el sistema</strong>
+                <br><span style="color: #666;">Comparar las claves con la clave actual para encontrar tu conciliación</span>
+            </div>
+        `;
+
+        todasLasConciliaciones.forEach(item => {
+            const esClaveActual = stateMayores.clienteActual && stateMayores.tipoMayorActual &&
+                item.clave === getConciliacionesMayorKey();
+
+            html += `
+                <div style="margin-bottom: 15px; padding: 12px; background: ${esClaveActual ? '#d4edda' : '#f8f9fa'}; border-radius: 6px; border: ${esClaveActual ? '2px solid #28a745' : '1px solid #dee2e6'};">
+                    <div style="font-size: 11px; font-family: monospace; color: #666; margin-bottom: 8px; word-break: break-all;">
+                        🔑 ${item.clave}
+                        ${esClaveActual ? '<span style="color: #28a745; font-weight: bold;"> ← CLAVE ACTUAL</span>' : ''}
+                    </div>
+                    ${item.error ?
+                        `<div style="color: #dc3545;">❌ ${item.error}</div>` :
+                        item.conciliaciones.map(c => `
+                            <div style="padding: 8px; background: white; border-radius: 4px; margin-top: 5px; border: 1px solid #e9ecef;">
+                                <div style="font-weight: 500;">"${c.nombre}"</div>
+                                <div style="font-size: 11px; color: #666;">
+                                    📊 ${c.registros} registros | 📅 ${new Date(c.fechaGuardado).toLocaleString('es-AR')}
+                                </div>
+                            </div>
+                        `).join('')
+                    }
+                </div>
+            `;
+        });
+
+        lista.innerHTML = html;
+    }
+}
+
+/**
  * Cargar lista de conciliaciones guardadas desde localStorage
  */
 function cargarConciliacionesMayorGuardadas() {
@@ -3168,8 +3272,14 @@ function cargarConciliacionesMayorGuardadas() {
  */
 function verificarConciliacionesMayorGuardadas() {
     console.log('🔍 Verificando conciliaciones de mayor guardadas...');
-    console.log('   Cliente ID:', stateMayores.clienteActual?.id);
-    console.log('   Tipo Mayor ID:', stateMayores.tipoMayorActual?.id);
+    console.log('   Cliente:', stateMayores.clienteActual?.nombre, '(ID:', stateMayores.clienteActual?.id + ')');
+    console.log('   Tipo Mayor:', stateMayores.tipoMayorActual?.nombre, '(ID:', stateMayores.tipoMayorActual?.id + ')');
+
+    // Mostrar la clave exacta que se busca en localStorage
+    if (stateMayores.clienteActual && stateMayores.tipoMayorActual) {
+        const key = getConciliacionesMayorKey();
+        console.log('   🔑 Clave localStorage:', key);
+    }
 
     const conciliaciones = cargarConciliacionesMayorGuardadas();
     conciliacionesMayorGuardadasLista = conciliaciones || [];
@@ -3193,12 +3303,9 @@ function verificarConciliacionesMayorGuardadas() {
 function actualizarBotonGestionConciliacionesMayor() {
     const btn = document.getElementById('btnGestionConciliacionesMayor');
     if (btn) {
-        btn.disabled = conciliacionesMayorGuardadasLista.length === 0;
-        if (conciliacionesMayorGuardadasLista.length > 0) {
-            btn.innerHTML = `<span>📂</span> Gestionar Conciliaciones (${conciliacionesMayorGuardadasLista.length})`;
-        } else {
-            btn.innerHTML = `<span>📂</span> Gestionar Conciliaciones`;
-        }
+        // Siempre habilitar el botón para permitir ver información de debug
+        btn.disabled = false;
+        btn.innerHTML = `<span>📂</span> Gestionar Conciliaciones (${conciliacionesMayorGuardadasLista.length})`;
     }
 }
 
@@ -3480,10 +3587,20 @@ function abrirGestionConciliacionesMayor() {
     const lista = document.getElementById('gestion-conciliaciones-mayor-lista');
 
     if (conciliacionesMayorGuardadasLista.length === 0) {
+        const key = getConciliacionesMayorKey();
         lista.innerHTML = `
             <div class="conciliaciones-vacio">
                 <div class="conciliaciones-vacio-icon">📂</div>
                 <p>No hay conciliaciones guardadas para este tipo de mayor</p>
+                <div style="margin-top: 15px; padding: 12px; background: #f8f9fa; border-radius: 6px; font-size: 12px; text-align: left;">
+                    <strong>Información de búsqueda:</strong><br>
+                    <span style="color: #6c757d;">Cliente:</span> ${stateMayores.clienteActual?.nombre || 'No seleccionado'}<br>
+                    <span style="color: #6c757d;">Tipo Mayor:</span> ${stateMayores.tipoMayorActual?.nombre || 'No seleccionado'}<br>
+                    <span style="color: #6c757d;">Clave:</span> <code style="background: #e9ecef; padding: 2px 4px; border-radius: 3px; font-size: 11px;">${key}</code>
+                </div>
+                <p style="margin-top: 10px; font-size: 12px; color: #6c757d;">
+                    💡 Si guardaste una conciliación previamente, verifica que hayas seleccionado el mismo cliente y tipo de mayor.
+                </p>
             </div>
         `;
     } else {
@@ -3701,6 +3818,7 @@ function ejecutarGuardarConciliacionMayor() {
     }
 
     const key = getConciliacionesMayorKey();
+    console.log('💾 Guardando conciliación con clave:', key);
 
     // Cargar conciliaciones existentes
     let conciliaciones = cargarConciliacionesMayorGuardadas();
