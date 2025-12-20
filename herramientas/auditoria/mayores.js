@@ -5767,48 +5767,19 @@ function guardarMesesProcesados() {
 }
 
 // ============================================
-// FUNCIONES PARA AGREGAR CHEQUES MANUALMENTE
+// FUNCIONES PARA IMPORTAR CHEQUES DESDE EXCEL
 // ============================================
 
-/**
- * Iniciar un listado de cheques manual (sin archivo Excel)
- * Crea un listado vacío y abre el modal para agregar el primer cheque
- */
-function iniciarListadoManual() {
-    // Verificar que hay un mayor cargado
-    if (stateMayores.registrosMayor.length === 0) {
-        alert('Primero debe cargar un mayor contable antes de agregar cheques.');
-        return;
-    }
-
-    // Inicializar el listado vacío
-    stateMayores.listadoChequesIncorporado = true;
-    stateMayores.listadoChequesCargados = [];
-    stateMayores.mesesDisponibles = [];
-    stateMayores.mesesProcesados = {};
-
-    // Actualizar UI
-    actualizarEstadoListadoCheques();
-    actualizarResumenListadoCheques();
-
-    // Mostrar panel de conciliación por mes
-    const panelPaso2Mes = document.getElementById('panelConciliacionPorMes');
-    if (panelPaso2Mes) {
-        panelPaso2Mes.style.display = 'block';
-        renderizarListaMeses();
-    }
-
-    // Abrir modal para agregar el primer cheque
-    mostrarModalAgregarCheque();
-}
+// Variable temporal para almacenar los cheques a importar
+let chequesParaImportar = [];
 
 /**
- * Mostrar modal para agregar un cheque manualmente
+ * Mostrar modal para importar cheques desde Excel
  */
-function mostrarModalAgregarCheque() {
+function mostrarModalImportarChequesExcel() {
     // Verificar que hay un mayor cargado
     if (stateMayores.registrosMayor.length === 0) {
-        alert('Primero debe cargar un mayor contable antes de agregar cheques.');
+        alert('Primero debe cargar un mayor contable antes de importar cheques.');
         return;
     }
 
@@ -5822,128 +5793,216 @@ function mostrarModalAgregarCheque() {
         actualizarEstadoListadoCheques();
     }
 
-    // Limpiar formulario
-    limpiarFormularioCheque();
+    // Limpiar estado anterior
+    chequesParaImportar = [];
+    document.getElementById('archivoImportarCheques').value = '';
+    document.getElementById('previewImportacionCheques').style.display = 'none';
+    document.getElementById('resumenImportacionCheques').style.display = 'none';
+    document.getElementById('btnConfirmarImportacion').disabled = true;
 
     // Ocultar mensaje de error
-    const errorEl = document.getElementById('errorAgregarCheque');
+    const errorEl = document.getElementById('errorImportarCheques');
     if (errorEl) {
         errorEl.style.display = 'none';
         errorEl.textContent = '';
     }
 
     // Mostrar modal
-    document.getElementById('modalAgregarCheque').classList.remove('hidden');
+    document.getElementById('modalImportarChequesExcel').classList.remove('hidden');
 }
 
 /**
- * Cerrar modal de agregar cheque
+ * Cerrar modal de importar cheques desde Excel
  */
-function cerrarModalAgregarCheque() {
-    document.getElementById('modalAgregarCheque').classList.add('hidden');
-    limpiarFormularioCheque();
+function cerrarModalImportarChequesExcel() {
+    document.getElementById('modalImportarChequesExcel').classList.add('hidden');
+    chequesParaImportar = [];
 }
 
 /**
- * Limpiar formulario de agregar cheque
+ * Previsualizar los cheques del archivo Excel seleccionado
+ * @param {HTMLInputElement} input - Input de archivo
  */
-function limpiarFormularioCheque() {
-    document.getElementById('chequeNumero').value = '';
-    document.getElementById('chequeInterno').value = '';
-    document.getElementById('chequeImporte').value = '';
-    document.getElementById('chequeEstado').value = '';
-    document.getElementById('chequeOrigen').value = '';
-    document.getElementById('chequeDestino').value = '';
-    document.getElementById('chequeFechaEmision').value = '';
-    document.getElementById('chequeFechaRecepcion').value = '';
-    document.getElementById('chequeFechaCobro').value = '';
-    document.getElementById('chequeFechaDeposito').value = '';
-    document.getElementById('chequeFechaTransferencia').value = '';
-    document.getElementById('chequeFechaRechazo').value = '';
-}
+function previsualizarImportacionCheques(input) {
+    const file = input.files[0];
+    const previewPanel = document.getElementById('previewImportacionCheques');
+    const infoPreview = document.getElementById('infoPreviewImportacion');
+    const resumenPanel = document.getElementById('resumenImportacionCheques');
+    const btnConfirmar = document.getElementById('btnConfirmarImportacion');
+    const errorEl = document.getElementById('errorImportarCheques');
 
-/**
- * Validar y agregar cheque al listado
- */
-function confirmarAgregarCheque() {
-    const errorEl = document.getElementById('errorAgregarCheque');
-
-    // Obtener valores del formulario
-    const numero = document.getElementById('chequeNumero').value.trim();
-    const interno = document.getElementById('chequeInterno').value.trim();
-    const importeRaw = document.getElementById('chequeImporte').value.trim();
-    const estado = document.getElementById('chequeEstado').value;
-    const origen = document.getElementById('chequeOrigen').value.trim();
-    const destino = document.getElementById('chequeDestino').value.trim();
-    const fechaEmision = document.getElementById('chequeFechaEmision').value;
-    const fechaRecepcion = document.getElementById('chequeFechaRecepcion').value;
-    const fechaCobro = document.getElementById('chequeFechaCobro').value;
-    const fechaDeposito = document.getElementById('chequeFechaDeposito').value;
-    const fechaTransferencia = document.getElementById('chequeFechaTransferencia').value;
-    const fechaRechazo = document.getElementById('chequeFechaRechazo').value;
-
-    // Validar campos obligatorios
-    const errores = [];
-
-    if (!numero) {
-        errores.push('El número de cheque es obligatorio');
-    }
-
-    if (!importeRaw) {
-        errores.push('El importe es obligatorio');
-    }
-
-    if (!origen) {
-        errores.push('El origen (librador) es obligatorio');
-    }
-
-    if (!fechaRecepcion) {
-        errores.push('La fecha de recepción es obligatoria');
-    }
-
-    // Validar importe
-    const importe = parsearNumeroArgentino(importeRaw);
-    if (importeRaw && (isNaN(importe) || importe <= 0)) {
-        errores.push('El importe debe ser un número válido mayor a cero');
-    }
-
-    // Mostrar errores si hay
-    if (errores.length > 0) {
-        errorEl.innerHTML = errores.map(e => `• ${e}`).join('<br>');
-        errorEl.style.display = 'block';
+    if (!file) {
+        previewPanel.style.display = 'none';
+        resumenPanel.style.display = 'none';
+        btnConfirmar.disabled = true;
         return;
     }
 
-    // Ocultar errores
+    // Mostrar loading
+    previewPanel.style.display = 'block';
+    infoPreview.innerHTML = '<strong>Procesando archivo...</strong>';
+    resumenPanel.style.display = 'none';
+    btnConfirmar.disabled = true;
     errorEl.style.display = 'none';
 
-    // Crear objeto cheque
-    const nuevoCheque = {
-        id: `cheque_manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        interno: interno,
-        numero: numero,
-        fechaEmision: fechaEmision ? new Date(fechaEmision) : null,
-        fechaEmisionOriginal: fechaEmision || '',
-        fechaRecepcion: fechaRecepcion ? new Date(fechaRecepcion) : null,
-        fechaRecepcionOriginal: fechaRecepcion || '',
-        fechaCobro: fechaCobro ? new Date(fechaCobro) : null,
-        fechaCobroOriginal: fechaCobro || '',
-        fechaDeposito: fechaDeposito ? new Date(fechaDeposito) : null,
-        fechaDepositoOriginal: fechaDeposito || '',
-        fechaTransferencia: fechaTransferencia ? new Date(fechaTransferencia) : null,
-        fechaTransferenciaOriginal: fechaTransferencia || '',
-        fechaRechazo: fechaRechazo ? new Date(fechaRechazo) : null,
-        fechaRechazoOriginal: fechaRechazo || '',
-        origen: origen,
-        destino: destino,
-        importe: importe,
-        estado: estado,
-        asientoAsociado: null,
-        agregadoManualmente: true  // Marca para identificar cheques agregados manualmente
-    };
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(firstSheet);
 
-    // Agregar al listado
-    stateMayores.listadoChequesCargados.push(nuevoCheque);
+            if (jsonData.length === 0) {
+                infoPreview.innerHTML = '<span style="color: red;">El archivo no contiene datos.</span>';
+                return;
+            }
+
+            // Procesar los cheques del Excel
+            const chequesExcel = procesarDatosListadoCheques(jsonData);
+
+            // Verificar duplicados usando la columna "interno"
+            const internosExistentes = new Set(
+                stateMayores.listadoChequesCargados
+                    .filter(c => c.interno && c.interno.toString().trim() !== '')
+                    .map(c => c.interno.toString().trim().toLowerCase())
+            );
+
+            // Separar cheques nuevos y duplicados
+            const chequesNuevos = [];
+            const chequesDuplicados = [];
+            const internosEnExcel = new Set();
+
+            chequesExcel.forEach(cheque => {
+                const internoNormalizado = cheque.interno ? cheque.interno.toString().trim().toLowerCase() : '';
+
+                // Verificar si ya existe en el listado actual
+                if (internoNormalizado && internosExistentes.has(internoNormalizado)) {
+                    chequesDuplicados.push(cheque);
+                }
+                // Verificar si es duplicado dentro del mismo Excel
+                else if (internoNormalizado && internosEnExcel.has(internoNormalizado)) {
+                    chequesDuplicados.push(cheque);
+                }
+                else {
+                    chequesNuevos.push(cheque);
+                    if (internoNormalizado) {
+                        internosEnExcel.add(internoNormalizado);
+                    }
+                }
+            });
+
+            // Guardar cheques para importar
+            chequesParaImportar = chequesNuevos;
+
+            // Mostrar información del archivo
+            const headers = Object.keys(jsonData[0]);
+            infoPreview.innerHTML = `
+                <strong>Archivo procesado correctamente</strong><br>
+                Columnas detectadas: ${headers.join(', ')}
+            `;
+
+            // Actualizar resumen
+            document.getElementById('chequesEnExcel').textContent = chequesExcel.length;
+            document.getElementById('chequesExistentes').textContent = stateMayores.listadoChequesCargados.length;
+            document.getElementById('chequesNuevos').textContent = chequesNuevos.length;
+            document.getElementById('chequesDuplicados').textContent = chequesDuplicados.length;
+
+            // Mostrar lista de cheques nuevos a agregar
+            const listaChequesEl = document.getElementById('listaChequesNuevos');
+            if (chequesNuevos.length > 0) {
+                const totalImporteNuevos = chequesNuevos.reduce((sum, c) => sum + c.importe, 0);
+                listaChequesEl.innerHTML = `
+                    <div class="info-box" style="background: #f0fdf4; border-color: #86efac;">
+                        <strong>Cheques a agregar:</strong> ${chequesNuevos.length} cheques por un total de ${formatearMoneda(totalImporteNuevos)}
+                    </div>
+                    <table class="tabla-preview-cheques" style="width: 100%; font-size: 12px; margin-top: 10px;">
+                        <thead>
+                            <tr style="background: #f3f4f6;">
+                                <th style="padding: 4px; text-align: left;">Interno</th>
+                                <th style="padding: 4px; text-align: left;">Número</th>
+                                <th style="padding: 4px; text-align: right;">Importe</th>
+                                <th style="padding: 4px; text-align: left;">Origen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${chequesNuevos.slice(0, 10).map(c => `
+                                <tr>
+                                    <td style="padding: 4px;">${c.interno || '-'}</td>
+                                    <td style="padding: 4px;">${c.numero || '-'}</td>
+                                    <td style="padding: 4px; text-align: right;">${formatearMoneda(c.importe)}</td>
+                                    <td style="padding: 4px;">${c.origen || '-'}</td>
+                                </tr>
+                            `).join('')}
+                            ${chequesNuevos.length > 10 ? `
+                                <tr>
+                                    <td colspan="4" style="padding: 4px; text-align: center; font-style: italic; color: #666;">
+                                        ... y ${chequesNuevos.length - 10} cheques más
+                                    </td>
+                                </tr>
+                            ` : ''}
+                        </tbody>
+                    </table>
+                `;
+                btnConfirmar.disabled = false;
+            } else {
+                listaChequesEl.innerHTML = `
+                    <div class="info-box" style="background: #fef3c7; border-color: #fcd34d;">
+                        <strong>No hay cheques nuevos para agregar.</strong> Todos los cheques del archivo ya existen en el listado actual (verificado por columna "Interno").
+                    </div>
+                `;
+                btnConfirmar.disabled = true;
+            }
+
+            // Mostrar advertencia de duplicados si hay
+            if (chequesDuplicados.length > 0) {
+                listaChequesEl.innerHTML += `
+                    <div class="info-box mt-2" style="background: #fef2f2; border-color: #fca5a5; margin-top: 10px;">
+                        <strong>Cheques omitidos (duplicados):</strong> ${chequesDuplicados.length} cheques no se agregarán porque ya existen en el listado.
+                        <details style="margin-top: 5px;">
+                            <summary style="cursor: pointer; color: #dc2626;">Ver cheques duplicados</summary>
+                            <ul style="margin-top: 5px; padding-left: 20px; font-size: 11px;">
+                                ${chequesDuplicados.slice(0, 10).map(c => `
+                                    <li>Interno: ${c.interno || '-'} | Nro: ${c.numero || '-'} | ${formatearMoneda(c.importe)}</li>
+                                `).join('')}
+                                ${chequesDuplicados.length > 10 ? `<li>... y ${chequesDuplicados.length - 10} más</li>` : ''}
+                            </ul>
+                        </details>
+                    </div>
+                `;
+            }
+
+            resumenPanel.style.display = 'block';
+
+        } catch (error) {
+            console.error('Error leyendo archivo de cheques:', error);
+            infoPreview.innerHTML = '<span style="color: red;">Error al leer el archivo: ' + error.message + '</span>';
+            resumenPanel.style.display = 'none';
+            btnConfirmar.disabled = true;
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+/**
+ * Confirmar e importar los cheques al listado
+ */
+function confirmarImportacionCheques() {
+    if (chequesParaImportar.length === 0) {
+        alert('No hay cheques nuevos para importar.');
+        return;
+    }
+
+    // Marcar los cheques como importados desde Excel
+    const chequesConMarca = chequesParaImportar.map(cheque => ({
+        ...cheque,
+        id: `cheque_importado_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        agregadoManualmente: false,
+        importadoDesdeExcel: true
+    }));
+
+    // Agregar cheques al listado existente
+    stateMayores.listadoChequesCargados.push(...chequesConMarca);
 
     // Recalcular meses disponibles
     stateMayores.mesesDisponibles = calcularMesesDeCheques(stateMayores.listadoChequesCargados);
@@ -5964,13 +6023,14 @@ function confirmarAgregarCheque() {
         renderizarConciliacionMes(stateMayores.mesSeleccionado);
     }
 
-    console.log(`✅ Cheque agregado manualmente: ${numero} - ${formatearMoneda(importe)} de ${origen}`);
+    const totalImporte = chequesConMarca.reduce((sum, c) => sum + c.importe, 0);
+    console.log(`✅ Importados ${chequesConMarca.length} cheques desde Excel por un total de ${formatearMoneda(totalImporte)}`);
 
     // Cerrar modal
-    cerrarModalAgregarCheque();
+    cerrarModalImportarChequesExcel();
 
     // Mostrar confirmación
-    alert(`✅ Cheque agregado correctamente:\n\nNúmero: ${numero}\nImporte: ${formatearMoneda(importe)}\nOrigen: ${origen}`);
+    alert(`✅ Importación completada:\n\n${chequesConMarca.length} cheques agregados\nImporte total: ${formatearMoneda(totalImporte)}\n\nTotal de cheques en listado: ${stateMayores.listadoChequesCargados.length}`);
 }
 
 // ============================================
