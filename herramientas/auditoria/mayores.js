@@ -30,6 +30,15 @@ let conciliacionesMayorGuardadasLista = [];
 let conciliacionMayorSeleccionadaId = null;
 let conciliacionMayorAEliminarId = null;
 
+// Estado del modal de vinculación manual
+let estadoModalVincular = {
+    tipo: null,           // 'cheque-a-asiento' o 'asiento-a-cheque'
+    elementoOrigen: null, // Cheque o Asiento seleccionado
+    opcionesDisponibles: [], // Lista de opciones filtradas
+    opcionesTodas: [],    // Lista completa de opciones
+    opcionSeleccionada: null // ID de la opción seleccionada
+};
+
 // ============================================
 // FUNCIONES DE PROGRESO DE CONCILIACIÓN
 // ============================================
@@ -6358,7 +6367,7 @@ function guardarConciliacionMes() {
 }
 
 /**
- * Mostrar cheques disponibles para vincular a un asiento
+ * Mostrar cheques disponibles para vincular a un asiento (usando modal)
  */
 function mostrarChequesParaVincular(asientoId) {
     const mesKey = stateMayores.mesActualConciliacion;
@@ -6375,32 +6384,21 @@ function mostrarChequesParaVincular(asientoId) {
         return;
     }
 
-    // Crear lista de opciones
-    const opciones = chequesDisponibles.map((ch, idx) => {
-        const fechaRecep = ch.fechaRecepcion
-            ? formatearFecha(ch.fechaRecepcion instanceof Date ? ch.fechaRecepcion : new Date(ch.fechaRecepcion))
-            : '-';
-        return `${idx + 1}. ${ch.numero || ch.interno || 'S/N'} - ${ch.origen || 'Sin origen'} - ${formatearMoneda(ch.importe)} - ${fechaRecep}`;
-    }).join('\n');
+    // Configurar estado del modal
+    estadoModalVincular = {
+        tipo: 'asiento-a-cheque',
+        elementoOrigen: asiento,
+        opcionesTodas: chequesDisponibles,
+        opcionesDisponibles: chequesDisponibles,
+        opcionSeleccionada: null
+    };
 
-    const seleccion = prompt(
-        `Seleccione el número del cheque a vincular al asiento:\n` +
-        `Asiento: ${asiento.descripcion}\n` +
-        `Monto: ${formatearMoneda(asiento.debe)}\n\n` +
-        `Cheques disponibles:\n${opciones}\n\n` +
-        `Ingrese el número (1-${chequesDisponibles.length}):`
-    );
-
-    if (seleccion) {
-        const idx = parseInt(seleccion) - 1;
-        if (idx >= 0 && idx < chequesDisponibles.length) {
-            vincularChequeAAsientoMes(chequesDisponibles[idx], asientoId);
-        }
-    }
+    // Abrir modal
+    abrirModalVincularManual();
 }
 
 /**
- * Mostrar asientos disponibles para vincular un cheque
+ * Mostrar asientos disponibles para vincular un cheque (usando modal)
  */
 function mostrarAsientosParaVincular(chequeId) {
     const mesKey = stateMayores.mesActualConciliacion;
@@ -6410,6 +6408,8 @@ function mostrarAsientosParaVincular(chequeId) {
     if (!estadoMes) return;
 
     const cheque = estadoMes.chequesNoAsociadosDelMes.find(c => (c.id || c.interno) === chequeId);
+    if (!cheque) return;
+
     const asientosDisponibles = estadoMes.asientosDelMes.filter(a => a.estadoCheques !== 'completo');
 
     if (asientosDisponibles.length === 0) {
@@ -6417,24 +6417,350 @@ function mostrarAsientosParaVincular(chequeId) {
         return;
     }
 
-    const opciones = asientosDisponibles.map((a, idx) => {
-        return `${idx + 1}. ${a.asiento || 'S/N'} - ${truncarTexto(a.descripcion, 30)} - ${formatearMoneda(a.debe)}`;
-    }).join('\n');
+    // Configurar estado del modal
+    estadoModalVincular = {
+        tipo: 'cheque-a-asiento',
+        elementoOrigen: cheque,
+        opcionesTodas: asientosDisponibles,
+        opcionesDisponibles: asientosDisponibles,
+        opcionSeleccionada: null
+    };
 
-    const seleccion = prompt(
-        `Seleccione el número del asiento para vincular el cheque:\n` +
-        `Cheque: ${cheque.numero || cheque.interno} - ${cheque.origen}\n` +
-        `Importe: ${formatearMoneda(cheque.importe)}\n\n` +
-        `Asientos disponibles:\n${opciones}\n\n` +
-        `Ingrese el número (1-${asientosDisponibles.length}):`
-    );
+    // Abrir modal
+    abrirModalVincularManual();
+}
 
-    if (seleccion) {
-        const idx = parseInt(seleccion) - 1;
-        if (idx >= 0 && idx < asientosDisponibles.length) {
-            vincularChequeAAsientoMes(cheque, asientosDisponibles[idx].id);
+/**
+ * Abrir modal de vinculación manual
+ */
+function abrirModalVincularManual() {
+    const overlay = document.getElementById('overlay-vincular-manual');
+    const modal = document.getElementById('modal-vincular-manual');
+
+    // Configurar título según el tipo
+    const titulo = document.getElementById('titulo-modal-vincular');
+    const listaTitulo = document.getElementById('vincular-lista-titulo');
+
+    if (estadoModalVincular.tipo === 'cheque-a-asiento') {
+        titulo.textContent = '🔗 Vincular Cheque a Asiento';
+        listaTitulo.textContent = 'Asientos disponibles';
+    } else {
+        titulo.textContent = '🔗 Vincular Asiento a Cheque';
+        listaTitulo.textContent = 'Cheques disponibles';
+    }
+
+    // Renderizar información del elemento origen
+    renderizarElementoOrigen();
+
+    // Limpiar filtros
+    document.getElementById('filtro-busqueda-vincular').value = '';
+    document.getElementById('filtro-solo-compatibles').checked = true;
+
+    // Renderizar opciones
+    filtrarOpcionesVincular();
+
+    // Deshabilitar botón de confirmar
+    document.getElementById('btn-confirmar-vincular').disabled = true;
+
+    // Mostrar modal
+    overlay.classList.add('active');
+    modal.classList.add('active');
+}
+
+/**
+ * Cerrar modal de vinculación manual
+ */
+function cerrarModalVincularManual() {
+    const overlay = document.getElementById('overlay-vincular-manual');
+    const modal = document.getElementById('modal-vincular-manual');
+
+    overlay.classList.remove('active');
+    modal.classList.remove('active');
+
+    // Limpiar estado
+    estadoModalVincular = {
+        tipo: null,
+        elementoOrigen: null,
+        opcionesDisponibles: [],
+        opcionesTodas: [],
+        opcionSeleccionada: null
+    };
+}
+
+/**
+ * Renderizar información del elemento origen en el modal
+ */
+function renderizarElementoOrigen() {
+    const container = document.getElementById('info-elemento-vincular');
+    const elem = estadoModalVincular.elementoOrigen;
+
+    if (estadoModalVincular.tipo === 'cheque-a-asiento') {
+        // El elemento origen es un cheque
+        const fechaRecep = elem.fechaRecepcion
+            ? formatearFecha(elem.fechaRecepcion instanceof Date ? elem.fechaRecepcion : new Date(elem.fechaRecepcion))
+            : '-';
+
+        container.innerHTML = `
+            <div class="elemento-tipo">Cheque seleccionado</div>
+            <div class="elemento-principal">
+                <span class="elemento-descripcion">${elem.numero || elem.interno || 'S/N'} - ${elem.origen || 'Sin origen'}</span>
+                <span class="elemento-monto">${formatearMoneda(elem.importe)}</span>
+            </div>
+            <div class="elemento-detalles">
+                <div class="elemento-detalle">
+                    <span class="elemento-detalle-label">F. Recepción:</span>
+                    <span>${fechaRecep}</span>
+                </div>
+                <div class="elemento-detalle">
+                    <span class="elemento-detalle-label">Estado:</span>
+                    <span>${elem.estado || '-'}</span>
+                </div>
+            </div>
+        `;
+    } else {
+        // El elemento origen es un asiento
+        const sumaCheques = elem.chequesAsociados ? elem.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0) : 0;
+        const diferencia = elem.debe - sumaCheques;
+
+        container.innerHTML = `
+            <div class="elemento-tipo">Asiento seleccionado</div>
+            <div class="elemento-principal">
+                <span class="elemento-descripcion">${elem.asiento || 'S/N'} - ${truncarTexto(elem.descripcion, 50)}</span>
+                <span class="elemento-monto">${formatearMoneda(elem.debe)}</span>
+            </div>
+            <div class="elemento-detalles">
+                <div class="elemento-detalle">
+                    <span class="elemento-detalle-label">Fecha:</span>
+                    <span>${elem.fecha ? formatearFecha(new Date(elem.fecha)) : '-'}</span>
+                </div>
+                <div class="elemento-detalle">
+                    <span class="elemento-detalle-label">Cheques asociados:</span>
+                    <span>${elem.chequesAsociados ? elem.chequesAsociados.length : 0}</span>
+                </div>
+                ${diferencia > 0 ? `
+                <div class="elemento-detalle">
+                    <span class="elemento-detalle-label">Pendiente:</span>
+                    <span style="color: #f59e0b; font-weight: 600;">${formatearMoneda(diferencia)}</span>
+                </div>
+                ` : ''}
+            </div>
+        `;
+    }
+}
+
+/**
+ * Filtrar opciones de vinculación según los filtros activos
+ */
+function filtrarOpcionesVincular() {
+    const busqueda = document.getElementById('filtro-busqueda-vincular').value.toLowerCase();
+    const soloCompatibles = document.getElementById('filtro-solo-compatibles').checked;
+    const elem = estadoModalVincular.elementoOrigen;
+
+    let montoReferencia;
+    if (estadoModalVincular.tipo === 'cheque-a-asiento') {
+        montoReferencia = elem.importe;
+    } else {
+        // Para asiento a cheque, calcular el pendiente
+        const sumaCheques = elem.chequesAsociados ? elem.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0) : 0;
+        montoReferencia = elem.debe - sumaCheques;
+    }
+
+    let filtradas = estadoModalVincular.opcionesTodas.filter(opcion => {
+        // Filtro de búsqueda
+        if (busqueda) {
+            const texto = estadoModalVincular.tipo === 'cheque-a-asiento'
+                ? `${opcion.asiento || ''} ${opcion.descripcion || ''}`.toLowerCase()
+                : `${opcion.numero || ''} ${opcion.interno || ''} ${opcion.origen || ''}`.toLowerCase();
+            if (!texto.includes(busqueda)) return false;
+        }
+
+        // Filtro de montos compatibles (±5%)
+        if (soloCompatibles) {
+            const montoOpcion = estadoModalVincular.tipo === 'cheque-a-asiento'
+                ? (opcion.debe - (opcion.chequesAsociados ? opcion.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0) : 0))
+                : opcion.importe;
+            const tolerancia = montoReferencia * 0.05;
+            if (Math.abs(montoOpcion - montoReferencia) > tolerancia && montoOpcion > 0) {
+                // También mostrar si el monto de la opción es mayor (podría ser una asociación parcial)
+                if (montoOpcion < montoReferencia * 0.5) return false;
+            }
+        }
+
+        return true;
+    });
+
+    // Ordenar por diferencia de monto (los más cercanos primero)
+    filtradas.sort((a, b) => {
+        const montoA = estadoModalVincular.tipo === 'cheque-a-asiento'
+            ? (a.debe - (a.chequesAsociados ? a.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0) : 0))
+            : a.importe;
+        const montoB = estadoModalVincular.tipo === 'cheque-a-asiento'
+            ? (b.debe - (b.chequesAsociados ? b.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0) : 0))
+            : b.importe;
+
+        return Math.abs(montoA - montoReferencia) - Math.abs(montoB - montoReferencia);
+    });
+
+    estadoModalVincular.opcionesDisponibles = filtradas;
+
+    // Actualizar contador
+    document.getElementById('vincular-lista-count').textContent = filtradas.length;
+
+    // Renderizar opciones
+    renderizarOpcionesVincular();
+}
+
+/**
+ * Renderizar lista de opciones de vinculación
+ */
+function renderizarOpcionesVincular() {
+    const container = document.getElementById('vincular-lista-opciones');
+    const opciones = estadoModalVincular.opcionesDisponibles;
+    const elem = estadoModalVincular.elementoOrigen;
+
+    if (opciones.length === 0) {
+        container.innerHTML = `
+            <div class="vincular-lista-vacia">
+                <div class="icono">🔍</div>
+                <div class="mensaje">No se encontraron opciones con los filtros actuales</div>
+            </div>
+        `;
+        return;
+    }
+
+    // Calcular monto de referencia para diferencias
+    let montoReferencia;
+    if (estadoModalVincular.tipo === 'cheque-a-asiento') {
+        montoReferencia = elem.importe;
+    } else {
+        const sumaCheques = elem.chequesAsociados ? elem.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0) : 0;
+        montoReferencia = elem.debe - sumaCheques;
+    }
+
+    container.innerHTML = opciones.map(opcion => {
+        const id = estadoModalVincular.tipo === 'cheque-a-asiento'
+            ? opcion.id
+            : (opcion.id || opcion.interno);
+
+        const isSelected = estadoModalVincular.opcionSeleccionada === id;
+
+        if (estadoModalVincular.tipo === 'cheque-a-asiento') {
+            // Renderizar opción de asiento
+            const sumaCheques = opcion.chequesAsociados ? opcion.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0) : 0;
+            const pendiente = opcion.debe - sumaCheques;
+            const diferencia = montoReferencia - pendiente;
+            const porcentajeDif = Math.abs(diferencia / montoReferencia * 100);
+
+            let claseDif = 'compatible';
+            if (porcentajeDif > 5 && porcentajeDif <= 20) claseDif = 'warning';
+            else if (porcentajeDif > 20) claseDif = 'error';
+
+            let estadoBadge = '';
+            if (opcion.chequesAsociados && opcion.chequesAsociados.length > 0) {
+                estadoBadge = `<span class="estado-badge parcial">Parcial (${opcion.chequesAsociados.length} ch.)</span>`;
+            } else {
+                estadoBadge = `<span class="estado-badge sin-vincular">Sin cheques</span>`;
+            }
+
+            return `
+                <div class="vincular-opcion-item ${isSelected ? 'selected' : ''}" onclick="seleccionarOpcionVincular('${id}')">
+                    <input type="radio" name="opcion-vincular" class="vincular-opcion-radio" ${isSelected ? 'checked' : ''}>
+                    <div class="vincular-opcion-info">
+                        <div class="vincular-opcion-numero">${opcion.asiento || 'S/N'}</div>
+                        <div class="vincular-opcion-descripcion" title="${opcion.descripcion}">${truncarTexto(opcion.descripcion, 45)}</div>
+                    </div>
+                    <div class="vincular-opcion-monto">
+                        <div class="monto-valor">${formatearMoneda(pendiente)}</div>
+                        <div class="monto-diferencia ${claseDif}">
+                            ${diferencia === 0 ? '✓ Exacto' : (diferencia > 0 ? `+${formatearMoneda(diferencia)}` : formatearMoneda(diferencia))}
+                        </div>
+                    </div>
+                    <div class="vincular-opcion-estado">
+                        ${estadoBadge}
+                    </div>
+                </div>
+            `;
+        } else {
+            // Renderizar opción de cheque
+            const diferencia = montoReferencia - opcion.importe;
+            const porcentajeDif = Math.abs(diferencia / montoReferencia * 100);
+
+            let claseDif = 'compatible';
+            if (porcentajeDif > 5 && porcentajeDif <= 20) claseDif = 'warning';
+            else if (porcentajeDif > 20) claseDif = 'error';
+
+            const fechaRecep = opcion.fechaRecepcion
+                ? formatearFecha(opcion.fechaRecepcion instanceof Date ? opcion.fechaRecepcion : new Date(opcion.fechaRecepcion))
+                : '-';
+
+            return `
+                <div class="vincular-opcion-item ${isSelected ? 'selected' : ''}" onclick="seleccionarOpcionVincular('${id}')">
+                    <input type="radio" name="opcion-vincular" class="vincular-opcion-radio" ${isSelected ? 'checked' : ''}>
+                    <div class="vincular-opcion-info">
+                        <div class="vincular-opcion-numero">${opcion.numero || opcion.interno || 'S/N'}</div>
+                        <div class="vincular-opcion-descripcion" title="${opcion.origen}">${opcion.origen || 'Sin origen'} - ${fechaRecep}</div>
+                    </div>
+                    <div class="vincular-opcion-monto">
+                        <div class="monto-valor">${formatearMoneda(opcion.importe)}</div>
+                        <div class="monto-diferencia ${claseDif}">
+                            ${diferencia === 0 ? '✓ Exacto' : (diferencia > 0 ? `+${formatearMoneda(diferencia)}` : formatearMoneda(diferencia))}
+                        </div>
+                    </div>
+                    <div class="vincular-opcion-estado">
+                        <span class="estado-badge ${opcion.estado === 'transferido' ? 'completo' : 'sin-vincular'}">${opcion.estado || 'pendiente'}</span>
+                    </div>
+                </div>
+            `;
+        }
+    }).join('');
+}
+
+/**
+ * Seleccionar una opción de vinculación
+ */
+function seleccionarOpcionVincular(id) {
+    estadoModalVincular.opcionSeleccionada = id;
+
+    // Actualizar visualización
+    document.querySelectorAll('.vincular-opcion-item').forEach(item => {
+        item.classList.remove('selected');
+        item.querySelector('.vincular-opcion-radio').checked = false;
+    });
+
+    const itemSeleccionado = document.querySelector(`.vincular-opcion-item[onclick*="'${id}'"]`);
+    if (itemSeleccionado) {
+        itemSeleccionado.classList.add('selected');
+        itemSeleccionado.querySelector('.vincular-opcion-radio').checked = true;
+    }
+
+    // Habilitar botón de confirmar
+    document.getElementById('btn-confirmar-vincular').disabled = false;
+}
+
+/**
+ * Confirmar vinculación manual
+ */
+function confirmarVinculacionManual() {
+    if (!estadoModalVincular.opcionSeleccionada) return;
+
+    const id = estadoModalVincular.opcionSeleccionada;
+
+    if (estadoModalVincular.tipo === 'cheque-a-asiento') {
+        // Vincular cheque a asiento seleccionado
+        const asiento = estadoModalVincular.opcionesDisponibles.find(a => a.id === id);
+        if (asiento) {
+            vincularChequeAAsientoMes(estadoModalVincular.elementoOrigen, asiento.id);
+        }
+    } else {
+        // Vincular asiento a cheque seleccionado
+        const cheque = estadoModalVincular.opcionesDisponibles.find(c => (c.id || c.interno) === id);
+        if (cheque) {
+            vincularChequeAAsientoMes(cheque, estadoModalVincular.elementoOrigen.id);
         }
     }
+
+    // Cerrar modal
+    cerrarModalVincularManual();
 }
 
 /**

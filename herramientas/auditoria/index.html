@@ -1181,6 +1181,51 @@
         </div>
     </div>
 
+    <!-- Modal para vinculación manual de cheques/asientos -->
+    <div id="overlay-vincular-manual" class="overlay-eliminar"></div>
+    <div id="modal-vincular-manual" class="modal-eliminar modal-vincular-manual">
+        <div class="modal-eliminar-header">
+            <h3 id="titulo-modal-vincular">🔗 Vincular Cheque</h3>
+            <button class="modal-close-btn" onclick="cerrarModalVincularManual()">✕</button>
+        </div>
+        <div class="modal-eliminar-body">
+            <!-- Info del elemento seleccionado -->
+            <div id="info-elemento-vincular" class="info-elemento-vincular">
+                <!-- Se llena dinámicamente -->
+            </div>
+
+            <!-- Filtros de búsqueda -->
+            <div class="vincular-filtros">
+                <div class="filtro-busqueda">
+                    <input type="text" id="filtro-busqueda-vincular" class="input-text" placeholder="Buscar por descripción, número..." oninput="filtrarOpcionesVincular()">
+                </div>
+                <div class="filtro-estado">
+                    <label>
+                        <input type="checkbox" id="filtro-solo-compatibles" checked onchange="filtrarOpcionesVincular()">
+                        Mostrar solo montos compatibles (±5%)
+                    </label>
+                </div>
+            </div>
+
+            <!-- Lista de opciones -->
+            <div class="vincular-lista-container">
+                <div class="vincular-lista-header">
+                    <span id="vincular-lista-titulo">Asientos disponibles</span>
+                    <span id="vincular-lista-count" class="badge-count">0</span>
+                </div>
+                <div id="vincular-lista-opciones" class="vincular-lista-opciones">
+                    <!-- Se llena dinámicamente -->
+                </div>
+            </div>
+        </div>
+        <div class="modal-eliminar-footer">
+            <button class="btn-cancelar" onclick="cerrarModalVincularManual()">Cancelar</button>
+            <button id="btn-confirmar-vincular" class="btn-confirmar-eliminar" style="background: #3b82f6;" onclick="confirmarVinculacionManual()" disabled>
+                🔗 Vincular Seleccionado
+            </button>
+        </div>
+    </div>
+
     <!-- Navegación global -->
     <script src="../../shared/globalNav.js"></script>
     <!-- Script principal -->
