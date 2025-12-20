@@ -956,11 +956,37 @@ async function procesarMayor() {
 
 /**
  * Parsear fecha en varios formatos
+ * Soporta: strings DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, números seriales de Excel, objetos Date
  */
 function parsearFecha(fechaStr) {
     if (!fechaStr) return null;
 
-    // Intentar varios formatos
+    // Si ya es un objeto Date válido, devolverlo
+    if (fechaStr instanceof Date) {
+        return isNaN(fechaStr.getTime()) ? null : fechaStr;
+    }
+
+    // Si es un número, puede ser un serial de Excel
+    if (typeof fechaStr === 'number') {
+        // Excel usa números seriales: días desde 1/1/1900
+        // Pero tiene un bug: considera 1900 como bisiesto (29/02/1900 no existió)
+        // Para convertir: serial - 25569 = días desde 1/1/1970 (epoch JS)
+        // Luego multiplicar por 86400000 (ms por día)
+        if (fechaStr > 0 && fechaStr < 200000) {  // Rango razonable para serial de Excel
+            // Ajustar por el bug de 1900 de Excel (si fecha > 60, restar 1)
+            const serialAjustado = fechaStr > 60 ? fechaStr - 1 : fechaStr;
+            const diasDesdeEpoch = serialAjustado - 25569;
+            const fecha = new Date(diasDesdeEpoch * 86400000);
+            if (!isNaN(fecha.getTime()) && fecha.getFullYear() > 1970 && fecha.getFullYear() < 2100) {
+                return fecha;
+            }
+        }
+    }
+
+    // Convertir a string para procesar
+    const fechaString = fechaStr.toString().trim();
+
+    // Intentar varios formatos de string
     const formatos = [
         // DD/MM/YYYY
         /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/,
@@ -971,7 +997,7 @@ function parsearFecha(fechaStr) {
     ];
 
     for (const formato of formatos) {
-        const match = fechaStr.toString().match(formato);
+        const match = fechaString.match(formato);
         if (match) {
             if (formato === formatos[2]) {
                 // YYYY-MM-DD
@@ -983,9 +1009,13 @@ function parsearFecha(fechaStr) {
         }
     }
 
-    // Intentar parseo directo
-    const fecha = new Date(fechaStr);
-    return isNaN(fecha.getTime()) ? null : fecha;
+    // Intentar parseo directo como último recurso
+    const fecha = new Date(fechaString);
+    if (!isNaN(fecha.getTime()) && fecha.getFullYear() > 1970 && fecha.getFullYear() < 2100) {
+        return fecha;
+    }
+
+    return null;
 }
 
 // ============================================
