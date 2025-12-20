@@ -206,8 +206,112 @@
                         </div>
                     </div>
 
-                    <!-- Panel de Vinculación (específico para Cupones de Tarjetas) -->
-                    <div id="panelVinculacionCupones" class="panel-vinculacion" style="display: none;">
+                    <!-- ============================================ -->
+                    <!-- PASO 1: Conciliación Listado Cheques con Debe (solo para cheques_terceros_recibidos) -->
+                    <!-- ============================================ -->
+                    <div id="panelConciliacionChequesDebe" class="panel-paso-conciliacion" style="display: none;">
+                        <div class="paso-header">
+                            <div class="paso-numero">1</div>
+                            <div class="paso-titulo">
+                                <h4>📋 Conciliación: Listado de Cheques vs Registros del Debe</h4>
+                                <p class="paso-descripcion">Asocie cada cheque del listado externo con los registros de ingreso (debe) del mayor contable.</p>
+                            </div>
+                            <button class="btn-toggle-paso" onclick="togglePasoChequesDebe()">
+                                <span id="iconTogglePaso1">▼</span>
+                            </button>
+                        </div>
+
+                        <div id="contenidoPaso1" class="paso-contenido">
+                            <!-- Estado de carga del listado -->
+                            <div id="estadoListadoCheques" class="estado-listado-cheques">
+                                <div id="listadoNoCarado" class="listado-estado sin-cargar">
+                                    <div class="estado-icono">📂</div>
+                                    <div class="estado-info">
+                                        <h5>Listado de cheques no cargado</h5>
+                                        <p>Cargue el listado de cheques recibidos para asociarlos con los registros del debe.</p>
+                                    </div>
+                                    <button onclick="mostrarCargarListadoCheques()" class="btn-primary">📋 Cargar Listado de Cheques</button>
+                                </div>
+
+                                <div id="listadoCargado" class="listado-estado cargado" style="display: none;">
+                                    <div class="estado-icono">✅</div>
+                                    <div class="estado-info">
+                                        <h5>Listado de cheques incorporado</h5>
+                                        <p id="resumenListadoCheques">0 cheques cargados</p>
+                                    </div>
+                                    <button onclick="mostrarCargarListadoCheques()" class="btn-secondary btn-sm">🔄 Recargar listado</button>
+                                </div>
+                            </div>
+
+                            <!-- Estadísticas de conciliación cheques vs debe -->
+                            <div id="statsConciliacionChequesDebe" class="stats-conciliacion-paso" style="display: none;">
+                                <div class="stat-conciliacion completo">
+                                    <span class="stat-numero" id="statRegistrosCompletos">0</span>
+                                    <span class="stat-label">Registros completos</span>
+                                </div>
+                                <div class="stat-conciliacion parcial">
+                                    <span class="stat-numero" id="statRegistrosParciales">0</span>
+                                    <span class="stat-label">Asociaciones parciales</span>
+                                </div>
+                                <div class="stat-conciliacion sin-cheques">
+                                    <span class="stat-numero" id="statRegistrosSinCheques">0</span>
+                                    <span class="stat-label">Sin cheques asociados</span>
+                                </div>
+                                <div class="stat-conciliacion no-asociados">
+                                    <span class="stat-numero" id="statChequesNoAsociados">0</span>
+                                    <span class="stat-label">Cheques sin asociar</span>
+                                </div>
+                            </div>
+
+                            <!-- Tabla resumen de asociaciones -->
+                            <div id="tablaResumenAsociaciones" class="tabla-resumen-asociaciones" style="display: none;">
+                                <div class="resumen-header">
+                                    <h5>Detalle de Asociaciones por Registro del Debe</h5>
+                                    <div class="resumen-filtros">
+                                        <label class="filtro-inline">
+                                            <input type="checkbox" id="filtroSoloPendientesCheques" onchange="filtrarResumenAsociaciones()">
+                                            Solo mostrar con diferencias
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="preview-table-container" style="max-height: 300px;">
+                                    <table class="preview-table tabla-asociaciones-cheques">
+                                        <thead>
+                                            <tr>
+                                                <th>Fecha</th>
+                                                <th>Asiento</th>
+                                                <th>Descripción</th>
+                                                <th class="text-right">Importe Debe</th>
+                                                <th class="text-right">Suma Cheques</th>
+                                                <th class="text-right">Diferencia</th>
+                                                <th>Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tablaResumenAsociacionesBody">
+                                            <!-- Se llena dinámicamente -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ============================================ -->
+                    <!-- PASO 2: Conciliación Debe con Haber -->
+                    <!-- ============================================ -->
+                    <div id="panelVinculacionCupones" class="panel-vinculacion panel-paso-conciliacion" style="display: none;">
+                        <div class="paso-header">
+                            <div class="paso-numero" id="numeroPasoVinculacion">2</div>
+                            <div class="paso-titulo">
+                                <h4 id="tituloPasoVinculacion">🔗 Conciliación: Ingresos (Debe) vs Usos (Haber)</h4>
+                                <p class="paso-descripcion" id="descripcionPasoVinculacion">Vincule los registros de ingreso con sus correspondientes usos o depósitos.</p>
+                            </div>
+                            <button class="btn-toggle-paso" onclick="togglePasoVinculacion()">
+                                <span id="iconTogglePaso2">▼</span>
+                            </button>
+                        </div>
+
+                        <div id="contenidoPaso2" class="paso-contenido">
                         <div class="vinculacion-header">
                             <h4>🔗 Vinculación de Cupones</h4>
                             <div class="vinculacion-stats">
@@ -341,6 +445,7 @@
                             </div>
                             <button onclick="cerrarResultadosConciliacion()" class="btn-secondary btn-sm">Cerrar</button>
                         </div>
+                        </div><!-- Cierre contenidoPaso2 -->
                     </div>
 
                     <!-- Tabla de registros del mayor -->

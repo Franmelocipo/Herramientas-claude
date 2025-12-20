@@ -536,14 +536,19 @@ function seleccionarTipoMayor(tipoId) {
         panelVinculacion.style.display = 'block';
         // Actualizar etiquetas dinámicas según el tipo de mayor
         actualizarEtiquetasVinculacion();
+        // Actualizar títulos del paso de vinculación
+        actualizarTitulosPasoVinculacion();
     } else {
         panelVinculacion.style.display = 'none';
     }
 
-    // Mostrar/ocultar botón de cargar listado de cheques según el tipo
+    // Mostrar/ocultar panel de conciliación cheques vs debe (Paso 1)
+    actualizarPanelConciliacionChequesDebe();
+
+    // Ocultar botón de cargar listado cheques de la toolbar (ahora está en el paso 1)
     const btnCargarListadoCheques = document.getElementById('btnCargarListadoCheques');
     if (btnCargarListadoCheques) {
-        btnCargarListadoCheques.style.display = tipoId === 'cheques_terceros_recibidos' ? 'inline-flex' : 'none';
+        btnCargarListadoCheques.style.display = 'none';
     }
 
     // Ocultar info del mayor (hasta que se cargue)
@@ -4982,6 +4987,9 @@ async function incorporarListadoChequesAlMayor() {
     // Mostrar indicador de listado incorporado
     mostrarIndicadorListadoIncorporado();
 
+    // Actualizar panel del Paso 1 (Conciliación Cheques vs Debe)
+    actualizarEstadoListadoCheques();
+
     // Mostrar filtro de asociaciones parciales
     const filtroParcialesLabel = document.getElementById('filtroParcialesLabel');
     if (filtroParcialesLabel) {
@@ -5060,6 +5068,225 @@ function ocultarIndicadorListadoIncorporado() {
     const indicador = document.getElementById('indicadorListadoCheques');
     if (indicador) {
         indicador.style.display = 'none';
+    }
+}
+
+// ============================================
+// FUNCIONES PARA PASOS DE CONCILIACIÓN SEPARADOS
+// ============================================
+
+/**
+ * Toggle expandir/colapsar Paso 1: Conciliación Cheques vs Debe
+ */
+function togglePasoChequesDebe() {
+    const contenido = document.getElementById('contenidoPaso1');
+    const icono = document.getElementById('iconTogglePaso1');
+    const btnToggle = contenido.closest('.panel-paso-conciliacion').querySelector('.btn-toggle-paso');
+
+    if (contenido.classList.contains('collapsed')) {
+        contenido.classList.remove('collapsed');
+        icono.textContent = '▼';
+        btnToggle.classList.remove('collapsed');
+    } else {
+        contenido.classList.add('collapsed');
+        icono.textContent = '▶';
+        btnToggle.classList.add('collapsed');
+    }
+}
+
+/**
+ * Toggle expandir/colapsar Paso 2: Conciliación Debe vs Haber
+ */
+function togglePasoVinculacion() {
+    const contenido = document.getElementById('contenidoPaso2');
+    const icono = document.getElementById('iconTogglePaso2');
+    const btnToggle = contenido.closest('.panel-paso-conciliacion').querySelector('.btn-toggle-paso');
+
+    if (contenido.classList.contains('collapsed')) {
+        contenido.classList.remove('collapsed');
+        icono.textContent = '▼';
+        btnToggle.classList.remove('collapsed');
+    } else {
+        contenido.classList.add('collapsed');
+        icono.textContent = '▶';
+        btnToggle.classList.add('collapsed');
+    }
+}
+
+/**
+ * Actualizar la visualización del panel de conciliación Paso 1 (Cheques vs Debe)
+ * según el tipo de mayor seleccionado
+ */
+function actualizarPanelConciliacionChequesDebe() {
+    const panelPaso1 = document.getElementById('panelConciliacionChequesDebe');
+    const tipoMayor = stateMayores.tipoMayorActual;
+
+    // Solo mostrar para cheques_terceros_recibidos
+    if (tipoMayor && tipoMayor.id === 'cheques_terceros_recibidos') {
+        panelPaso1.style.display = 'block';
+
+        // Actualizar número del paso 2 a "2" cuando hay paso 1
+        const numeroPaso2 = document.getElementById('numeroPasoVinculacion');
+        if (numeroPaso2) numeroPaso2.textContent = '2';
+
+        // Actualizar estado del listado de cheques
+        actualizarEstadoListadoCheques();
+    } else {
+        panelPaso1.style.display = 'none';
+
+        // Actualizar número del paso a "1" cuando no hay paso 1
+        const numeroPaso2 = document.getElementById('numeroPasoVinculacion');
+        if (numeroPaso2) numeroPaso2.textContent = '1';
+    }
+}
+
+/**
+ * Actualizar el estado visual del listado de cheques en el Paso 1
+ */
+function actualizarEstadoListadoCheques() {
+    const listadoNoCargado = document.getElementById('listadoNoCarado');
+    const listadoCargado = document.getElementById('listadoCargado');
+    const statsPanel = document.getElementById('statsConciliacionChequesDebe');
+    const tablaResumen = document.getElementById('tablaResumenAsociaciones');
+
+    if (stateMayores.listadoChequesIncorporado) {
+        // Mostrar estado cargado
+        listadoNoCargado.style.display = 'none';
+        listadoCargado.style.display = 'flex';
+
+        // Actualizar resumen
+        const resumen = document.getElementById('resumenListadoCheques');
+        const cantCheques = stateMayores.listadoChequesCargados.length;
+        resumen.textContent = `${cantCheques} cheques incorporados`;
+
+        // Mostrar estadísticas y tabla
+        statsPanel.style.display = 'flex';
+        tablaResumen.style.display = 'block';
+
+        // Calcular y mostrar estadísticas
+        actualizarEstadisticasConciliacionCheques();
+        renderizarTablaResumenAsociaciones();
+    } else {
+        // Mostrar estado sin cargar
+        listadoNoCargado.style.display = 'flex';
+        listadoCargado.style.display = 'none';
+        statsPanel.style.display = 'none';
+        tablaResumen.style.display = 'none';
+    }
+}
+
+/**
+ * Actualizar las estadísticas de conciliación de cheques con registros del debe
+ */
+function actualizarEstadisticasConciliacionCheques() {
+    const asientos = stateMayores.asientosDebeOriginales || [];
+
+    // Calcular estadísticas
+    const completos = asientos.filter(a => a.estadoCheques === 'completo').length;
+    const parciales = asientos.filter(a => a.estadoCheques === 'parcial').length;
+    const sinCheques = asientos.filter(a => a.estadoCheques === 'sin_cheques').length;
+    const chequesNoAsoc = (stateMayores.chequesNoAsociados || []).length;
+
+    // Actualizar UI
+    document.getElementById('statRegistrosCompletos').textContent = completos;
+    document.getElementById('statRegistrosParciales').textContent = parciales;
+    document.getElementById('statRegistrosSinCheques').textContent = sinCheques;
+    document.getElementById('statChequesNoAsociados').textContent = chequesNoAsoc;
+}
+
+/**
+ * Renderizar la tabla resumen de asociaciones de cheques con registros del debe
+ */
+function renderizarTablaResumenAsociaciones() {
+    const tbody = document.getElementById('tablaResumenAsociacionesBody');
+    const asientos = stateMayores.asientosDebeOriginales || [];
+    const soloPendientes = document.getElementById('filtroSoloPendientesCheques')?.checked || false;
+
+    // Filtrar asientos según el checkbox
+    const asientosFiltrados = soloPendientes
+        ? asientos.filter(a => a.estadoCheques !== 'completo')
+        : asientos;
+
+    if (asientosFiltrados.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align: center; color: #64748b; padding: 20px;">
+                    ${soloPendientes ? 'No hay registros con diferencias' : 'No hay registros del debe'}
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = asientosFiltrados.map(asiento => {
+        const sumaCheques = (asiento.chequesAsociados || []).reduce((sum, ch) => sum + ch.importe, 0);
+        const diferencia = asiento.debe - sumaCheques;
+
+        let claseEstado = '';
+        let textoEstado = '';
+
+        switch (asiento.estadoCheques) {
+            case 'completo':
+                claseEstado = 'completo';
+                textoEstado = '✅ Completo';
+                break;
+            case 'parcial':
+                claseEstado = 'parcial';
+                textoEstado = '⚠️ Parcial';
+                break;
+            case 'sin_cheques':
+                claseEstado = 'sin-cheques';
+                textoEstado = '❌ Sin cheques';
+                break;
+            default:
+                textoEstado = '-';
+        }
+
+        return `
+            <tr class="fila-${claseEstado}">
+                <td>${formatearFecha(asiento.fecha)}</td>
+                <td>${asiento.asiento || '-'}</td>
+                <td title="${asiento.descripcion}">${truncarTexto(asiento.descripcion, 40)}</td>
+                <td class="text-right debe">${formatearMoneda(asiento.debe)}</td>
+                <td class="text-right">${formatearMoneda(sumaCheques)}</td>
+                <td class="text-right ${Math.abs(diferencia) > 0.01 ? 'diferencia-warning' : ''}">${formatearMoneda(diferencia)}</td>
+                <td><span class="estado-asociacion ${claseEstado}">${textoEstado}</span></td>
+            </tr>
+        `;
+    }).join('');
+}
+
+/**
+ * Filtrar la tabla resumen de asociaciones
+ */
+function filtrarResumenAsociaciones() {
+    renderizarTablaResumenAsociaciones();
+}
+
+/**
+ * Truncar texto a una longitud máxima
+ */
+function truncarTexto(texto, maxLen) {
+    if (!texto) return '';
+    return texto.length > maxLen ? texto.substring(0, maxLen) + '...' : texto;
+}
+
+/**
+ * Actualizar títulos dinámicos del Paso 2 según el tipo de mayor
+ */
+function actualizarTitulosPasoVinculacion() {
+    const config = obtenerConfigVinculacion();
+    const tipoMayor = stateMayores.tipoMayorActual;
+
+    const titulo = document.getElementById('tituloPasoVinculacion');
+    const descripcion = document.getElementById('descripcionPasoVinculacion');
+
+    if (titulo) {
+        titulo.textContent = `🔗 Conciliación: ${config.etiquetaOrigen} vs ${config.etiquetaDestino}`;
+    }
+
+    if (descripcion) {
+        descripcion.textContent = config.descripcionVinculacion;
     }
 }
 
