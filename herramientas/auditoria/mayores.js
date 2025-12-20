@@ -6521,6 +6521,9 @@ function calcularSimilitudTextoMes(origenCheque, descripcionAsiento) {
 
 /**
  * Reprocesar cheques sin asociar del mes actual
+ * IMPORTANTE: Esta función NO elimina vinculaciones manuales existentes.
+ * Solo intenta vincular los cheques que aún no están asociados a asientos
+ * que no tienen cheques o tienen vinculación parcial.
  */
 function reprocesarChequesMes() {
     const mesKey = stateMayores.mesActualConciliacion;
@@ -6529,8 +6532,122 @@ function reprocesarChequesMes() {
         return;
     }
 
-    // Volver a ejecutar la conciliación automática
-    conciliarMesAutomaticamente();
+    const estadoMes = stateMayores.mesesProcesados[mesKey];
+    if (!estadoMes) {
+        alert('No hay datos para este mes');
+        return;
+    }
+
+    const asientos = estadoMes.asientosDelMes;
+    let chequesNoAsociados = estadoMes.chequesNoAsociadosDelMes || [];
+
+    if (chequesNoAsociados.length === 0) {
+        alert('No hay cheques pendientes de vinculación.');
+        return;
+    }
+
+    // Obtener IDs de cheques ya vinculados para no duplicarlos
+    const chequesYaVinculadosIds = new Set();
+    asientos.forEach(asiento => {
+        (asiento.chequesAsociados || []).forEach(ch => {
+            if (ch.id) chequesYaVinculadosIds.add(ch.id);
+        });
+    });
+
+    // Solo trabajar con cheques que realmente no están asociados
+    const chequesParaProcesar = chequesNoAsociados.filter(ch => !chequesYaVinculadosIds.has(ch.id));
+
+    if (chequesParaProcesar.length === 0) {
+        alert('No hay cheques pendientes de vinculación.');
+        return;
+    }
+
+    let vinculacionesNuevas = 0;
+    const chequesQueSiguenSinAsociar = [];
+
+    // Intentar vincular cada cheque sin asociar
+    for (const cheque of chequesParaProcesar) {
+        let registroAsociado = null;
+        let mejorDiffDias = Infinity;
+
+        // Solo buscar en asientos que NO están completos (sin_cheques o parcial)
+        for (const asiento of asientos) {
+            // Omitir asientos ya completos
+            if (asiento.estadoCheques === 'completo') continue;
+
+            // Verificar si excedería el monto (considerando cheques ya vinculados)
+            const sumaActual = (asiento.chequesAsociados || []).reduce((sum, ch) => sum + ch.importe, 0);
+            if (sumaActual + cheque.importe > asiento.debe + 0.50) continue;
+
+            // Calcular similitud de texto
+            const similitud = calcularSimilitudTextoMes(cheque.origen, asiento.descripcion);
+            if (similitud < 0.5) continue;
+
+            // Calcular diferencia de días
+            const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
+            if (!fechaCheque || !asiento.fecha) continue;
+
+            const fechaChequeDate = fechaCheque instanceof Date ? fechaCheque : new Date(fechaCheque);
+            const fechaAsientoDate = asiento.fecha instanceof Date ? asiento.fecha : new Date(asiento.fecha);
+            const diffDias = Math.abs((fechaAsientoDate - fechaChequeDate) / (1000 * 60 * 60 * 24));
+
+            if (diffDias <= 2 && diffDias < mejorDiffDias) {
+                mejorDiffDias = diffDias;
+                registroAsociado = asiento;
+            }
+        }
+
+        if (registroAsociado) {
+            // Inicializar array si no existe
+            if (!registroAsociado.chequesAsociados) {
+                registroAsociado.chequesAsociados = [];
+            }
+
+            const chequeEnriquecido = {
+                id: cheque.id || `cheque_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                ...cheque
+            };
+            registroAsociado.chequesAsociados.push(chequeEnriquecido);
+            vinculacionesNuevas++;
+        } else {
+            chequesQueSiguenSinAsociar.push(cheque);
+        }
+    }
+
+    // Recalcular estado de cada asiento (solo actualizar estados, no borrar vinculaciones)
+    asientos.forEach(asiento => {
+        const sumaCheques = (asiento.chequesAsociados || []).reduce((sum, ch) => sum + ch.importe, 0);
+        if (!asiento.chequesAsociados || asiento.chequesAsociados.length === 0) {
+            asiento.estadoCheques = 'sin_cheques';
+        } else if (Math.abs(asiento.debe - sumaCheques) <= 0.01) {
+            asiento.estadoCheques = 'completo';
+        } else {
+            asiento.estadoCheques = 'parcial';
+            asiento.diferenciaCheques = asiento.debe - sumaCheques;
+        }
+    });
+
+    // Actualizar lista de cheques no asociados
+    estadoMes.chequesNoAsociadosDelMes = chequesQueSiguenSinAsociar;
+
+    // Actualizar estado del mes
+    const completos = asientos.filter(a => a.estadoCheques === 'completo').length;
+    estadoMes.asientosDelMes = asientos;
+    estadoMes.procesado = true;
+    estadoMes.completo = chequesQueSiguenSinAsociar.length === 0 && asientos.every(a => a.estadoCheques === 'completo');
+    estadoMes.pendientes = asientos.filter(a => a.estadoCheques !== 'completo').length;
+
+    // Renderizar resultados
+    renderizarConciliacionMes(asientos, chequesQueSiguenSinAsociar);
+    renderizarListaMeses();
+
+    // Mostrar resumen
+    alert(`Reprocesamiento completado:\n\n` +
+          `🔄 ${vinculacionesNuevas} nuevas vinculaciones realizadas\n` +
+          `✅ ${completos} asientos completos\n` +
+          `⚠️ ${asientos.filter(a => a.estadoCheques === 'parcial').length} asientos parciales\n` +
+          `❌ ${asientos.filter(a => a.estadoCheques === 'sin_cheques').length} sin cheques\n` +
+          `📌 ${chequesQueSiguenSinAsociar.length} cheques sin asociar`);
 }
 
 /**
