@@ -178,6 +178,7 @@
                         <button id="btnCargarListadoCheques" onclick="mostrarCargarListadoCheques()" class="btn-secondary" style="display: none;">📋 Cargar Listado Cheques</button>
                         <button id="btnGestionConciliacionesMayor" onclick="abrirGestionConciliacionesMayor()" class="btn-secondary" disabled>📂 Gestionar Conciliaciones</button>
                         <button onclick="exportarAnalisisMayor()" class="btn-template">📥 Exportar Análisis</button>
+                        <button id="btnVerEliminados" onclick="mostrarModalMovimientosEliminados()" class="btn-secondary" style="display: none;">🗑️ Ver Eliminados <span id="contadorEliminados" class="contador-badge">0</span></button>
                         <button id="btnGuardarConciliacion" onclick="mostrarModalGuardarConciliacionMayor()" class="btn-success" style="display: none;">💾 Guardar</button>
                     </div>
 
@@ -229,9 +230,12 @@
                                     <div class="estado-icono">📂</div>
                                     <div class="estado-info">
                                         <h5>Listado de cheques no cargado</h5>
-                                        <p>Cargue el listado de cheques recibidos desde un archivo Excel para luego conciliar con los registros del debe.</p>
+                                        <p>Cargue el listado de cheques recibidos desde un archivo Excel o agregue cheques manualmente.</p>
                                     </div>
-                                    <button onclick="mostrarCargarListadoCheques()" class="btn-primary">📋 Cargar Listado de Cheques</button>
+                                    <div class="estado-acciones">
+                                        <button onclick="mostrarCargarListadoCheques()" class="btn-primary">📋 Cargar desde Excel</button>
+                                        <button onclick="iniciarListadoManual()" class="btn-secondary">➕ Agregar manualmente</button>
+                                    </div>
                                 </div>
 
                                 <div id="listadoCargado" class="listado-estado cargado" style="display: none;">
@@ -242,6 +246,7 @@
                                         <p id="resumenMesesDisponibles" class="text-muted"></p>
                                     </div>
                                     <div class="estado-acciones">
+                                        <button onclick="mostrarModalAgregarCheque()" class="btn-primary btn-sm">➕ Agregar cheque</button>
                                         <button onclick="mostrarCargarListadoCheques()" class="btn-secondary btn-sm">🔄 Recargar listado</button>
                                     </div>
                                 </div>
@@ -582,6 +587,7 @@
                                         <th class="text-right">Haber</th>
                                         <th>Estado</th>
                                         <th>Vinculado con</th>
+                                        <th class="acciones-col">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tablaMayorBody">
@@ -1028,6 +1034,204 @@
             <div class="btn-group">
                 <button onclick="cerrarConfirmarDiferenciaListado()" class="btn-secondary">Cancelar</button>
                 <button onclick="confirmarIncorporarListadoConDiferencia()" class="btn-warning">Incorporar de todas formas</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Agregar Cheque Manualmente -->
+    <div id="modalAgregarCheque" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>➕ Agregar Cheque</h2>
+                <button class="close-btn" onclick="cerrarModalAgregarCheque()">✕</button>
+            </div>
+            <div class="info-box mb-4">
+                <strong>Agregar cheque manualmente:</strong> Complete los datos del cheque para agregarlo al listado.
+                Los campos marcados con * son obligatorios.
+            </div>
+
+            <div class="form-grid-cheque">
+                <div class="form-row">
+                    <div class="form-field">
+                        <label>Número de Cheque *</label>
+                        <input type="text" id="chequeNumero" class="input-text" placeholder="Ej: 12345678">
+                    </div>
+                    <div class="form-field">
+                        <label>ID Interno</label>
+                        <input type="text" id="chequeInterno" class="input-text" placeholder="ID interno (opcional)">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-field">
+                        <label>Importe * ($)</label>
+                        <input type="text" id="chequeImporte" class="input-text" placeholder="Ej: 150.000,00">
+                    </div>
+                    <div class="form-field">
+                        <label>Estado</label>
+                        <select id="chequeEstado" class="input-text">
+                            <option value="">-- Seleccionar --</option>
+                            <option value="Recibido">Recibido</option>
+                            <option value="Depositado">Depositado</option>
+                            <option value="Cobrado">Cobrado</option>
+                            <option value="Rechazado">Rechazado</option>
+                            <option value="Transferido">Transferido</option>
+                            <option value="Pendiente">Pendiente</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-field">
+                        <label>Origen (Librador) *</label>
+                        <input type="text" id="chequeOrigen" class="input-text" placeholder="Nombre del emisor del cheque">
+                    </div>
+                    <div class="form-field">
+                        <label>Destino</label>
+                        <input type="text" id="chequeDestino" class="input-text" placeholder="Destino del cheque (opcional)">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-field">
+                        <label>Fecha de Emisión</label>
+                        <input type="date" id="chequeFechaEmision" class="input-text">
+                    </div>
+                    <div class="form-field">
+                        <label>Fecha de Recepción *</label>
+                        <input type="date" id="chequeFechaRecepcion" class="input-text">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-field">
+                        <label>Fecha de Cobro</label>
+                        <input type="date" id="chequeFechaCobro" class="input-text">
+                    </div>
+                    <div class="form-field">
+                        <label>Fecha de Depósito</label>
+                        <input type="date" id="chequeFechaDeposito" class="input-text">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-field">
+                        <label>Fecha de Transferencia</label>
+                        <input type="date" id="chequeFechaTransferencia" class="input-text">
+                    </div>
+                    <div class="form-field">
+                        <label>Fecha de Rechazo</label>
+                        <input type="date" id="chequeFechaRechazo" class="input-text">
+                    </div>
+                </div>
+            </div>
+
+            <div id="errorAgregarCheque" class="error-message" style="display: none; color: #dc2626; margin-top: 10px;"></div>
+
+            <div class="btn-group mt-4">
+                <button onclick="cerrarModalAgregarCheque()" class="btn-secondary">Cancelar</button>
+                <button onclick="confirmarAgregarCheque()" class="btn-primary">➕ Agregar Cheque</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Eliminar Movimiento del Mayor -->
+    <div id="modalEliminarMovimiento" class="modal hidden">
+        <div class="modal-content-sm">
+            <div class="modal-header">
+                <h2>🗑️ Eliminar Movimiento</h2>
+                <button class="close-btn" onclick="cerrarModalEliminarMovimiento()">✕</button>
+            </div>
+
+            <div class="info-box mb-4" style="background: #fef2f2; border-color: #fca5a5;">
+                <strong>Atención:</strong> El movimiento será eliminado del análisis pero quedará registrado en el listado de movimientos eliminados.
+            </div>
+
+            <!-- Información del movimiento a eliminar -->
+            <div id="infoMovimientoEliminar" class="info-movimiento-eliminar">
+                <div class="movimiento-detalle">
+                    <span class="label">Fecha:</span>
+                    <span id="elimMovFecha" class="valor">-</span>
+                </div>
+                <div class="movimiento-detalle">
+                    <span class="label">Asiento:</span>
+                    <span id="elimMovAsiento" class="valor">-</span>
+                </div>
+                <div class="movimiento-detalle">
+                    <span class="label">Descripción:</span>
+                    <span id="elimMovDescripcion" class="valor">-</span>
+                </div>
+                <div class="movimiento-detalle">
+                    <span class="label">Importe:</span>
+                    <span id="elimMovImporte" class="valor">-</span>
+                </div>
+            </div>
+
+            <!-- Nota de eliminación -->
+            <div class="form-field mt-4">
+                <label for="notaEliminacion">Motivo de eliminación (opcional):</label>
+                <textarea id="notaEliminacion" class="input-text" rows="3" placeholder="Ingrese el motivo por el cual elimina este movimiento..."></textarea>
+            </div>
+
+            <input type="hidden" id="movimientoAEliminarId" value="">
+
+            <div class="btn-group mt-4">
+                <button onclick="cerrarModalEliminarMovimiento()" class="btn-secondary">Cancelar</button>
+                <button onclick="confirmarEliminarMovimiento()" class="btn-danger">🗑️ Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ver Movimientos Eliminados -->
+    <div id="modalMovimientosEliminados" class="modal hidden">
+        <div class="modal-content modal-content-lg">
+            <div class="modal-header">
+                <h2>📋 Movimientos Eliminados</h2>
+                <button class="close-btn" onclick="cerrarModalMovimientosEliminados()">✕</button>
+            </div>
+
+            <div class="info-box mb-4">
+                <strong>Historial de eliminaciones:</strong> Aquí puede ver todos los movimientos que han sido eliminados del análisis y restaurarlos si es necesario.
+            </div>
+
+            <!-- Resumen -->
+            <div id="resumenMovimientosEliminados" class="resumen-eliminados">
+                <div class="stat-item">
+                    <span class="stat-numero" id="totalMovimientosEliminados">0</span>
+                    <span class="stat-label">Movimientos eliminados</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-numero" id="totalImporteEliminado">$0</span>
+                    <span class="stat-label">Importe total eliminado</span>
+                </div>
+            </div>
+
+            <!-- Tabla de movimientos eliminados -->
+            <div class="tabla-container-eliminados">
+                <table class="tabla-eliminados">
+                    <thead>
+                        <tr>
+                            <th>Fecha Elim.</th>
+                            <th>Fecha Mov.</th>
+                            <th>Asiento</th>
+                            <th>Descripción</th>
+                            <th>Debe</th>
+                            <th>Haber</th>
+                            <th>Nota</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaMovimientosEliminadosBody">
+                        <tr>
+                            <td colspan="8" class="empty-state">No hay movimientos eliminados</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="btn-group mt-4">
+                <button onclick="cerrarModalMovimientosEliminados()" class="btn-secondary">Cerrar</button>
+                <button onclick="exportarMovimientosEliminados()" class="btn-primary" id="btnExportarEliminados" disabled>📥 Exportar a Excel</button>
             </div>
         </div>
     </div>
