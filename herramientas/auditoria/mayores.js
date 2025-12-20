@@ -596,6 +596,10 @@ function seleccionarTipoMayor(tipoId) {
     // Ocultar info del mayor (hasta que se cargue)
     document.getElementById('infoMayorCargado').style.display = 'none';
 
+    // Ocultar botón de guardar (hasta que se cargue un mayor)
+    const btnGuardar = document.getElementById('btnGuardarConciliacion');
+    if (btnGuardar) btnGuardar.style.display = 'none';
+
     // Resetear datos y estado de conciliación cargada
     stateMayores.registrosMayor = [];
     stateMayores.vinculaciones = [];
@@ -932,6 +936,10 @@ async function procesarMayor() {
 
         // Mostrar info del mayor
         document.getElementById('infoMayorCargado').style.display = 'block';
+
+        // Mostrar botón de guardar en toolbar
+        const btnGuardar = document.getElementById('btnGuardarConciliacion');
+        if (btnGuardar) btnGuardar.style.display = 'inline-flex';
 
         console.log(`✅ Mayor procesado: ${registros.length} registros`);
         if (registros.length > 0) {
@@ -3375,6 +3383,12 @@ function cargarConciliacionMayorGuardada(conciliacionId) {
     document.getElementById('infoMayorCargado').style.display =
         stateMayores.registrosMayor.length > 0 ? 'block' : 'none';
 
+    // Mostrar/ocultar botón de guardar en toolbar
+    const btnGuardar = document.getElementById('btnGuardarConciliacion');
+    if (btnGuardar) {
+        btnGuardar.style.display = stateMayores.registrosMayor.length > 0 ? 'inline-flex' : 'none';
+    }
+
     console.log(`✅ Conciliación "${conciliacion.nombre}" cargada: ${registros.length} registros`);
 }
 
@@ -3410,6 +3424,10 @@ function nuevaConciliacionMayor() {
     }
 
     document.getElementById('infoMayorCargado').style.display = 'none';
+
+    // Ocultar botón de guardar en toolbar
+    const btnGuardar = document.getElementById('btnGuardarConciliacion');
+    if (btnGuardar) btnGuardar.style.display = 'none';
 
     console.log('📝 Nueva conciliación iniciada');
 }
@@ -3571,6 +3589,10 @@ function ejecutarEliminarConciliacionMayor() {
         renderizarTablaMayor();
         renderizarVinculacion();
         document.getElementById('infoMayorCargado').style.display = 'none';
+
+        // Ocultar botón de guardar en toolbar
+        const btnGuardar = document.getElementById('btnGuardarConciliacion');
+        if (btnGuardar) btnGuardar.style.display = 'none';
     }
 
     cerrarConfirmarEliminarConciliacionMayor();
