@@ -3276,6 +3276,23 @@ function cargarConciliacionMayorGuardada(conciliacionId) {
     stateMayores.conciliacionCargadaId = conciliacion.id;
     stateMayores.conciliacionCargadaNombre = conciliacion.nombre;
 
+    // Restaurar cheques si están incluidos en la conciliación
+    if (conciliacion.listadoChequesCargados && conciliacion.listadoChequesCargados.length > 0) {
+        // Restaurar fechas de los cheques como objetos Date
+        conciliacion.listadoChequesCargados.forEach(c => {
+            if (c.fechaRecepcion) c.fechaRecepcion = new Date(c.fechaRecepcion);
+            if (c.fechaEmision) c.fechaEmision = new Date(c.fechaEmision);
+            if (c.fechaDeposito) c.fechaDeposito = new Date(c.fechaDeposito);
+        });
+
+        stateMayores.listadoChequesCargados = conciliacion.listadoChequesCargados;
+        stateMayores.listadoChequesIncorporado = conciliacion.listadoChequesIncorporado || true;
+        stateMayores.mesesDisponibles = conciliacion.mesesDisponibles || calcularMesesDeCheques(conciliacion.listadoChequesCargados);
+        stateMayores.mesesProcesados = conciliacion.mesesProcesados || {};
+
+        console.log(`📋 Cheques restaurados: ${conciliacion.listadoChequesCargados.length} cheques`);
+    }
+
     // Actualizar UI
     actualizarEstadisticasMayor();
     renderizarTablaMayor();
@@ -3283,6 +3300,19 @@ function cargarConciliacionMayorGuardada(conciliacionId) {
     if (stateMayores.tipoMayorActual?.logica === 'vinculacion') {
         renderizarVinculacion();
         actualizarEstadisticasVinculacion();
+    }
+
+    // Actualizar UI de cheques si corresponde
+    if (stateMayores.tipoMayorActual?.id === 'cheques_terceros_recibidos') {
+        actualizarEstadoListadoCheques();
+        actualizarResumenListadoCheques();
+
+        // Mostrar panel de conciliación por mes si hay cheques
+        const panelPaso2Mes = document.getElementById('panelConciliacionPorMes');
+        if (panelPaso2Mes && stateMayores.listadoChequesIncorporado) {
+            panelPaso2Mes.style.display = 'block';
+            renderizarListaMeses();
+        }
     }
 
     document.getElementById('infoMayorCargado').style.display =
@@ -3303,8 +3333,24 @@ function nuevaConciliacionMayor() {
     stateMayores.conciliacionCargadaId = null;
     stateMayores.conciliacionCargadaNombre = null;
 
+    // Resetear cheques también
+    stateMayores.listadoChequesCargados = [];
+    stateMayores.listadoChequesIncorporado = false;
+    stateMayores.listadoChequesTemporal = [];
+    stateMayores.mesesDisponibles = [];
+    stateMayores.mesesProcesados = {};
+    stateMayores.mesActualConciliacion = null;
+    stateMayores.listadoChequesGuardadoId = null;
+
     renderizarTablaMayor();
     renderizarVinculacion();
+
+    // Actualizar UI de cheques si corresponde
+    if (stateMayores.tipoMayorActual?.id === 'cheques_terceros_recibidos') {
+        actualizarEstadoListadoCheques();
+        const panelPaso2Mes = document.getElementById('panelConciliacionPorMes');
+        if (panelPaso2Mes) panelPaso2Mes.style.display = 'none';
+    }
 
     document.getElementById('infoMayorCargado').style.display = 'none';
 
@@ -3548,6 +3594,14 @@ function ejecutarGuardarConciliacionMayor() {
     // Crear o actualizar conciliación
     const ahora = new Date().toISOString();
 
+    // Preparar datos de cheques para guardar junto con la conciliación
+    const datosCheques = {
+        listadoChequesCargados: stateMayores.listadoChequesCargados || [],
+        listadoChequesIncorporado: stateMayores.listadoChequesIncorporado || false,
+        mesesDisponibles: stateMayores.mesesDisponibles || [],
+        mesesProcesados: stateMayores.mesesProcesados || {}
+    };
+
     if (stateMayores.conciliacionCargadaId) {
         // Actualizar conciliación existente
         const index = conciliaciones.findIndex(c => c.id === stateMayores.conciliacionCargadaId);
@@ -3557,6 +3611,8 @@ function ejecutarGuardarConciliacionMayor() {
                 nombre: nombre,
                 registros: stateMayores.registrosMayor,
                 vinculaciones: stateMayores.vinculaciones,
+                // Incluir cheques en la conciliación
+                ...datosCheques,
                 fechaModificado: ahora
             };
             console.log('📝 Conciliación actualizada:', nombre);
@@ -3568,6 +3624,8 @@ function ejecutarGuardarConciliacionMayor() {
             nombre: nombre,
             registros: stateMayores.registrosMayor,
             vinculaciones: stateMayores.vinculaciones,
+            // Incluir cheques en la conciliación
+            ...datosCheques,
             fechaGuardado: ahora,
             fechaModificado: ahora
         };
@@ -5245,8 +5303,8 @@ function actualizarPanelConciliacionChequesDebe() {
         // Actualizar estado del listado de cheques
         actualizarEstadoListadoCheques();
 
-        // Verificar si hay listado guardado al cargar
-        verificarListadoChequesGuardado();
+        // NOTA: Los cheques se guardan/cargan junto con la conciliación completa
+        // No se verifica listado guardado por separado para evitar confusión
     } else {
         panelPaso1.style.display = 'none';
         panelPaso2Mes.style.display = 'none';
