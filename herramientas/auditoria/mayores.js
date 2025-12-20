@@ -6166,7 +6166,10 @@ function confirmarEliminarMovimiento() {
     // Actualizar UI
     actualizarContadorEliminados();
     renderizarTablaMayor();
-    actualizarEstadisticas();
+    actualizarEstadisticasMayor();
+
+    // Actualizar panel de vinculación para reflejar el registro eliminado
+    renderizarVinculacion();
 
     console.log(`🗑️ Movimiento eliminado: ${registro.asiento} - ${registro.descripcion}`);
 
