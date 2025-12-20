@@ -5816,7 +5816,7 @@ function renderizarConciliacionMes(asientos, chequesNoAsociados) {
     if (asientosFiltrados.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="8" style="text-align: center; color: #64748b; padding: 20px;">
+                <td colspan="10" style="text-align: center; color: #64748b; padding: 20px;">
                     ${soloPendientes ? 'No hay registros con diferencias' : 'No hay registros del debe en este mes'}
                 </td>
             </tr>
@@ -5826,6 +5826,8 @@ function renderizarConciliacionMes(asientos, chequesNoAsociados) {
             const sumaCheques = asiento.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
             const diferencia = asiento.debe - sumaCheques;
             const estado = asiento.estadoCheques;
+            const cantidadCheques = asiento.chequesAsociados.length;
+            const tieneChequesAsociados = cantidadCheques > 0;
 
             let claseEstado = '';
             let textoEstado = '';
@@ -5840,12 +5842,64 @@ function renderizarConciliacionMes(asientos, chequesNoAsociados) {
                 textoEstado = '❌ Sin cheques';
             }
 
+            // Generar HTML de cheques asociados para la fila expandible
+            const chequesDetalleHTML = tieneChequesAsociados ? `
+                <tr class="fila-detalle-cheques" id="detalle-${asiento.id}" style="display: none;">
+                    <td colspan="10" class="celda-detalle-cheques">
+                        <div class="contenedor-cheques-asociados">
+                            <div class="titulo-cheques-asociados">Cheques asociados (${cantidadCheques}):</div>
+                            <table class="tabla-cheques-asociados-detalle">
+                                <thead>
+                                    <tr>
+                                        <th>Número</th>
+                                        <th>Origen</th>
+                                        <th>F. Recepción</th>
+                                        <th class="text-right">Importe</th>
+                                        <th>Estado</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${asiento.chequesAsociados.map(cheque => {
+                                        const fechaRec = cheque.fechaRecepcion
+                                            ? formatearFecha(cheque.fechaRecepcion instanceof Date ? cheque.fechaRecepcion : new Date(cheque.fechaRecepcion))
+                                            : '-';
+                                        return `
+                                            <tr>
+                                                <td>${cheque.numero || cheque.interno || '-'}</td>
+                                                <td title="${cheque.origen || ''}">${truncarTexto(cheque.origen || '', 30)}</td>
+                                                <td>${fechaRec}</td>
+                                                <td class="text-right">${formatearMoneda(cheque.importe)}</td>
+                                                <td>${cheque.estado || '-'}</td>
+                                                <td>
+                                                    <button class="btn-accion-fila btn-desvincular" onclick="desvincularChequeDeAsiento('${asiento.id}', '${cheque.id || cheque.interno}')" title="Desvincular cheque">
+                                                        ✖
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+            ` : '';
+
             return `
-                <tr class="fila-${claseEstado}">
+                <tr class="fila-${claseEstado} fila-asiento-principal" data-asiento-id="${asiento.id}">
+                    <td class="celda-expandir">
+                        ${tieneChequesAsociados ? `<button class="btn-expandir-fila" onclick="toggleDetalleChequesAsiento('${asiento.id}')" title="Ver cheques asociados">▶</button>` : ''}
+                    </td>
                     <td>${formatearFecha(asiento.fecha)}</td>
                     <td>${asiento.asiento || '-'}</td>
                     <td title="${asiento.descripcion}">${truncarTexto(asiento.descripcion, 35)}</td>
                     <td class="text-right debe">${formatearMoneda(asiento.debe)}</td>
+                    <td class="text-center">
+                        ${tieneChequesAsociados
+                            ? `<span class="badge-cheques" onclick="toggleDetalleChequesAsiento('${asiento.id}')" title="Click para ver detalle">${cantidadCheques}</span>`
+                            : '<span class="badge-cheques-vacio">0</span>'}
+                    </td>
                     <td class="text-right">${formatearMoneda(sumaCheques)}</td>
                     <td class="text-right ${Math.abs(diferencia) > 0.01 ? 'diferencia-warning' : ''}">${formatearMoneda(diferencia)}</td>
                     <td><span class="estado-asociacion ${claseEstado}">${textoEstado}</span></td>
@@ -5855,6 +5909,7 @@ function renderizarConciliacionMes(asientos, chequesNoAsociados) {
                         </button>
                     </td>
                 </tr>
+                ${chequesDetalleHTML}
             `;
         }).join('');
     }
@@ -5870,10 +5925,106 @@ function renderizarConciliacionMes(asientos, chequesNoAsociados) {
 }
 
 /**
+ * Toggle para mostrar/ocultar detalle de cheques asociados a un asiento
+ */
+function toggleDetalleChequesAsiento(asientoId) {
+    const filaDetalle = document.getElementById(`detalle-${asientoId}`);
+    const filaPrincipal = document.querySelector(`tr[data-asiento-id="${asientoId}"]`);
+    const btnExpandir = filaPrincipal?.querySelector('.btn-expandir-fila');
+
+    if (filaDetalle) {
+        const estaVisible = filaDetalle.style.display !== 'none';
+        filaDetalle.style.display = estaVisible ? 'none' : 'table-row';
+        if (btnExpandir) {
+            btnExpandir.textContent = estaVisible ? '▶' : '▼';
+        }
+        if (!estaVisible) {
+            filaPrincipal?.classList.add('fila-expandida');
+        } else {
+            filaPrincipal?.classList.remove('fila-expandida');
+        }
+    }
+}
+
+/**
+ * Desvincular un cheque de un asiento
+ */
+function desvincularChequeDeAsiento(asientoId, chequeId) {
+    const mesKey = stateMayores.mesActualConciliacion;
+    if (!mesKey) return;
+
+    const estadoMes = stateMayores.mesesProcesados[mesKey];
+    if (!estadoMes) return;
+
+    const asiento = estadoMes.asientosDelMes.find(a => a.id === asientoId);
+    if (!asiento) return;
+
+    // Encontrar y remover el cheque
+    const indiceCheque = asiento.chequesAsociados.findIndex(ch => (ch.id || ch.interno) === chequeId);
+    if (indiceCheque === -1) return;
+
+    const chequeDesvinculado = asiento.chequesAsociados.splice(indiceCheque, 1)[0];
+
+    // Agregar a la lista de no asociados
+    if (!estadoMes.chequesNoAsociadosDelMes) {
+        estadoMes.chequesNoAsociadosDelMes = [];
+    }
+    estadoMes.chequesNoAsociadosDelMes.push(chequeDesvinculado);
+
+    // Recalcular estado del asiento
+    const sumaCheques = asiento.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+    if (asiento.chequesAsociados.length === 0) {
+        asiento.estadoCheques = 'sin_cheques';
+    } else if (Math.abs(asiento.debe - sumaCheques) <= 0.01) {
+        asiento.estadoCheques = 'completo';
+    } else {
+        asiento.estadoCheques = 'parcial';
+        asiento.diferenciaCheques = asiento.debe - sumaCheques;
+    }
+
+    // Re-renderizar
+    renderizarConciliacionMes(estadoMes.asientosDelMes, estadoMes.chequesNoAsociadosDelMes || []);
+}
+
+// Estado para filtros y ordenamiento de cheques no asociados
+let chequesNoAsociadosOrdenamiento = {
+    campo: null,
+    direccion: 'asc'
+};
+let chequesNoAsociadosOriginales = [];
+
+/**
  * Renderizar tabla de cheques no asociados del mes
  */
 function renderizarChequesNoAsociadosMes(cheques) {
+    // Guardar referencia original para filtros
+    chequesNoAsociadosOriginales = [...cheques];
+
+    // Actualizar contador
+    const contador = document.getElementById('contadorChequesNoAsociados');
+    if (contador) {
+        contador.textContent = `(${cheques.length} cheques)`;
+    }
+
+    renderizarTablaChequesNoAsociados(cheques);
+}
+
+/**
+ * Renderizar la tabla de cheques no asociados (usado internamente)
+ */
+function renderizarTablaChequesNoAsociados(cheques) {
     const tbody = document.getElementById('tablaChequesNoAsociadosMes');
+
+    if (cheques.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; color: #64748b; padding: 20px;">
+                    No hay cheques que coincidan con los filtros
+                </td>
+            </tr>
+        `;
+        return;
+    }
 
     tbody.innerHTML = cheques.map(cheque => {
         const fechaRecepcion = cheque.fechaRecepcion
@@ -5883,7 +6034,7 @@ function renderizarChequesNoAsociadosMes(cheques) {
         return `
             <tr>
                 <td>${cheque.numero || cheque.interno || '-'}</td>
-                <td title="${cheque.origen}">${truncarTexto(cheque.origen, 25)}</td>
+                <td title="${cheque.origen || ''}">${truncarTexto(cheque.origen || '', 25)}</td>
                 <td>${fechaRecepcion}</td>
                 <td class="text-right">${formatearMoneda(cheque.importe)}</td>
                 <td>${cheque.estado || '-'}</td>
@@ -5895,6 +6046,138 @@ function renderizarChequesNoAsociadosMes(cheques) {
             </tr>
         `;
     }).join('');
+}
+
+/**
+ * Filtrar cheques no asociados según los inputs de filtro
+ */
+function filtrarChequesNoAsociados() {
+    const filtroNumero = (document.getElementById('filtroNumeroChequeSinAsociar')?.value || '').toLowerCase().trim();
+    const filtroOrigen = (document.getElementById('filtroOrigenChequeSinAsociar')?.value || '').toLowerCase().trim();
+    const filtroEstado = (document.getElementById('filtroEstadoChequeSinAsociar')?.value || '').toLowerCase().trim();
+
+    let chequesFiltrados = chequesNoAsociadosOriginales.filter(cheque => {
+        const numero = (cheque.numero || cheque.interno || '').toString().toLowerCase();
+        const origen = (cheque.origen || '').toLowerCase();
+        const estado = (cheque.estado || '').toLowerCase();
+
+        const matchNumero = !filtroNumero || numero.includes(filtroNumero);
+        const matchOrigen = !filtroOrigen || origen.includes(filtroOrigen);
+        const matchEstado = !filtroEstado || estado.includes(filtroEstado);
+
+        return matchNumero && matchOrigen && matchEstado;
+    });
+
+    // Aplicar ordenamiento si hay uno activo
+    if (chequesNoAsociadosOrdenamiento.campo) {
+        chequesFiltrados = ordenarCheques(chequesFiltrados, chequesNoAsociadosOrdenamiento.campo, chequesNoAsociadosOrdenamiento.direccion);
+    }
+
+    renderizarTablaChequesNoAsociados(chequesFiltrados);
+}
+
+/**
+ * Limpiar filtros de cheques no asociados
+ */
+function limpiarFiltrosChequesNoAsociados() {
+    const filtroNumero = document.getElementById('filtroNumeroChequeSinAsociar');
+    const filtroOrigen = document.getElementById('filtroOrigenChequeSinAsociar');
+    const filtroEstado = document.getElementById('filtroEstadoChequeSinAsociar');
+
+    if (filtroNumero) filtroNumero.value = '';
+    if (filtroOrigen) filtroOrigen.value = '';
+    if (filtroEstado) filtroEstado.value = '';
+
+    // Resetear ordenamiento
+    chequesNoAsociadosOrdenamiento = { campo: null, direccion: 'asc' };
+    actualizarIconosOrdenamiento(null);
+
+    renderizarTablaChequesNoAsociados(chequesNoAsociadosOriginales);
+}
+
+/**
+ * Ordenar cheques no asociados por columna
+ */
+function ordenarChequesNoAsociados(campo) {
+    // Si se hace clic en la misma columna, cambiar dirección
+    if (chequesNoAsociadosOrdenamiento.campo === campo) {
+        chequesNoAsociadosOrdenamiento.direccion = chequesNoAsociadosOrdenamiento.direccion === 'asc' ? 'desc' : 'asc';
+    } else {
+        chequesNoAsociadosOrdenamiento.campo = campo;
+        chequesNoAsociadosOrdenamiento.direccion = 'asc';
+    }
+
+    // Actualizar iconos
+    actualizarIconosOrdenamiento(campo);
+
+    // Re-aplicar filtros (que también aplicará ordenamiento)
+    filtrarChequesNoAsociados();
+}
+
+/**
+ * Ordenar array de cheques por campo
+ */
+function ordenarCheques(cheques, campo, direccion) {
+    return [...cheques].sort((a, b) => {
+        let valorA, valorB;
+
+        switch (campo) {
+            case 'numero':
+                valorA = (a.numero || a.interno || '').toString().toLowerCase();
+                valorB = (b.numero || b.interno || '').toString().toLowerCase();
+                break;
+            case 'origen':
+                valorA = (a.origen || '').toLowerCase();
+                valorB = (b.origen || '').toLowerCase();
+                break;
+            case 'fechaRecepcion':
+                valorA = a.fechaRecepcion ? new Date(a.fechaRecepcion).getTime() : 0;
+                valorB = b.fechaRecepcion ? new Date(b.fechaRecepcion).getTime() : 0;
+                break;
+            case 'importe':
+                valorA = a.importe || 0;
+                valorB = b.importe || 0;
+                break;
+            case 'estado':
+                valorA = (a.estado || '').toLowerCase();
+                valorB = (b.estado || '').toLowerCase();
+                break;
+            default:
+                return 0;
+        }
+
+        let comparacion = 0;
+        if (typeof valorA === 'number' && typeof valorB === 'number') {
+            comparacion = valorA - valorB;
+        } else {
+            comparacion = valorA.toString().localeCompare(valorB.toString());
+        }
+
+        return direccion === 'asc' ? comparacion : -comparacion;
+    });
+}
+
+/**
+ * Actualizar iconos de ordenamiento en cabeceras
+ */
+function actualizarIconosOrdenamiento(campoActivo) {
+    const tabla = document.querySelector('.tabla-cheques-no-asociados');
+    if (!tabla) return;
+
+    const headers = tabla.querySelectorAll('th.sortable');
+    headers.forEach(th => {
+        const campo = th.getAttribute('data-sort');
+        const icono = th.querySelector('.sort-icon');
+        if (icono) {
+            if (campo === campoActivo) {
+                icono.textContent = chequesNoAsociadosOrdenamiento.direccion === 'asc' ? '▲' : '▼';
+                th.classList.add('sorted');
+            } else {
+                icono.textContent = '⇅';
+                th.classList.remove('sorted');
+            }
+        }
+    });
 }
 
 /**

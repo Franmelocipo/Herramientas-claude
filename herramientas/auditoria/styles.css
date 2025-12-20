@@ -3632,6 +3632,246 @@ body {
 }
 
 /* ============================================
+   DETALLE DE CHEQUES ASOCIADOS (expandible)
+   ============================================ */
+
+/* Celda de expandir */
+.celda-expandir {
+    width: 30px;
+    padding: 4px 8px !important;
+    text-align: center;
+}
+
+.btn-expandir-fila {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 10px;
+    color: #64748b;
+    padding: 4px 6px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.btn-expandir-fila:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+}
+
+/* Fila expandida */
+.fila-asiento-principal.fila-expandida {
+    border-bottom: none !important;
+}
+
+/* Badge de cantidad de cheques */
+.badge-cheques {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    background: #3b82f6;
+    color: white;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.badge-cheques:hover {
+    background: #2563eb;
+    transform: scale(1.05);
+}
+
+.badge-cheques-vacio {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    background: #e2e8f0;
+    color: #94a3b8;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Fila de detalle de cheques */
+.fila-detalle-cheques {
+    background-color: #f8fafc !important;
+}
+
+.celda-detalle-cheques {
+    padding: 0 !important;
+    border-top: none !important;
+}
+
+.contenedor-cheques-asociados {
+    padding: 12px 16px 16px 40px;
+    background: linear-gradient(to right, #f1f5f9, #f8fafc);
+    border-left: 3px solid #3b82f6;
+    margin: 0;
+}
+
+.titulo-cheques-asociados {
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 10px;
+}
+
+/* Tabla de cheques asociados en detalle */
+.tabla-cheques-asociados-detalle {
+    width: 100%;
+    font-size: 11px;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.tabla-cheques-asociados-detalle thead {
+    background: #f1f5f9;
+}
+
+.tabla-cheques-asociados-detalle th {
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #475569;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tabla-cheques-asociados-detalle td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #334155;
+}
+
+.tabla-cheques-asociados-detalle tr:last-child td {
+    border-bottom: none;
+}
+
+.tabla-cheques-asociados-detalle tr:hover {
+    background: #f8fafc;
+}
+
+/* Botón de desvincular */
+.btn-desvincular {
+    background: #fee2e2;
+    color: #dc2626;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.2s;
+}
+
+.btn-desvincular:hover {
+    background: #fecaca;
+    color: #b91c1c;
+}
+
+/* ============================================
+   FILTROS Y ORDENAMIENTO - CHEQUES SIN ASOCIAR
+   ============================================ */
+
+.cheques-no-asociados-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.contador-cheques-no-asociados {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.filtros-cheques-no-asociados {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.filtro-input-small {
+    padding: 6px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 12px;
+    width: 150px;
+    background: white;
+    transition: all 0.2s;
+}
+
+.filtro-input-small:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.filtro-input-small::placeholder {
+    color: #94a3b8;
+}
+
+.btn-limpiar-filtros {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #64748b;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.btn-limpiar-filtros:hover {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+/* Tabla de cheques no asociados */
+.tabla-cheques-no-asociados {
+    font-size: 12px;
+}
+
+.tabla-cheques-no-asociados th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.tabla-cheques-no-asociados th.sortable:hover {
+    background: #e2e8f0;
+}
+
+.tabla-cheques-no-asociados th.sortable.sorted {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.sort-icon {
+    margin-left: 4px;
+    font-size: 10px;
+    opacity: 0.6;
+}
+
+.tabla-cheques-no-asociados th.sortable:hover .sort-icon,
+.tabla-cheques-no-asociados th.sortable.sorted .sort-icon {
+    opacity: 1;
+}
+
+/* ============================================
    PASO 2: CONCILIACIÓN POR MES
    ============================================ */
 
