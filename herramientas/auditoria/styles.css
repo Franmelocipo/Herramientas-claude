@@ -3332,3 +3332,341 @@ body {
         font-size: 11px;
     }
 }
+
+/* ============================================
+   ESTILOS PARA PASOS DE CONCILIACIÓN
+   ============================================ */
+
+/* Panel de paso de conciliación */
+.panel-paso-conciliacion {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin-bottom: 20px;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+}
+
+/* Header del paso */
+.paso-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-bottom: 1px solid #e2e8f0;
+    cursor: pointer;
+}
+
+.paso-header:hover {
+    background: linear-gradient(135deg, #f1f5f9 0%, #cbd5e1 100%);
+}
+
+/* Número del paso */
+.paso-numero {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    flex-shrink: 0;
+    box-shadow: 0 2px 6px rgba(14, 165, 233, 0.4);
+}
+
+/* Título del paso */
+.paso-titulo {
+    flex: 1;
+}
+
+.paso-titulo h4 {
+    margin: 0;
+    color: #1e293b;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.paso-descripcion {
+    margin: 4px 0 0 0;
+    color: #64748b;
+    font-size: 13px;
+}
+
+/* Botón toggle del paso */
+.btn-toggle-paso {
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    color: #64748b;
+    font-size: 16px;
+    transition: transform 0.3s ease;
+}
+
+.btn-toggle-paso:hover {
+    color: #0ea5e9;
+}
+
+.btn-toggle-paso.collapsed span {
+    transform: rotate(-90deg);
+    display: inline-block;
+}
+
+/* Contenido del paso */
+.paso-contenido {
+    padding: 20px;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+}
+
+.paso-contenido.collapsed {
+    display: none;
+}
+
+/* Estado del listado de cheques */
+.estado-listado-cheques {
+    margin-bottom: 20px;
+}
+
+.listado-estado {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+
+.listado-estado.sin-cargar {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border: 1px dashed #94a3b8;
+}
+
+.listado-estado.cargado {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border: 1px solid #86efac;
+}
+
+.estado-icono {
+    font-size: 32px;
+}
+
+.estado-info {
+    flex: 1;
+    min-width: 200px;
+}
+
+.estado-info h5 {
+    margin: 0 0 4px 0;
+    color: #1e293b;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.estado-info p {
+    margin: 0;
+    color: #64748b;
+    font-size: 13px;
+}
+
+/* Estadísticas de conciliación por paso */
+.stats-conciliacion-paso {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.stat-conciliacion {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 24px;
+    border-radius: 8px;
+    min-width: 120px;
+    flex: 1;
+    text-align: center;
+}
+
+.stat-conciliacion.completo {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border: 1px solid #86efac;
+}
+
+.stat-conciliacion.parcial {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fcd34d;
+}
+
+.stat-conciliacion.sin-cheques {
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border: 1px solid #fca5a5;
+}
+
+.stat-conciliacion.no-asociados {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border: 1px solid #94a3b8;
+}
+
+.stat-numero {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1;
+}
+
+.stat-conciliacion.completo .stat-numero {
+    color: #16a34a;
+}
+
+.stat-conciliacion.parcial .stat-numero {
+    color: #d97706;
+}
+
+.stat-conciliacion.sin-cheques .stat-numero {
+    color: #dc2626;
+}
+
+.stat-conciliacion.no-asociados .stat-numero {
+    color: #64748b;
+}
+
+.stat-conciliacion .stat-label {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+/* Tabla resumen de asociaciones */
+.tabla-resumen-asociaciones {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid #e2e8f0;
+}
+
+.resumen-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.resumen-header h5 {
+    margin: 0;
+    color: #1e293b;
+    font-size: 14px;
+}
+
+.resumen-filtros {
+    display: flex;
+    gap: 16px;
+}
+
+.filtro-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #475569;
+    cursor: pointer;
+}
+
+.filtro-inline input[type="checkbox"] {
+    cursor: pointer;
+}
+
+.tabla-asociaciones-cheques {
+    font-size: 12px;
+}
+
+.tabla-asociaciones-cheques td {
+    padding: 8px 12px;
+}
+
+/* Estados en tabla de asociaciones */
+.estado-asociacion {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.estado-asociacion.completo {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.estado-asociacion.parcial {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.estado-asociacion.sin-cheques {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+/* Filas de la tabla de asociaciones */
+.tabla-asociaciones-cheques .fila-completo {
+    background-color: rgba(220, 252, 231, 0.3);
+}
+
+.tabla-asociaciones-cheques .fila-parcial {
+    background-color: rgba(254, 243, 199, 0.3);
+}
+
+.tabla-asociaciones-cheques .fila-sin-cheques {
+    background-color: rgba(254, 226, 226, 0.3);
+}
+
+.diferencia-warning {
+    color: #dc2626 !important;
+    font-weight: 600;
+}
+
+/* Responsive para pasos de conciliación */
+@media (max-width: 768px) {
+    .paso-header {
+        padding: 12px 16px;
+        flex-wrap: wrap;
+    }
+
+    .paso-numero {
+        width: 30px;
+        height: 30px;
+        font-size: 14px;
+    }
+
+    .paso-titulo h4 {
+        font-size: 14px;
+    }
+
+    .stats-conciliacion-paso {
+        gap: 8px;
+    }
+
+    .stat-conciliacion {
+        min-width: 100px;
+        padding: 12px 16px;
+    }
+
+    .stat-numero {
+        font-size: 22px;
+    }
+
+    .listado-estado {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .estado-info {
+        text-align: center;
+    }
+}
