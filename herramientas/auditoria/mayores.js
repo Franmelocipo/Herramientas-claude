@@ -50,7 +50,9 @@ const stateMayores = {
     mesesDisponibles: [],          // Array de meses disponibles para conciliar
     mesesProcesados: {},           // Objeto con estado de cada mes { 'YYYY-MM': { procesado: true, vinculaciones: [...], ... } }
     mesActualConciliacion: null,   // Mes actualmente seleccionado para conciliar
-    listadoChequesGuardadoId: null // ID del listado de cheques guardado
+    listadoChequesGuardadoId: null, // ID del listado de cheques guardado
+    // Estado para movimientos eliminados
+    movimientosEliminados: []      // Array de movimientos eliminados con notas
 };
 
 // Variables para gestión de conciliaciones
@@ -2361,7 +2363,7 @@ function renderizarTablaMayor() {
     }
 
     if (registrosFiltrados.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="empty-state" style="text-align: center; padding: 40px;">No hay registros para mostrar</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="empty-state" style="text-align: center; padding: 40px;">No hay registros para mostrar</td></tr>`;
         return;
     }
 
@@ -2386,6 +2388,9 @@ function renderizarTablaMayor() {
             <td class="text-right" style="color: #16a34a;">${r.haber > 0 ? formatearMoneda(r.haber) : ''}</td>
             <td><span class="registro-estado ${r.estado}">${obtenerEtiquetaEstado(r.estado)}</span></td>
             <td>${r.vinculadoCon?.length > 0 ? `${r.vinculadoCon.length} reg.` : '-'}</td>
+            <td class="acciones-col">
+                <button class="btn-eliminar-mov" onclick="mostrarModalEliminarMovimiento('${r.id}')" title="Eliminar movimiento">🗑️</button>
+            </td>
         </tr>
     `}).join('');
 }
@@ -5966,6 +5971,301 @@ function confirmarAgregarCheque() {
 
     // Mostrar confirmación
     alert(`✅ Cheque agregado correctamente:\n\nNúmero: ${numero}\nImporte: ${formatearMoneda(importe)}\nOrigen: ${origen}`);
+}
+
+// ============================================
+// FUNCIONES PARA ELIMINAR MOVIMIENTOS DEL MAYOR
+// ============================================
+
+/**
+ * Mostrar modal para eliminar un movimiento del mayor
+ * @param {string} movimientoId - ID del movimiento a eliminar
+ */
+function mostrarModalEliminarMovimiento(movimientoId) {
+    const registro = stateMayores.registrosMayor.find(r => r.id === movimientoId);
+
+    if (!registro) {
+        alert('No se encontró el movimiento seleccionado.');
+        return;
+    }
+
+    // Llenar información del movimiento
+    document.getElementById('elimMovFecha').textContent = formatearFecha(registro.fecha);
+    document.getElementById('elimMovAsiento').textContent = registro.asiento || '-';
+    document.getElementById('elimMovDescripcion').textContent = registro.descripcion || '-';
+
+    const importe = registro.debe > 0 ? registro.debe : registro.haber;
+    const tipoImporte = registro.debe > 0 ? 'Debe' : 'Haber';
+    document.getElementById('elimMovImporte').textContent = `${formatearMoneda(importe)} (${tipoImporte})`;
+
+    // Guardar ID del movimiento a eliminar
+    document.getElementById('movimientoAEliminarId').value = movimientoId;
+
+    // Limpiar nota
+    document.getElementById('notaEliminacion').value = '';
+
+    // Mostrar modal
+    document.getElementById('modalEliminarMovimiento').classList.remove('hidden');
+}
+
+/**
+ * Cerrar modal de eliminar movimiento
+ */
+function cerrarModalEliminarMovimiento() {
+    document.getElementById('modalEliminarMovimiento').classList.add('hidden');
+    document.getElementById('movimientoAEliminarId').value = '';
+    document.getElementById('notaEliminacion').value = '';
+}
+
+/**
+ * Confirmar y ejecutar la eliminación del movimiento
+ */
+function confirmarEliminarMovimiento() {
+    const movimientoId = document.getElementById('movimientoAEliminarId').value;
+    const nota = document.getElementById('notaEliminacion').value.trim();
+
+    if (!movimientoId) {
+        alert('Error: No se especificó el movimiento a eliminar.');
+        return;
+    }
+
+    // Buscar el movimiento
+    const indice = stateMayores.registrosMayor.findIndex(r => r.id === movimientoId);
+
+    if (indice === -1) {
+        alert('Error: No se encontró el movimiento en el mayor.');
+        cerrarModalEliminarMovimiento();
+        return;
+    }
+
+    const registro = stateMayores.registrosMayor[indice];
+
+    // Crear registro de movimiento eliminado
+    const movimientoEliminado = {
+        id: `elim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        movimientoOriginal: { ...registro },
+        fechaEliminacion: new Date().toISOString(),
+        nota: nota || 'Sin nota',
+        eliminadoPor: 'Usuario'  // Podría expandirse para incluir info del usuario
+    };
+
+    // Agregar a la lista de eliminados
+    stateMayores.movimientosEliminados.push(movimientoEliminado);
+
+    // Eliminar del array de registros del mayor
+    stateMayores.registrosMayor.splice(indice, 1);
+
+    // Si el registro estaba vinculado, deshacer las vinculaciones
+    if (registro.vinculadoCon && registro.vinculadoCon.length > 0) {
+        registro.vinculadoCon.forEach(vinculadoId => {
+            const regVinculado = stateMayores.registrosMayor.find(r => r.id === vinculadoId);
+            if (regVinculado && regVinculado.vinculadoCon) {
+                regVinculado.vinculadoCon = regVinculado.vinculadoCon.filter(id => id !== movimientoId);
+                if (regVinculado.vinculadoCon.length === 0) {
+                    regVinculado.estado = 'pendiente';
+                }
+            }
+        });
+
+        // Eliminar vinculación del array principal
+        stateMayores.vinculaciones = stateMayores.vinculaciones.filter(v =>
+            !v.origenes.includes(movimientoId) && !v.destinos.includes(movimientoId)
+        );
+    }
+
+    // Actualizar UI
+    actualizarContadorEliminados();
+    renderizarTablaMayor();
+    actualizarEstadisticas();
+
+    console.log(`🗑️ Movimiento eliminado: ${registro.asiento} - ${registro.descripcion}`);
+
+    // Cerrar modal
+    cerrarModalEliminarMovimiento();
+
+    // Mostrar notificación
+    mostrarNotificacion(`Movimiento eliminado correctamente. ${nota ? 'Nota: ' + nota : ''}`);
+}
+
+/**
+ * Actualizar contador de movimientos eliminados en la toolbar
+ */
+function actualizarContadorEliminados() {
+    const contador = stateMayores.movimientosEliminados.length;
+    const contadorEl = document.getElementById('contadorEliminados');
+    const btnVerEliminados = document.getElementById('btnVerEliminados');
+
+    if (contadorEl) {
+        contadorEl.textContent = contador;
+    }
+
+    // Mostrar/ocultar botón según si hay eliminados
+    if (btnVerEliminados) {
+        btnVerEliminados.style.display = contador > 0 ? 'inline-flex' : 'none';
+    }
+}
+
+/**
+ * Mostrar modal de movimientos eliminados
+ */
+function mostrarModalMovimientosEliminados() {
+    renderizarTablaMovimientosEliminados();
+    document.getElementById('modalMovimientosEliminados').classList.remove('hidden');
+}
+
+/**
+ * Cerrar modal de movimientos eliminados
+ */
+function cerrarModalMovimientosEliminados() {
+    document.getElementById('modalMovimientosEliminados').classList.add('hidden');
+}
+
+/**
+ * Renderizar tabla de movimientos eliminados
+ */
+function renderizarTablaMovimientosEliminados() {
+    const tbody = document.getElementById('tablaMovimientosEliminadosBody');
+    const eliminados = stateMayores.movimientosEliminados;
+    const btnExportar = document.getElementById('btnExportarEliminados');
+
+    // Actualizar resumen
+    document.getElementById('totalMovimientosEliminados').textContent = eliminados.length;
+
+    const totalImporte = eliminados.reduce((sum, e) => {
+        const mov = e.movimientoOriginal;
+        return sum + (mov.debe > 0 ? mov.debe : mov.haber);
+    }, 0);
+    document.getElementById('totalImporteEliminado').textContent = formatearMoneda(totalImporte);
+
+    // Habilitar/deshabilitar botón exportar
+    if (btnExportar) {
+        btnExportar.disabled = eliminados.length === 0;
+    }
+
+    if (eliminados.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-state" style="text-align: center; padding: 20px;">No hay movimientos eliminados</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = eliminados.map(e => {
+        const mov = e.movimientoOriginal;
+        const fechaElim = new Date(e.fechaEliminacion).toLocaleDateString('es-AR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        return `
+        <tr data-id="${e.id}">
+            <td class="fecha-eliminacion">${fechaElim}</td>
+            <td>${formatearFecha(mov.fecha)}</td>
+            <td>${mov.asiento || '-'}</td>
+            <td title="${mov.descripcion}">${truncarTexto(mov.descripcion, 30)}</td>
+            <td class="text-right" style="color: #dc2626;">${mov.debe > 0 ? formatearMoneda(mov.debe) : ''}</td>
+            <td class="text-right" style="color: #16a34a;">${mov.haber > 0 ? formatearMoneda(mov.haber) : ''}</td>
+            <td class="nota-eliminacion" title="${e.nota}">${truncarTexto(e.nota, 25)}</td>
+            <td class="acciones-col">
+                <button class="btn-restaurar-mov" onclick="restaurarMovimiento('${e.id}')" title="Restaurar movimiento">↩️</button>
+            </td>
+        </tr>
+        `;
+    }).join('');
+}
+
+/**
+ * Restaurar un movimiento eliminado
+ * @param {string} eliminadoId - ID del registro de eliminación
+ */
+function restaurarMovimiento(eliminadoId) {
+    const indice = stateMayores.movimientosEliminados.findIndex(e => e.id === eliminadoId);
+
+    if (indice === -1) {
+        alert('Error: No se encontró el movimiento eliminado.');
+        return;
+    }
+
+    const eliminado = stateMayores.movimientosEliminados[indice];
+    const movimiento = eliminado.movimientoOriginal;
+
+    // Restaurar al array de registros del mayor
+    // Resetear estado de vinculación ya que las vinculaciones fueron deshechas
+    movimiento.estado = 'pendiente';
+    movimiento.vinculadoCon = [];
+
+    stateMayores.registrosMayor.push(movimiento);
+
+    // Ordenar por fecha
+    stateMayores.registrosMayor.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+    // Eliminar de la lista de eliminados
+    stateMayores.movimientosEliminados.splice(indice, 1);
+
+    // Actualizar UI
+    actualizarContadorEliminados();
+    renderizarTablaMovimientosEliminados();
+    renderizarTablaMayor();
+    actualizarEstadisticas();
+
+    console.log(`↩️ Movimiento restaurado: ${movimiento.asiento} - ${movimiento.descripcion}`);
+
+    // Mostrar notificación
+    mostrarNotificacion('Movimiento restaurado correctamente.');
+}
+
+/**
+ * Exportar movimientos eliminados a Excel
+ */
+function exportarMovimientosEliminados() {
+    const eliminados = stateMayores.movimientosEliminados;
+
+    if (eliminados.length === 0) {
+        alert('No hay movimientos eliminados para exportar.');
+        return;
+    }
+
+    // Preparar datos para Excel
+    const datosExcel = eliminados.map(e => {
+        const mov = e.movimientoOriginal;
+        return {
+            'Fecha Eliminación': new Date(e.fechaEliminacion).toLocaleDateString('es-AR'),
+            'Hora Eliminación': new Date(e.fechaEliminacion).toLocaleTimeString('es-AR'),
+            'Fecha Movimiento': formatearFecha(mov.fecha),
+            'Asiento': mov.asiento || '',
+            'Descripción': mov.descripcion || '',
+            'Debe': mov.debe > 0 ? mov.debe : '',
+            'Haber': mov.haber > 0 ? mov.haber : '',
+            'Nota de Eliminación': e.nota || ''
+        };
+    });
+
+    // Crear libro de Excel
+    const ws = XLSX.utils.json_to_sheet(datosExcel);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Movimientos Eliminados');
+
+    // Ajustar anchos de columna
+    ws['!cols'] = [
+        { wch: 15 }, // Fecha Eliminación
+        { wch: 12 }, // Hora Eliminación
+        { wch: 15 }, // Fecha Movimiento
+        { wch: 12 }, // Asiento
+        { wch: 40 }, // Descripción
+        { wch: 15 }, // Debe
+        { wch: 15 }, // Haber
+        { wch: 40 }  // Nota
+    ];
+
+    // Generar nombre de archivo
+    const clienteNombre = stateMayores.clienteActual?.nombre || 'cliente';
+    const fecha = new Date().toISOString().split('T')[0];
+    const nombreArchivo = `movimientos_eliminados_${clienteNombre}_${fecha}.xlsx`;
+
+    // Descargar archivo
+    XLSX.writeFile(wb, nombreArchivo);
+
+    console.log(`📥 Exportados ${eliminados.length} movimientos eliminados a ${nombreArchivo}`);
 }
 
 /**

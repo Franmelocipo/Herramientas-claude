@@ -178,6 +178,7 @@
                         <button id="btnCargarListadoCheques" onclick="mostrarCargarListadoCheques()" class="btn-secondary" style="display: none;">📋 Cargar Listado Cheques</button>
                         <button id="btnGestionConciliacionesMayor" onclick="abrirGestionConciliacionesMayor()" class="btn-secondary" disabled>📂 Gestionar Conciliaciones</button>
                         <button onclick="exportarAnalisisMayor()" class="btn-template">📥 Exportar Análisis</button>
+                        <button id="btnVerEliminados" onclick="mostrarModalMovimientosEliminados()" class="btn-secondary" style="display: none;">🗑️ Ver Eliminados <span id="contadorEliminados" class="contador-badge">0</span></button>
                         <button id="btnGuardarConciliacion" onclick="mostrarModalGuardarConciliacionMayor()" class="btn-success" style="display: none;">💾 Guardar</button>
                     </div>
 
@@ -586,6 +587,7 @@
                                         <th class="text-right">Haber</th>
                                         <th>Estado</th>
                                         <th>Vinculado con</th>
+                                        <th class="acciones-col">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tablaMayorBody">
@@ -1129,6 +1131,107 @@
             <div class="btn-group mt-4">
                 <button onclick="cerrarModalAgregarCheque()" class="btn-secondary">Cancelar</button>
                 <button onclick="confirmarAgregarCheque()" class="btn-primary">➕ Agregar Cheque</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Eliminar Movimiento del Mayor -->
+    <div id="modalEliminarMovimiento" class="modal hidden">
+        <div class="modal-content-sm">
+            <div class="modal-header">
+                <h2>🗑️ Eliminar Movimiento</h2>
+                <button class="close-btn" onclick="cerrarModalEliminarMovimiento()">✕</button>
+            </div>
+
+            <div class="info-box mb-4" style="background: #fef2f2; border-color: #fca5a5;">
+                <strong>Atención:</strong> El movimiento será eliminado del análisis pero quedará registrado en el listado de movimientos eliminados.
+            </div>
+
+            <!-- Información del movimiento a eliminar -->
+            <div id="infoMovimientoEliminar" class="info-movimiento-eliminar">
+                <div class="movimiento-detalle">
+                    <span class="label">Fecha:</span>
+                    <span id="elimMovFecha" class="valor">-</span>
+                </div>
+                <div class="movimiento-detalle">
+                    <span class="label">Asiento:</span>
+                    <span id="elimMovAsiento" class="valor">-</span>
+                </div>
+                <div class="movimiento-detalle">
+                    <span class="label">Descripción:</span>
+                    <span id="elimMovDescripcion" class="valor">-</span>
+                </div>
+                <div class="movimiento-detalle">
+                    <span class="label">Importe:</span>
+                    <span id="elimMovImporte" class="valor">-</span>
+                </div>
+            </div>
+
+            <!-- Nota de eliminación -->
+            <div class="form-field mt-4">
+                <label for="notaEliminacion">Motivo de eliminación (opcional):</label>
+                <textarea id="notaEliminacion" class="input-text" rows="3" placeholder="Ingrese el motivo por el cual elimina este movimiento..."></textarea>
+            </div>
+
+            <input type="hidden" id="movimientoAEliminarId" value="">
+
+            <div class="btn-group mt-4">
+                <button onclick="cerrarModalEliminarMovimiento()" class="btn-secondary">Cancelar</button>
+                <button onclick="confirmarEliminarMovimiento()" class="btn-danger">🗑️ Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ver Movimientos Eliminados -->
+    <div id="modalMovimientosEliminados" class="modal hidden">
+        <div class="modal-content modal-content-lg">
+            <div class="modal-header">
+                <h2>📋 Movimientos Eliminados</h2>
+                <button class="close-btn" onclick="cerrarModalMovimientosEliminados()">✕</button>
+            </div>
+
+            <div class="info-box mb-4">
+                <strong>Historial de eliminaciones:</strong> Aquí puede ver todos los movimientos que han sido eliminados del análisis y restaurarlos si es necesario.
+            </div>
+
+            <!-- Resumen -->
+            <div id="resumenMovimientosEliminados" class="resumen-eliminados">
+                <div class="stat-item">
+                    <span class="stat-numero" id="totalMovimientosEliminados">0</span>
+                    <span class="stat-label">Movimientos eliminados</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-numero" id="totalImporteEliminado">$0</span>
+                    <span class="stat-label">Importe total eliminado</span>
+                </div>
+            </div>
+
+            <!-- Tabla de movimientos eliminados -->
+            <div class="tabla-container-eliminados">
+                <table class="tabla-eliminados">
+                    <thead>
+                        <tr>
+                            <th>Fecha Elim.</th>
+                            <th>Fecha Mov.</th>
+                            <th>Asiento</th>
+                            <th>Descripción</th>
+                            <th>Debe</th>
+                            <th>Haber</th>
+                            <th>Nota</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaMovimientosEliminadosBody">
+                        <tr>
+                            <td colspan="8" class="empty-state">No hay movimientos eliminados</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="btn-group mt-4">
+                <button onclick="cerrarModalMovimientosEliminados()" class="btn-secondary">Cerrar</button>
+                <button onclick="exportarMovimientosEliminados()" class="btn-primary" id="btnExportarEliminados" disabled>📥 Exportar a Excel</button>
             </div>
         </div>
     </div>
