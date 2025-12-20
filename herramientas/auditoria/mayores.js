@@ -6613,17 +6613,8 @@ function filtrarOpcionesVincular() {
         return true;
     });
 
-    // Ordenar por diferencia de monto (los más cercanos primero)
-    filtradas.sort((a, b) => {
-        const montoA = estadoModalVincular.tipo === 'cheque-a-asiento'
-            ? (a.debe - (a.chequesAsociados ? a.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0) : 0))
-            : a.importe;
-        const montoB = estadoModalVincular.tipo === 'cheque-a-asiento'
-            ? (b.debe - (b.chequesAsociados ? b.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0) : 0))
-            : b.importe;
-
-        return Math.abs(montoA - montoReferencia) - Math.abs(montoB - montoReferencia);
-    });
+    // Aplicar ordenamiento según selector
+    filtradas = aplicarOrdenamientoVincular(filtradas, montoReferencia);
 
     estadoModalVincular.opcionesDisponibles = filtradas;
 
@@ -6632,6 +6623,93 @@ function filtrarOpcionesVincular() {
 
     // Renderizar opciones
     renderizarOpcionesVincular();
+}
+
+/**
+ * Ordenar opciones de vinculación según el selector
+ */
+function ordenarOpcionesVincular() {
+    filtrarOpcionesVincular();
+}
+
+/**
+ * Aplicar ordenamiento a las opciones de vinculación
+ */
+function aplicarOrdenamientoVincular(opciones, montoReferencia) {
+    const selectOrden = document.getElementById('ordenar-opciones-vincular');
+    const criterio = selectOrden ? selectOrden.value : 'compatibilidad';
+
+    const getMonto = (opcion) => {
+        if (estadoModalVincular.tipo === 'cheque-a-asiento') {
+            return opcion.debe - (opcion.chequesAsociados ? opcion.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0) : 0);
+        }
+        return opcion.importe || 0;
+    };
+
+    const getNumero = (opcion) => {
+        if (estadoModalVincular.tipo === 'cheque-a-asiento') {
+            return (opcion.numeroAsiento || opcion.id || '').toString();
+        }
+        return (opcion.numero || opcion.interno || '').toString();
+    };
+
+    const getDescripcion = (opcion) => {
+        if (estadoModalVincular.tipo === 'cheque-a-asiento') {
+            return (opcion.descripcion || '').toLowerCase();
+        }
+        return (opcion.origen || '').toLowerCase();
+    };
+
+    if (criterio === 'compatibilidad') {
+        // Ordenar por diferencia de monto (los más cercanos primero)
+        opciones.sort((a, b) => {
+            const montoA = getMonto(a);
+            const montoB = getMonto(b);
+            return Math.abs(montoA - montoReferencia) - Math.abs(montoB - montoReferencia);
+        });
+    } else {
+        const [campo, direccion] = criterio.split('-');
+
+        opciones.sort((a, b) => {
+            let valorA, valorB;
+
+            switch (campo) {
+                case 'numero':
+                    valorA = getNumero(a);
+                    valorB = getNumero(b);
+                    // Intentar comparación numérica si es posible
+                    const numA = parseInt(valorA.replace(/\D/g, ''));
+                    const numB = parseInt(valorB.replace(/\D/g, ''));
+                    if (!isNaN(numA) && !isNaN(numB)) {
+                        valorA = numA;
+                        valorB = numB;
+                    }
+                    break;
+                case 'monto':
+                    valorA = getMonto(a);
+                    valorB = getMonto(b);
+                    break;
+                case 'descripcion':
+                    valorA = getDescripcion(a);
+                    valorB = getDescripcion(b);
+                    break;
+                default:
+                    valorA = 0;
+                    valorB = 0;
+            }
+
+            let resultado;
+            if (typeof valorA === 'string' && typeof valorB === 'string') {
+                resultado = valorA.localeCompare(valorB, 'es');
+            } else {
+                resultado = valorA - valorB;
+            }
+
+            return direccion === 'desc' ? -resultado : resultado;
+        });
+    }
+
+    return opciones;
 }
 
 /**
@@ -7044,18 +7122,80 @@ function renderizarAsientosParaVincularMultiples(asientos) {
  * Filtrar asientos en el modal de vinculación múltiple
  */
 function filtrarAsientosParaVincularMultiples() {
+    // Llamar a ordenar que también aplica el filtro
+    ordenarAsientosParaVincular();
+}
+
+/**
+ * Ordenar asientos disponibles para vincular
+ */
+function ordenarAsientosParaVincular() {
+    const selectOrden = document.getElementById('ordenar-asientos-vincular');
+    if (!selectOrden) return;
+
+    const criterio = selectOrden.value;
+    const [campo, direccion] = criterio.split('-');
+
+    // Primero aplicar filtro si existe
     const filtro = (document.getElementById('filtro-busqueda-vincular-multiples')?.value || '').toLowerCase().trim();
 
-    const asientosFiltrados = asientosDisponiblesParaVincular.filter(asiento => {
+    let asientosParaOrdenar = asientosDisponiblesParaVincular.filter(asiento => {
         if (!filtro) return true;
-
         const numero = (asiento.numeroAsiento || asiento.id || '').toString().toLowerCase();
         const descripcion = (asiento.descripcion || '').toLowerCase();
-
         return numero.includes(filtro) || descripcion.includes(filtro);
     });
 
-    renderizarAsientosParaVincularMultiples(asientosFiltrados);
+    // Función para calcular monto pendiente
+    const getMontoPendiente = (asiento) => {
+        return asiento.debe - (asiento.chequesAsociados?.reduce((sum, ch) => sum + ch.importe, 0) || 0);
+    };
+
+    // Ordenar según criterio
+    asientosParaOrdenar.sort((a, b) => {
+        let valorA, valorB;
+
+        switch (campo) {
+            case 'numero':
+                valorA = (a.numeroAsiento || a.id || '').toString();
+                valorB = (b.numeroAsiento || b.id || '').toString();
+                // Intentar comparación numérica si es posible
+                const numA = parseInt(valorA.replace(/\D/g, ''));
+                const numB = parseInt(valorB.replace(/\D/g, ''));
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    valorA = numA;
+                    valorB = numB;
+                }
+                break;
+            case 'monto':
+                valorA = a.debe || 0;
+                valorB = b.debe || 0;
+                break;
+            case 'pendiente':
+                valorA = getMontoPendiente(a);
+                valorB = getMontoPendiente(b);
+                break;
+            case 'descripcion':
+                valorA = (a.descripcion || '').toLowerCase();
+                valorB = (b.descripcion || '').toLowerCase();
+                break;
+            default:
+                valorA = 0;
+                valorB = 0;
+        }
+
+        // Comparación
+        let resultado;
+        if (typeof valorA === 'string' && typeof valorB === 'string') {
+            resultado = valorA.localeCompare(valorB, 'es');
+        } else {
+            resultado = valorA - valorB;
+        }
+
+        return direccion === 'desc' ? -resultado : resultado;
+    });
+
+    renderizarAsientosParaVincularMultiples(asientosParaOrdenar);
 }
 
 /**

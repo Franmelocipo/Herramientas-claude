@@ -1216,8 +1216,22 @@
             <!-- Lista de opciones -->
             <div class="vincular-lista-container">
                 <div class="vincular-lista-header">
-                    <span id="vincular-lista-titulo">Asientos disponibles</span>
-                    <span id="vincular-lista-count" class="badge-count">0</span>
+                    <div class="vincular-lista-header-left">
+                        <span id="vincular-lista-titulo">Asientos disponibles</span>
+                        <span id="vincular-lista-count" class="badge-count">0</span>
+                    </div>
+                    <div class="vincular-ordenar-container">
+                        <label>Ordenar:</label>
+                        <select id="ordenar-opciones-vincular" class="vincular-ordenar-select" onchange="ordenarOpcionesVincular()">
+                            <option value="compatibilidad">Compatibilidad</option>
+                            <option value="numero-asc">Número ↑</option>
+                            <option value="numero-desc">Número ↓</option>
+                            <option value="monto-asc">Monto ↑</option>
+                            <option value="monto-desc">Monto ↓</option>
+                            <option value="descripcion-asc">Descripción A-Z</option>
+                            <option value="descripcion-desc">Descripción Z-A</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="vincular-lista-opciones" class="vincular-lista-opciones">
                     <!-- Se llena dinámicamente -->
@@ -1272,8 +1286,23 @@
             <!-- Lista de asientos disponibles -->
             <div class="vincular-lista-container">
                 <div class="vincular-lista-header">
-                    <span>Asientos disponibles</span>
-                    <span id="vincular-multiples-lista-count" class="badge-count">0</span>
+                    <div class="vincular-lista-header-left">
+                        <span>Asientos disponibles</span>
+                        <span id="vincular-multiples-lista-count" class="badge-count">0</span>
+                    </div>
+                    <div class="vincular-ordenar-container">
+                        <label>Ordenar:</label>
+                        <select id="ordenar-asientos-vincular" class="vincular-ordenar-select" onchange="ordenarAsientosParaVincular()">
+                            <option value="numero-asc">Número ↑</option>
+                            <option value="numero-desc">Número ↓</option>
+                            <option value="monto-asc">Monto ↑</option>
+                            <option value="monto-desc">Monto ↓</option>
+                            <option value="pendiente-asc">Pendiente ↑</option>
+                            <option value="pendiente-desc">Pendiente ↓</option>
+                            <option value="descripcion-asc">Descripción A-Z</option>
+                            <option value="descripcion-desc">Descripción Z-A</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="listaAsientosVincularMultiples" class="vincular-lista-opciones">
                     <!-- Se llena dinámicamente -->
