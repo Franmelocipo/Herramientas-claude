@@ -24,7 +24,9 @@ const state = {
         iva: '',
         percIva: '',
         otros: ''
-    }
+    },
+    // Control de visualización del Balance de Sumas y Saldos
+    balanceVisto: false     // El usuario debe ver el balance antes de descargar
 };
 
 // ============================================
@@ -586,7 +588,7 @@ function attachEventListeners() {
         elements.btnBackToAssignment.addEventListener('click', () => goToStep(2));
     }
     if (elements.btnDownloadExcel) {
-        elements.btnDownloadExcel.addEventListener('click', () => downloadExcel());
+        elements.btnDownloadExcel.addEventListener('click', () => handleDescargaExcel());
     }
 
     // Close dropdowns when clicking outside
@@ -656,6 +658,8 @@ function reset() {
         percIva: '',
         otros: ''
     };
+    // Resetear control del Balance de Sumas y Saldos
+    state.balanceVisto = false;
 
     elements.fileInput.value = '';
     elements.bankAccountInput.value = '';
@@ -6867,6 +6871,10 @@ function renderPreview() {
     `).join('');
 
     elements.previewTableBody.innerHTML = html;
+
+    // Resetear el estado del balance al entrar al paso 3
+    state.balanceVisto = false;
+    actualizarBotonDescarga();
 }
 
 /**
@@ -7353,3 +7361,216 @@ function downloadExcel() {
 
     console.log('✅ Archivo Excel exportado exitosamente');
 }
+
+// ============================================
+// BALANCE DE SUMAS Y SALDOS
+// ============================================
+
+/**
+ * Genera el Balance de Sumas y Saldos a partir de los asientos finales
+ * @returns {Array} Array de objetos con el balance por cuenta
+ */
+function generarBalanceSumasYSaldos() {
+    const balancePorCuenta = {};
+
+    // Acumular débitos y créditos por cuenta
+    state.finalData.forEach(mov => {
+        const cuenta = mov.Cuenta;
+        const descripcion = mov['Descripción Cuenta'] || '';
+        const debe = parseFloat(mov.Debe) || 0;
+        const haber = parseFloat(mov.Haber) || 0;
+
+        if (!balancePorCuenta[cuenta]) {
+            balancePorCuenta[cuenta] = {
+                codigo: cuenta,
+                descripcion: descripcion,
+                debitos: 0,
+                creditos: 0
+            };
+        }
+
+        balancePorCuenta[cuenta].debitos += debe;
+        balancePorCuenta[cuenta].creditos += haber;
+
+        // Actualizar descripción si viene vacía
+        if (!balancePorCuenta[cuenta].descripcion && descripcion) {
+            balancePorCuenta[cuenta].descripcion = descripcion;
+        }
+    });
+
+    // Convertir a array y calcular saldo
+    const balanceArray = Object.values(balancePorCuenta).map(cuenta => ({
+        codigo: cuenta.codigo,
+        descripcion: cuenta.descripcion,
+        debitos: cuenta.debitos,
+        creditos: cuenta.creditos,
+        saldo: cuenta.debitos - cuenta.creditos
+    }));
+
+    // Ordenar por código de cuenta
+    balanceArray.sort((a, b) => a.codigo.localeCompare(b.codigo, 'es', { numeric: true }));
+
+    return balanceArray;
+}
+
+/**
+ * Muestra el modal con el Balance de Sumas y Saldos
+ */
+function mostrarBalanceSumasYSaldos() {
+    const balance = generarBalanceSumasYSaldos();
+
+    // Calcular totales
+    const totalDebitos = balance.reduce((sum, c) => sum + c.debitos, 0);
+    const totalCreditos = balance.reduce((sum, c) => sum + c.creditos, 0);
+    const totalSaldo = totalDebitos - totalCreditos;
+
+    // Generar filas de la tabla
+    const filasHtml = balance.map(cuenta => `
+        <tr>
+            <td class="cuenta-col">${cuenta.codigo}</td>
+            <td class="descripcion-col">${cuenta.descripcion}</td>
+            <td class="text-right debe-col">${cuenta.debitos.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td class="text-right haber-col">${cuenta.creditos.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td class="text-right saldo-col ${cuenta.saldo >= 0 ? 'saldo-deudor' : 'saldo-acreedor'}">${cuenta.saldo.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        </tr>
+    `).join('');
+
+    // Fila de totales
+    const filaTotalesHtml = `
+        <tr class="fila-totales">
+            <td colspan="2"><strong>TOTALES</strong></td>
+            <td class="text-right"><strong>${totalDebitos.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td>
+            <td class="text-right"><strong>${totalCreditos.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td>
+            <td class="text-right ${totalSaldo >= 0 ? 'saldo-deudor' : 'saldo-acreedor'}"><strong>${totalSaldo.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td>
+        </tr>
+    `;
+
+    // Verificar si hay diferencia (desbalance)
+    const hayDesbalance = Math.abs(totalSaldo) > 0.01;
+    const alertaDesbalance = hayDesbalance ? `
+        <div class="balance-alerta-desbalance">
+            ⚠️ <strong>Atención:</strong> La diferencia entre Débitos y Créditos es ${totalSaldo.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
+            Los asientos deberían estar balanceados (diferencia = 0).
+        </div>
+    ` : '';
+
+    // Crear el contenido del modal
+    const modalHtml = `
+        <div class="modal-balance-overlay" id="modalBalanceOverlay" onclick="cerrarModalBalance(event)">
+            <div class="modal-balance-content" onclick="event.stopPropagation()">
+                <div class="modal-balance-header">
+                    <h3>📊 Balance de Sumas y Saldos</h3>
+                    <button class="modal-balance-close" onclick="cerrarModalBalance()">&times;</button>
+                </div>
+
+                <div class="modal-balance-info">
+                    <p>Resumen de las imputaciones al Debe y al Haber de cada cuenta contable.</p>
+                    <p class="balance-stats">${balance.length} cuentas | ${state.finalData.length} movimientos</p>
+                </div>
+
+                ${alertaDesbalance}
+
+                <div class="modal-balance-table-container">
+                    <table class="balance-table">
+                        <thead>
+                            <tr>
+                                <th>Código de Cuenta</th>
+                                <th>Descripción de Cuenta</th>
+                                <th class="text-right">Débitos</th>
+                                <th class="text-right">Créditos</th>
+                                <th class="text-right">Saldo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filasHtml}
+                        </tbody>
+                        <tfoot>
+                            ${filaTotalesHtml}
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div class="modal-balance-footer">
+                    <button class="btn-secondary" onclick="cerrarModalBalance()">Cerrar</button>
+                    <button class="btn-primary" onclick="confirmarBalanceYHabilitarDescarga()">
+                        ✓ Confirmar y Habilitar Descarga
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Insertar el modal en el DOM
+    const modalContainer = document.createElement('div');
+    modalContainer.id = 'modalBalanceContainer';
+    modalContainer.innerHTML = modalHtml;
+    document.body.appendChild(modalContainer);
+
+    console.log('📊 Balance de Sumas y Saldos mostrado');
+}
+
+/**
+ * Cierra el modal de Balance de Sumas y Saldos
+ */
+function cerrarModalBalance(event) {
+    // Si se llama con evento (click en overlay), solo cerrar si se hizo click en el overlay
+    if (event && event.target && event.target.id !== 'modalBalanceOverlay') {
+        return;
+    }
+    const modalContainer = document.getElementById('modalBalanceContainer');
+    if (modalContainer) {
+        modalContainer.remove();
+    }
+}
+
+/**
+ * Confirma la visualización del balance y habilita la descarga
+ */
+function confirmarBalanceYHabilitarDescarga() {
+    state.balanceVisto = true;
+    cerrarModalBalance();
+
+    // Actualizar el botón de descarga para mostrar que está habilitado
+    actualizarBotonDescarga();
+
+    console.log('✅ Balance confirmado, descarga habilitada');
+}
+
+/**
+ * Actualiza el estado visual del botón de descarga
+ */
+function actualizarBotonDescarga() {
+    const btnDescarga = document.getElementById('btnDownloadExcel');
+    const btnBalance = document.getElementById('btnVerBalance');
+
+    if (state.balanceVisto) {
+        btnDescarga.classList.remove('btn-disabled');
+        btnDescarga.disabled = false;
+        btnDescarga.innerHTML = '⬇️ Descargar Excel con Asientos';
+        if (btnBalance) {
+            btnBalance.innerHTML = '📊 Ver Balance (revisado ✓)';
+            btnBalance.classList.add('balance-revisado');
+        }
+    } else {
+        btnDescarga.classList.add('btn-disabled');
+        btnDescarga.disabled = true;
+        btnDescarga.innerHTML = '🔒 Ver Balance primero';
+    }
+}
+
+/**
+ * Handler del botón de descarga - verifica si el balance fue visto
+ */
+function handleDescargaExcel() {
+    if (!state.balanceVisto) {
+        alert('⚠️ Debe consultar el Balance de Sumas y Saldos antes de descargar el archivo.\n\nEste paso es obligatorio para verificar los asientos antes de incorporarlos a la contabilidad.');
+        return;
+    }
+    downloadExcel();
+}
+
+// Hacer las funciones globales
+window.mostrarBalanceSumasYSaldos = mostrarBalanceSumasYSaldos;
+window.cerrarModalBalance = cerrarModalBalance;
+window.confirmarBalanceYHabilitarDescarga = confirmarBalanceYHabilitarDescarga;
+window.handleDescargaExcel = handleDescargaExcel;

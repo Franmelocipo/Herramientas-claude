@@ -192,6 +192,15 @@
                 <h3 class="step-title">✅ Asientos generados</h3>
                 <p class="step-subtitle" id="finalStats"></p>
 
+                <!-- Aviso de paso obligatorio -->
+                <div class="balance-aviso">
+                    <span class="balance-aviso-icon">📊</span>
+                    <div class="balance-aviso-text">
+                        <strong>Paso obligatorio:</strong> Debe consultar el Balance de Sumas y Saldos antes de descargar el archivo.
+                        Este control permite verificar las imputaciones antes de incorporar los asientos a la contabilidad.
+                    </div>
+                </div>
+
                 <div class="preview-container">
                     <div class="preview-header">
                         <h4>Vista Previa (primeras 30 líneas)</h4>
@@ -216,8 +225,11 @@
 
                 <div class="btn-group mt-4">
                     <button id="btnBackToAssignment" class="btn-secondary">← Volver</button>
-                    <button id="btnDownloadExcel" class="btn-success flex-1">
-                        ⬇️ Descargar Excel con Asientos
+                    <button id="btnVerBalance" class="btn-balance" onclick="mostrarBalanceSumasYSaldos()">
+                        📊 Ver Balance de Sumas y Saldos
+                    </button>
+                    <button id="btnDownloadExcel" class="btn-success flex-1 btn-disabled" disabled>
+                        🔒 Ver Balance primero
                     </button>
                 </div>
             </div>
