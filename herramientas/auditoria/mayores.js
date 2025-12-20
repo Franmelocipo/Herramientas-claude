@@ -2,6 +2,34 @@
 // MÓDULO DE ANÁLISIS DE MAYORES CONTABLES
 // ============================================
 
+/**
+ * Mostrar notificación temporal (función local para este módulo)
+ */
+function mostrarNotificacion(mensaje, tipo = 'info') {
+    const notificacion = document.createElement('div');
+    notificacion.style.cssText = `
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        background: ${tipo === 'success' ? '#10b981' : tipo === 'error' ? '#ef4444' : tipo === 'warning' ? '#f59e0b' : '#3b82f6'};
+        color: white;
+        padding: 16px 24px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        font-weight: 600;
+        font-size: 14px;
+        animation: slideIn 0.3s ease;
+    `;
+    notificacion.textContent = mensaje;
+    document.body.appendChild(notificacion);
+
+    setTimeout(() => {
+        notificacion.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notificacion.remove(), 300);
+    }, 3000);
+}
+
 // Estado del módulo de mayores
 const stateMayores = {
     clienteActual: null,
@@ -3276,7 +3304,7 @@ function cargarConciliacionMayorGuardada(conciliacionId) {
     stateMayores.conciliacionCargadaId = conciliacion.id;
     stateMayores.conciliacionCargadaNombre = conciliacion.nombre;
 
-    // Restaurar cheques si están incluidos en la conciliación
+    // Restaurar cheques si están incluidos en la conciliación (formato antiguo)
     if (conciliacion.listadoChequesCargados && conciliacion.listadoChequesCargados.length > 0) {
         // Restaurar fechas de los cheques como objetos Date
         conciliacion.listadoChequesCargados.forEach(c => {
@@ -3291,6 +3319,35 @@ function cargarConciliacionMayorGuardada(conciliacionId) {
         stateMayores.mesesProcesados = conciliacion.mesesProcesados || {};
 
         console.log(`📋 Cheques restaurados: ${conciliacion.listadoChequesCargados.length} cheques`);
+    } else if (conciliacion.listadoChequesGuardadoId || conciliacion.listadoChequesIncorporado) {
+        // Formato nuevo: cargar cheques desde el listado guardado separadamente
+        const keyListado = getListadoChequesKey();
+        if (keyListado) {
+            try {
+                const datosListado = localStorage.getItem(keyListado);
+                if (datosListado) {
+                    const datos = JSON.parse(datosListado);
+                    // Restaurar fechas de los cheques como objetos Date
+                    datos.cheques.forEach(c => {
+                        if (c.fechaRecepcion) c.fechaRecepcion = new Date(c.fechaRecepcion);
+                        if (c.fechaEmision) c.fechaEmision = new Date(c.fechaEmision);
+                        if (c.fechaDeposito) c.fechaDeposito = new Date(c.fechaDeposito);
+                    });
+
+                    stateMayores.listadoChequesCargados = datos.cheques;
+                    stateMayores.listadoChequesIncorporado = true;
+                    stateMayores.listadoChequesGuardadoId = datos.id;
+                    stateMayores.mesesDisponibles = conciliacion.mesesDisponibles || datos.meses || calcularMesesDeCheques(datos.cheques);
+
+                    // Cargar meses procesados
+                    cargarMesesProcesados();
+
+                    console.log(`📋 Cheques cargados desde listado guardado: ${datos.cheques.length} cheques`);
+                }
+            } catch (error) {
+                console.error('Error cargando listado de cheques:', error);
+            }
+        }
     }
 
     // Actualizar UI
@@ -3594,12 +3651,25 @@ function ejecutarGuardarConciliacionMayor() {
     // Crear o actualizar conciliación
     const ahora = new Date().toISOString();
 
-    // Preparar datos de cheques para guardar junto con la conciliación
+    // Guardar cheques por separado si hay muchos (evitar QuotaExceededError)
+    // Solo guardar referencia al listado de cheques, no los cheques completos
+    const tieneChequesGuardados = stateMayores.listadoChequesGuardadoId || false;
+
+    // Preparar datos mínimos de cheques (solo referencia, no los datos completos)
     const datosCheques = {
-        listadoChequesCargados: stateMayores.listadoChequesCargados || [],
+        listadoChequesGuardadoId: stateMayores.listadoChequesGuardadoId || null,
         listadoChequesIncorporado: stateMayores.listadoChequesIncorporado || false,
         mesesDisponibles: stateMayores.mesesDisponibles || [],
-        mesesProcesados: stateMayores.mesesProcesados || {}
+        // Solo guardar el resumen de meses procesados, no todos los datos
+        mesesProcesadosResumen: Object.keys(stateMayores.mesesProcesados || {}).reduce((acc, mes) => {
+            const mesDatos = stateMayores.mesesProcesados[mes];
+            acc[mes] = {
+                procesado: mesDatos.procesado || false,
+                totalAsociados: (mesDatos.vinculaciones || []).length,
+                fechaProcesado: mesDatos.fechaProcesado || null
+            };
+            return acc;
+        }, {})
     };
 
     if (stateMayores.conciliacionCargadaId) {
@@ -3611,7 +3681,6 @@ function ejecutarGuardarConciliacionMayor() {
                 nombre: nombre,
                 registros: stateMayores.registrosMayor,
                 vinculaciones: stateMayores.vinculaciones,
-                // Incluir cheques en la conciliación
                 ...datosCheques,
                 fechaModificado: ahora
             };
@@ -3624,7 +3693,6 @@ function ejecutarGuardarConciliacionMayor() {
             nombre: nombre,
             registros: stateMayores.registrosMayor,
             vinculaciones: stateMayores.vinculaciones,
-            // Incluir cheques en la conciliación
             ...datosCheques,
             fechaGuardado: ahora,
             fechaModificado: ahora
@@ -3642,14 +3710,23 @@ function ejecutarGuardarConciliacionMayor() {
         localStorage.setItem(key, JSON.stringify(conciliaciones));
         conciliacionesMayorGuardadasLista = conciliaciones;
 
+        // Guardar meses procesados por separado si hay datos
+        if (Object.keys(stateMayores.mesesProcesados || {}).length > 0) {
+            guardarMesesProcesados();
+        }
+
         // Actualizar botón
         actualizarBotonGestionConciliacionesMayor();
 
         cerrarModalGuardarConciliacionMayor();
-        alert('Conciliación guardada correctamente');
+        mostrarNotificacion('Conciliación guardada correctamente', 'success');
     } catch (error) {
         console.error('Error guardando conciliación:', error);
-        alert('Error al guardar: ' + error.message);
+        if (error.name === 'QuotaExceededError') {
+            alert('Error: El almacenamiento local está lleno.\n\nSugerencias:\n- Elimine conciliaciones antiguas\n- Use "Limpiar datos" en el menú de Herramientas\n- Exporte los datos antes de continuar');
+        } else {
+            alert('Error al guardar: ' + error.message);
+        }
     }
 }
 
