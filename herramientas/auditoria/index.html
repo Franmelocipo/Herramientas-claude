@@ -207,14 +207,14 @@
                     </div>
 
                     <!-- ============================================ -->
-                    <!-- PASO 1: Conciliación Listado Cheques con Debe (solo para cheques_terceros_recibidos) -->
+                    <!-- PASO 1: Carga del Listado de Cheques (solo para cheques_terceros_recibidos) -->
                     <!-- ============================================ -->
                     <div id="panelConciliacionChequesDebe" class="panel-paso-conciliacion" style="display: none;">
                         <div class="paso-header">
                             <div class="paso-numero">1</div>
                             <div class="paso-titulo">
-                                <h4>📋 Conciliación: Listado de Cheques vs Registros del Debe</h4>
-                                <p class="paso-descripcion">Asocie cada cheque del listado externo con los registros de ingreso (debe) del mayor contable.</p>
+                                <h4>📋 Carga del Listado de Cheques</h4>
+                                <p class="paso-descripcion">Cargue el listado de cheques recibidos desde un archivo Excel.</p>
                             </div>
                             <button class="btn-toggle-paso" onclick="togglePasoChequesDebe()">
                                 <span id="iconTogglePaso1">▼</span>
@@ -228,7 +228,7 @@
                                     <div class="estado-icono">📂</div>
                                     <div class="estado-info">
                                         <h5>Listado de cheques no cargado</h5>
-                                        <p>Cargue el listado de cheques recibidos para asociarlos con los registros del debe.</p>
+                                        <p>Cargue el listado de cheques recibidos desde un archivo Excel para luego conciliar con los registros del debe.</p>
                                     </div>
                                     <button onclick="mostrarCargarListadoCheques()" class="btn-primary">📋 Cargar Listado de Cheques</button>
                                 </div>
@@ -236,72 +236,165 @@
                                 <div id="listadoCargado" class="listado-estado cargado" style="display: none;">
                                     <div class="estado-icono">✅</div>
                                     <div class="estado-info">
-                                        <h5>Listado de cheques incorporado</h5>
+                                        <h5>Listado de cheques cargado</h5>
                                         <p id="resumenListadoCheques">0 cheques cargados</p>
+                                        <p id="resumenMesesDisponibles" class="text-muted"></p>
                                     </div>
-                                    <button onclick="mostrarCargarListadoCheques()" class="btn-secondary btn-sm">🔄 Recargar listado</button>
+                                    <div class="estado-acciones">
+                                        <button onclick="mostrarCargarListadoCheques()" class="btn-secondary btn-sm">🔄 Recargar listado</button>
+                                        <button onclick="guardarListadoChequesLocal()" class="btn-success btn-sm">💾 Guardar listado</button>
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- Estadísticas de conciliación cheques vs debe -->
-                            <div id="statsConciliacionChequesDebe" class="stats-conciliacion-paso" style="display: none;">
-                                <div class="stat-conciliacion completo">
-                                    <span class="stat-numero" id="statRegistrosCompletos">0</span>
-                                    <span class="stat-label">Registros completos</span>
-                                </div>
-                                <div class="stat-conciliacion parcial">
-                                    <span class="stat-numero" id="statRegistrosParciales">0</span>
-                                    <span class="stat-label">Asociaciones parciales</span>
-                                </div>
-                                <div class="stat-conciliacion sin-cheques">
-                                    <span class="stat-numero" id="statRegistrosSinCheques">0</span>
-                                    <span class="stat-label">Sin cheques asociados</span>
-                                </div>
-                                <div class="stat-conciliacion no-asociados">
-                                    <span class="stat-numero" id="statChequesNoAsociados">0</span>
-                                    <span class="stat-label">Cheques sin asociar</span>
-                                </div>
-                            </div>
-
-                            <!-- Tabla resumen de asociaciones -->
-                            <div id="tablaResumenAsociaciones" class="tabla-resumen-asociaciones" style="display: none;">
+                            <!-- Resumen del listado cargado -->
+                            <div id="resumenListadoChequesDetalle" class="resumen-listado-cheques" style="display: none;">
                                 <div class="resumen-header">
-                                    <h5>Detalle de Asociaciones por Registro del Debe</h5>
-                                    <div class="resumen-filtros">
-                                        <label class="filtro-inline">
-                                            <input type="checkbox" id="filtroSoloPendientesCheques" onchange="filtrarResumenAsociaciones()">
-                                            Solo mostrar con diferencias
-                                        </label>
-                                    </div>
+                                    <h5>📊 Resumen del Listado Cargado</h5>
                                 </div>
-                                <div class="preview-table-container" style="max-height: 300px;">
-                                    <table class="preview-table tabla-asociaciones-cheques">
-                                        <thead>
-                                            <tr>
-                                                <th>Fecha</th>
-                                                <th>Asiento</th>
-                                                <th>Descripción</th>
-                                                <th class="text-right">Importe Debe</th>
-                                                <th class="text-right">Suma Cheques</th>
-                                                <th class="text-right">Diferencia</th>
-                                                <th>Estado</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="tablaResumenAsociacionesBody">
-                                            <!-- Se llena dinámicamente -->
-                                        </tbody>
-                                    </table>
+                                <div class="resumen-stats-grid">
+                                    <div class="stat-item">
+                                        <span class="stat-numero" id="totalChequesCargados">0</span>
+                                        <span class="stat-label">Total cheques</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="stat-numero" id="totalImporteCheques">$0</span>
+                                        <span class="stat-label">Importe total</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span class="stat-numero" id="totalMesesCheques">0</span>
+                                        <span class="stat-label">Meses disponibles</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <!-- ============================================ -->
-                    <!-- PASO 2: Conciliación Debe con Haber -->
+                    <!-- PASO 2: Conciliación Cheques vs Debe por Mes (solo para cheques_terceros_recibidos) -->
+                    <!-- ============================================ -->
+                    <div id="panelConciliacionPorMes" class="panel-paso-conciliacion" style="display: none;">
+                        <div class="paso-header">
+                            <div class="paso-numero">2</div>
+                            <div class="paso-titulo">
+                                <h4>📅 Conciliación por Mes: Cheques vs Registros del Debe</h4>
+                                <p class="paso-descripcion">Seleccione un mes y concilie los cheques con los registros del debe de forma gradual.</p>
+                            </div>
+                            <button class="btn-toggle-paso" onclick="togglePasoConciliacionPorMes()">
+                                <span id="iconTogglePaso2Mes">▼</span>
+                            </button>
+                        </div>
+
+                        <div id="contenidoPaso2Mes" class="paso-contenido">
+                            <!-- Selector de mes -->
+                            <div class="selector-mes-container">
+                                <div class="selector-mes-header">
+                                    <h5>Seleccione un mes para conciliar</h5>
+                                </div>
+                                <div id="listaMesesConciliacion" class="lista-meses-grid">
+                                    <!-- Se llena dinámicamente con los meses disponibles -->
+                                </div>
+                            </div>
+
+                            <!-- Panel de conciliación del mes seleccionado -->
+                            <div id="panelMesSeleccionado" class="panel-mes-seleccionado" style="display: none;">
+                                <div class="mes-seleccionado-header">
+                                    <h5>📆 Conciliando: <span id="nombreMesSeleccionado">--</span></h5>
+                                    <button onclick="cerrarConciliacionMes()" class="btn-secondary btn-sm">✕ Cerrar</button>
+                                </div>
+
+                                <!-- Estadísticas del mes -->
+                                <div class="stats-conciliacion-paso stats-mes">
+                                    <div class="stat-conciliacion completo">
+                                        <span class="stat-numero" id="statMesCompletos">0</span>
+                                        <span class="stat-label">Registros completos</span>
+                                    </div>
+                                    <div class="stat-conciliacion parcial">
+                                        <span class="stat-numero" id="statMesParciales">0</span>
+                                        <span class="stat-label">Asociaciones parciales</span>
+                                    </div>
+                                    <div class="stat-conciliacion sin-cheques">
+                                        <span class="stat-numero" id="statMesSinCheques">0</span>
+                                        <span class="stat-label">Sin cheques asociados</span>
+                                    </div>
+                                    <div class="stat-conciliacion no-asociados">
+                                        <span class="stat-numero" id="statMesChequesNoAsociados">0</span>
+                                        <span class="stat-label">Cheques sin asociar</span>
+                                    </div>
+                                </div>
+
+                                <!-- Acciones de conciliación del mes -->
+                                <div class="acciones-conciliacion-mes">
+                                    <button onclick="conciliarMesAutomaticamente()" class="btn-primary">🤖 Conciliar Automáticamente</button>
+                                    <button onclick="reprocesarChequesMes()" class="btn-secondary">🔄 Reprocesar cheques sin asociar</button>
+                                    <button onclick="guardarConciliacionMes()" class="btn-success">💾 Guardar progreso del mes</button>
+                                </div>
+
+                                <!-- Tabla de asociaciones del mes -->
+                                <div class="tabla-resumen-asociaciones">
+                                    <div class="resumen-header">
+                                        <h5>Detalle de Asociaciones del Mes</h5>
+                                        <div class="resumen-filtros">
+                                            <label class="filtro-inline">
+                                                <input type="checkbox" id="filtroSoloPendientesMes" onchange="filtrarAsociacionesMes()">
+                                                Solo mostrar con diferencias
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="preview-table-container" style="max-height: 400px;">
+                                        <table class="preview-table tabla-asociaciones-cheques">
+                                            <thead>
+                                                <tr>
+                                                    <th>Fecha</th>
+                                                    <th>Asiento</th>
+                                                    <th>Descripción</th>
+                                                    <th class="text-right">Importe Debe</th>
+                                                    <th class="text-right">Suma Cheques</th>
+                                                    <th class="text-right">Diferencia</th>
+                                                    <th>Estado</th>
+                                                    <th>Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="tablaAsociacionesMesBody">
+                                                <!-- Se llena dinámicamente -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- Cheques sin asociar del mes -->
+                                <div id="chequesNoAsociadosMes" class="cheques-no-asociados-panel" style="display: none;">
+                                    <div class="cheques-no-asociados-header">
+                                        <h5>⚠️ Cheques sin asociar del mes</h5>
+                                    </div>
+                                    <div class="preview-table-container" style="max-height: 250px;">
+                                        <table class="preview-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Número</th>
+                                                    <th>Origen</th>
+                                                    <th>F. Recepción</th>
+                                                    <th class="text-right">Importe</th>
+                                                    <th>Estado</th>
+                                                    <th>Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="tablaChequesNoAsociadosMes">
+                                                <!-- Se llena dinámicamente -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ============================================ -->
+                    <!-- PASO 3: Conciliación Debe con Haber -->
                     <!-- ============================================ -->
                     <div id="panelVinculacionCupones" class="panel-vinculacion panel-paso-conciliacion" style="display: none;">
                         <div class="paso-header">
-                            <div class="paso-numero" id="numeroPasoVinculacion">2</div>
+                            <div class="paso-numero" id="numeroPasoVinculacion">3</div>
                             <div class="paso-titulo">
                                 <h4 id="tituloPasoVinculacion">🔗 Conciliación: Ingresos (Debe) vs Usos (Haber)</h4>
                                 <p class="paso-descripcion" id="descripcionPasoVinculacion">Vincule los registros de ingreso con sus correspondientes usos o depósitos.</p>

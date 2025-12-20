@@ -3631,6 +3631,258 @@ body {
     font-weight: 600;
 }
 
+/* ============================================
+   PASO 2: CONCILIACIÓN POR MES
+   ============================================ */
+
+/* Contenedor del selector de mes */
+.selector-mes-container {
+    margin-bottom: 24px;
+}
+
+.selector-mes-header {
+    margin-bottom: 16px;
+}
+
+.selector-mes-header h5 {
+    color: #1e293b;
+    font-size: 14px;
+    margin: 0;
+}
+
+/* Grid de meses */
+.lista-meses-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.mes-card {
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+}
+
+.mes-card:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    transform: translateY(-2px);
+}
+
+.mes-card.procesado {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border-color: #86efac;
+}
+
+.mes-card.procesando {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border-color: #3b82f6;
+}
+
+.mes-card.con-pendientes {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border-color: #fcd34d;
+}
+
+.mes-card-nombre {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 8px;
+}
+
+.mes-card-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.mes-card-stats .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mes-card-estado {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    margin-top: 8px;
+}
+
+.mes-card-estado.pendiente {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.mes-card-estado.procesado {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.mes-card-estado.parcial {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+/* Panel del mes seleccionado */
+.panel-mes-seleccionado {
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.mes-seleccionado-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.mes-seleccionado-header h5 {
+    margin: 0;
+    color: #1e293b;
+    font-size: 16px;
+}
+
+/* Estadísticas del mes */
+.stats-mes {
+    background: white;
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+/* Acciones de conciliación del mes */
+.acciones-conciliacion-mes {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 16px;
+    background: white;
+    border-radius: 8px;
+}
+
+/* Panel de cheques no asociados */
+.cheques-no-asociados-panel {
+    margin-top: 20px;
+    background: #fffbeb;
+    border-radius: 8px;
+    border: 1px solid #fcd34d;
+    padding: 16px;
+}
+
+.cheques-no-asociados-header {
+    margin-bottom: 12px;
+}
+
+.cheques-no-asociados-header h5 {
+    margin: 0;
+    color: #d97706;
+    font-size: 14px;
+}
+
+/* Resumen del listado cargado */
+.resumen-listado-cheques {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
+    border: 1px solid #e2e8f0;
+}
+
+.resumen-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 16px;
+    margin-top: 12px;
+}
+
+.resumen-stats-grid .stat-item {
+    text-align: center;
+    padding: 12px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.resumen-stats-grid .stat-numero {
+    font-size: 24px;
+    font-weight: 700;
+    color: #3b82f6;
+    display: block;
+}
+
+.resumen-stats-grid .stat-label {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 4px;
+    display: block;
+}
+
+/* Acciones en el estado del listado */
+.estado-acciones {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Botones de acción en filas de tabla */
+.btn-accion-fila {
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-accion-fila.btn-vincular {
+    background: #eff6ff;
+    color: #3b82f6;
+}
+
+.btn-accion-fila.btn-vincular:hover {
+    background: #dbeafe;
+}
+
+.btn-accion-fila.btn-desvincular {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.btn-accion-fila.btn-desvincular:hover {
+    background: #fee2e2;
+}
+
+.btn-accion-fila.btn-ver {
+    background: #f0fdf4;
+    color: #16a34a;
+}
+
+.btn-accion-fila.btn-ver:hover {
+    background: #dcfce7;
+}
+
+/* Text muted para descripciones secundarias */
+.text-muted {
+    color: #64748b;
+    font-size: 12px;
+}
+
 /* Responsive para pasos de conciliación */
 @media (max-width: 768px) {
     .paso-header {

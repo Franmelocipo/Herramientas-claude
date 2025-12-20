@@ -17,7 +17,12 @@ const stateMayores = {
     // Estado del listado de cheques recibidos
     listadoChequesIncorporado: false,
     listadoChequesCargados: [],
-    listadoChequesTemporal: []  // Datos temporales mientras se valida
+    listadoChequesTemporal: [],  // Datos temporales mientras se valida
+    // Estado para conciliación por mes
+    mesesDisponibles: [],          // Array de meses disponibles para conciliar
+    mesesProcesados: {},           // Objeto con estado de cada mes { 'YYYY-MM': { procesado: true, vinculaciones: [...], ... } }
+    mesActualConciliacion: null,   // Mes actualmente seleccionado para conciliar
+    listadoChequesGuardadoId: null // ID del listado de cheques guardado
 };
 
 // Variables para gestión de conciliaciones
@@ -4537,11 +4542,101 @@ function confirmarIncorporarListadoConDiferencia() {
 }
 
 /**
- * Incorporar el listado de cheques al mayor, asociándolos a los asientos existentes
- * Los asientos del debe se mantienen y los cheques se asocian como sublistado.
- * Se crean registros individuales de cheques para la conciliación.
+ * Incorporar el listado de cheques al mayor.
+ * NUEVA LÓGICA: Solo carga el listado, no hace asociación automática.
+ * La conciliación se realiza gradualmente por mes en el Paso 2.
  */
 async function incorporarListadoChequesAlMayor() {
+    const cheques = stateMayores.listadoChequesTemporal;
+
+    if (cheques.length === 0) {
+        alert('No hay cheques para incorporar.');
+        return;
+    }
+
+    // Mostrar barra de progreso
+    mostrarProgresoCheques();
+    actualizarProgresoCheques(0, 'Procesando listado de cheques...');
+    await permitirActualizacionUI();
+
+    // Enriquecer cada cheque con un ID único
+    actualizarProgresoCheques(30, 'Preparando cheques...');
+    await permitirActualizacionUI();
+
+    const chequesEnriquecidos = cheques.map((cheque, index) => ({
+        id: `cheque_${index}_${Date.now()}`,
+        interno: cheque.interno,
+        numero: cheque.numero,
+        fechaEmision: cheque.fechaEmision,
+        fechaEmisionOriginal: cheque.fechaEmisionOriginal,
+        fechaRecepcion: cheque.fechaRecepcion,
+        fechaRecepcionOriginal: cheque.fechaRecepcionOriginal,
+        fechaCobro: cheque.fechaCobro,
+        fechaCobroOriginal: cheque.fechaCobroOriginal,
+        fechaDeposito: cheque.fechaDeposito,
+        fechaDepositoOriginal: cheque.fechaDepositoOriginal,
+        fechaTransferencia: cheque.fechaTransferencia,
+        fechaTransferenciaOriginal: cheque.fechaTransferenciaOriginal,
+        origen: cheque.origen,
+        destino: cheque.destino,
+        importe: cheque.importe,
+        estado: cheque.estado,
+        asientoAsociado: null
+    }));
+
+    // Calcular meses disponibles
+    actualizarProgresoCheques(60, 'Calculando meses disponibles...');
+    await permitirActualizacionUI();
+
+    const mesesDisponibles = calcularMesesDeCheques(chequesEnriquecidos);
+
+    // Actualizar estado
+    actualizarProgresoCheques(80, 'Actualizando estado...');
+    await permitirActualizacionUI();
+
+    stateMayores.listadoChequesIncorporado = true;
+    stateMayores.listadoChequesCargados = chequesEnriquecidos;
+    stateMayores.listadoChequesTemporal = [];
+    stateMayores.mesesDisponibles = mesesDisponibles;
+    stateMayores.mesesProcesados = {};
+
+    // Actualizar UI
+    actualizarProgresoCheques(90, 'Actualizando interfaz...');
+    await permitirActualizacionUI();
+
+    // Actualizar estado del listado de cheques (Paso 1)
+    actualizarEstadoListadoCheques();
+    actualizarResumenListadoCheques();
+
+    // Mostrar panel de conciliación por mes (Paso 2)
+    const panelPaso2Mes = document.getElementById('panelConciliacionPorMes');
+    if (panelPaso2Mes) {
+        panelPaso2Mes.style.display = 'block';
+        renderizarListaMeses();
+    }
+
+    actualizarProgresoCheques(100, '¡Completado!');
+    await permitirActualizacionUI();
+
+    console.log(`✅ Listado de cheques cargado:`);
+    console.log(`   - ${chequesEnriquecidos.length} cheques procesados`);
+    console.log(`   - ${mesesDisponibles.length} meses disponibles para conciliar`);
+
+    // Ocultar progreso y cerrar modal
+    ocultarProgresoCheques();
+    cerrarCargarListadoCheques();
+
+    alert(`✅ Se cargaron ${chequesEnriquecidos.length} cheques.\n\n` +
+          `📅 ${mesesDisponibles.length} meses disponibles para conciliar.\n\n` +
+          `Vaya al Paso 2 para conciliar los cheques con los registros del debe mes por mes.`);
+}
+
+/**
+ * FUNCIÓN LEGACY: Incorporar el listado de cheques al mayor con asociación automática
+ * Esta función mantiene la lógica anterior para compatibilidad.
+ * Se puede invocar manualmente si se necesita el comportamiento antiguo.
+ */
+async function incorporarListadoChequesAlMayorLegacy() {
     const cheques = stateMayores.listadoChequesTemporal;
 
     if (cheques.length === 0) {
@@ -5114,40 +5209,53 @@ function togglePasoVinculacion() {
 }
 
 /**
- * Actualizar la visualización del panel de conciliación Paso 1 (Cheques vs Debe)
- * según el tipo de mayor seleccionado
+ * Actualizar la visualización del panel de conciliación Paso 1 (Carga de Cheques)
+ * y Paso 2 (Conciliación por Mes) según el tipo de mayor seleccionado
  */
 function actualizarPanelConciliacionChequesDebe() {
     const panelPaso1 = document.getElementById('panelConciliacionChequesDebe');
+    const panelPaso2Mes = document.getElementById('panelConciliacionPorMes');
     const tipoMayor = stateMayores.tipoMayorActual;
 
     // Solo mostrar para cheques_terceros_recibidos
     if (tipoMayor && tipoMayor.id === 'cheques_terceros_recibidos') {
         panelPaso1.style.display = 'block';
 
-        // Actualizar número del paso 2 a "2" cuando hay paso 1
-        const numeroPaso2 = document.getElementById('numeroPasoVinculacion');
-        if (numeroPaso2) numeroPaso2.textContent = '2';
+        // Mostrar Paso 2 (conciliación por mes) solo si hay listado cargado
+        if (stateMayores.listadoChequesIncorporado) {
+            panelPaso2Mes.style.display = 'block';
+            renderizarListaMeses();
+        } else {
+            panelPaso2Mes.style.display = 'none';
+        }
+
+        // Actualizar número del paso 3 a "3" cuando hay pasos 1 y 2
+        const numeroPaso3 = document.getElementById('numeroPasoVinculacion');
+        if (numeroPaso3) numeroPaso3.textContent = '3';
 
         // Actualizar estado del listado de cheques
         actualizarEstadoListadoCheques();
+
+        // Verificar si hay listado guardado al cargar
+        verificarListadoChequesGuardado();
     } else {
         panelPaso1.style.display = 'none';
+        panelPaso2Mes.style.display = 'none';
 
-        // Actualizar número del paso a "1" cuando no hay paso 1
-        const numeroPaso2 = document.getElementById('numeroPasoVinculacion');
-        if (numeroPaso2) numeroPaso2.textContent = '1';
+        // Actualizar número del paso a "1" cuando no hay pasos previos
+        const numeroPaso3 = document.getElementById('numeroPasoVinculacion');
+        if (numeroPaso3) numeroPaso3.textContent = '1';
     }
 }
 
 /**
  * Actualizar el estado visual del listado de cheques en el Paso 1
+ * NUEVA LÓGICA: El paso 1 solo muestra el estado de carga del listado.
+ * Las estadísticas de conciliación se muestran en el Paso 2 por mes.
  */
 function actualizarEstadoListadoCheques() {
     const listadoNoCargado = document.getElementById('listadoNoCarado');
     const listadoCargado = document.getElementById('listadoCargado');
-    const statsPanel = document.getElementById('statsConciliacionChequesDebe');
-    const tablaResumen = document.getElementById('tablaResumenAsociaciones');
 
     if (stateMayores.listadoChequesIncorporado) {
         // Mostrar estado cargado
@@ -5157,21 +5265,22 @@ function actualizarEstadoListadoCheques() {
         // Actualizar resumen
         const resumen = document.getElementById('resumenListadoCheques');
         const cantCheques = stateMayores.listadoChequesCargados.length;
-        resumen.textContent = `${cantCheques} cheques incorporados`;
+        resumen.textContent = `${cantCheques} cheques cargados`;
 
-        // Mostrar estadísticas y tabla
-        statsPanel.style.display = 'flex';
-        tablaResumen.style.display = 'block';
-
-        // Calcular y mostrar estadísticas
-        actualizarEstadisticasConciliacionCheques();
-        renderizarTablaResumenAsociaciones();
+        // Actualizar resumen de meses disponibles
+        const resumenMeses = document.getElementById('resumenMesesDisponibles');
+        if (resumenMeses) {
+            const meses = stateMayores.mesesDisponibles || [];
+            resumenMeses.textContent = `${meses.length} meses disponibles para conciliar`;
+        }
     } else {
         // Mostrar estado sin cargar
         listadoNoCargado.style.display = 'flex';
         listadoCargado.style.display = 'none';
-        statsPanel.style.display = 'none';
-        tablaResumen.style.display = 'none';
+
+        // Ocultar resumen detallado
+        const panelResumen = document.getElementById('resumenListadoChequesDetalle');
+        if (panelResumen) panelResumen.style.display = 'none';
     }
 }
 
@@ -5272,7 +5381,7 @@ function truncarTexto(texto, maxLen) {
 }
 
 /**
- * Actualizar títulos dinámicos del Paso 2 según el tipo de mayor
+ * Actualizar títulos dinámicos del Paso 3 según el tipo de mayor
  */
 function actualizarTitulosPasoVinculacion() {
     const config = obtenerConfigVinculacion();
@@ -5288,6 +5397,807 @@ function actualizarTitulosPasoVinculacion() {
     if (descripcion) {
         descripcion.textContent = config.descripcionVinculacion;
     }
+}
+
+// ============================================
+// FUNCIONES PARA CONCILIACIÓN POR MES (PASO 2)
+// ============================================
+
+/**
+ * Obtener clave para localStorage del listado de cheques
+ */
+function getListadoChequesKey() {
+    if (!stateMayores.clienteActual) return null;
+    return `listado_cheques_${stateMayores.clienteActual.id}`;
+}
+
+/**
+ * Obtener clave para localStorage de meses procesados
+ */
+function getMesesProcesadosKey() {
+    if (!stateMayores.clienteActual) return null;
+    return `meses_procesados_${stateMayores.clienteActual.id}`;
+}
+
+/**
+ * Guardar el listado de cheques cargado en localStorage
+ */
+function guardarListadoChequesLocal() {
+    const key = getListadoChequesKey();
+    if (!key) {
+        alert('Debe seleccionar un cliente primero');
+        return;
+    }
+
+    const cheques = stateMayores.listadoChequesCargados;
+    if (cheques.length === 0) {
+        alert('No hay cheques cargados para guardar');
+        return;
+    }
+
+    try {
+        const datosGuardar = {
+            id: `listado_${Date.now()}`,
+            fechaGuardado: new Date().toISOString(),
+            cheques: cheques,
+            totalCheques: cheques.length,
+            totalImporte: cheques.reduce((sum, c) => sum + c.importe, 0),
+            meses: calcularMesesDeCheques(cheques)
+        };
+
+        localStorage.setItem(key, JSON.stringify(datosGuardar));
+        stateMayores.listadoChequesGuardadoId = datosGuardar.id;
+
+        alert(`✅ Listado de ${cheques.length} cheques guardado correctamente.`);
+        console.log('💾 Listado de cheques guardado:', datosGuardar);
+    } catch (error) {
+        console.error('Error guardando listado de cheques:', error);
+        alert('Error al guardar el listado: ' + error.message);
+    }
+}
+
+/**
+ * Verificar si hay un listado de cheques guardado y ofrecerlo al cargar
+ */
+function verificarListadoChequesGuardado() {
+    const key = getListadoChequesKey();
+    if (!key) return;
+
+    try {
+        const datosGuardados = localStorage.getItem(key);
+        if (datosGuardados && !stateMayores.listadoChequesIncorporado) {
+            const datos = JSON.parse(datosGuardados);
+            const fechaGuardado = new Date(datos.fechaGuardado).toLocaleDateString('es-AR');
+
+            if (confirm(`Se encontró un listado de cheques guardado:\n\n` +
+                       `📋 ${datos.totalCheques} cheques\n` +
+                       `💰 ${formatearMoneda(datos.totalImporte)} total\n` +
+                       `📅 Guardado el ${fechaGuardado}\n\n` +
+                       `¿Desea cargar este listado?`)) {
+                cargarListadoChequesDesdeLocal(datos);
+            }
+        }
+    } catch (error) {
+        console.error('Error verificando listado guardado:', error);
+    }
+}
+
+/**
+ * Cargar un listado de cheques desde localStorage
+ */
+function cargarListadoChequesDesdeLocal(datos) {
+    stateMayores.listadoChequesCargados = datos.cheques;
+    stateMayores.listadoChequesIncorporado = true;
+    stateMayores.listadoChequesGuardadoId = datos.id;
+    stateMayores.mesesDisponibles = datos.meses || calcularMesesDeCheques(datos.cheques);
+
+    // Cargar meses procesados si existen
+    cargarMesesProcesados();
+
+    // Actualizar UI
+    actualizarEstadoListadoCheques();
+    actualizarResumenListadoCheques();
+
+    // Mostrar panel de conciliación por mes
+    const panelPaso2Mes = document.getElementById('panelConciliacionPorMes');
+    if (panelPaso2Mes) {
+        panelPaso2Mes.style.display = 'block';
+        renderizarListaMeses();
+    }
+
+    console.log('📂 Listado de cheques cargado desde localStorage:', datos);
+}
+
+/**
+ * Calcular los meses disponibles a partir de los cheques cargados
+ */
+function calcularMesesDeCheques(cheques) {
+    const mesesSet = new Set();
+
+    cheques.forEach(cheque => {
+        const fecha = cheque.fechaRecepcion || cheque.fechaEmision;
+        if (fecha) {
+            const fechaDate = fecha instanceof Date ? fecha : new Date(fecha);
+            if (!isNaN(fechaDate.getTime())) {
+                const mesKey = `${fechaDate.getFullYear()}-${String(fechaDate.getMonth() + 1).padStart(2, '0')}`;
+                mesesSet.add(mesKey);
+            }
+        }
+    });
+
+    return Array.from(mesesSet).sort();
+}
+
+/**
+ * Actualizar el resumen del listado de cheques cargado
+ */
+function actualizarResumenListadoCheques() {
+    const cheques = stateMayores.listadoChequesCargados;
+    const meses = stateMayores.mesesDisponibles || calcularMesesDeCheques(cheques);
+
+    // Actualizar resumen en el paso 1
+    const resumenEl = document.getElementById('resumenListadoCheques');
+    if (resumenEl) {
+        resumenEl.textContent = `${cheques.length} cheques cargados`;
+    }
+
+    const resumenMeses = document.getElementById('resumenMesesDisponibles');
+    if (resumenMeses) {
+        resumenMeses.textContent = `${meses.length} meses disponibles para conciliar`;
+    }
+
+    // Actualizar estadísticas detalladas
+    const totalCheques = document.getElementById('totalChequesCargados');
+    if (totalCheques) totalCheques.textContent = cheques.length;
+
+    const totalImporte = document.getElementById('totalImporteCheques');
+    if (totalImporte) totalImporte.textContent = formatearMoneda(cheques.reduce((sum, c) => sum + c.importe, 0));
+
+    const totalMeses = document.getElementById('totalMesesCheques');
+    if (totalMeses) totalMeses.textContent = meses.length;
+
+    // Mostrar panel de resumen
+    const panelResumen = document.getElementById('resumenListadoChequesDetalle');
+    if (panelResumen) panelResumen.style.display = 'block';
+}
+
+/**
+ * Cargar meses procesados desde localStorage
+ */
+function cargarMesesProcesados() {
+    const key = getMesesProcesadosKey();
+    if (!key) return;
+
+    try {
+        const datos = localStorage.getItem(key);
+        if (datos) {
+            stateMayores.mesesProcesados = JSON.parse(datos);
+            console.log('📂 Meses procesados cargados:', Object.keys(stateMayores.mesesProcesados).length);
+        }
+    } catch (error) {
+        console.error('Error cargando meses procesados:', error);
+        stateMayores.mesesProcesados = {};
+    }
+}
+
+/**
+ * Guardar meses procesados en localStorage
+ */
+function guardarMesesProcesados() {
+    const key = getMesesProcesadosKey();
+    if (!key) return;
+
+    try {
+        localStorage.setItem(key, JSON.stringify(stateMayores.mesesProcesados));
+        console.log('💾 Meses procesados guardados');
+    } catch (error) {
+        console.error('Error guardando meses procesados:', error);
+    }
+}
+
+/**
+ * Renderizar la lista de meses disponibles para conciliar
+ */
+function renderizarListaMeses() {
+    const container = document.getElementById('listaMesesConciliacion');
+    if (!container) return;
+
+    const cheques = stateMayores.listadoChequesCargados;
+    const meses = stateMayores.mesesDisponibles || calcularMesesDeCheques(cheques);
+    stateMayores.mesesDisponibles = meses;
+
+    if (meses.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state-meses">
+                <p>No hay meses disponibles. Cargue un listado de cheques primero.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Agrupar cheques por mes
+    const chequesPorMes = {};
+    cheques.forEach(cheque => {
+        const fecha = cheque.fechaRecepcion || cheque.fechaEmision;
+        if (fecha) {
+            const fechaDate = fecha instanceof Date ? fecha : new Date(fecha);
+            if (!isNaN(fechaDate.getTime())) {
+                const mesKey = `${fechaDate.getFullYear()}-${String(fechaDate.getMonth() + 1).padStart(2, '0')}`;
+                if (!chequesPorMes[mesKey]) {
+                    chequesPorMes[mesKey] = [];
+                }
+                chequesPorMes[mesKey].push(cheque);
+            }
+        }
+    });
+
+    container.innerHTML = meses.map(mesKey => {
+        const chequesDelMes = chequesPorMes[mesKey] || [];
+        const totalImporte = chequesDelMes.reduce((sum, c) => sum + c.importe, 0);
+        const estadoMes = stateMayores.mesesProcesados[mesKey];
+
+        // Determinar estado visual
+        let claseEstado = '';
+        let textoEstado = 'Pendiente';
+        if (estadoMes) {
+            if (estadoMes.completo) {
+                claseEstado = 'procesado';
+                textoEstado = '✅ Completo';
+            } else if (estadoMes.procesado) {
+                claseEstado = 'con-pendientes';
+                textoEstado = `⚠️ ${estadoMes.pendientes || 0} pendientes`;
+            }
+        }
+
+        // Formatear nombre del mes
+        const [anio, mes] = mesKey.split('-');
+        const nombreMes = new Date(anio, parseInt(mes) - 1, 1).toLocaleDateString('es-AR', {
+            month: 'long',
+            year: 'numeric'
+        });
+
+        return `
+            <div class="mes-card ${claseEstado}" onclick="seleccionarMesConciliacion('${mesKey}')">
+                <div class="mes-card-nombre">${nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1)}</div>
+                <div class="mes-card-stats">
+                    <div class="stat-row">
+                        <span>Cheques:</span>
+                        <span><strong>${chequesDelMes.length}</strong></span>
+                    </div>
+                    <div class="stat-row">
+                        <span>Importe:</span>
+                        <span><strong>${formatearMoneda(totalImporte)}</strong></span>
+                    </div>
+                </div>
+                <span class="mes-card-estado ${claseEstado ? claseEstado : 'pendiente'}">${textoEstado}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Toggle expandir/colapsar Paso 2: Conciliación por Mes
+ */
+function togglePasoConciliacionPorMes() {
+    const contenido = document.getElementById('contenidoPaso2Mes');
+    const icono = document.getElementById('iconTogglePaso2Mes');
+    const btnToggle = contenido.closest('.panel-paso-conciliacion').querySelector('.btn-toggle-paso');
+
+    if (contenido.classList.contains('collapsed')) {
+        contenido.classList.remove('collapsed');
+        icono.textContent = '▼';
+        btnToggle.classList.remove('collapsed');
+    } else {
+        contenido.classList.add('collapsed');
+        icono.textContent = '▶';
+        btnToggle.classList.add('collapsed');
+    }
+}
+
+/**
+ * Seleccionar un mes para conciliación
+ */
+function seleccionarMesConciliacion(mesKey) {
+    stateMayores.mesActualConciliacion = mesKey;
+
+    // Mostrar panel del mes seleccionado
+    const panel = document.getElementById('panelMesSeleccionado');
+    if (panel) panel.style.display = 'block';
+
+    // Actualizar nombre del mes
+    const [anio, mes] = mesKey.split('-');
+    const nombreMes = new Date(anio, parseInt(mes) - 1, 1).toLocaleDateString('es-AR', {
+        month: 'long',
+        year: 'numeric'
+    });
+    const nombreEl = document.getElementById('nombreMesSeleccionado');
+    if (nombreEl) nombreEl.textContent = nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1);
+
+    // Marcar visualmente el mes seleccionado
+    document.querySelectorAll('.mes-card').forEach(card => {
+        card.classList.remove('procesando');
+    });
+    const cardSeleccionada = document.querySelector(`.mes-card[onclick*="${mesKey}"]`);
+    if (cardSeleccionada) cardSeleccionada.classList.add('procesando');
+
+    // Verificar si ya hay datos procesados para este mes
+    const estadoMes = stateMayores.mesesProcesados[mesKey];
+    if (estadoMes && estadoMes.asientosDelMes) {
+        // Cargar estado guardado
+        renderizarConciliacionMes(estadoMes.asientosDelMes, estadoMes.chequesNoAsociadosDelMes || []);
+    } else {
+        // Preparar datos para conciliación
+        prepararConciliacionMes(mesKey);
+    }
+}
+
+/**
+ * Cerrar el panel de conciliación del mes
+ */
+function cerrarConciliacionMes() {
+    stateMayores.mesActualConciliacion = null;
+    const panel = document.getElementById('panelMesSeleccionado');
+    if (panel) panel.style.display = 'none';
+
+    // Quitar marca visual
+    document.querySelectorAll('.mes-card').forEach(card => {
+        card.classList.remove('procesando');
+    });
+}
+
+/**
+ * Preparar datos para conciliación de un mes específico
+ */
+function prepararConciliacionMes(mesKey) {
+    const cheques = stateMayores.listadoChequesCargados;
+    const registrosDebe = stateMayores.registrosMayor.filter(r => r.debe > 0 && !r.esDevolucion);
+
+    // Filtrar cheques del mes
+    const chequesDelMes = cheques.filter(cheque => {
+        const fecha = cheque.fechaRecepcion || cheque.fechaEmision;
+        if (!fecha) return false;
+        const fechaDate = fecha instanceof Date ? fecha : new Date(fecha);
+        if (isNaN(fechaDate.getTime())) return false;
+        const mesKeyCheque = `${fechaDate.getFullYear()}-${String(fechaDate.getMonth() + 1).padStart(2, '0')}`;
+        return mesKeyCheque === mesKey;
+    });
+
+    // Filtrar registros del debe del mes
+    const registrosDelMes = registrosDebe.filter(registro => {
+        if (!registro.fecha) return false;
+        const fechaDate = registro.fecha instanceof Date ? registro.fecha : new Date(registro.fecha);
+        if (isNaN(fechaDate.getTime())) return false;
+        const mesKeyRegistro = `${fechaDate.getFullYear()}-${String(fechaDate.getMonth() + 1).padStart(2, '0')}`;
+        return mesKeyRegistro === mesKey;
+    });
+
+    // Preparar asientos con cheques asociados vacíos
+    const asientosDelMes = registrosDelMes.map(registro => ({
+        ...registro,
+        chequesAsociados: [],
+        estadoCheques: 'sin_cheques'
+    }));
+
+    // Guardar en estado temporal
+    stateMayores.mesesProcesados[mesKey] = {
+        procesado: false,
+        completo: false,
+        asientosDelMes: asientosDelMes,
+        chequesDelMes: chequesDelMes,
+        chequesNoAsociadosDelMes: [...chequesDelMes]
+    };
+
+    renderizarConciliacionMes(asientosDelMes, chequesDelMes);
+}
+
+/**
+ * Renderizar la tabla de conciliación del mes
+ */
+function renderizarConciliacionMes(asientos, chequesNoAsociados) {
+    const tbody = document.getElementById('tablaAsociacionesMesBody');
+    const soloPendientes = document.getElementById('filtroSoloPendientesMes')?.checked || false;
+
+    // Calcular estadísticas
+    const completos = asientos.filter(a => a.estadoCheques === 'completo').length;
+    const parciales = asientos.filter(a => a.estadoCheques === 'parcial').length;
+    const sinCheques = asientos.filter(a => a.estadoCheques === 'sin_cheques').length;
+
+    // Actualizar estadísticas
+    document.getElementById('statMesCompletos').textContent = completos;
+    document.getElementById('statMesParciales').textContent = parciales;
+    document.getElementById('statMesSinCheques').textContent = sinCheques;
+    document.getElementById('statMesChequesNoAsociados').textContent = chequesNoAsociados.length;
+
+    // Filtrar asientos
+    const asientosFiltrados = soloPendientes
+        ? asientos.filter(a => a.estadoCheques !== 'completo')
+        : asientos;
+
+    if (asientosFiltrados.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align: center; color: #64748b; padding: 20px;">
+                    ${soloPendientes ? 'No hay registros con diferencias' : 'No hay registros del debe en este mes'}
+                </td>
+            </tr>
+        `;
+    } else {
+        tbody.innerHTML = asientosFiltrados.map(asiento => {
+            const sumaCheques = asiento.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+            const diferencia = asiento.debe - sumaCheques;
+            const estado = asiento.estadoCheques;
+
+            let claseEstado = '';
+            let textoEstado = '';
+            if (estado === 'completo') {
+                claseEstado = 'completo';
+                textoEstado = '✅ Completo';
+            } else if (estado === 'parcial') {
+                claseEstado = 'parcial';
+                textoEstado = '⚠️ Parcial';
+            } else {
+                claseEstado = 'sin-cheques';
+                textoEstado = '❌ Sin cheques';
+            }
+
+            return `
+                <tr class="fila-${claseEstado}">
+                    <td>${formatearFecha(asiento.fecha)}</td>
+                    <td>${asiento.asiento || '-'}</td>
+                    <td title="${asiento.descripcion}">${truncarTexto(asiento.descripcion, 35)}</td>
+                    <td class="text-right debe">${formatearMoneda(asiento.debe)}</td>
+                    <td class="text-right">${formatearMoneda(sumaCheques)}</td>
+                    <td class="text-right ${Math.abs(diferencia) > 0.01 ? 'diferencia-warning' : ''}">${formatearMoneda(diferencia)}</td>
+                    <td><span class="estado-asociacion ${claseEstado}">${textoEstado}</span></td>
+                    <td>
+                        <button class="btn-accion-fila btn-vincular" onclick="mostrarChequesParaVincular('${asiento.id}')" title="Vincular cheque">
+                            🔗 Vincular
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // Mostrar/ocultar panel de cheques no asociados
+    const panelNoAsociados = document.getElementById('chequesNoAsociadosMes');
+    if (chequesNoAsociados.length > 0) {
+        panelNoAsociados.style.display = 'block';
+        renderizarChequesNoAsociadosMes(chequesNoAsociados);
+    } else {
+        panelNoAsociados.style.display = 'none';
+    }
+}
+
+/**
+ * Renderizar tabla de cheques no asociados del mes
+ */
+function renderizarChequesNoAsociadosMes(cheques) {
+    const tbody = document.getElementById('tablaChequesNoAsociadosMes');
+
+    tbody.innerHTML = cheques.map(cheque => {
+        const fechaRecepcion = cheque.fechaRecepcion
+            ? formatearFecha(cheque.fechaRecepcion instanceof Date ? cheque.fechaRecepcion : new Date(cheque.fechaRecepcion))
+            : '-';
+
+        return `
+            <tr>
+                <td>${cheque.numero || cheque.interno || '-'}</td>
+                <td title="${cheque.origen}">${truncarTexto(cheque.origen, 25)}</td>
+                <td>${fechaRecepcion}</td>
+                <td class="text-right">${formatearMoneda(cheque.importe)}</td>
+                <td>${cheque.estado || '-'}</td>
+                <td>
+                    <button class="btn-accion-fila btn-vincular" onclick="mostrarAsientosParaVincular('${cheque.id || cheque.interno}')" title="Vincular a asiento">
+                        🔗 Vincular
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+/**
+ * Filtrar asociaciones del mes
+ */
+function filtrarAsociacionesMes() {
+    const mesKey = stateMayores.mesActualConciliacion;
+    if (!mesKey) return;
+
+    const estadoMes = stateMayores.mesesProcesados[mesKey];
+    if (estadoMes) {
+        renderizarConciliacionMes(estadoMes.asientosDelMes, estadoMes.chequesNoAsociadosDelMes || []);
+    }
+}
+
+/**
+ * Conciliar automáticamente el mes seleccionado
+ */
+async function conciliarMesAutomaticamente() {
+    const mesKey = stateMayores.mesActualConciliacion;
+    if (!mesKey) {
+        alert('Seleccione un mes primero');
+        return;
+    }
+
+    const estadoMes = stateMayores.mesesProcesados[mesKey];
+    if (!estadoMes) {
+        alert('No hay datos para este mes');
+        return;
+    }
+
+    const asientos = estadoMes.asientosDelMes;
+    const cheques = estadoMes.chequesDelMes || [];
+    const chequesNoAsociados = [];
+
+    // Resetear asociaciones
+    asientos.forEach(asiento => {
+        asiento.chequesAsociados = [];
+        asiento.estadoCheques = 'sin_cheques';
+    });
+
+    // Usar la misma lógica de asociación que en incorporarListadoChequesAlMayor
+    for (const cheque of cheques) {
+        let registroAsociado = null;
+        let mejorDiffDias = Infinity;
+
+        for (const asiento of asientos) {
+            // Verificar si excedería el monto
+            const sumaActual = asiento.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+            if (sumaActual + cheque.importe > asiento.debe + 0.50) continue;
+
+            // Calcular similitud de texto
+            const similitud = calcularSimilitudTextoMes(cheque.origen, asiento.descripcion);
+            if (similitud < 0.5) continue;
+
+            // Calcular diferencia de días
+            const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
+            if (!fechaCheque || !asiento.fecha) continue;
+
+            const fechaChequeDate = fechaCheque instanceof Date ? fechaCheque : new Date(fechaCheque);
+            const fechaAsientoDate = asiento.fecha instanceof Date ? asiento.fecha : new Date(asiento.fecha);
+            const diffDias = Math.abs((fechaAsientoDate - fechaChequeDate) / (1000 * 60 * 60 * 24));
+
+            if (diffDias <= 2 && diffDias < mejorDiffDias) {
+                mejorDiffDias = diffDias;
+                registroAsociado = asiento;
+            }
+        }
+
+        if (registroAsociado) {
+            const chequeEnriquecido = {
+                id: cheque.id || `cheque_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                ...cheque
+            };
+            registroAsociado.chequesAsociados.push(chequeEnriquecido);
+        } else {
+            chequesNoAsociados.push(cheque);
+        }
+    }
+
+    // Calcular estado de cada asiento
+    asientos.forEach(asiento => {
+        const sumaCheques = asiento.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+        if (asiento.chequesAsociados.length === 0) {
+            asiento.estadoCheques = 'sin_cheques';
+        } else if (Math.abs(asiento.debe - sumaCheques) <= 0.01) {
+            asiento.estadoCheques = 'completo';
+        } else {
+            asiento.estadoCheques = 'parcial';
+            asiento.diferenciaCheques = asiento.debe - sumaCheques;
+        }
+    });
+
+    // Actualizar estado del mes
+    const completos = asientos.filter(a => a.estadoCheques === 'completo').length;
+    estadoMes.asientosDelMes = asientos;
+    estadoMes.chequesNoAsociadosDelMes = chequesNoAsociados;
+    estadoMes.procesado = true;
+    estadoMes.completo = chequesNoAsociados.length === 0 && asientos.every(a => a.estadoCheques === 'completo');
+    estadoMes.pendientes = asientos.filter(a => a.estadoCheques !== 'completo').length;
+
+    // Renderizar resultados
+    renderizarConciliacionMes(asientos, chequesNoAsociados);
+    renderizarListaMeses();
+
+    // Mostrar resumen
+    alert(`Conciliación automática completada:\n\n` +
+          `✅ ${completos} asientos completos\n` +
+          `⚠️ ${asientos.filter(a => a.estadoCheques === 'parcial').length} asientos parciales\n` +
+          `❌ ${asientos.filter(a => a.estadoCheques === 'sin_cheques').length} sin cheques\n` +
+          `📌 ${chequesNoAsociados.length} cheques sin asociar`);
+}
+
+/**
+ * Calcular similitud de texto (versión simplificada para conciliación por mes)
+ */
+function calcularSimilitudTextoMes(origenCheque, descripcionAsiento) {
+    if (!origenCheque || !descripcionAsiento) return 0;
+
+    const normalizar = (texto) => {
+        return texto.toString().toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ').trim();
+    };
+
+    const origenNorm = normalizar(origenCheque);
+    const descripcionNorm = normalizar(descripcionAsiento);
+
+    if (descripcionNorm.includes(origenNorm) || origenNorm.includes(descripcionNorm)) {
+        return 1;
+    }
+
+    const palabrasOrigen = origenNorm.split(' ').filter(p => p.length > 3);
+    if (palabrasOrigen.length === 0) return 0;
+
+    let coincidencias = 0;
+    const palabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 3);
+
+    for (const palabra of palabrasOrigen) {
+        if (palabrasDescripcion.some(pd => pd === palabra || pd.includes(palabra) || palabra.includes(pd))) {
+            coincidencias++;
+        }
+    }
+
+    // Exigir al menos 2 palabras coincidentes
+    if (coincidencias < 2) return 0;
+
+    return coincidencias / palabrasOrigen.length;
+}
+
+/**
+ * Reprocesar cheques sin asociar del mes actual
+ */
+function reprocesarChequesMes() {
+    const mesKey = stateMayores.mesActualConciliacion;
+    if (!mesKey) {
+        alert('Seleccione un mes primero');
+        return;
+    }
+
+    // Volver a ejecutar la conciliación automática
+    conciliarMesAutomaticamente();
+}
+
+/**
+ * Guardar el progreso de conciliación del mes actual
+ */
+function guardarConciliacionMes() {
+    const mesKey = stateMayores.mesActualConciliacion;
+    if (!mesKey) {
+        alert('Seleccione un mes primero');
+        return;
+    }
+
+    guardarMesesProcesados();
+    alert('✅ Progreso del mes guardado correctamente');
+}
+
+/**
+ * Mostrar cheques disponibles para vincular a un asiento
+ */
+function mostrarChequesParaVincular(asientoId) {
+    const mesKey = stateMayores.mesActualConciliacion;
+    if (!mesKey) return;
+
+    const estadoMes = stateMayores.mesesProcesados[mesKey];
+    if (!estadoMes) return;
+
+    const asiento = estadoMes.asientosDelMes.find(a => a.id === asientoId);
+    const chequesDisponibles = estadoMes.chequesNoAsociadosDelMes || [];
+
+    if (chequesDisponibles.length === 0) {
+        alert('No hay cheques disponibles para vincular');
+        return;
+    }
+
+    // Crear lista de opciones
+    const opciones = chequesDisponibles.map((ch, idx) => {
+        const fechaRecep = ch.fechaRecepcion
+            ? formatearFecha(ch.fechaRecepcion instanceof Date ? ch.fechaRecepcion : new Date(ch.fechaRecepcion))
+            : '-';
+        return `${idx + 1}. ${ch.numero || ch.interno || 'S/N'} - ${ch.origen || 'Sin origen'} - ${formatearMoneda(ch.importe)} - ${fechaRecep}`;
+    }).join('\n');
+
+    const seleccion = prompt(
+        `Seleccione el número del cheque a vincular al asiento:\n` +
+        `Asiento: ${asiento.descripcion}\n` +
+        `Monto: ${formatearMoneda(asiento.debe)}\n\n` +
+        `Cheques disponibles:\n${opciones}\n\n` +
+        `Ingrese el número (1-${chequesDisponibles.length}):`
+    );
+
+    if (seleccion) {
+        const idx = parseInt(seleccion) - 1;
+        if (idx >= 0 && idx < chequesDisponibles.length) {
+            vincularChequeAAsientoMes(chequesDisponibles[idx], asientoId);
+        }
+    }
+}
+
+/**
+ * Mostrar asientos disponibles para vincular un cheque
+ */
+function mostrarAsientosParaVincular(chequeId) {
+    const mesKey = stateMayores.mesActualConciliacion;
+    if (!mesKey) return;
+
+    const estadoMes = stateMayores.mesesProcesados[mesKey];
+    if (!estadoMes) return;
+
+    const cheque = estadoMes.chequesNoAsociadosDelMes.find(c => (c.id || c.interno) === chequeId);
+    const asientosDisponibles = estadoMes.asientosDelMes.filter(a => a.estadoCheques !== 'completo');
+
+    if (asientosDisponibles.length === 0) {
+        alert('No hay asientos disponibles para vincular (todos completos)');
+        return;
+    }
+
+    const opciones = asientosDisponibles.map((a, idx) => {
+        return `${idx + 1}. ${a.asiento || 'S/N'} - ${truncarTexto(a.descripcion, 30)} - ${formatearMoneda(a.debe)}`;
+    }).join('\n');
+
+    const seleccion = prompt(
+        `Seleccione el número del asiento para vincular el cheque:\n` +
+        `Cheque: ${cheque.numero || cheque.interno} - ${cheque.origen}\n` +
+        `Importe: ${formatearMoneda(cheque.importe)}\n\n` +
+        `Asientos disponibles:\n${opciones}\n\n` +
+        `Ingrese el número (1-${asientosDisponibles.length}):`
+    );
+
+    if (seleccion) {
+        const idx = parseInt(seleccion) - 1;
+        if (idx >= 0 && idx < asientosDisponibles.length) {
+            vincularChequeAAsientoMes(cheque, asientosDisponibles[idx].id);
+        }
+    }
+}
+
+/**
+ * Vincular un cheque a un asiento en la conciliación del mes
+ */
+function vincularChequeAAsientoMes(cheque, asientoId) {
+    const mesKey = stateMayores.mesActualConciliacion;
+    if (!mesKey) return;
+
+    const estadoMes = stateMayores.mesesProcesados[mesKey];
+    if (!estadoMes) return;
+
+    const asiento = estadoMes.asientosDelMes.find(a => a.id === asientoId);
+    if (!asiento) return;
+
+    // Agregar cheque al asiento
+    const chequeEnriquecido = {
+        id: cheque.id || `cheque_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        ...cheque
+    };
+    asiento.chequesAsociados.push(chequeEnriquecido);
+
+    // Remover de cheques no asociados
+    const idxCheque = estadoMes.chequesNoAsociadosDelMes.findIndex(c => (c.id || c.interno) === (cheque.id || cheque.interno));
+    if (idxCheque !== -1) {
+        estadoMes.chequesNoAsociadosDelMes.splice(idxCheque, 1);
+    }
+
+    // Recalcular estado del asiento
+    const sumaCheques = asiento.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
+    if (Math.abs(asiento.debe - sumaCheques) <= 0.01) {
+        asiento.estadoCheques = 'completo';
+    } else {
+        asiento.estadoCheques = 'parcial';
+        asiento.diferenciaCheques = asiento.debe - sumaCheques;
+    }
+
+    // Actualizar estado del mes
+    estadoMes.procesado = true;
+    estadoMes.completo = estadoMes.chequesNoAsociadosDelMes.length === 0 &&
+                         estadoMes.asientosDelMes.every(a => a.estadoCheques === 'completo');
+    estadoMes.pendientes = estadoMes.asientosDelMes.filter(a => a.estadoCheques !== 'completo').length;
+
+    // Renderizar actualización
+    renderizarConciliacionMes(estadoMes.asientosDelMes, estadoMes.chequesNoAsociadosDelMes);
+    renderizarListaMeses();
 }
 
 console.log('✅ Módulo de Mayores Contables cargado');
