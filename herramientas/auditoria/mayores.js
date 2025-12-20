@@ -3242,46 +3242,180 @@ function mostrarTodasLasConciliaciones() {
 }
 
 /**
- * Cargar lista de conciliaciones guardadas desde localStorage
+ * Cargar lista de conciliaciones guardadas desde Supabase (o localStorage como fallback)
  */
-function cargarConciliacionesMayorGuardadas() {
+async function cargarConciliacionesMayorGuardadas() {
     if (!stateMayores.clienteActual || !stateMayores.tipoMayorActual) {
         console.log('⚠️ cargarConciliacionesMayorGuardadas: No hay cliente o tipo seleccionado');
         return [];
     }
 
+    const clienteId = stateMayores.clienteActual.id;
+    const tipoMayorId = stateMayores.tipoMayorActual.id;
+
     try {
+        // Intentar cargar desde Supabase primero
+        if (window.supabaseDB) {
+            const { data, error } = await window.supabaseDB
+                .from('conciliaciones_mayor')
+                .select('*')
+                .eq('cliente_id', clienteId)
+                .eq('tipo_mayor_id', tipoMayorId)
+                .order('fecha_modificado', { ascending: false });
+
+            if (error) {
+                // Si la tabla no existe, caer en localStorage
+                if (error.code === '42P01' || error.message.includes('does not exist')) {
+                    console.warn('⚠️ Tabla conciliaciones_mayor no existe en Supabase, usando localStorage');
+                } else {
+                    console.error('Error cargando desde Supabase:', error);
+                }
+            } else if (data && data.length > 0) {
+                console.log(`📊 ${data.length} conciliaciones cargadas desde Supabase`);
+                // Transformar datos de Supabase al formato esperado
+                return data.map(c => ({
+                    id: c.id,
+                    nombre: c.nombre,
+                    registros: c.registros || [],
+                    vinculaciones: c.vinculaciones || [],
+                    listadoChequesGuardadoId: c.listado_cheques_guardado_id,
+                    listadoChequesIncorporado: c.listado_cheques_incorporado,
+                    mesesDisponibles: c.meses_disponibles || [],
+                    mesesProcesadosResumen: c.meses_procesados_resumen || {},
+                    fechaGuardado: c.fecha_guardado,
+                    fechaModificado: c.fecha_modificado
+                }));
+            } else {
+                console.log('📊 No hay conciliaciones en Supabase para este cliente/tipo');
+                // Intentar migrar desde localStorage si hay datos
+                await migrarConciliacionesLocalStorageASupabase();
+                // Recargar desde Supabase después de la migración
+                const { data: dataPostMigration } = await window.supabaseDB
+                    .from('conciliaciones_mayor')
+                    .select('*')
+                    .eq('cliente_id', clienteId)
+                    .eq('tipo_mayor_id', tipoMayorId)
+                    .order('fecha_modificado', { ascending: false });
+
+                if (dataPostMigration && dataPostMigration.length > 0) {
+                    return dataPostMigration.map(c => ({
+                        id: c.id,
+                        nombre: c.nombre,
+                        registros: c.registros || [],
+                        vinculaciones: c.vinculaciones || [],
+                        listadoChequesGuardadoId: c.listado_cheques_guardado_id,
+                        listadoChequesIncorporado: c.listado_cheques_incorporado,
+                        mesesDisponibles: c.meses_disponibles || [],
+                        mesesProcesadosResumen: c.meses_procesados_resumen || {},
+                        fechaGuardado: c.fecha_guardado,
+                        fechaModificado: c.fecha_modificado
+                    }));
+                }
+                return [];
+            }
+        }
+
+        // Fallback a localStorage si Supabase no está disponible
         const key = getConciliacionesMayorKey();
         const datosGuardados = localStorage.getItem(key);
 
         if (datosGuardados) {
             const conciliaciones = JSON.parse(datosGuardados);
-            console.log(`📊 ${conciliaciones.length} conciliaciones encontradas para ${key}`);
+            console.log(`📊 ${conciliaciones.length} conciliaciones encontradas en localStorage para ${key}`);
             return conciliaciones;
         }
 
         return [];
     } catch (error) {
         console.error('Error cargando conciliaciones:', error);
+
+        // Último intento: localStorage
+        try {
+            const key = getConciliacionesMayorKey();
+            const datosGuardados = localStorage.getItem(key);
+            if (datosGuardados) {
+                return JSON.parse(datosGuardados);
+            }
+        } catch (e) {
+            console.error('Error en fallback localStorage:', e);
+        }
+
         return [];
+    }
+}
+
+/**
+ * Migrar conciliaciones de localStorage a Supabase
+ */
+async function migrarConciliacionesLocalStorageASupabase() {
+    if (!window.supabaseDB || !stateMayores.clienteActual || !stateMayores.tipoMayorActual) {
+        return;
+    }
+
+    const key = getConciliacionesMayorKey();
+    const datosGuardados = localStorage.getItem(key);
+
+    if (!datosGuardados) {
+        return;
+    }
+
+    try {
+        const conciliaciones = JSON.parse(datosGuardados);
+        if (!Array.isArray(conciliaciones) || conciliaciones.length === 0) {
+            return;
+        }
+
+        console.log(`🔄 Migrando ${conciliaciones.length} conciliaciones de localStorage a Supabase...`);
+
+        for (const c of conciliaciones) {
+            const registro = {
+                id: c.id,
+                cliente_id: stateMayores.clienteActual.id,
+                tipo_mayor_id: stateMayores.tipoMayorActual.id,
+                nombre: c.nombre,
+                registros: c.registros || [],
+                vinculaciones: c.vinculaciones || [],
+                listado_cheques_guardado_id: c.listadoChequesGuardadoId || null,
+                listado_cheques_incorporado: c.listadoChequesIncorporado || false,
+                meses_disponibles: c.mesesDisponibles || [],
+                meses_procesados_resumen: c.mesesProcesadosResumen || {},
+                fecha_guardado: c.fechaGuardado || new Date().toISOString(),
+                fecha_modificado: c.fechaModificado || new Date().toISOString()
+            };
+
+            const { error } = await window.supabaseDB
+                .from('conciliaciones_mayor')
+                .upsert(registro, { onConflict: 'id' });
+
+            if (error) {
+                console.error('Error migrando conciliación:', c.nombre, error);
+            }
+        }
+
+        console.log('✅ Migración completada');
+        // Limpiar localStorage después de migrar exitosamente
+        localStorage.removeItem(key);
+        console.log('🗑️ Datos de localStorage eliminados (ya están en Supabase)');
+
+    } catch (error) {
+        console.error('Error en migración:', error);
     }
 }
 
 /**
  * Verificar y mostrar conciliaciones guardadas al seleccionar tipo de mayor
  */
-function verificarConciliacionesMayorGuardadas() {
+async function verificarConciliacionesMayorGuardadas() {
     console.log('🔍 Verificando conciliaciones de mayor guardadas...');
     console.log('   Cliente:', stateMayores.clienteActual?.nombre, '(ID:', stateMayores.clienteActual?.id + ')');
     console.log('   Tipo Mayor:', stateMayores.tipoMayorActual?.nombre, '(ID:', stateMayores.tipoMayorActual?.id + ')');
 
-    // Mostrar la clave exacta que se busca en localStorage
+    // Mostrar información de origen de datos
     if (stateMayores.clienteActual && stateMayores.tipoMayorActual) {
-        const key = getConciliacionesMayorKey();
-        console.log('   🔑 Clave localStorage:', key);
+        console.log('   🔑 Buscando en Supabase y localStorage...');
     }
 
-    const conciliaciones = cargarConciliacionesMayorGuardadas();
+    const conciliaciones = await cargarConciliacionesMayorGuardadas();
     conciliacionesMayorGuardadasLista = conciliaciones || [];
 
     console.log('📋 Conciliaciones encontradas:', conciliacionesMayorGuardadasLista.length);
@@ -3577,9 +3711,9 @@ function nuevaConciliacionMayor() {
 /**
  * Abrir modal de gestión de conciliaciones
  */
-function abrirGestionConciliacionesMayor() {
-    // Recargar lista
-    const conciliaciones = cargarConciliacionesMayorGuardadas();
+async function abrirGestionConciliacionesMayor() {
+    // Recargar lista desde Supabase/localStorage
+    const conciliaciones = await cargarConciliacionesMayorGuardadas();
     conciliacionesMayorGuardadasLista = conciliaciones || [];
 
     const overlay = document.getElementById('overlay-gestion-conciliaciones-mayor');
@@ -3716,49 +3850,86 @@ function cerrarConfirmarEliminarConciliacionMayor() {
 }
 
 /**
- * Ejecutar eliminación de conciliación
+ * Ejecutar eliminación de conciliación de Supabase (o localStorage)
  */
-function ejecutarEliminarConciliacionMayor() {
+async function ejecutarEliminarConciliacionMayor() {
     if (!conciliacionMayorAEliminarId) return;
 
-    const key = getConciliacionesMayorKey();
+    console.log('🗑️ Eliminando conciliación:', conciliacionMayorAEliminarId);
 
-    // Filtrar la conciliación a eliminar
-    conciliacionesMayorGuardadasLista = conciliacionesMayorGuardadasLista.filter(
-        c => c.id !== conciliacionMayorAEliminarId
-    );
+    try {
+        let eliminadoExitoso = false;
 
-    // Guardar lista actualizada
-    localStorage.setItem(key, JSON.stringify(conciliacionesMayorGuardadasLista));
+        // Intentar eliminar de Supabase primero
+        if (window.supabaseDB) {
+            const { error } = await window.supabaseDB
+                .from('conciliaciones_mayor')
+                .delete()
+                .eq('id', conciliacionMayorAEliminarId);
 
-    // Si la conciliación eliminada estaba cargada, limpiar
-    if (stateMayores.conciliacionCargadaId === conciliacionMayorAEliminarId) {
-        stateMayores.registrosMayor = [];
-        stateMayores.vinculaciones = [];
-        stateMayores.conciliacionCargadaId = null;
-        stateMayores.conciliacionCargadaNombre = null;
+            if (error) {
+                if (error.code === '42P01' || error.message.includes('does not exist')) {
+                    console.warn('⚠️ Tabla conciliaciones_mayor no existe, eliminando de localStorage');
+                } else {
+                    console.error('Error eliminando de Supabase:', error);
+                }
+            } else {
+                eliminadoExitoso = true;
+                console.log('✅ Conciliación eliminada de Supabase');
+            }
+        }
 
-        renderizarTablaMayor();
-        renderizarVinculacion();
-        document.getElementById('infoMayorCargado').style.display = 'none';
+        // También eliminar de localStorage (por si existe copia local)
+        const key = getConciliacionesMayorKey();
+        try {
+            const datosGuardados = localStorage.getItem(key);
+            if (datosGuardados) {
+                const conciliaciones = JSON.parse(datosGuardados);
+                const conciliacionesFiltradas = conciliaciones.filter(c => c.id !== conciliacionMayorAEliminarId);
+                localStorage.setItem(key, JSON.stringify(conciliacionesFiltradas));
+            }
+        } catch (e) {
+            console.error('Error eliminando de localStorage:', e);
+        }
 
-        // Ocultar botón de guardar en toolbar
-        const btnGuardar = document.getElementById('btnGuardarConciliacion');
-        if (btnGuardar) btnGuardar.style.display = 'none';
+        // Actualizar lista en memoria
+        conciliacionesMayorGuardadasLista = conciliacionesMayorGuardadasLista.filter(
+            c => c.id !== conciliacionMayorAEliminarId
+        );
+
+        // Si la conciliación eliminada estaba cargada, limpiar
+        if (stateMayores.conciliacionCargadaId === conciliacionMayorAEliminarId) {
+            stateMayores.registrosMayor = [];
+            stateMayores.vinculaciones = [];
+            stateMayores.conciliacionCargadaId = null;
+            stateMayores.conciliacionCargadaNombre = null;
+
+            renderizarTablaMayor();
+            renderizarVinculacion();
+            document.getElementById('infoMayorCargado').style.display = 'none';
+
+            // Ocultar botón de guardar en toolbar
+            const btnGuardar = document.getElementById('btnGuardarConciliacion');
+            if (btnGuardar) btnGuardar.style.display = 'none';
+        }
+
+        cerrarConfirmarEliminarConciliacionMayor();
+
+        // Actualizar botón y refrescar modal de gestión si está abierto
+        actualizarBotonGestionConciliacionesMayor();
+
+        // Refrescar modal de gestión
+        const modalGestion = document.getElementById('modal-gestion-conciliaciones-mayor');
+        if (modalGestion.classList.contains('active')) {
+            await abrirGestionConciliacionesMayor();
+        }
+
+        console.log('🗑️ Conciliación eliminada correctamente');
+
+    } catch (error) {
+        console.error('Error eliminando conciliación:', error);
+        alert('Error al eliminar: ' + error.message);
     }
-
-    cerrarConfirmarEliminarConciliacionMayor();
-
-    // Actualizar botón y refrescar modal de gestión si está abierto
-    actualizarBotonGestionConciliacionesMayor();
-
-    // Refrescar modal de gestión
-    const modalGestion = document.getElementById('modal-gestion-conciliaciones-mayor');
-    if (modalGestion.classList.contains('active')) {
-        abrirGestionConciliacionesMayor();
-    }
-
-    console.log('🗑️ Conciliación eliminada');
 }
 
 /**
@@ -3805,9 +3976,9 @@ function cerrarModalGuardarConciliacionMayor() {
 }
 
 /**
- * Ejecutar guardado de conciliación
+ * Ejecutar guardado de conciliación en Supabase (o localStorage como fallback)
  */
-function ejecutarGuardarConciliacionMayor() {
+async function ejecutarGuardarConciliacionMayor() {
     const inputNombre = document.getElementById('nombreConciliacionMayor');
     const nombre = inputNombre.value.trim();
 
@@ -3817,77 +3988,128 @@ function ejecutarGuardarConciliacionMayor() {
         return;
     }
 
-    const key = getConciliacionesMayorKey();
-    console.log('💾 Guardando conciliación con clave:', key);
+    const clienteId = stateMayores.clienteActual?.id;
+    const tipoMayorId = stateMayores.tipoMayorActual?.id;
 
-    // Cargar conciliaciones existentes
-    let conciliaciones = cargarConciliacionesMayorGuardadas();
+    if (!clienteId || !tipoMayorId) {
+        alert('Error: No hay cliente o tipo de mayor seleccionado');
+        return;
+    }
+
+    console.log('💾 Guardando conciliación en Supabase...');
 
     // Crear o actualizar conciliación
     const ahora = new Date().toISOString();
 
-    // Guardar cheques por separado si hay muchos (evitar QuotaExceededError)
-    // Solo guardar referencia al listado de cheques, no los cheques completos
-    const tieneChequesGuardados = stateMayores.listadoChequesGuardadoId || false;
-
     // Preparar datos mínimos de cheques (solo referencia, no los datos completos)
-    const datosCheques = {
-        listadoChequesGuardadoId: stateMayores.listadoChequesGuardadoId || null,
-        listadoChequesIncorporado: stateMayores.listadoChequesIncorporado || false,
-        mesesDisponibles: stateMayores.mesesDisponibles || [],
-        // Solo guardar el resumen de meses procesados, no todos los datos
-        mesesProcesadosResumen: Object.keys(stateMayores.mesesProcesados || {}).reduce((acc, mes) => {
-            const mesDatos = stateMayores.mesesProcesados[mes];
-            acc[mes] = {
-                procesado: mesDatos.procesado || false,
-                totalAsociados: (mesDatos.vinculaciones || []).length,
-                fechaProcesado: mesDatos.fechaProcesado || null
-            };
-            return acc;
-        }, {})
+    const mesesProcesadosResumen = Object.keys(stateMayores.mesesProcesados || {}).reduce((acc, mes) => {
+        const mesDatos = stateMayores.mesesProcesados[mes];
+        acc[mes] = {
+            procesado: mesDatos.procesado || false,
+            totalAsociados: (mesDatos.vinculaciones || []).length,
+            fechaProcesado: mesDatos.fechaProcesado || null
+        };
+        return acc;
+    }, {});
+
+    // Preparar el registro para Supabase
+    const conciliacionId = stateMayores.conciliacionCargadaId || `conc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const esNueva = !stateMayores.conciliacionCargadaId;
+
+    const registro = {
+        id: conciliacionId,
+        cliente_id: clienteId,
+        tipo_mayor_id: tipoMayorId,
+        nombre: nombre,
+        registros: stateMayores.registrosMayor || [],
+        vinculaciones: stateMayores.vinculaciones || [],
+        listado_cheques_guardado_id: stateMayores.listadoChequesGuardadoId || null,
+        listado_cheques_incorporado: stateMayores.listadoChequesIncorporado || false,
+        meses_disponibles: stateMayores.mesesDisponibles || [],
+        meses_procesados_resumen: mesesProcesadosResumen,
+        fecha_guardado: esNueva ? ahora : undefined,
+        fecha_modificado: ahora
     };
 
-    if (stateMayores.conciliacionCargadaId) {
-        // Actualizar conciliación existente
-        const index = conciliaciones.findIndex(c => c.id === stateMayores.conciliacionCargadaId);
-        if (index !== -1) {
-            conciliaciones[index] = {
-                ...conciliaciones[index],
-                nombre: nombre,
-                registros: stateMayores.registrosMayor,
-                vinculaciones: stateMayores.vinculaciones,
-                ...datosCheques,
-                fechaModificado: ahora
-            };
-            console.log('📝 Conciliación actualizada:', nombre);
-        }
-    } else {
-        // Crear nueva conciliación
-        const nuevaConciliacion = {
-            id: `conc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            nombre: nombre,
-            registros: stateMayores.registrosMayor,
-            vinculaciones: stateMayores.vinculaciones,
-            ...datosCheques,
-            fechaGuardado: ahora,
-            fechaModificado: ahora
-        };
-
-        conciliaciones.push(nuevaConciliacion);
-        stateMayores.conciliacionCargadaId = nuevaConciliacion.id;
-        stateMayores.conciliacionCargadaNombre = nombre;
-
-        console.log('💾 Nueva conciliación guardada:', nombre);
+    // Remover fecha_guardado si es actualización (no queremos sobrescribirla)
+    if (!esNueva) {
+        delete registro.fecha_guardado;
     }
 
-    // Guardar en localStorage
     try {
-        localStorage.setItem(key, JSON.stringify(conciliaciones));
-        conciliacionesMayorGuardadasLista = conciliaciones;
+        let guardadoExitoso = false;
+
+        // Intentar guardar en Supabase primero
+        if (window.supabaseDB) {
+            const { error } = await window.supabaseDB
+                .from('conciliaciones_mayor')
+                .upsert(registro, { onConflict: 'id' });
+
+            if (error) {
+                if (error.code === '42P01' || error.message.includes('does not exist')) {
+                    console.warn('⚠️ Tabla conciliaciones_mayor no existe, usando localStorage');
+                } else {
+                    console.error('Error guardando en Supabase:', error);
+                    throw error;
+                }
+            } else {
+                guardadoExitoso = true;
+                console.log('✅ Conciliación guardada en Supabase:', nombre);
+            }
+        }
+
+        // Fallback a localStorage si Supabase no funcionó
+        if (!guardadoExitoso) {
+            const key = getConciliacionesMayorKey();
+            let conciliaciones = [];
+
+            try {
+                const datosGuardados = localStorage.getItem(key);
+                if (datosGuardados) {
+                    conciliaciones = JSON.parse(datosGuardados);
+                }
+            } catch (e) {
+                conciliaciones = [];
+            }
+
+            const conciliacionLocal = {
+                id: conciliacionId,
+                nombre: nombre,
+                registros: stateMayores.registrosMayor || [],
+                vinculaciones: stateMayores.vinculaciones || [],
+                listadoChequesGuardadoId: stateMayores.listadoChequesGuardadoId || null,
+                listadoChequesIncorporado: stateMayores.listadoChequesIncorporado || false,
+                mesesDisponibles: stateMayores.mesesDisponibles || [],
+                mesesProcesadosResumen: mesesProcesadosResumen,
+                fechaGuardado: esNueva ? ahora : (conciliaciones.find(c => c.id === conciliacionId)?.fechaGuardado || ahora),
+                fechaModificado: ahora
+            };
+
+            if (esNueva) {
+                conciliaciones.push(conciliacionLocal);
+            } else {
+                const index = conciliaciones.findIndex(c => c.id === conciliacionId);
+                if (index !== -1) {
+                    conciliaciones[index] = conciliacionLocal;
+                } else {
+                    conciliaciones.push(conciliacionLocal);
+                }
+            }
+
+            localStorage.setItem(key, JSON.stringify(conciliaciones));
+            console.log('💾 Conciliación guardada en localStorage:', nombre);
+        }
+
+        // Actualizar estado local
+        stateMayores.conciliacionCargadaId = conciliacionId;
+        stateMayores.conciliacionCargadaNombre = nombre;
+
+        // Recargar lista de conciliaciones
+        conciliacionesMayorGuardadasLista = await cargarConciliacionesMayorGuardadas();
 
         // Guardar meses procesados por separado si hay datos
         if (Object.keys(stateMayores.mesesProcesados || {}).length > 0) {
-            guardarMesesProcesados();
+            await guardarMesesProcesadosSupabase();
         }
 
         // Actualizar botón
@@ -3895,13 +4117,43 @@ function ejecutarGuardarConciliacionMayor() {
 
         cerrarModalGuardarConciliacionMayor();
         mostrarNotificacion('Conciliación guardada correctamente', 'success');
+
     } catch (error) {
         console.error('Error guardando conciliación:', error);
-        if (error.name === 'QuotaExceededError') {
-            alert('Error: El almacenamiento local está lleno.\n\nSugerencias:\n- Elimine conciliaciones antiguas\n- Use "Limpiar datos" en el menú de Herramientas\n- Exporte los datos antes de continuar');
-        } else {
-            alert('Error al guardar: ' + error.message);
+        alert('Error al guardar: ' + error.message);
+    }
+}
+
+/**
+ * Guardar meses procesados en Supabase
+ */
+async function guardarMesesProcesadosSupabase() {
+    if (!window.supabaseDB || !stateMayores.clienteActual) {
+        // Fallback a localStorage
+        guardarMesesProcesados();
+        return;
+    }
+
+    try {
+        const { error } = await window.supabaseDB
+            .from('meses_procesados')
+            .upsert({
+                cliente_id: stateMayores.clienteActual.id,
+                datos: stateMayores.mesesProcesados || {},
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'cliente_id' });
+
+        if (error) {
+            if (error.code === '42P01' || error.message.includes('does not exist')) {
+                console.warn('⚠️ Tabla meses_procesados no existe, usando localStorage');
+                guardarMesesProcesados();
+            } else {
+                throw error;
+            }
         }
+    } catch (error) {
+        console.error('Error guardando meses procesados en Supabase:', error);
+        guardarMesesProcesados();
     }
 }
 
