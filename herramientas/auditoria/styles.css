@@ -4321,6 +4321,23 @@ body {
 .modal-vincular-manual {
     max-width: 650px;
     width: 95%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-vincular-manual .modal-eliminar-body {
+    overflow-y: auto;
+    flex: 1;
+    max-height: calc(90vh - 140px);
+}
+
+#modal-vincular-multiples {
+    max-width: 700px;
+}
+
+#modal-vincular-multiples .modal-eliminar-body {
+    max-height: calc(90vh - 160px);
 }
 
 .info-elemento-vincular {
@@ -4434,12 +4451,64 @@ body {
     padding: 12px 16px;
     background: #f8fafc;
     border-bottom: 1px solid #e5e7eb;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .vincular-lista-header span:first-child {
     font-weight: 600;
     color: #374151;
     font-size: 14px;
+}
+
+.vincular-lista-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.vincular-ordenar-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.vincular-ordenar-container label {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.vincular-ordenar-select {
+    padding: 4px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 12px;
+    background: white;
+    color: #374151;
+    cursor: pointer;
+    min-width: 120px;
+}
+
+.vincular-ordenar-select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.vincular-orden-btn {
+    padding: 4px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.15s ease;
+}
+
+.vincular-orden-btn:hover {
+    background: #f1f5f9;
+    border-color: #3b82f6;
 }
 
 .badge-count {
