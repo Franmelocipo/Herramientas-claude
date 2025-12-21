@@ -3570,7 +3570,7 @@ function confirmarCargarConciliacionMayorSeleccionada() {
 /**
  * Cargar una conciliación guardada específica
  */
-function cargarConciliacionMayorGuardada(conciliacionId) {
+async function cargarConciliacionMayorGuardada(conciliacionId) {
     const conciliacion = conciliacionesMayorGuardadasLista.find(c => c.id === conciliacionId);
 
     if (!conciliacion) {
@@ -3636,7 +3636,11 @@ function cargarConciliacionMayorGuardada(conciliacionId) {
             const datosFallback = localStorage.getItem(keyFallback);
             if (datosFallback) {
                 const datos = JSON.parse(datosFallback);
-                if (datos.cheques && datos.cheques.length > 0) {
+                // Verificar si es una referencia (guardado compacto por falta de espacio)
+                if (datos.referencia === 'cheques_en_listado_cliente') {
+                    console.log(`📋 Fallback contiene solo referencia, cargando desde listado del cliente...`);
+                    // No marcar como encontrados, dejar que busque en el listado del cliente
+                } else if (datos.cheques && datos.cheques.length > 0) {
                     // Restaurar fechas de los cheques como objetos Date
                     datos.cheques.forEach(c => {
                         if (c.fechaRecepcion) c.fechaRecepcion = new Date(c.fechaRecepcion);
@@ -3681,10 +3685,44 @@ function cargarConciliacionMayorGuardada(conciliacionId) {
                         cargarMesesProcesados();
 
                         console.log(`📋 Cheques cargados desde listado guardado: ${datos.cheques.length} cheques`);
+                        chequesEncontrados = true;
                     }
                 } catch (error) {
                     console.error('Error cargando listado de cheques:', error);
                 }
+            }
+        }
+
+        // Si aún no se encontraron y hay listadoChequesGuardadoId, intentar cargar desde Supabase
+        if (!chequesEncontrados && conciliacion.listadoChequesGuardadoId && window.supabaseDB) {
+            console.log('📋 Intentando cargar cheques desde Supabase...');
+            try {
+                const { data, error } = await window.supabaseDB
+                    .from('listados_cheques')
+                    .select('*')
+                    .eq('id', conciliacion.listadoChequesGuardadoId)
+                    .single();
+
+                if (!error && data && data.cheques) {
+                    // Restaurar fechas de los cheques como objetos Date
+                    data.cheques.forEach(c => {
+                        if (c.fechaRecepcion) c.fechaRecepcion = new Date(c.fechaRecepcion);
+                        if (c.fechaEmision) c.fechaEmision = new Date(c.fechaEmision);
+                        if (c.fechaDeposito) c.fechaDeposito = new Date(c.fechaDeposito);
+                    });
+
+                    stateMayores.listadoChequesCargados = data.cheques;
+                    stateMayores.listadoChequesIncorporado = true;
+                    stateMayores.listadoChequesGuardadoId = data.id;
+                    stateMayores.mesesDisponibles = conciliacion.mesesDisponibles || data.meses || calcularMesesDeCheques(data.cheques);
+
+                    cargarMesesProcesados();
+
+                    console.log(`📋 Cheques cargados desde Supabase: ${data.cheques.length} cheques`);
+                    chequesEncontrados = true;
+                }
+            } catch (error) {
+                console.error('Error cargando cheques desde Supabase:', error);
             }
         }
     }
@@ -4055,6 +4093,37 @@ async function ejecutarGuardarConciliacionMayor() {
     console.log('💾 Guardando conciliación en Supabase...');
     console.log(`📋 Cheques a guardar: ${(stateMayores.listadoChequesCargados || []).length}`);
 
+    // Si hay muchos cheques y no hay listadoChequesGuardadoId, guardar el listado primero en Supabase
+    const chequesCount = (stateMayores.listadoChequesCargados || []).length;
+    if (chequesCount > 500 && !stateMayores.listadoChequesGuardadoId && window.supabaseDB) {
+        console.log('📋 Guardando listado de cheques en Supabase primero (son muchos para localStorage)...');
+        try {
+            const listadoId = `listado_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const datosListado = {
+                id: listadoId,
+                cliente_id: clienteId,
+                fecha_guardado: new Date().toISOString(),
+                cheques: stateMayores.listadoChequesCargados,
+                total_cheques: chequesCount,
+                total_importe: stateMayores.listadoChequesCargados.reduce((sum, c) => sum + (c.importe || 0), 0),
+                meses: stateMayores.mesesDisponibles || []
+            };
+
+            const { error: listadoError } = await window.supabaseDB
+                .from('listados_cheques')
+                .upsert(datosListado, { onConflict: 'id' });
+
+            if (!listadoError) {
+                stateMayores.listadoChequesGuardadoId = listadoId;
+                console.log('✅ Listado de cheques guardado en Supabase:', listadoId);
+            } else if (listadoError.code !== '42P01' && !listadoError.message.includes('does not exist')) {
+                console.warn('⚠️ No se pudo guardar listado en Supabase:', listadoError.message);
+            }
+        } catch (error) {
+            console.warn('⚠️ Error guardando listado de cheques en Supabase:', error);
+        }
+    }
+
     // Crear o actualizar conciliación
     const ahora = new Date().toISOString();
 
@@ -4131,20 +4200,52 @@ async function ejecutarGuardarConciliacionMayor() {
                 error = resultado.error;
 
                 if (!error) {
-                    // Guardar cheques en localStorage como fallback
-                    if ((stateMayores.listadoChequesCargados || []).length > 0) {
+                    // Guardar cheques en localStorage como fallback SOLO si no hay listadoChequesGuardadoId
+                    // Si ya existe listadoChequesGuardadoId, los cheques ya están guardados en Supabase
+                    if ((stateMayores.listadoChequesCargados || []).length > 0 && !stateMayores.listadoChequesGuardadoId) {
                         const keyListado = `listado_cheques_conciliacion_${registro.id}`;
-                        localStorage.setItem(keyListado, JSON.stringify({
-                            cheques: stateMayores.listadoChequesCargados,
-                            mesesProcesados: stateMayores.mesesProcesados || {}
-                        }));
-                        console.log('📋 Cheques guardados en localStorage como fallback');
+                        try {
+                            localStorage.setItem(keyListado, JSON.stringify({
+                                cheques: stateMayores.listadoChequesCargados,
+                                mesesProcesados: stateMayores.mesesProcesados || {}
+                            }));
+                            console.log('📋 Cheques guardados en localStorage como fallback');
+                        } catch (storageError) {
+                            if (storageError.name === 'QuotaExceededError') {
+                                console.warn('⚠️ localStorage lleno, guardando solo referencia de cheques');
+                                // Guardar solo metadatos mínimos (IDs y referencias)
+                                try {
+                                    localStorage.setItem(keyListado, JSON.stringify({
+                                        chequesCount: stateMayores.listadoChequesCargados.length,
+                                        mesesProcesadosResumen: Object.keys(stateMayores.mesesProcesados || {}).reduce((acc, mes) => {
+                                            acc[mes] = { procesado: stateMayores.mesesProcesados[mes]?.procesado || false };
+                                            return acc;
+                                        }, {}),
+                                        referencia: 'cheques_en_listado_cliente'
+                                    }));
+                                } catch (e) {
+                                    console.warn('⚠️ No se pudo guardar ni la referencia mínima en localStorage');
+                                }
+                            } else {
+                                console.error('Error guardando cheques en localStorage:', storageError);
+                            }
+                        }
+                    } else if (stateMayores.listadoChequesGuardadoId) {
+                        console.log('📋 Cheques ya referenciados por listadoChequesGuardadoId, no se duplican en localStorage');
                     }
                     // Guardar movimientos eliminados en localStorage como fallback
                     if ((stateMayores.movimientosEliminados || []).length > 0) {
                         const keyEliminados = `movimientos_eliminados_conciliacion_${registro.id}`;
-                        localStorage.setItem(keyEliminados, JSON.stringify(stateMayores.movimientosEliminados));
-                        console.log('🗑️ Movimientos eliminados guardados en localStorage como fallback');
+                        try {
+                            localStorage.setItem(keyEliminados, JSON.stringify(stateMayores.movimientosEliminados));
+                            console.log('🗑️ Movimientos eliminados guardados en localStorage como fallback');
+                        } catch (storageError) {
+                            if (storageError.name === 'QuotaExceededError') {
+                                console.warn('⚠️ localStorage lleno, no se pudieron guardar movimientos eliminados');
+                            } else {
+                                console.error('Error guardando movimientos eliminados:', storageError);
+                            }
+                        }
                     }
                 }
             }
@@ -4176,6 +4277,10 @@ async function ejecutarGuardarConciliacionMayor() {
                 conciliaciones = [];
             }
 
+            // Si hay listadoChequesGuardadoId, no duplicar los cheques en localStorage
+            // Los cheques ya están guardados en el listado del cliente en Supabase
+            const tieneReferenciaACheques = !!stateMayores.listadoChequesGuardadoId;
+
             const conciliacionLocal = {
                 id: conciliacionId,
                 nombre: nombre,
@@ -4184,7 +4289,9 @@ async function ejecutarGuardarConciliacionMayor() {
                 movimientosEliminados: stateMayores.movimientosEliminados || [],
                 listadoChequesGuardadoId: stateMayores.listadoChequesGuardadoId || null,
                 listadoChequesIncorporado: stateMayores.listadoChequesIncorporado || false,
-                listadoChequesCargados: stateMayores.listadoChequesCargados || [],
+                // Solo incluir cheques completos si no hay referencia a listado guardado
+                listadoChequesCargados: tieneReferenciaACheques ? [] : (stateMayores.listadoChequesCargados || []),
+                listadoChequesCount: (stateMayores.listadoChequesCargados || []).length, // Mantener el conteo
                 mesesDisponibles: stateMayores.mesesDisponibles || [],
                 mesesProcesados: stateMayores.mesesProcesados || {},
                 mesesProcesadosResumen: mesesProcesadosResumen,
@@ -4203,8 +4310,36 @@ async function ejecutarGuardarConciliacionMayor() {
                 }
             }
 
-            localStorage.setItem(key, JSON.stringify(conciliaciones));
-            console.log('💾 Conciliación guardada en localStorage:', nombre);
+            try {
+                localStorage.setItem(key, JSON.stringify(conciliaciones));
+                console.log('💾 Conciliación guardada en localStorage:', nombre);
+            } catch (storageError) {
+                if (storageError.name === 'QuotaExceededError') {
+                    console.warn('⚠️ localStorage lleno, intentando guardar versión compacta...');
+                    // Intentar guardar sin cheques ni registros pesados
+                    conciliacionLocal.listadoChequesCargados = [];
+                    conciliacionLocal.registros = [];
+                    conciliacionLocal.mesesProcesados = mesesProcesadosResumen; // Solo resumen
+
+                    if (esNueva) {
+                        conciliaciones[conciliaciones.length - 1] = conciliacionLocal;
+                    } else {
+                        const index = conciliaciones.findIndex(c => c.id === conciliacionId);
+                        if (index !== -1) conciliaciones[index] = conciliacionLocal;
+                    }
+
+                    try {
+                        localStorage.setItem(key, JSON.stringify(conciliaciones));
+                        console.log('💾 Conciliación guardada en localStorage (versión compacta):', nombre);
+                        console.warn('⚠️ Algunos datos no se guardaron por falta de espacio. Los cheques deben recargarse desde Supabase.');
+                    } catch (e) {
+                        console.error('❌ No se pudo guardar en localStorage, incluso con versión compacta');
+                        throw new Error('No hay espacio suficiente en localStorage para guardar la conciliación. Por favor, libere espacio o contacte al administrador para activar Supabase.');
+                    }
+                } else {
+                    throw storageError;
+                }
+            }
         }
 
         // Actualizar estado local
