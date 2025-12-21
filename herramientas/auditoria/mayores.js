@@ -2952,19 +2952,22 @@ function reprocesarChequesNoAsociados() {
     function calcularScoreAsociacion(cheque, registro) {
         let score = 0;
         const detalles = { fecha: 0, texto: 0, diffDias: Infinity };
-        // Tolerancia máxima de días: +/- 2 días
-        const TOLERANCIA_DIAS_CHEQUES = 2;
+        // Tolerancia máxima de días: +/- 5 días (operaciones bancarias pueden demorar)
+        const TOLERANCIA_DIAS_CHEQUES = 5; // Tolerancia ampliada para operaciones bancarias
 
         const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
         if (fechaCheque && registro.fecha) {
             detalles.diffDias = Math.abs((registro.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
-            // Solo asignar score si está dentro de la tolerancia de +/- 2 días
+            // Solo asignar score si está dentro de la tolerancia de +/- 5 días
             if (detalles.diffDias <= TOLERANCIA_DIAS_CHEQUES) {
                 if (detalles.diffDias === 0) detalles.fecha = 50;
                 else if (detalles.diffDias <= 1) detalles.fecha = 45;
                 else if (detalles.diffDias <= 2) detalles.fecha = 35;
+                else if (detalles.diffDias <= 3) detalles.fecha = 28;
+                else if (detalles.diffDias <= 4) detalles.fecha = 20;
+                else detalles.fecha = 15; // 5 días
             }
-            // Si diffDias > 2, detalles.fecha queda en 0
+            // Si diffDias > 5, detalles.fecha queda en 0
         }
         const similitud = calcularSimilitudTexto(cheque.origen, registro.descripcion);
         detalles.texto = Math.round(similitud * 50);
@@ -5646,12 +5649,11 @@ async function incorporarListadoChequesAlMayorLegacy() {
     ];
 
     /**
-     * Calcular similitud entre origen del cheque y descripción del asiento
-     * Retorna un valor entre 0 y 1
-     *
-     * EXIGENCIA: Se requieren al menos 2 palabras coincidentes para considerar
-     * válida la vinculación entre un cheque y un registro del debe.
-     * Esto evita falsos positivos por coincidencias accidentales de una sola palabra.
+     * Calcular similitud entre origen del cheque y descripción del asiento.
+     * El requisito de coincidencias es proporcional al número de palabras:
+     * - Orígenes cortos (1-2 palabras): requiere al menos 1 coincidencia
+     * - Orígenes largos (3+ palabras): requiere al menos 2 coincidencias
+     * Retorna un valor entre 0 y 1.
      */
     function calcularSimilitudTexto(origenCheque, descripcionAsiento) {
         const origenNorm = normalizarTexto(origenCheque);
@@ -5664,33 +5666,33 @@ async function incorporarListadoChequesAlMayorLegacy() {
             return 1;
         }
 
-        // Dividir en palabras - usar más de 3 caracteres para evitar falsos positivos con "san", "de", etc.
-        const palabrasOrigen = origenNorm.split(' ').filter(p => p.length > 3);
-        const palabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 3);
+        // Dividir en palabras - usar más de 2 caracteres para incluir "hnos", etc.
+        const palabrasOrigen = origenNorm.split(' ').filter(p => p.length > 2);
+        const palabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 2);
 
         if (palabrasOrigen.length === 0) return 0;
 
         let coincidencias = 0;
 
         for (const palabra of palabrasOrigen) {
-            // Comparación más estricta: la palabra debe coincidir exactamente o
-            // una debe contener a la otra solo si la diferencia de longitud es <= 2
+            // Comparación flexible: exacta, inclusión o prefijo común
             if (palabrasDescripcion.some(pd => {
                 if (pd === palabra) return true;
-                const diffLen = Math.abs(pd.length - palabra.length);
-                if (diffLen > 2) return false;
-                return pd.includes(palabra) || palabra.includes(pd);
+                if (pd.includes(palabra) || palabra.includes(pd)) return true;
+                // Comparar por prefijo (4+ caracteres) para manejar abreviaciones
+                if (palabra.length >= 4 && pd.length >= 4 &&
+                    pd.substring(0, 4) === palabra.substring(0, 4)) return true;
+                return false;
             })) {
                 coincidencias++;
             }
         }
 
-        // VALIDACIÓN OBLIGATORIA: Exigir al menos 2 palabras coincidentes
-        // para considerar válida la vinculación entre cheques y registros del debe.
-        // Esto evita falsos positivos por coincidencias accidentales de una sola palabra
-        // (ej: "Repuestos del Sur" vs "Repuestos Regina" donde solo coincide "repuestos").
-        const MINIMO_PALABRAS_COINCIDENTES = 2;
-        if (coincidencias < MINIMO_PALABRAS_COINCIDENTES) {
+        // Requisito proporcional al número de palabras del origen:
+        // - Si el origen tiene 1-2 palabras: requerir al menos 1 coincidencia
+        // - Si el origen tiene 3+ palabras: requerir al menos 2 coincidencias
+        const minimoRequerido = palabrasOrigen.length <= 2 ? 1 : 2;
+        if (coincidencias < minimoRequerido) {
             return 0;  // No hay suficientes palabras coincidentes
         }
 
@@ -5702,14 +5704,14 @@ async function incorporarListadoChequesAlMayorLegacy() {
      * NUEVA LÓGICA:
      * - Exige coincidencia de texto entre origen del cheque y leyenda del mayor
      * - Prioriza por cercanía de fechas como criterio secundario
-     * - RESTRICCIÓN: Tolerancia de fechas de +/- 2 días máximo
+     * - RESTRICCIÓN: Tolerancia de fechas de +/- 5 días máximo
      * Retorna un objeto con score, detalles y flag de match de texto
      */
     function calcularScoreAsociacion(cheque, registro) {
         const detalles = { fecha: 0, texto: 0, diffDias: Infinity };
 
         // Tolerancia máxima de días entre fecha de recepción del cheque y fecha del registro
-        const TOLERANCIA_DIAS_CHEQUES = 2;
+        const TOLERANCIA_DIAS_CHEQUES = 5; // Tolerancia ampliada para operaciones bancarias
 
         // Primero calcular similitud de texto origen/descripción (REQUISITO OBLIGATORIO)
         const similitud = calcularSimilitudTexto(cheque.origen, registro.descripcion);
@@ -5726,7 +5728,7 @@ async function incorporarListadoChequesAlMayorLegacy() {
         if (fechaCheque && registro.fecha) {
             detalles.diffDias = Math.abs((registro.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
 
-            // Solo asignar score si está dentro de la tolerancia de +/- 2 días
+            // Solo asignar score si está dentro de la tolerancia de +/- 5 días
             if (detalles.diffDias <= TOLERANCIA_DIAS_CHEQUES) {
                 // Score de fecha: 100 para fecha exacta, decrece con la distancia
                 if (detalles.diffDias === 0) {
@@ -5735,6 +5737,12 @@ async function incorporarListadoChequesAlMayorLegacy() {
                     detalles.fecha = 90;
                 } else if (detalles.diffDias <= 2) {
                     detalles.fecha = 70;
+                } else if (detalles.diffDias <= 3) {
+                    detalles.fecha = 55;
+                } else if (detalles.diffDias <= 4) {
+                    detalles.fecha = 40;
+                } else {
+                    detalles.fecha = 30; // 5 días
                 }
             } else {
                 // Fuera de tolerancia: no hay match válido de fecha
@@ -7910,7 +7918,8 @@ async function conciliarMesAutomaticamente() {
             const fechaAsientoDate = asiento.fecha instanceof Date ? asiento.fecha : new Date(asiento.fecha);
             const diffDias = Math.abs((fechaAsientoDate - fechaChequeDate) / (1000 * 60 * 60 * 24));
 
-            if (diffDias <= 2 && diffDias < mejorDiffDias) {
+            // Tolerancia de 5 días para operaciones bancarias (depósitos pueden demorar)
+            if (diffDias <= 5 && diffDias < mejorDiffDias) {
                 mejorDiffDias = diffDias;
                 registroAsociado = asiento;
             }
@@ -7962,6 +7971,7 @@ async function conciliarMesAutomaticamente() {
 
 /**
  * Calcular similitud de texto (versión simplificada para conciliación por mes)
+ * Mejorada para manejar nombres cortos como "REYES HNOS. S.R.L"
  */
 function calcularSimilitudTextoMes(origenCheque, descripcionAsiento) {
     if (!origenCheque || !descripcionAsiento) return 0;
@@ -7976,24 +7986,37 @@ function calcularSimilitudTextoMes(origenCheque, descripcionAsiento) {
     const origenNorm = normalizar(origenCheque);
     const descripcionNorm = normalizar(descripcionAsiento);
 
+    // Verificar inclusión directa (match exacto del nombre en la descripción)
     if (descripcionNorm.includes(origenNorm) || origenNorm.includes(descripcionNorm)) {
         return 1;
     }
 
-    const palabrasOrigen = origenNorm.split(' ').filter(p => p.length > 3);
+    // Extraer palabras significativas (>2 caracteres para incluir "hnos", "srl", etc.)
+    const palabrasOrigen = origenNorm.split(' ').filter(p => p.length > 2);
+    const palabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 2);
+
     if (palabrasOrigen.length === 0) return 0;
 
     let coincidencias = 0;
-    const palabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 3);
-
     for (const palabra of palabrasOrigen) {
-        if (palabrasDescripcion.some(pd => pd === palabra || pd.includes(palabra) || palabra.includes(pd))) {
+        // Comparación más flexible: coincidencia exacta o parcial
+        if (palabrasDescripcion.some(pd =>
+            pd === palabra ||
+            pd.includes(palabra) ||
+            palabra.includes(pd) ||
+            // Comparación por similitud de caracteres (para manejar abreviaciones)
+            (palabra.length >= 4 && pd.length >= 4 &&
+             (pd.substring(0, 4) === palabra.substring(0, 4)))
+        )) {
             coincidencias++;
         }
     }
 
-    // Exigir al menos 2 palabras coincidentes
-    if (coincidencias < 2) return 0;
+    // Requisito de coincidencias proporcional al número de palabras:
+    // - Si el origen tiene 1-2 palabras: requerir al menos 1 coincidencia
+    // - Si el origen tiene 3+ palabras: requerir al menos 2 coincidencias
+    const minimoRequerido = palabrasOrigen.length <= 2 ? 1 : 2;
+    if (coincidencias < minimoRequerido) return 0;
 
     return coincidencias / palabrasOrigen.length;
 }
@@ -8070,7 +8093,8 @@ function reprocesarChequesMes() {
             const fechaAsientoDate = asiento.fecha instanceof Date ? asiento.fecha : new Date(asiento.fecha);
             const diffDias = Math.abs((fechaAsientoDate - fechaChequeDate) / (1000 * 60 * 60 * 24));
 
-            if (diffDias <= 2 && diffDias < mejorDiffDias) {
+            // Tolerancia de 5 días para operaciones bancarias (depósitos pueden demorar)
+            if (diffDias <= 5 && diffDias < mejorDiffDias) {
                 mejorDiffDias = diffDias;
                 registroAsociado = asiento;
             }
