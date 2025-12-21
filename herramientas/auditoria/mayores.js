@@ -3739,6 +3739,28 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
         }
     }
 
+    // Intentar cargar meses_procesados desde localStorage si no hay vinculaciones (fallback)
+    const tieneVinculaciones = Object.values(stateMayores.mesesProcesados || {}).some(m => m.vinculaciones && m.vinculaciones.length > 0);
+    if (!tieneVinculaciones && conciliacion.id) {
+        try {
+            const keyMesesProcesados = `meses_procesados_conciliacion_${conciliacion.id}`;
+            const datosMesesProcesados = localStorage.getItem(keyMesesProcesados);
+            if (datosMesesProcesados) {
+                const mesesCargados = JSON.parse(datosMesesProcesados);
+                // Verificar que tiene vinculaciones
+                const tieneVinculacionesFallback = Object.values(mesesCargados).some(m => m.vinculaciones && m.vinculaciones.length > 0);
+                if (tieneVinculacionesFallback) {
+                    stateMayores.mesesProcesados = mesesCargados;
+                    console.log('🔗 Meses procesados (vinculaciones) cargados desde fallback localStorage');
+                    const totalVinculaciones = Object.values(mesesCargados).reduce((sum, m) => sum + (m.vinculaciones?.length || 0), 0);
+                    console.log(`   Total vinculaciones restauradas: ${totalVinculaciones}`);
+                }
+            }
+        } catch (error) {
+            console.warn('No se pudieron cargar meses procesados desde fallback:', error);
+        }
+    }
+
     // Actualizar UI
     actualizarEstadisticasMayor();
     renderizarTablaMayor();
@@ -4295,6 +4317,20 @@ async function ejecutarGuardarConciliacionMayor() {
                                 console.warn('⚠️ localStorage lleno, no se pudieron guardar movimientos eliminados');
                             } else {
                                 console.error('Error guardando movimientos eliminados:', storageError);
+                            }
+                        }
+                    }
+                    // Guardar meses_procesados en localStorage como fallback (contiene las vinculaciones)
+                    if (Object.keys(stateMayores.mesesProcesados || {}).length > 0) {
+                        const keyMesesProcesados = `meses_procesados_conciliacion_${registro.id}`;
+                        try {
+                            localStorage.setItem(keyMesesProcesados, JSON.stringify(stateMayores.mesesProcesados));
+                            console.log('🔗 Meses procesados (vinculaciones) guardados en localStorage como fallback');
+                        } catch (storageError) {
+                            if (storageError.name === 'QuotaExceededError') {
+                                console.warn('⚠️ localStorage lleno, no se pudieron guardar meses procesados');
+                            } else {
+                                console.error('Error guardando meses procesados:', storageError);
                             }
                         }
                     }
