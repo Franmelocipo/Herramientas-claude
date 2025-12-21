@@ -3280,7 +3280,9 @@ async function cargarConciliacionesMayorGuardadas() {
                     vinculaciones: c.vinculaciones || [],
                     listadoChequesGuardadoId: c.listado_cheques_guardado_id,
                     listadoChequesIncorporado: c.listado_cheques_incorporado,
+                    listadoChequesCargados: c.listado_cheques_cargados || [],
                     mesesDisponibles: c.meses_disponibles || [],
+                    mesesProcesados: c.meses_procesados || {},
                     mesesProcesadosResumen: c.meses_procesados_resumen || {},
                     fechaGuardado: c.fecha_guardado,
                     fechaModificado: c.fecha_modificado
@@ -3305,7 +3307,9 @@ async function cargarConciliacionesMayorGuardadas() {
                         vinculaciones: c.vinculaciones || [],
                         listadoChequesGuardadoId: c.listado_cheques_guardado_id,
                         listadoChequesIncorporado: c.listado_cheques_incorporado,
+                        listadoChequesCargados: c.listado_cheques_cargados || [],
                         mesesDisponibles: c.meses_disponibles || [],
+                        mesesProcesados: c.meses_procesados || {},
                         mesesProcesadosResumen: c.meses_procesados_resumen || {},
                         fechaGuardado: c.fecha_guardado,
                         fechaModificado: c.fecha_modificado
@@ -3997,6 +4001,7 @@ async function ejecutarGuardarConciliacionMayor() {
     }
 
     console.log('💾 Guardando conciliación en Supabase...');
+    console.log(`📋 Cheques a guardar: ${(stateMayores.listadoChequesCargados || []).length}`);
 
     // Crear o actualizar conciliación
     const ahora = new Date().toISOString();
@@ -4025,7 +4030,9 @@ async function ejecutarGuardarConciliacionMayor() {
         vinculaciones: stateMayores.vinculaciones || [],
         listado_cheques_guardado_id: stateMayores.listadoChequesGuardadoId || null,
         listado_cheques_incorporado: stateMayores.listadoChequesIncorporado || false,
+        listado_cheques_cargados: stateMayores.listadoChequesCargados || [],
         meses_disponibles: stateMayores.mesesDisponibles || [],
+        meses_procesados: stateMayores.mesesProcesados || {},
         meses_procesados_resumen: mesesProcesadosResumen,
         fecha_guardado: esNueva ? ahora : undefined,
         fecha_modificado: ahora
@@ -4079,7 +4086,9 @@ async function ejecutarGuardarConciliacionMayor() {
                 vinculaciones: stateMayores.vinculaciones || [],
                 listadoChequesGuardadoId: stateMayores.listadoChequesGuardadoId || null,
                 listadoChequesIncorporado: stateMayores.listadoChequesIncorporado || false,
+                listadoChequesCargados: stateMayores.listadoChequesCargados || [],
                 mesesDisponibles: stateMayores.mesesDisponibles || [],
+                mesesProcesados: stateMayores.mesesProcesados || {},
                 mesesProcesadosResumen: mesesProcesadosResumen,
                 fechaGuardado: esNueva ? ahora : (conciliaciones.find(c => c.id === conciliacionId)?.fechaGuardado || ahora),
                 fechaModificado: ahora
