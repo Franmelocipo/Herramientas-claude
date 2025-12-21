@@ -2952,22 +2952,24 @@ function reprocesarChequesNoAsociados() {
     function calcularScoreAsociacion(cheque, registro) {
         let score = 0;
         const detalles = { fecha: 0, texto: 0, diffDias: Infinity };
-        // Tolerancia máxima de días: +/- 5 días (operaciones bancarias pueden demorar)
-        const TOLERANCIA_DIAS_CHEQUES = 5; // Tolerancia ampliada para operaciones bancarias
+        // Tolerancia máxima de días: +/- 15 días (operaciones bancarias pueden demorar)
+        const TOLERANCIA_DIAS_CHEQUES = 15; // Tolerancia ampliada para operaciones bancarias
 
         const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
         if (fechaCheque && registro.fecha) {
             detalles.diffDias = Math.abs((registro.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
-            // Solo asignar score si está dentro de la tolerancia de +/- 5 días
+            // Solo asignar score si está dentro de la tolerancia de +/- 15 días
             if (detalles.diffDias <= TOLERANCIA_DIAS_CHEQUES) {
                 if (detalles.diffDias === 0) detalles.fecha = 50;
-                else if (detalles.diffDias <= 1) detalles.fecha = 45;
-                else if (detalles.diffDias <= 2) detalles.fecha = 35;
-                else if (detalles.diffDias <= 3) detalles.fecha = 28;
-                else if (detalles.diffDias <= 4) detalles.fecha = 20;
-                else detalles.fecha = 15; // 5 días
+                else if (detalles.diffDias <= 1) detalles.fecha = 48;
+                else if (detalles.diffDias <= 2) detalles.fecha = 45;
+                else if (detalles.diffDias <= 3) detalles.fecha = 42;
+                else if (detalles.diffDias <= 5) detalles.fecha = 38;
+                else if (detalles.diffDias <= 7) detalles.fecha = 32;
+                else if (detalles.diffDias <= 10) detalles.fecha = 25;
+                else detalles.fecha = 18; // 11-15 días
             }
-            // Si diffDias > 5, detalles.fecha queda en 0
+            // Si diffDias > 15, detalles.fecha queda en 0
         }
         const similitud = calcularSimilitudTexto(cheque.origen, registro.descripcion);
         detalles.texto = Math.round(similitud * 50);
@@ -5704,14 +5706,14 @@ async function incorporarListadoChequesAlMayorLegacy() {
      * NUEVA LÓGICA:
      * - Exige coincidencia de texto entre origen del cheque y leyenda del mayor
      * - Prioriza por cercanía de fechas como criterio secundario
-     * - RESTRICCIÓN: Tolerancia de fechas de +/- 5 días máximo
+     * - RESTRICCIÓN: Tolerancia de fechas de +/- 15 días máximo
      * Retorna un objeto con score, detalles y flag de match de texto
      */
     function calcularScoreAsociacion(cheque, registro) {
         const detalles = { fecha: 0, texto: 0, diffDias: Infinity };
 
         // Tolerancia máxima de días entre fecha de recepción del cheque y fecha del registro
-        const TOLERANCIA_DIAS_CHEQUES = 5; // Tolerancia ampliada para operaciones bancarias
+        const TOLERANCIA_DIAS_CHEQUES = 15; // Tolerancia ampliada para operaciones bancarias
 
         // Primero calcular similitud de texto origen/descripción (REQUISITO OBLIGATORIO)
         const similitud = calcularSimilitudTexto(cheque.origen, registro.descripcion);
@@ -5723,26 +5725,30 @@ async function incorporarListadoChequesAlMayorLegacy() {
 
         // Score por fecha (para priorización entre matches de texto)
         // Usamos diferencia en días - menor es mejor
-        // RESTRICCIÓN: Solo se consideran válidos matches dentro de +/- 2 días
+        // RESTRICCIÓN: Solo se consideran válidos matches dentro de +/- 15 días
         const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
         if (fechaCheque && registro.fecha) {
             detalles.diffDias = Math.abs((registro.fecha - fechaCheque) / (1000 * 60 * 60 * 24));
 
-            // Solo asignar score si está dentro de la tolerancia de +/- 5 días
+            // Solo asignar score si está dentro de la tolerancia de +/- 15 días
             if (detalles.diffDias <= TOLERANCIA_DIAS_CHEQUES) {
                 // Score de fecha: 100 para fecha exacta, decrece con la distancia
                 if (detalles.diffDias === 0) {
                     detalles.fecha = 100;
                 } else if (detalles.diffDias <= 1) {
-                    detalles.fecha = 90;
+                    detalles.fecha = 95;
                 } else if (detalles.diffDias <= 2) {
-                    detalles.fecha = 70;
+                    detalles.fecha = 90;
                 } else if (detalles.diffDias <= 3) {
-                    detalles.fecha = 55;
-                } else if (detalles.diffDias <= 4) {
-                    detalles.fecha = 40;
+                    detalles.fecha = 85;
+                } else if (detalles.diffDias <= 5) {
+                    detalles.fecha = 75;
+                } else if (detalles.diffDias <= 7) {
+                    detalles.fecha = 60;
+                } else if (detalles.diffDias <= 10) {
+                    detalles.fecha = 45;
                 } else {
-                    detalles.fecha = 30; // 5 días
+                    detalles.fecha = 30; // 11-15 días
                 }
             } else {
                 // Fuera de tolerancia: no hay match válido de fecha
@@ -7918,8 +7924,8 @@ async function conciliarMesAutomaticamente() {
             const fechaAsientoDate = asiento.fecha instanceof Date ? asiento.fecha : new Date(asiento.fecha);
             const diffDias = Math.abs((fechaAsientoDate - fechaChequeDate) / (1000 * 60 * 60 * 24));
 
-            // Tolerancia de 5 días para operaciones bancarias (depósitos pueden demorar)
-            if (diffDias <= 5 && diffDias < mejorDiffDias) {
+            // Tolerancia de 15 días para operaciones bancarias (depósitos pueden demorar)
+            if (diffDias <= 15 && diffDias < mejorDiffDias) {
                 mejorDiffDias = diffDias;
                 registroAsociado = asiento;
             }
@@ -8093,8 +8099,8 @@ function reprocesarChequesMes() {
             const fechaAsientoDate = asiento.fecha instanceof Date ? asiento.fecha : new Date(asiento.fecha);
             const diffDias = Math.abs((fechaAsientoDate - fechaChequeDate) / (1000 * 60 * 60 * 24));
 
-            // Tolerancia de 5 días para operaciones bancarias (depósitos pueden demorar)
-            if (diffDias <= 5 && diffDias < mejorDiffDias) {
+            // Tolerancia de 15 días para operaciones bancarias (depósitos pueden demorar)
+            if (diffDias <= 15 && diffDias < mejorDiffDias) {
                 mejorDiffDias = diffDias;
                 registroAsociado = asiento;
             }
