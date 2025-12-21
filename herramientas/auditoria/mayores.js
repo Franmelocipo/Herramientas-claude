@@ -3589,6 +3589,8 @@ function cargarConciliacionMayorGuardada(conciliacionId) {
     // Restaurar estado
     stateMayores.registrosMayor = registros;
     stateMayores.vinculaciones = conciliacion.vinculaciones || [];
+    // Restaurar movimientos eliminados (soporta ambos formatos: snake_case de Supabase y camelCase de localStorage)
+    stateMayores.movimientosEliminados = conciliacion.movimientosEliminados || conciliacion.movimientos_eliminados || [];
     stateMayores.conciliacionCargadaId = conciliacion.id;
     stateMayores.conciliacionCargadaNombre = conciliacion.nombre;
 
@@ -3641,6 +3643,7 @@ function cargarConciliacionMayorGuardada(conciliacionId) {
     // Actualizar UI
     actualizarEstadisticasMayor();
     renderizarTablaMayor();
+    actualizarContadorEliminados();
 
     if (stateMayores.tipoMayorActual?.logica === 'vinculacion') {
         renderizarVinculacion();
@@ -4028,6 +4031,7 @@ async function ejecutarGuardarConciliacionMayor() {
         nombre: nombre,
         registros: stateMayores.registrosMayor || [],
         vinculaciones: stateMayores.vinculaciones || [],
+        movimientos_eliminados: stateMayores.movimientosEliminados || [],
         listado_cheques_guardado_id: stateMayores.listadoChequesGuardadoId || null,
         listado_cheques_incorporado: stateMayores.listadoChequesIncorporado || false,
         listado_cheques_cargados: stateMayores.listadoChequesCargados || [],
@@ -4084,6 +4088,7 @@ async function ejecutarGuardarConciliacionMayor() {
                 nombre: nombre,
                 registros: stateMayores.registrosMayor || [],
                 vinculaciones: stateMayores.vinculaciones || [],
+                movimientosEliminados: stateMayores.movimientosEliminados || [],
                 listadoChequesGuardadoId: stateMayores.listadoChequesGuardadoId || null,
                 listadoChequesIncorporado: stateMayores.listadoChequesIncorporado || false,
                 listadoChequesCargados: stateMayores.listadoChequesCargados || [],
@@ -6540,6 +6545,40 @@ function confirmarEliminarMovimiento() {
         stateMayores.vinculaciones = stateMayores.vinculaciones.filter(v =>
             !v.origenes.includes(movimientoId) && !v.destinos.includes(movimientoId)
         );
+    }
+
+    // Actualizar mesesProcesados si el registro pertenece a un mes procesado
+    if (registro.fecha && stateMayores.mesesProcesados) {
+        const fechaRegistro = registro.fecha instanceof Date ? registro.fecha : new Date(registro.fecha);
+        const mesKey = `${fechaRegistro.getFullYear()}-${String(fechaRegistro.getMonth() + 1).padStart(2, '0')}`;
+        const estadoMes = stateMayores.mesesProcesados[mesKey];
+
+        if (estadoMes && estadoMes.asientosDelMes) {
+            // Buscar el asiento en asientosDelMes
+            const indiceAsiento = estadoMes.asientosDelMes.findIndex(a => a.id === movimientoId);
+
+            if (indiceAsiento !== -1) {
+                const asientoEliminado = estadoMes.asientosDelMes[indiceAsiento];
+
+                // Si el asiento tenía cheques asociados, devolverlos a chequesNoAsociadosDelMes
+                if (asientoEliminado.chequesAsociados && asientoEliminado.chequesAsociados.length > 0) {
+                    if (!estadoMes.chequesNoAsociadosDelMes) {
+                        estadoMes.chequesNoAsociadosDelMes = [];
+                    }
+                    estadoMes.chequesNoAsociadosDelMes.push(...asientoEliminado.chequesAsociados);
+                    console.log(`↩️ Devueltos ${asientoEliminado.chequesAsociados.length} cheques a no asociados del mes ${mesKey}`);
+                }
+
+                // Eliminar el asiento del mes
+                estadoMes.asientosDelMes.splice(indiceAsiento, 1);
+                console.log(`🗓️ Asiento eliminado de mesesProcesados[${mesKey}]`);
+
+                // Si es el mes actual, re-renderizar el panel de asociaciones
+                if (stateMayores.mesActualConciliacion === mesKey) {
+                    renderizarConciliacionMes(estadoMes.asientosDelMes, estadoMes.chequesNoAsociadosDelMes || []);
+                }
+            }
+        }
     }
 
     // Actualizar UI
