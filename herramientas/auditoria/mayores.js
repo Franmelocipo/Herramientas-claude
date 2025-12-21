@@ -3611,12 +3611,15 @@ function cargarConciliacionMayorGuardada(conciliacionId) {
         console.log(`📋 Cheques restaurados: ${conciliacion.listadoChequesCargados.length} cheques`);
     } else if (conciliacion.listadoChequesGuardadoId || conciliacion.listadoChequesIncorporado) {
         // Formato nuevo: cargar cheques desde el listado guardado separadamente
-        const keyListado = getListadoChequesKey();
-        if (keyListado) {
-            try {
-                const datosListado = localStorage.getItem(keyListado);
-                if (datosListado) {
-                    const datos = JSON.parse(datosListado);
+        let chequesEncontrados = false;
+
+        // Primero intentar cargar desde la clave específica de la conciliación (fallback)
+        const keyFallback = `listado_cheques_conciliacion_${conciliacion.id}`;
+        try {
+            const datosFallback = localStorage.getItem(keyFallback);
+            if (datosFallback) {
+                const datos = JSON.parse(datosFallback);
+                if (datos.cheques && datos.cheques.length > 0) {
                     // Restaurar fechas de los cheques como objetos Date
                     datos.cheques.forEach(c => {
                         if (c.fechaRecepcion) c.fechaRecepcion = new Date(c.fechaRecepcion);
@@ -3626,16 +3629,45 @@ function cargarConciliacionMayorGuardada(conciliacionId) {
 
                     stateMayores.listadoChequesCargados = datos.cheques;
                     stateMayores.listadoChequesIncorporado = true;
-                    stateMayores.listadoChequesGuardadoId = datos.id;
-                    stateMayores.mesesDisponibles = conciliacion.mesesDisponibles || datos.meses || calcularMesesDeCheques(datos.cheques);
+                    stateMayores.mesesDisponibles = conciliacion.mesesDisponibles || calcularMesesDeCheques(datos.cheques);
+                    stateMayores.mesesProcesados = datos.mesesProcesados || {};
 
-                    // Cargar meses procesados
-                    cargarMesesProcesados();
-
-                    console.log(`📋 Cheques cargados desde listado guardado: ${datos.cheques.length} cheques`);
+                    console.log(`📋 Cheques cargados desde fallback: ${datos.cheques.length} cheques`);
+                    chequesEncontrados = true;
                 }
-            } catch (error) {
-                console.error('Error cargando listado de cheques:', error);
+            }
+        } catch (error) {
+            console.warn('No se encontraron cheques en fallback:', error);
+        }
+
+        // Si no se encontraron, intentar con la clave general del cliente
+        if (!chequesEncontrados) {
+            const keyListado = getListadoChequesKey();
+            if (keyListado) {
+                try {
+                    const datosListado = localStorage.getItem(keyListado);
+                    if (datosListado) {
+                        const datos = JSON.parse(datosListado);
+                        // Restaurar fechas de los cheques como objetos Date
+                        datos.cheques.forEach(c => {
+                            if (c.fechaRecepcion) c.fechaRecepcion = new Date(c.fechaRecepcion);
+                            if (c.fechaEmision) c.fechaEmision = new Date(c.fechaEmision);
+                            if (c.fechaDeposito) c.fechaDeposito = new Date(c.fechaDeposito);
+                        });
+
+                        stateMayores.listadoChequesCargados = datos.cheques;
+                        stateMayores.listadoChequesIncorporado = true;
+                        stateMayores.listadoChequesGuardadoId = datos.id;
+                        stateMayores.mesesDisponibles = conciliacion.mesesDisponibles || datos.meses || calcularMesesDeCheques(datos.cheques);
+
+                        // Cargar meses procesados
+                        cargarMesesProcesados();
+
+                        console.log(`📋 Cheques cargados desde listado guardado: ${datos.cheques.length} cheques`);
+                    }
+                } catch (error) {
+                    console.error('Error cargando listado de cheques:', error);
+                }
             }
         }
     }
@@ -4052,9 +4084,47 @@ async function ejecutarGuardarConciliacionMayor() {
 
         // Intentar guardar en Supabase primero
         if (window.supabaseDB) {
-            const { error } = await window.supabaseDB
+            let { error } = await window.supabaseDB
                 .from('conciliaciones_mayor')
                 .upsert(registro, { onConflict: 'id' });
+
+            // Si falla por columnas faltantes, intentar sin las nuevas columnas
+            if (error && error.message && error.message.includes('Could not find')) {
+                console.warn('⚠️ Columnas nuevas no existen en Supabase, guardando sin ellas...');
+                // Crear registro sin las columnas nuevas
+                const registroBasico = {
+                    id: registro.id,
+                    cliente_id: registro.cliente_id,
+                    tipo_mayor_id: registro.tipo_mayor_id,
+                    nombre: registro.nombre,
+                    registros: registro.registros,
+                    vinculaciones: registro.vinculaciones,
+                    listado_cheques_guardado_id: registro.listado_cheques_guardado_id,
+                    listado_cheques_incorporado: registro.listado_cheques_incorporado,
+                    meses_disponibles: registro.meses_disponibles,
+                    meses_procesados_resumen: registro.meses_procesados_resumen,
+                    fecha_guardado: registro.fecha_guardado,
+                    fecha_modificado: registro.fecha_modificado
+                };
+                if (!esNueva) delete registroBasico.fecha_guardado;
+
+                const resultado = await window.supabaseDB
+                    .from('conciliaciones_mayor')
+                    .upsert(registroBasico, { onConflict: 'id' });
+                error = resultado.error;
+
+                if (!error) {
+                    // Guardar cheques en localStorage como fallback
+                    if ((stateMayores.listadoChequesCargados || []).length > 0) {
+                        const keyListado = `listado_cheques_conciliacion_${registro.id}`;
+                        localStorage.setItem(keyListado, JSON.stringify({
+                            cheques: stateMayores.listadoChequesCargados,
+                            mesesProcesados: stateMayores.mesesProcesados || {}
+                        }));
+                        console.log('📋 Cheques guardados en localStorage como fallback');
+                    }
+                }
+            }
 
             if (error) {
                 if (error.code === '42P01' || error.message.includes('does not exist')) {
