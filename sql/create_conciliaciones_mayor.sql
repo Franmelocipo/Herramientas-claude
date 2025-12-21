@@ -13,11 +13,38 @@ CREATE TABLE IF NOT EXISTS conciliaciones_mayor (
     vinculaciones JSONB NOT NULL DEFAULT '[]'::jsonb,
     listado_cheques_guardado_id TEXT,
     listado_cheques_incorporado BOOLEAN DEFAULT FALSE,
+    listado_cheques_cargados JSONB DEFAULT '[]'::jsonb,
     meses_disponibles JSONB DEFAULT '[]'::jsonb,
+    meses_procesados JSONB DEFAULT '{}'::jsonb,
     meses_procesados_resumen JSONB DEFAULT '{}'::jsonb,
     fecha_guardado TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     fecha_modificado TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
+
+-- =====================================================
+-- MIGRACIÓN: Agregar columnas nuevas si no existen
+-- Ejecutar este bloque si la tabla ya existe
+-- =====================================================
+DO $$
+BEGIN
+    -- Agregar columna listado_cheques_cargados si no existe
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'conciliaciones_mayor'
+                   AND column_name = 'listado_cheques_cargados') THEN
+        ALTER TABLE conciliaciones_mayor
+        ADD COLUMN listado_cheques_cargados JSONB DEFAULT '[]'::jsonb;
+        RAISE NOTICE 'Columna listado_cheques_cargados agregada';
+    END IF;
+
+    -- Agregar columna meses_procesados si no existe
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'conciliaciones_mayor'
+                   AND column_name = 'meses_procesados') THEN
+        ALTER TABLE conciliaciones_mayor
+        ADD COLUMN meses_procesados JSONB DEFAULT '{}'::jsonb;
+        RAISE NOTICE 'Columna meses_procesados agregada';
+    END IF;
+END $$;
 
 -- Comentarios descriptivos
 COMMENT ON TABLE conciliaciones_mayor IS 'Almacena conciliaciones de mayores contables (cheques, cupones, etc.)';
