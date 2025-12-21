@@ -3278,6 +3278,7 @@ async function cargarConciliacionesMayorGuardadas() {
                     nombre: c.nombre,
                     registros: c.registros || [],
                     vinculaciones: c.vinculaciones || [],
+                    movimientosEliminados: c.movimientos_eliminados || [],
                     listadoChequesGuardadoId: c.listado_cheques_guardado_id,
                     listadoChequesIncorporado: c.listado_cheques_incorporado,
                     listadoChequesCargados: c.listado_cheques_cargados || [],
@@ -3305,6 +3306,7 @@ async function cargarConciliacionesMayorGuardadas() {
                         nombre: c.nombre,
                         registros: c.registros || [],
                         vinculaciones: c.vinculaciones || [],
+                        movimientosEliminados: c.movimientos_eliminados || [],
                         listadoChequesGuardadoId: c.listado_cheques_guardado_id,
                         listadoChequesIncorporado: c.listado_cheques_incorporado,
                         listadoChequesCargados: c.listado_cheques_cargados || [],
@@ -3590,7 +3592,22 @@ function cargarConciliacionMayorGuardada(conciliacionId) {
     stateMayores.registrosMayor = registros;
     stateMayores.vinculaciones = conciliacion.vinculaciones || [];
     // Restaurar movimientos eliminados (soporta ambos formatos: snake_case de Supabase y camelCase de localStorage)
-    stateMayores.movimientosEliminados = conciliacion.movimientosEliminados || conciliacion.movimientos_eliminados || [];
+    let movimientosEliminados = conciliacion.movimientosEliminados || conciliacion.movimientos_eliminados || [];
+
+    // Si no hay movimientos eliminados en la conciliación, intentar cargar desde localStorage (fallback)
+    if (movimientosEliminados.length === 0) {
+        try {
+            const keyEliminados = `movimientos_eliminados_conciliacion_${conciliacion.id}`;
+            const datosEliminados = localStorage.getItem(keyEliminados);
+            if (datosEliminados) {
+                movimientosEliminados = JSON.parse(datosEliminados);
+                console.log(`🗑️ Movimientos eliminados cargados desde fallback: ${movimientosEliminados.length}`);
+            }
+        } catch (error) {
+            console.warn('No se pudieron cargar movimientos eliminados desde fallback:', error);
+        }
+    }
+    stateMayores.movimientosEliminados = movimientosEliminados;
     stateMayores.conciliacionCargadaId = conciliacion.id;
     stateMayores.conciliacionCargadaNombre = conciliacion.nombre;
 
@@ -4122,6 +4139,12 @@ async function ejecutarGuardarConciliacionMayor() {
                             mesesProcesados: stateMayores.mesesProcesados || {}
                         }));
                         console.log('📋 Cheques guardados en localStorage como fallback');
+                    }
+                    // Guardar movimientos eliminados en localStorage como fallback
+                    if ((stateMayores.movimientosEliminados || []).length > 0) {
+                        const keyEliminados = `movimientos_eliminados_conciliacion_${registro.id}`;
+                        localStorage.setItem(keyEliminados, JSON.stringify(stateMayores.movimientosEliminados));
+                        console.log('🗑️ Movimientos eliminados guardados en localStorage como fallback');
                     }
                 }
             }
@@ -6993,6 +7016,32 @@ function seleccionarMesConciliacion(mesKey) {
             estadoMes.chequesDelMes = [...(estadoMes.chequesDelMes || []), ...chequesNuevos];
             estadoMes.chequesNoAsociadosDelMes = [...(estadoMes.chequesNoAsociadosDelMes || []), ...chequesNuevos];
             console.log(`📥 Se agregaron ${chequesNuevos.length} cheques nuevos al mes ${mesKey}`);
+        }
+
+        // Verificar si hay registros eliminados que aún están en asientosDelMes
+        // Obtener IDs de registros actuales en el mayor (no eliminados)
+        const idsRegistrosMayor = new Set(stateMayores.registrosMayor.map(r => r.id));
+        const asientosAntesDeFiltar = estadoMes.asientosDelMes.length;
+
+        // Filtrar asientos que ya no existen en el mayor (fueron eliminados)
+        estadoMes.asientosDelMes = estadoMes.asientosDelMes.filter(asiento => {
+            if (idsRegistrosMayor.has(asiento.id)) {
+                return true; // El registro sigue existiendo
+            }
+            // El registro fue eliminado, devolver sus cheques asociados a no asociados
+            if (asiento.chequesAsociados && asiento.chequesAsociados.length > 0) {
+                if (!estadoMes.chequesNoAsociadosDelMes) {
+                    estadoMes.chequesNoAsociadosDelMes = [];
+                }
+                estadoMes.chequesNoAsociadosDelMes.push(...asiento.chequesAsociados);
+                console.log(`↩️ Devueltos ${asiento.chequesAsociados.length} cheques del registro eliminado ${asiento.asiento || asiento.id}`);
+            }
+            return false; // Eliminar este asiento del panel
+        });
+
+        const asientosEliminados = asientosAntesDeFiltar - estadoMes.asientosDelMes.length;
+        if (asientosEliminados > 0) {
+            console.log(`🗑️ Se filtraron ${asientosEliminados} registros eliminados del mes ${mesKey}`);
         }
 
         // Cargar estado guardado (ahora con los nuevos cheques si los hay)
