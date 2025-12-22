@@ -5705,9 +5705,10 @@ async function incorporarListadoChequesAlMayorLegacy() {
         }
 
         // Requisito proporcional al número de palabras del origen:
-        // - Si el origen tiene 1-2 palabras: requerir al menos 1 coincidencia
-        // - Si el origen tiene 3+ palabras: requerir al menos 2 coincidencias
-        const minimoRequerido = palabrasOrigen.length <= 2 ? 1 : 2;
+        // - Si el origen tiene 1 palabra: requerir 1 coincidencia
+        // - Si el origen tiene 2+ palabras: requerir al menos 2 coincidencias
+        // Esto evita falsos positivos cuando solo coincide un nombre común (ej: "Pablo")
+        const minimoRequerido = palabrasOrigen.length >= 2 ? 2 : 1;
         if (coincidencias < minimoRequerido) {
             return 0;  // No hay suficientes palabras coincidentes
         }
