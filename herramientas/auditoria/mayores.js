@@ -7273,19 +7273,29 @@ function seleccionarMesConciliacion(mesKey) {
         // Verificar si hay nuevos cheques que se agregaron después de procesar el mes
         const chequesActualesDelMes = obtenerChequesDelMes(mesKey);
         const idsChequesEnEstado = new Set([
-            ...(estadoMes.chequesDelMes || []).map(c => c.id),
-            ...(estadoMes.chequesNoAsociadosDelMes || []).map(c => c.id),
-            ...estadoMes.asientosDelMes.flatMap(a => (a.chequesAsociados || []).map(c => c.id))
+            ...(estadoMes.chequesDelMes || []).map(c => c.id || c.interno),
+            ...(estadoMes.chequesNoAsociadosDelMes || []).map(c => c.id || c.interno),
+            ...estadoMes.asientosDelMes.flatMap(a => (a.chequesAsociados || []).map(c => c.id || c.interno))
         ]);
 
         // Filtrar cheques nuevos que no están en el estado
-        const chequesNuevos = chequesActualesDelMes.filter(c => !idsChequesEnEstado.has(c.id));
+        const chequesNuevos = chequesActualesDelMes.filter(c => !idsChequesEnEstado.has(c.id || c.interno));
 
         if (chequesNuevos.length > 0) {
             // Agregar los nuevos cheques a chequesNoAsociadosDelMes
             estadoMes.chequesDelMes = [...(estadoMes.chequesDelMes || []), ...chequesNuevos];
             estadoMes.chequesNoAsociadosDelMes = [...(estadoMes.chequesNoAsociadosDelMes || []), ...chequesNuevos];
             console.log(`📥 Se agregaron ${chequesNuevos.length} cheques nuevos al mes ${mesKey}`);
+        }
+
+        // Verificar si hay cheques de meses anteriores que ahora están disponibles
+        // (por ejemplo, si se desvincularon en otro mes)
+        const chequesAnterioresActuales = obtenerChequesNoVinculadosMesesAnteriores(mesKey);
+        const chequesAnterioresNuevos = chequesAnterioresActuales.filter(c => !idsChequesEnEstado.has(c.id || c.interno));
+
+        if (chequesAnterioresNuevos.length > 0) {
+            estadoMes.chequesNoAsociadosDelMes = [...(estadoMes.chequesNoAsociadosDelMes || []), ...chequesAnterioresNuevos];
+            console.log(`📥 Se agregaron ${chequesAnterioresNuevos.length} cheques de meses anteriores al mes ${mesKey}`);
         }
 
         // Verificar si hay registros eliminados que aún están en asientosDelMes
@@ -7354,49 +7364,45 @@ function obtenerChequesNoVinculadosMesesAnteriores(mesKey) {
     const mesesAnterioresKeys = mesesDisponibles.filter(mes => mes < mesKey);
     const chequesYaAgregadosIds = new Set();
 
-    mesesAnterioresKeys.forEach(mesAnterior => {
-        const estadoMesAnterior = mesesProcesados[mesAnterior];
-
-        if (estadoMesAnterior && estadoMesAnterior.chequesNoAsociadosDelMes) {
-            // Mes YA procesado: usar chequesNoAsociadosDelMes
-            estadoMesAnterior.chequesNoAsociadosDelMes.forEach(cheque => {
-                const chequeId = cheque.id || cheque.interno;
-                if (!chequesYaAgregadosIds.has(chequeId)) {
-                    chequesAnteriores.push({
-                        ...cheque,
-                        mesOrigen: mesAnterior,
-                        esDeMesAnterior: true
+    // Crear un Set de IDs de cheques que ya están vinculados en algún asiento
+    const chequesVinculadosIds = new Set();
+    Object.values(mesesProcesados).forEach(estadoMes => {
+        if (estadoMes && estadoMes.asientosDelMes) {
+            estadoMes.asientosDelMes.forEach(asiento => {
+                if (asiento.chequesAsociados) {
+                    asiento.chequesAsociados.forEach(ch => {
+                        chequesVinculadosIds.add(ch.id || ch.interno);
                     });
-                    chequesYaAgregadosIds.add(chequeId);
-                }
-            });
-        } else {
-            // Mes NO procesado: buscar cheques sin vincular directamente del listado
-            // Un cheque sin vincular tiene asientoAsociado = null o undefined
-            const chequesDelMesAnterior = todosLosCheques.filter(cheque => {
-                const fecha = cheque.fechaRecepcion || cheque.fechaEmision;
-                if (!fecha) return false;
-                const fechaDate = fecha instanceof Date ? fecha : new Date(fecha);
-                if (isNaN(fechaDate.getTime())) return false;
-                const mesKeyCheque = `${fechaDate.getFullYear()}-${String(fechaDate.getMonth() + 1).padStart(2, '0')}`;
-                return mesKeyCheque === mesAnterior;
-            });
-
-            chequesDelMesAnterior.forEach(cheque => {
-                // Solo agregar si no está vinculado (asientoAsociado es null/undefined)
-                if (!cheque.asientoAsociado) {
-                    const chequeId = cheque.id || cheque.interno;
-                    if (!chequesYaAgregadosIds.has(chequeId)) {
-                        chequesAnteriores.push({
-                            ...cheque,
-                            mesOrigen: mesAnterior,
-                            esDeMesAnterior: true
-                        });
-                        chequesYaAgregadosIds.add(chequeId);
-                    }
                 }
             });
         }
+    });
+
+    mesesAnterioresKeys.forEach(mesAnterior => {
+        // Siempre buscar cheques del mes específico directamente del listado principal
+        // para obtener el estado más actualizado
+        const chequesDelMesAnterior = todosLosCheques.filter(cheque => {
+            const fecha = cheque.fechaRecepcion || cheque.fechaEmision;
+            if (!fecha) return false;
+            const fechaDate = fecha instanceof Date ? fecha : new Date(fecha);
+            if (isNaN(fechaDate.getTime())) return false;
+            const mesKeyCheque = `${fechaDate.getFullYear()}-${String(fechaDate.getMonth() + 1).padStart(2, '0')}`;
+            return mesKeyCheque === mesAnterior;
+        });
+
+        chequesDelMesAnterior.forEach(cheque => {
+            const chequeId = cheque.id || cheque.interno;
+            // Solo agregar si no está vinculado (verificar tanto el campo como la lista de vinculados)
+            const estaVinculado = cheque.asientoAsociado || chequesVinculadosIds.has(chequeId);
+            if (!estaVinculado && !chequesYaAgregadosIds.has(chequeId)) {
+                chequesAnteriores.push({
+                    ...cheque,
+                    mesOrigen: mesAnterior,
+                    esDeMesAnterior: true
+                });
+                chequesYaAgregadosIds.add(chequeId);
+            }
+        });
     });
 
     return chequesAnteriores;
@@ -7669,6 +7675,14 @@ function desvincularChequeDeAsiento(asientoId, chequeId) {
                 estadoMesOrigen.chequesNoAsociadosDelMes.push(chequeParaOrigen);
             }
         }
+    }
+
+    // Limpiar el campo asientoAsociado del cheque original para que vuelva a estar disponible
+    const chequeOriginal = stateMayores.listadoChequesCargados?.find(
+        c => (c.id || c.interno) === (chequeDesvinculado.id || chequeDesvinculado.interno)
+    );
+    if (chequeOriginal) {
+        chequeOriginal.asientoAsociado = null;
     }
 
     // Recalcular estado del asiento
@@ -8739,6 +8753,15 @@ function vincularChequeAAsientoMes(cheque, asientoId) {
                 estadoMesOrigen.chequesNoAsociadosDelMes.splice(idxEnOrigen, 1);
             }
         }
+    }
+
+    // Marcar el cheque como vinculado en el listado original para que no aparezca
+    // como disponible al procesar otros meses
+    const chequeOriginal = stateMayores.listadoChequesCargados?.find(
+        c => (c.id || c.interno) === (cheque.id || cheque.interno)
+    );
+    if (chequeOriginal) {
+        chequeOriginal.asientoAsociado = asiento.asiento || asientoId;
     }
 
     // Recalcular estado del asiento
