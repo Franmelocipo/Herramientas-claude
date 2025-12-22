@@ -5655,6 +5655,9 @@ async function incorporarListadoChequesAlMayorLegacy() {
      * El requisito de coincidencias es proporcional al número de palabras:
      * - Orígenes cortos (1-2 palabras): requiere al menos 1 coincidencia
      * - Orígenes largos (3+ palabras): requiere al menos 2 coincidencias
+     *
+     * IMPORTANTE: Si las únicas coincidencias son palabras comunes (como "repuestos"),
+     * se requiere al menos una segunda palabra coincidente para validar la vinculación.
      * Retorna un valor entre 0 y 1.
      */
     function calcularSimilitudTexto(origenCheque, descripcionAsiento) {
@@ -5675,18 +5678,29 @@ async function incorporarListadoChequesAlMayorLegacy() {
         if (palabrasOrigen.length === 0) return 0;
 
         let coincidencias = 0;
+        let coincidenciasNoComunes = 0;  // Contador de coincidencias con palabras NO comunes
 
         for (const palabra of palabrasOrigen) {
             // Comparación flexible: exacta, inclusión o prefijo común
-            if (palabrasDescripcion.some(pd => {
+            const tieneCoincidencia = palabrasDescripcion.some(pd => {
                 if (pd === palabra) return true;
                 if (pd.includes(palabra) || palabra.includes(pd)) return true;
                 // Comparar por prefijo (4+ caracteres) para manejar abreviaciones
                 if (palabra.length >= 4 && pd.length >= 4 &&
                     pd.substring(0, 4) === palabra.substring(0, 4)) return true;
                 return false;
-            })) {
+            });
+
+            if (tieneCoincidencia) {
                 coincidencias++;
+                // Verificar si esta palabra NO es una palabra común
+                const esPalabraComun = PALABRAS_COMUNES.some(pc =>
+                    palabra === pc || palabra.includes(pc) || pc.includes(palabra) ||
+                    (palabra.length >= 4 && pc.length >= 4 && palabra.substring(0, 4) === pc.substring(0, 4))
+                );
+                if (!esPalabraComun) {
+                    coincidenciasNoComunes++;
+                }
             }
         }
 
@@ -5696,6 +5710,13 @@ async function incorporarListadoChequesAlMayorLegacy() {
         const minimoRequerido = palabrasOrigen.length <= 2 ? 1 : 2;
         if (coincidencias < minimoRequerido) {
             return 0;  // No hay suficientes palabras coincidentes
+        }
+
+        // NUEVA VALIDACIÓN: Si TODAS las coincidencias son palabras comunes,
+        // requerir al menos 2 coincidencias totales para validar la vinculación.
+        // Esto evita falsos positivos con palabras genéricas como "repuestos" solas.
+        if (coincidenciasNoComunes === 0 && coincidencias < 2) {
+            return 0;  // Solo hay coincidencias con palabras comunes y son menos de 2
         }
 
         return coincidencias / palabrasOrigen.length;
@@ -7327,20 +7348,53 @@ function obtenerChequesNoVinculadosMesesAnteriores(mesKey) {
     const chequesAnteriores = [];
     const mesesProcesados = stateMayores.mesesProcesados || {};
     const mesesDisponibles = stateMayores.mesesDisponibles || [];
+    const todosLosCheques = stateMayores.listadoChequesCargados || [];
 
     // Filtrar meses anteriores al mes actual
-    const mesesAnteriores = mesesDisponibles.filter(mes => mes < mesKey);
+    const mesesAnterioresKeys = mesesDisponibles.filter(mes => mes < mesKey);
+    const chequesYaAgregadosIds = new Set();
 
-    mesesAnteriores.forEach(mesAnterior => {
+    mesesAnterioresKeys.forEach(mesAnterior => {
         const estadoMesAnterior = mesesProcesados[mesAnterior];
+
         if (estadoMesAnterior && estadoMesAnterior.chequesNoAsociadosDelMes) {
-            // Agregar cada cheque no vinculado con indicador de mes origen
+            // Mes YA procesado: usar chequesNoAsociadosDelMes
             estadoMesAnterior.chequesNoAsociadosDelMes.forEach(cheque => {
-                chequesAnteriores.push({
-                    ...cheque,
-                    mesOrigen: mesAnterior,
-                    esDeMesAnterior: true
-                });
+                const chequeId = cheque.id || cheque.interno;
+                if (!chequesYaAgregadosIds.has(chequeId)) {
+                    chequesAnteriores.push({
+                        ...cheque,
+                        mesOrigen: mesAnterior,
+                        esDeMesAnterior: true
+                    });
+                    chequesYaAgregadosIds.add(chequeId);
+                }
+            });
+        } else {
+            // Mes NO procesado: buscar cheques sin vincular directamente del listado
+            // Un cheque sin vincular tiene asientoAsociado = null o undefined
+            const chequesDelMesAnterior = todosLosCheques.filter(cheque => {
+                const fecha = cheque.fechaRecepcion || cheque.fechaEmision;
+                if (!fecha) return false;
+                const fechaDate = fecha instanceof Date ? fecha : new Date(fecha);
+                if (isNaN(fechaDate.getTime())) return false;
+                const mesKeyCheque = `${fechaDate.getFullYear()}-${String(fechaDate.getMonth() + 1).padStart(2, '0')}`;
+                return mesKeyCheque === mesAnterior;
+            });
+
+            chequesDelMesAnterior.forEach(cheque => {
+                // Solo agregar si no está vinculado (asientoAsociado es null/undefined)
+                if (!cheque.asientoAsociado) {
+                    const chequeId = cheque.id || cheque.interno;
+                    if (!chequesYaAgregadosIds.has(chequeId)) {
+                        chequesAnteriores.push({
+                            ...cheque,
+                            mesOrigen: mesAnterior,
+                            esDeMesAnterior: true
+                        });
+                        chequesYaAgregadosIds.add(chequeId);
+                    }
+                }
             });
         }
     });
