@@ -8160,10 +8160,198 @@ function calcularSimilitudTextoMes(origenCheque, descripcionAsiento) {
 }
 
 /**
+ * Agrupar asientos similares por descripción (proveedor) y fecha cercana
+ * Esto permite optimizar la distribución de cheques cuando hay múltiples asientos
+ * del mismo proveedor en fechas cercanas.
+ */
+function agruparAsientosSimilares(asientos, chequesDisponibles, toleranciaDias = 5) {
+    const grupos = [];
+    const asientosUsados = new Set();
+
+    for (const asiento of asientos) {
+        if (asientosUsados.has(asiento.id)) continue;
+        if (asiento.estadoCheques === 'completo') continue;
+
+        // Buscar asientos similares (misma descripción/proveedor, fecha cercana)
+        const grupo = {
+            asientos: [asiento],
+            chequesCandidatos: []
+        };
+        asientosUsados.add(asiento.id);
+
+        for (const otroAsiento of asientos) {
+            if (asientosUsados.has(otroAsiento.id)) continue;
+            if (otroAsiento.estadoCheques === 'completo') continue;
+
+            // Verificar similitud de descripción
+            const similitud = calcularSimilitudTextoMes(asiento.descripcion, otroAsiento.descripcion);
+            if (similitud < 0.7) continue;
+
+            // Verificar cercanía de fechas
+            const fechaA = asiento.fecha instanceof Date ? asiento.fecha : new Date(asiento.fecha);
+            const fechaB = otroAsiento.fecha instanceof Date ? otroAsiento.fecha : new Date(otroAsiento.fecha);
+            const diffDias = Math.abs((fechaA - fechaB) / (1000 * 60 * 60 * 24));
+            if (diffDias > toleranciaDias) continue;
+
+            grupo.asientos.push(otroAsiento);
+            asientosUsados.add(otroAsiento.id);
+        }
+
+        // Encontrar cheques candidatos para este grupo
+        for (const cheque of chequesDisponibles) {
+            // Verificar similitud con al menos un asiento del grupo
+            const tieneMatch = grupo.asientos.some(a => {
+                const similitud = calcularSimilitudTextoMes(cheque.origen, a.descripcion);
+                return similitud >= 0.5;
+            });
+            if (tieneMatch) {
+                // Verificar fecha compatible
+                const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
+                if (!fechaCheque) continue;
+                const fechaChequeDate = fechaCheque instanceof Date ? fechaCheque : new Date(fechaCheque);
+
+                const fechaCompatible = grupo.asientos.some(a => {
+                    const fechaAsiento = a.fecha instanceof Date ? a.fecha : new Date(a.fecha);
+                    const diffDias = (fechaAsiento - fechaChequeDate) / (1000 * 60 * 60 * 24);
+                    return diffDias >= 0 && diffDias <= 15;
+                });
+
+                if (fechaCompatible) {
+                    grupo.chequesCandidatos.push(cheque);
+                }
+            }
+        }
+
+        grupos.push(grupo);
+    }
+
+    return grupos;
+}
+
+/**
+ * Optimizar distribución de cheques entre asientos de un grupo similar.
+ * Intenta encontrar la combinación que minimiza las diferencias totales.
+ * Prioriza encontrar asignaciones que completen exactamente los asientos.
+ */
+function optimizarDistribucionGrupo(grupo) {
+    const { asientos, chequesCandidatos } = grupo;
+
+    // Si no hay múltiples asientos o cheques, no hay nada que optimizar
+    if (asientos.length <= 1 || chequesCandidatos.length === 0) {
+        return null;
+    }
+
+    // Calcular montos faltantes de cada asiento
+    const asientosConFaltante = asientos.map(a => {
+        const sumaActual = (a.chequesAsociados || []).reduce((sum, ch) => sum + ch.importe, 0);
+        return {
+            asiento: a,
+            faltante: a.debe - sumaActual,
+            capacidadDisponible: a.debe - sumaActual
+        };
+    }).filter(a => a.faltante > 0.01); // Solo asientos con faltante
+
+    if (asientosConFaltante.length === 0) return null;
+
+    // Paso 1: Buscar cheques que completen exactamente la diferencia de un asiento
+    const distribucion = new Map(); // asientoId -> [cheques]
+    const chequesUsados = new Set();
+
+    // Inicializar distribución
+    for (const a of asientosConFaltante) {
+        distribucion.set(a.asiento.id, []);
+    }
+
+    // Buscar matches exactos (cheque que completa exactamente un faltante)
+    for (const a of asientosConFaltante) {
+        for (const cheque of chequesCandidatos) {
+            if (chequesUsados.has(cheque.id)) continue;
+
+            // Verificar si este cheque completa exactamente el faltante
+            if (Math.abs(cheque.importe - a.faltante) <= 0.50) {
+                distribucion.get(a.asiento.id).push(cheque);
+                chequesUsados.add(cheque.id);
+                a.capacidadDisponible = 0;
+                break;
+            }
+        }
+    }
+
+    // Paso 2: Para cheques restantes, buscar combinaciones que completen asientos
+    // Usar algoritmo voraz mejorado: asignar al asiento donde el cheque "encaja mejor"
+    const chequesRestantes = chequesCandidatos.filter(ch => !chequesUsados.has(ch.id));
+
+    // Ordenar cheques de mayor a menor para optimizar empaquetado
+    chequesRestantes.sort((a, b) => b.importe - a.importe);
+
+    for (const cheque of chequesRestantes) {
+        let mejorAsiento = null;
+        let mejorScore = -Infinity;
+
+        for (const a of asientosConFaltante) {
+            if (a.capacidadDisponible < cheque.importe - 0.50) continue;
+
+            // Calcular score: priorizar asientos donde el cheque reduce más la diferencia
+            // pero sin exceder el monto
+            const nuevoFaltante = a.capacidadDisponible - cheque.importe;
+
+            // Score más alto si completa exactamente o deja poco faltante
+            let score;
+            if (Math.abs(nuevoFaltante) <= 0.50) {
+                // Completa exactamente: máxima prioridad
+                score = 1000000;
+            } else if (nuevoFaltante > 0) {
+                // Deja faltante: preferir dejar poco faltante
+                score = 100000 - nuevoFaltante;
+            } else {
+                // Excedería (no debería pasar por el filtro, pero por seguridad)
+                continue;
+            }
+
+            if (score > mejorScore) {
+                mejorScore = score;
+                mejorAsiento = a;
+            }
+        }
+
+        if (mejorAsiento) {
+            distribucion.get(mejorAsiento.asiento.id).push(cheque);
+            chequesUsados.add(cheque.id);
+            mejorAsiento.capacidadDisponible -= cheque.importe;
+        }
+    }
+
+    // Paso 3: Verificar si la distribución optimizada es mejor que la actual
+    // Calcular diferencias totales con la distribución propuesta
+    let diferenciaTotal = 0;
+    let asientosCompletos = 0;
+
+    for (const a of asientosConFaltante) {
+        const chequesAsignados = distribucion.get(a.asiento.id) || [];
+        const sumaAsignada = chequesAsignados.reduce((sum, ch) => sum + ch.importe, 0);
+        const sumaActual = (a.asiento.chequesAsociados || []).reduce((sum, ch) => sum + ch.importe, 0);
+        const nuevaDiferencia = a.asiento.debe - sumaActual - sumaAsignada;
+
+        diferenciaTotal += Math.abs(nuevaDiferencia);
+        if (Math.abs(nuevaDiferencia) <= 0.01) asientosCompletos++;
+    }
+
+    return {
+        distribucion,
+        diferenciaTotal,
+        asientosCompletos,
+        chequesUsados
+    };
+}
+
+/**
  * Reprocesar cheques sin asociar del mes actual
  * IMPORTANTE: Esta función NO elimina vinculaciones manuales existentes.
  * Solo intenta vincular los cheques que aún no están asociados a asientos
  * que no tienen cheques o tienen vinculación parcial.
+ *
+ * MEJORA: Cuando hay múltiples asientos del mismo proveedor, optimiza la
+ * distribución de cheques para minimizar las diferencias totales.
  */
 function reprocesarChequesMes() {
     const mesKey = stateMayores.mesActualConciliacion;
@@ -8203,10 +8391,67 @@ function reprocesarChequesMes() {
     }
 
     let vinculacionesNuevas = 0;
+    const chequesUsadosEnOptimizacion = new Set();
+
+    // PASO 1: Optimización para grupos de asientos similares
+    // Esto maneja casos donde hay múltiples asientos del mismo proveedor
+    const grupos = agruparAsientosSimilares(asientos, chequesParaProcesar);
+
+    for (const grupo of grupos) {
+        // Solo optimizar grupos con múltiples asientos
+        if (grupo.asientos.length > 1 && grupo.chequesCandidatos.length > 0) {
+            const resultado = optimizarDistribucionGrupo(grupo);
+
+            if (resultado && resultado.chequesUsados.size > 0) {
+                // Aplicar la distribución optimizada
+                for (const [asientoId, cheques] of resultado.distribucion) {
+                    if (cheques.length === 0) continue;
+
+                    const asiento = asientos.find(a => a.id === asientoId);
+                    if (!asiento) continue;
+
+                    // Inicializar array si no existe
+                    if (!asiento.chequesAsociados) {
+                        asiento.chequesAsociados = [];
+                    }
+
+                    for (const cheque of cheques) {
+                        // Evitar duplicados
+                        if (chequesYaVinculadosIds.has(cheque.id)) continue;
+                        if (chequesUsadosEnOptimizacion.has(cheque.id)) continue;
+
+                        const chequeEnriquecido = {
+                            id: cheque.id || `cheque_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                            ...cheque
+                        };
+                        asiento.chequesAsociados.push(chequeEnriquecido);
+                        chequesUsadosEnOptimizacion.add(cheque.id);
+                        chequesYaVinculadosIds.add(cheque.id);
+                        vinculacionesNuevas++;
+                    }
+                }
+            }
+        }
+    }
+
+    // Recalcular estados después de la optimización
+    asientos.forEach(asiento => {
+        const sumaCheques = (asiento.chequesAsociados || []).reduce((sum, ch) => sum + ch.importe, 0);
+        if (!asiento.chequesAsociados || asiento.chequesAsociados.length === 0) {
+            asiento.estadoCheques = 'sin_cheques';
+        } else if (Math.abs(asiento.debe - sumaCheques) <= 0.01) {
+            asiento.estadoCheques = 'completo';
+        } else {
+            asiento.estadoCheques = 'parcial';
+            asiento.diferenciaCheques = asiento.debe - sumaCheques;
+        }
+    });
+
+    // PASO 2: Procesar cheques restantes con el algoritmo original
+    const chequesRestantes = chequesParaProcesar.filter(ch => !chequesUsadosEnOptimizacion.has(ch.id));
     const chequesQueSiguenSinAsociar = [];
 
-    // Intentar vincular cada cheque sin asociar
-    for (const cheque of chequesParaProcesar) {
+    for (const cheque of chequesRestantes) {
         let registroAsociado = null;
         let mejorDiffDias = Infinity;
 
