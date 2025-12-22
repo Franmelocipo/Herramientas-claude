@@ -3628,7 +3628,11 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
         stateMayores.listadoChequesCargados = conciliacion.listadoChequesCargados;
         stateMayores.listadoChequesIncorporado = conciliacion.listadoChequesIncorporado || true;
         stateMayores.mesesDisponibles = conciliacion.mesesDisponibles || calcularMesesDeCheques(conciliacion.listadoChequesCargados);
-        stateMayores.mesesProcesados = conciliacion.mesesProcesados || {};
+        // Restaurar mesesProcesados (soporta formato optimizado con IDs y formato antiguo con objetos)
+        stateMayores.mesesProcesados = restaurarMesesProcesadosDesdeDatos(
+            conciliacion.mesesProcesados || {},
+            stateMayores.listadoChequesCargados
+        );
 
         console.log(`📋 Cheques restaurados: ${conciliacion.listadoChequesCargados.length} cheques`);
     } else if (conciliacion.listadoChequesGuardadoId || conciliacion.listadoChequesIncorporado) {
@@ -3659,7 +3663,11 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
                     stateMayores.listadoChequesCargados = datos.cheques;
                     stateMayores.listadoChequesIncorporado = true;
                     stateMayores.mesesDisponibles = conciliacion.mesesDisponibles || calcularMesesDeCheques(datos.cheques);
-                    stateMayores.mesesProcesados = datos.mesesProcesados || {};
+                    // Restaurar mesesProcesados (soporta formato optimizado con IDs)
+                    stateMayores.mesesProcesados = restaurarMesesProcesadosDesdeDatos(
+                        datos.mesesProcesados || {},
+                        stateMayores.listadoChequesCargados
+                    );
 
                     console.log(`📋 Cheques cargados desde fallback: ${datos.cheques.length} cheques`);
                     chequesEncontrados = true;
@@ -3755,9 +3763,13 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
                 // Verificar que tiene vinculaciones
                 const tieneVinculacionesFallback = Object.values(mesesCargados).some(m => m.vinculaciones && m.vinculaciones.length > 0);
                 if (tieneVinculacionesFallback) {
-                    stateMayores.mesesProcesados = mesesCargados;
+                    // Restaurar mesesProcesados (soporta formato optimizado con IDs)
+                    stateMayores.mesesProcesados = restaurarMesesProcesadosDesdeDatos(
+                        mesesCargados,
+                        stateMayores.listadoChequesCargados
+                    );
                     console.log('🔗 Meses procesados (vinculaciones) cargados desde fallback localStorage');
-                    const totalVinculaciones = Object.values(mesesCargados).reduce((sum, m) => sum + (m.vinculaciones?.length || 0), 0);
+                    const totalVinculaciones = Object.values(stateMayores.mesesProcesados).reduce((sum, m) => sum + (m.vinculaciones?.length || 0), 0);
                     console.log(`   Total vinculaciones restauradas: ${totalVinculaciones}`);
                 }
             }
@@ -4109,6 +4121,111 @@ function cerrarModalGuardarConciliacionMayor() {
 }
 
 /**
+ * Optimizar mesesProcesados para guardado - reemplaza objetos de cheques por solo IDs
+ * Esto reduce significativamente el tamaño del payload (de MB a KB)
+ */
+function optimizarMesesProcesadosParaGuardado(mesesProcesados) {
+    if (!mesesProcesados || Object.keys(mesesProcesados).length === 0) {
+        return {};
+    }
+
+    const mesesOptimizados = {};
+
+    for (const [mesKey, estadoMes] of Object.entries(mesesProcesados)) {
+        mesesOptimizados[mesKey] = {
+            procesado: estadoMes.procesado || false,
+            completo: estadoMes.completo || false,
+            fechaProcesado: estadoMes.fechaProcesado || null,
+            // Guardar solo IDs de cheques del mes (no objetos completos)
+            chequesDelMesIds: (estadoMes.chequesDelMes || []).map(c => c.id || c.interno),
+            // Guardar solo IDs de cheques no asociados
+            chequesNoAsociadosDelMesIds: (estadoMes.chequesNoAsociadosDelMes || []).map(c => c.id || c.interno),
+            // Guardar asientos con solo IDs de cheques asociados (no objetos completos)
+            asientosDelMes: (estadoMes.asientosDelMes || []).map(asiento => ({
+                id: asiento.id,
+                fecha: asiento.fecha,
+                asiento: asiento.asiento,
+                descripcion: asiento.descripcion,
+                debe: asiento.debe,
+                haber: asiento.haber,
+                estadoCheques: asiento.estadoCheques,
+                // Solo guardar IDs de cheques asociados
+                chequesAsociadosIds: (asiento.chequesAsociados || []).map(c => c.id || c.interno)
+            })),
+            // Mantener vinculaciones si existen (estas ya son referencias)
+            vinculaciones: estadoMes.vinculaciones || []
+        };
+    }
+
+    return mesesOptimizados;
+}
+
+/**
+ * Restaurar mesesProcesados desde datos optimizados - reconstruye objetos de cheques desde IDs
+ */
+function restaurarMesesProcesadosDesdeDatos(mesesOptimizados, listadoCheques) {
+    if (!mesesOptimizados || Object.keys(mesesOptimizados).length === 0) {
+        return {};
+    }
+
+    // Crear mapa de cheques por ID para búsqueda rápida
+    const chequesMap = new Map();
+    (listadoCheques || []).forEach(cheque => {
+        const id = cheque.id || cheque.interno;
+        if (id) {
+            chequesMap.set(id, cheque);
+        }
+    });
+
+    const mesesRestaurados = {};
+
+    for (const [mesKey, estadoMes] of Object.entries(mesesOptimizados)) {
+        // Verificar si ya tiene formato antiguo (con objetos completos)
+        const tieneFormatoAntiguo = estadoMes.chequesDelMes &&
+            estadoMes.chequesDelMes.length > 0 &&
+            typeof estadoMes.chequesDelMes[0] === 'object' &&
+            estadoMes.chequesDelMes[0].importe !== undefined;
+
+        if (tieneFormatoAntiguo) {
+            // Ya tiene formato antiguo, usar directamente
+            mesesRestaurados[mesKey] = estadoMes;
+            continue;
+        }
+
+        // Reconstruir cheques del mes desde IDs
+        const chequesDelMes = (estadoMes.chequesDelMesIds || [])
+            .map(id => chequesMap.get(id))
+            .filter(c => c !== undefined);
+
+        // Reconstruir cheques no asociados desde IDs
+        const chequesNoAsociadosDelMes = (estadoMes.chequesNoAsociadosDelMesIds || [])
+            .map(id => chequesMap.get(id))
+            .filter(c => c !== undefined);
+
+        // Reconstruir asientos con cheques asociados
+        const asientosDelMes = (estadoMes.asientosDelMes || []).map(asiento => ({
+            ...asiento,
+            // Reconstruir cheques asociados desde IDs
+            chequesAsociados: (asiento.chequesAsociadosIds || [])
+                .map(id => chequesMap.get(id))
+                .filter(c => c !== undefined)
+        }));
+
+        mesesRestaurados[mesKey] = {
+            procesado: estadoMes.procesado || false,
+            completo: estadoMes.completo || false,
+            fechaProcesado: estadoMes.fechaProcesado || null,
+            chequesDelMes,
+            chequesNoAsociadosDelMes,
+            asientosDelMes,
+            vinculaciones: estadoMes.vinculaciones || []
+        };
+    }
+
+    return mesesRestaurados;
+}
+
+/**
  * Ejecutar guardado de conciliación en Supabase (o localStorage como fallback)
  */
 async function ejecutarGuardarConciliacionMayor() {
@@ -4188,6 +4305,14 @@ async function ejecutarGuardarConciliacionMayor() {
     const conciliacionId = stateMayores.conciliacionCargadaId || `conc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const esNueva = !stateMayores.conciliacionCargadaId;
 
+    // Optimizar mesesProcesados para guardado (solo IDs en lugar de objetos completos)
+    const mesesProcesadosOptimizados = optimizarMesesProcesadosParaGuardado(stateMayores.mesesProcesados);
+
+    // Log de optimización para depuración
+    const tamanoOriginal = JSON.stringify(stateMayores.mesesProcesados || {}).length;
+    const tamanoOptimizado = JSON.stringify(mesesProcesadosOptimizados).length;
+    console.log(`📊 Optimización mesesProcesados: ${(tamanoOriginal / 1024).toFixed(1)}KB → ${(tamanoOptimizado / 1024).toFixed(1)}KB (${((1 - tamanoOptimizado / tamanoOriginal) * 100).toFixed(0)}% reducción)`);
+
     const registro = {
         id: conciliacionId,
         cliente_id: clienteId,
@@ -4200,7 +4325,7 @@ async function ejecutarGuardarConciliacionMayor() {
         listado_cheques_incorporado: stateMayores.listadoChequesIncorporado || false,
         listado_cheques_cargados: stateMayores.listadoChequesCargados || [],
         meses_disponibles: stateMayores.mesesDisponibles || [],
-        meses_procesados: stateMayores.mesesProcesados || {},
+        meses_procesados: mesesProcesadosOptimizados,
         meses_procesados_resumen: mesesProcesadosResumen,
         fecha_guardado: esNueva ? ahora : undefined,
         fecha_modificado: ahora
@@ -4255,7 +4380,7 @@ async function ejecutarGuardarConciliacionMayor() {
                         try {
                             localStorage.setItem(keyListado, JSON.stringify({
                                 cheques: stateMayores.listadoChequesCargados,
-                                mesesProcesados: stateMayores.mesesProcesados || {}
+                                mesesProcesados: mesesProcesadosOptimizados // Usar versión optimizada
                             }));
                             console.log('📋 Cheques guardados en localStorage como fallback');
                             chequesGuardados = true;
@@ -4329,8 +4454,9 @@ async function ejecutarGuardarConciliacionMayor() {
                     if (Object.keys(stateMayores.mesesProcesados || {}).length > 0) {
                         const keyMesesProcesados = `meses_procesados_conciliacion_${registro.id}`;
                         try {
-                            localStorage.setItem(keyMesesProcesados, JSON.stringify(stateMayores.mesesProcesados));
-                            console.log('🔗 Meses procesados (vinculaciones) guardados en localStorage como fallback');
+                            // Usar versión optimizada (ya calculada arriba)
+                            localStorage.setItem(keyMesesProcesados, JSON.stringify(mesesProcesadosOptimizados));
+                            console.log('🔗 Meses procesados (vinculaciones) guardados en localStorage como fallback (optimizado)');
                         } catch (storageError) {
                             if (storageError.name === 'QuotaExceededError') {
                                 console.warn('⚠️ localStorage lleno, no se pudieron guardar meses procesados');
@@ -4385,7 +4511,7 @@ async function ejecutarGuardarConciliacionMayor() {
                 listadoChequesCargados: tieneReferenciaACheques ? [] : (stateMayores.listadoChequesCargados || []),
                 listadoChequesCount: (stateMayores.listadoChequesCargados || []).length, // Mantener el conteo
                 mesesDisponibles: stateMayores.mesesDisponibles || [],
-                mesesProcesados: stateMayores.mesesProcesados || {},
+                mesesProcesados: mesesProcesadosOptimizados, // Usar versión optimizada
                 mesesProcesadosResumen: mesesProcesadosResumen,
                 fechaGuardado: esNueva ? ahora : (conciliaciones.find(c => c.id === conciliacionId)?.fechaGuardado || ahora),
                 fechaModificado: ahora
@@ -4469,11 +4595,14 @@ async function guardarMesesProcesadosSupabase() {
     }
 
     try {
+        // Optimizar antes de guardar (solo IDs en lugar de objetos completos)
+        const mesesOptimizados = optimizarMesesProcesadosParaGuardado(stateMayores.mesesProcesados);
+
         const { error } = await window.supabaseDB
             .from('meses_procesados')
             .upsert({
                 cliente_id: stateMayores.clienteActual.id,
-                datos: stateMayores.mesesProcesados || {},
+                datos: mesesOptimizados,
                 updated_at: new Date().toISOString()
             }, { onConflict: 'cliente_id' });
 
@@ -6520,7 +6649,12 @@ function cargarMesesProcesados() {
     try {
         const datos = localStorage.getItem(key);
         if (datos) {
-            stateMayores.mesesProcesados = JSON.parse(datos);
+            const mesesCargados = JSON.parse(datos);
+            // Restaurar mesesProcesados (soporta formato optimizado con IDs)
+            stateMayores.mesesProcesados = restaurarMesesProcesadosDesdeDatos(
+                mesesCargados,
+                stateMayores.listadoChequesCargados
+            );
             console.log('📂 Meses procesados cargados:', Object.keys(stateMayores.mesesProcesados).length);
         }
     } catch (error) {
@@ -6530,15 +6664,17 @@ function cargarMesesProcesados() {
 }
 
 /**
- * Guardar meses procesados en localStorage
+ * Guardar meses procesados en localStorage (versión optimizada)
  */
 function guardarMesesProcesados() {
     const key = getMesesProcesadosKey();
     if (!key) return;
 
     try {
-        localStorage.setItem(key, JSON.stringify(stateMayores.mesesProcesados));
-        console.log('💾 Meses procesados guardados');
+        // Optimizar antes de guardar (solo IDs en lugar de objetos completos)
+        const mesesOptimizados = optimizarMesesProcesadosParaGuardado(stateMayores.mesesProcesados);
+        localStorage.setItem(key, JSON.stringify(mesesOptimizados));
+        console.log('💾 Meses procesados guardados (optimizado)');
     } catch (error) {
         console.error('Error guardando meses procesados:', error);
     }
