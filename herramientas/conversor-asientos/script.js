@@ -6248,6 +6248,22 @@ function generateFinalExcel() {
                 }
             });
         }
+    } else if (state.sourceType === 'sifere_web_retenciones') {
+        // VALIDACIÓN ESPECÍFICA PARA SIFERE WEB RETENCIONES
+        // Validar cuenta de contrapartida
+        if (!state.bankAccount) {
+            errors.push('Falta la cuenta de CONTRAPARTIDA (activo contra el cual se compensan las retenciones IIBB)');
+        }
+
+        // Validar que todos los regímenes tengan cuenta asignada
+        if (state.regimenesUnicosSifereWeb && state.regimenesUnicosSifereWeb.length > 0) {
+            state.regimenesUnicosSifereWeb.forEach(reg => {
+                const cuentaAsignada = state.cuentasPorRegimenSifereWeb?.[reg.key];
+                if (!cuentaAsignada || cuentaAsignada.trim() === '') {
+                    errors.push(`Régimen SIFERE "${reg.key}": falta asignar cuenta`);
+                }
+            });
+        }
     } else {
         // VALIDACIÓN PARA OTROS TIPOS DE ORIGEN
         // Validar cuenta de contrapartida global (obligatoria EXCEPTO para compensaciones)
