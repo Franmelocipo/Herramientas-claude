@@ -98,9 +98,30 @@
                         <div class="source-icon">🏛️</div>
                         <h4>Cuotas de Préstamos</h4>
                     </button>
-                    <button class="source-type-btn" data-type="retenciones">
+                    <button class="source-type-btn" data-type="retenciones" id="btnRetenciones">
                         <div class="source-icon">📋</div>
                         <h4>Mis Retenciones ARCA</h4>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Submenú de Retenciones ARCA -->
+            <div id="stepRetencionesSubmenu" class="step hidden">
+                <div class="submenu-header">
+                    <button id="btnVolverTipos" class="btn-back-small">← Volver</button>
+                    <h3 class="step-title">📋 Mis Retenciones ARCA</h3>
+                    <p class="step-subtitle">Seleccione el tipo de retenciones a procesar</p>
+                </div>
+                <div class="source-types-grid retenciones-submenu-grid">
+                    <button class="source-type-btn" data-type="retenciones_suss">
+                        <div class="source-icon">🛡️</div>
+                        <h4>Retenciones SUSS</h4>
+                        <p class="source-description">Contribuciones de Seguridad Social</p>
+                    </button>
+                    <button class="source-type-btn" data-type="retenciones_resto">
+                        <div class="source-icon">📋</div>
+                        <h4>Resto de Retenciones</h4>
+                        <p class="source-description">Ganancias, IVA, IIBB y otras</p>
                     </button>
                 </div>
             </div>
