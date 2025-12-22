@@ -8052,6 +8052,22 @@ async function conciliarMesAutomaticamente() {
 function calcularSimilitudTextoMes(origenCheque, descripcionAsiento) {
     if (!origenCheque || !descripcionAsiento) return 0;
 
+    // Palabras genéricas que no deben contar como coincidencias significativas
+    // Son comunes en muchos nombres de empresas y causan falsos positivos
+    const palabrasGenericas = new Set([
+        'repuestos', 'repuesto', 'accesorios', 'accesorio', 'servicios', 'servicio',
+        'comercial', 'comercio', 'distribuidora', 'distribuidor', 'mayorista', 'minorista',
+        'materiales', 'material', 'construccion', 'construcciones', 'automotor', 'automotores',
+        'autopartes', 'autoparte', 'ferreteria', 'ferreterias', 'industria', 'industrial',
+        'empresa', 'empresas', 'compania', 'transporte', 'transportes', 'logistica',
+        'agro', 'agricola', 'ganadera', 'ganadero', 'rural', 'campo',
+        'electronica', 'electrica', 'electricidad', 'sanitarios', 'plomeria',
+        'pinturas', 'pintura', 'maderas', 'madera', 'hierros', 'hierro', 'aceros', 'acero',
+        'plasticos', 'plastico', 'vidrios', 'vidrio', 'alimentos', 'alimenticia',
+        'norte', 'sur', 'este', 'oeste', 'centro', 'del', 'las', 'los', 'san',
+        'srl', 'sas', 'hnos', 'hermanos', 'hijos', 'hijo', 'cia', 'ltda'
+    ]);
+
     const normalizar = (texto) => {
         return texto.toString().toLowerCase()
             .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -8068,15 +8084,20 @@ function calcularSimilitudTextoMes(origenCheque, descripcionAsiento) {
     }
 
     // Extraer palabras significativas (>2 caracteres para incluir "hnos", "srl", etc.)
-    const palabrasOrigen = origenNorm.split(' ').filter(p => p.length > 2);
-    const palabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 2);
+    const todasPalabrasOrigen = origenNorm.split(' ').filter(p => p.length > 2);
+    const todasPalabrasDescripcion = descripcionNorm.split(' ').filter(p => p.length > 2);
 
-    if (palabrasOrigen.length === 0) return 0;
+    // Separar palabras específicas (nombres propios) de palabras genéricas
+    const palabrasEspecificasOrigen = todasPalabrasOrigen.filter(p => !palabrasGenericas.has(p));
+    const palabrasEspecificasDescripcion = todasPalabrasDescripcion.filter(p => !palabrasGenericas.has(p));
 
-    let coincidencias = 0;
-    for (const palabra of palabrasOrigen) {
-        // Comparación más flexible pero controlada: coincidencia exacta o parcial significativa
-        if (palabrasDescripcion.some(pd => {
+    // Si no hay palabras específicas en el origen, no podemos hacer match confiable
+    if (palabrasEspecificasOrigen.length === 0) return 0;
+
+    let coincidenciasEspecificas = 0;
+    for (const palabra of palabrasEspecificasOrigen) {
+        // Comparación solo con palabras específicas de la descripción
+        if (palabrasEspecificasDescripcion.some(pd => {
             // Coincidencia exacta
             if (pd === palabra) return true;
 
@@ -8093,17 +8114,14 @@ function calcularSimilitudTextoMes(origenCheque, descripcionAsiento) {
 
             return false;
         })) {
-            coincidencias++;
+            coincidenciasEspecificas++;
         }
     }
 
-    // Requisito de coincidencias proporcional al número de palabras:
-    // - Si el origen tiene 1-2 palabras: requerir al menos 1 coincidencia
-    // - Si el origen tiene 3+ palabras: requerir al menos 2 coincidencias
-    const minimoRequerido = palabrasOrigen.length <= 2 ? 1 : 2;
-    if (coincidencias < minimoRequerido) return 0;
+    // Requerir al menos 1 coincidencia de palabra específica (nombre propio)
+    if (coincidenciasEspecificas === 0) return 0;
 
-    return coincidencias / palabrasOrigen.length;
+    return coincidenciasEspecificas / palabrasEspecificasOrigen.length;
 }
 
 /**
