@@ -7609,6 +7609,25 @@ function renderizarConciliacionMes(asientos, chequesNoAsociados) {
     } else {
         panelNoAsociados.style.display = 'none';
     }
+
+    // Restaurar estados de expansión después del render
+    if (stateMayores.asientosExpandidos) {
+        Object.keys(stateMayores.asientosExpandidos).forEach(asientoId => {
+            if (stateMayores.asientosExpandidos[asientoId]) {
+                const filaDetalle = document.getElementById(`detalle-${asientoId}`);
+                const filaPrincipal = document.querySelector(`tr[data-asiento-id="${asientoId}"]`);
+                const btnExpandir = filaPrincipal?.querySelector('.btn-expandir-fila');
+
+                if (filaDetalle) {
+                    filaDetalle.style.display = 'table-row';
+                    if (btnExpandir) {
+                        btnExpandir.textContent = '▼';
+                    }
+                    filaPrincipal?.classList.add('fila-expandida');
+                }
+            }
+        });
+    }
 }
 
 /**
@@ -7619,9 +7638,18 @@ function toggleDetalleChequesAsiento(asientoId) {
     const filaPrincipal = document.querySelector(`tr[data-asiento-id="${asientoId}"]`);
     const btnExpandir = filaPrincipal?.querySelector('.btn-expandir-fila');
 
+    // Inicializar estado de expansión si no existe
+    if (!stateMayores.asientosExpandidos) {
+        stateMayores.asientosExpandidos = {};
+    }
+
     if (filaDetalle) {
         const estaVisible = filaDetalle.style.display !== 'none';
         filaDetalle.style.display = estaVisible ? 'none' : 'table-row';
+
+        // Guardar estado de expansión
+        stateMayores.asientosExpandidos[asientoId] = !estaVisible;
+
         if (btnExpandir) {
             btnExpandir.textContent = estaVisible ? '▶' : '▼';
         }
@@ -7689,6 +7717,10 @@ function desvincularChequeDeAsiento(asientoId, chequeId) {
     const sumaCheques = asiento.chequesAsociados.reduce((sum, ch) => sum + ch.importe, 0);
     if (asiento.chequesAsociados.length === 0) {
         asiento.estadoCheques = 'sin_cheques';
+        // Limpiar estado de expansión cuando no quedan cheques (la fila expandible no existirá)
+        if (stateMayores.asientosExpandidos) {
+            delete stateMayores.asientosExpandidos[asientoId];
+        }
     } else if (Math.abs(asiento.debe - sumaCheques) <= 0.01) {
         asiento.estadoCheques = 'completo';
     } else {
