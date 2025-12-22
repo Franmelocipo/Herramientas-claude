@@ -7373,10 +7373,22 @@ function downloadExcel() {
 function generarBalanceSumasYSaldos() {
     const balancePorCuenta = {};
 
+    // Crear un mapa del plan de cuentas para búsqueda rápida
+    const planCuentasMap = {};
+    if (state.planCuentasCliente && Array.isArray(state.planCuentasCliente)) {
+        state.planCuentasCliente.forEach(cuenta => {
+            planCuentasMap[cuenta.codigo] = cuenta.nombre;
+        });
+    }
+
     // Acumular débitos y créditos por cuenta
     state.finalData.forEach(mov => {
         const cuenta = mov.Cuenta;
-        const descripcion = mov['Descripción Cuenta'] || '';
+        // Buscar descripción: primero en el movimiento, luego en el plan de cuentas
+        let descripcion = mov['Descripción Cuenta'] || '';
+        if (!descripcion && planCuentasMap[cuenta]) {
+            descripcion = planCuentasMap[cuenta];
+        }
         const debe = parseFloat(mov.Debe) || 0;
         const haber = parseFloat(mov.Haber) || 0;
 
@@ -7392,9 +7404,13 @@ function generarBalanceSumasYSaldos() {
         balancePorCuenta[cuenta].debitos += debe;
         balancePorCuenta[cuenta].creditos += haber;
 
-        // Actualizar descripción si viene vacía
-        if (!balancePorCuenta[cuenta].descripcion && descripcion) {
-            balancePorCuenta[cuenta].descripcion = descripcion;
+        // Actualizar descripción si viene vacía (buscar en plan de cuentas como fallback)
+        if (!balancePorCuenta[cuenta].descripcion) {
+            if (descripcion) {
+                balancePorCuenta[cuenta].descripcion = descripcion;
+            } else if (planCuentasMap[cuenta]) {
+                balancePorCuenta[cuenta].descripcion = planCuentasMap[cuenta];
+            }
         }
     });
 
