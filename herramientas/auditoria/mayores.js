@@ -7990,10 +7990,12 @@ async function conciliarMesAutomaticamente() {
 
             const fechaChequeDate = fechaCheque instanceof Date ? fechaCheque : new Date(fechaCheque);
             const fechaAsientoDate = asiento.fecha instanceof Date ? asiento.fecha : new Date(asiento.fecha);
-            const diffDias = Math.abs((fechaAsientoDate - fechaChequeDate) / (1000 * 60 * 60 * 24));
+            // Calcular diferencia SIN Math.abs(): positivo = asiento posterior al cheque (válido)
+            // negativo = asiento anterior al cheque (inválido - no se puede contabilizar antes de recibir)
+            const diffDias = (fechaAsientoDate - fechaChequeDate) / (1000 * 60 * 60 * 24);
 
-            // Tolerancia de 15 días para operaciones bancarias (depósitos pueden demorar)
-            if (diffDias <= 15 && diffDias < mejorDiffDias) {
+            // Tolerancia de 15 días: el asiento debe ser igual o posterior al cheque (diffDias >= 0)
+            if (diffDias >= 0 && diffDias <= 15 && diffDias < mejorDiffDias) {
                 mejorDiffDias = diffDias;
                 registroAsociado = asiento;
             }
@@ -8073,15 +8075,24 @@ function calcularSimilitudTextoMes(origenCheque, descripcionAsiento) {
 
     let coincidencias = 0;
     for (const palabra of palabrasOrigen) {
-        // Comparación más flexible: coincidencia exacta o parcial
-        if (palabrasDescripcion.some(pd =>
-            pd === palabra ||
-            pd.includes(palabra) ||
-            palabra.includes(pd) ||
+        // Comparación más flexible pero controlada: coincidencia exacta o parcial significativa
+        if (palabrasDescripcion.some(pd => {
+            // Coincidencia exacta
+            if (pd === palabra) return true;
+
+            // Inclusión parcial: la palabra incluida debe ser >= 70% de la longitud de la contenedora
+            // Esto evita falsos positivos como "san" -> "sanchez" (3/7 = 0.43 < 0.7)
+            // pero permite "repuesto" -> "repuestos" (8/9 = 0.89 > 0.7)
+            if (pd.includes(palabra) && palabra.length / pd.length >= 0.7) return true;
+            if (palabra.includes(pd) && pd.length / palabra.length >= 0.7) return true;
+
             // Comparación por similitud de caracteres (para manejar abreviaciones)
-            (palabra.length >= 4 && pd.length >= 4 &&
-             (pd.substring(0, 4) === palabra.substring(0, 4)))
-        )) {
+            // Requiere que ambas palabras tengan al menos 5 caracteres para evitar falsos positivos
+            if (palabra.length >= 5 && pd.length >= 5 &&
+                pd.substring(0, 5) === palabra.substring(0, 5)) return true;
+
+            return false;
+        })) {
             coincidencias++;
         }
     }
@@ -8165,10 +8176,12 @@ function reprocesarChequesMes() {
 
             const fechaChequeDate = fechaCheque instanceof Date ? fechaCheque : new Date(fechaCheque);
             const fechaAsientoDate = asiento.fecha instanceof Date ? asiento.fecha : new Date(asiento.fecha);
-            const diffDias = Math.abs((fechaAsientoDate - fechaChequeDate) / (1000 * 60 * 60 * 24));
+            // Calcular diferencia SIN Math.abs(): positivo = asiento posterior al cheque (válido)
+            // negativo = asiento anterior al cheque (inválido - no se puede contabilizar antes de recibir)
+            const diffDias = (fechaAsientoDate - fechaChequeDate) / (1000 * 60 * 60 * 24);
 
-            // Tolerancia de 15 días para operaciones bancarias (depósitos pueden demorar)
-            if (diffDias <= 15 && diffDias < mejorDiffDias) {
+            // Tolerancia de 15 días: el asiento debe ser igual o posterior al cheque (diffDias >= 0)
+            if (diffDias >= 0 && diffDias <= 15 && diffDias < mejorDiffDias) {
                 mejorDiffDias = diffDias;
                 registroAsociado = asiento;
             }
