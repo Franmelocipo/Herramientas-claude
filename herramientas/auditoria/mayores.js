@@ -270,13 +270,49 @@ function obtenerConfigVinculacion() {
 }
 
 /**
+ * Determina si se deben usar los cheques del listado como "origen" (ingresos)
+ * para el paso 3 de conciliación en lugar de los registros del debe.
+ * Esto aplica solo para cheques_terceros_recibidos cuando hay listado incorporado.
+ * @returns {boolean} true si se deben usar cheques como origen
+ */
+function usarChequesComoOrigen() {
+    return stateMayores.tipoMayorActual?.id === 'cheques_terceros_recibidos' &&
+           stateMayores.listadoChequesIncorporado &&
+           stateMayores.listadoChequesCargados &&
+           stateMayores.listadoChequesCargados.length > 0;
+}
+
+/**
  * Obtener registros de origen según configuración (cupones o emisiones)
+ * Para cheques_terceros_recibidos con listado incorporado, retorna los cheques
+ * del listado como "ingresos" en lugar de los registros del debe.
  * @param {Array} registros - Lista de registros
  * @param {boolean} incluirVinculados - Incluir registros ya vinculados
  * @returns {Array} Registros de origen filtrados
  */
 function obtenerRegistrosOrigen(registros, incluirVinculados = true) {
     const config = obtenerConfigVinculacion();
+
+    // Para cheques de terceros con listado incorporado, usar los cheques como origen
+    if (usarChequesComoOrigen()) {
+        return stateMayores.listadoChequesCargados.filter(cheque => {
+            if (!incluirVinculados && cheque.estadoVinculacion === 'vinculado') return false;
+            return true;
+        }).map(cheque => ({
+            // Propiedades del cheque original
+            ...cheque,
+            // Propiedades adaptadas para compatibilidad con el sistema de vinculación
+            fecha: cheque.fechaRecepcion || cheque.fechaEmision,
+            descripcion: `${cheque.origen || 'Sin origen'} - Cheque #${cheque.numero || cheque.interno || 'S/N'}`,
+            debe: cheque.importe,
+            haber: 0,
+            estado: cheque.estadoVinculacion || 'pendiente',
+            esCheque: true,  // Marcador para identificar que es un cheque
+            chequeOriginal: cheque  // Referencia al cheque original
+        }));
+    }
+
+    // Comportamiento estándar para otros tipos de mayor
     return registros.filter(r => {
         if (!incluirVinculados && r.estado === 'vinculado') return false;
         if (r.esDevolucion) return false;
@@ -310,10 +346,15 @@ function obtenerRegistrosDestino(registros, incluirVinculados = true) {
 
 /**
  * Obtener monto de origen de un registro según configuración
- * @param {Object} registro - Registro del mayor
+ * Para cheques, retorna el importe del cheque
+ * @param {Object} registro - Registro del mayor o cheque
  * @returns {number} Monto de origen
  */
 function obtenerMontoOrigen(registro) {
+    // Si es un cheque, retornar el importe
+    if (registro.esCheque || registro.importe !== undefined) {
+        return registro.importe || registro.debe || 0;
+    }
     const config = obtenerConfigVinculacion();
     return config.tipoOrigen === 'debe' ? registro.debe : registro.haber;
 }
@@ -1023,12 +1064,13 @@ function parsearFecha(fechaStr) {
 // ============================================
 
 /**
- * Analizar vencimientos de registros de origen (cupones o emisiones)
+ * Analizar vencimientos de registros de origen (cupones, emisiones o cheques)
  */
 function analizarVencimientos() {
     const configVinc = obtenerConfigVinculacion();
     const hoy = new Date();
 
+    // Analizar registros del mayor (comportamiento estándar)
     stateMayores.registrosMayor.forEach(registro => {
         if (registro.estado === 'vinculado' || registro.esDevolucion) return;
 
@@ -1044,6 +1086,23 @@ function analizarVencimientos() {
         }
     });
 
+    // Si estamos usando cheques como origen, también analizar vencimientos de cheques
+    if (usarChequesComoOrigen()) {
+        stateMayores.listadoChequesCargados.forEach(cheque => {
+            if (cheque.estadoVinculacion === 'vinculado') return;
+
+            const fechaCheque = cheque.fechaRecepcion || cheque.fechaEmision;
+            if (fechaCheque) {
+                const diasTranscurridos = Math.floor((hoy - fechaCheque) / (1000 * 60 * 60 * 24));
+                if (diasTranscurridos > configVinc.diasVencimiento) {
+                    cheque.estadoVinculacion = 'vencido';
+                } else if (!cheque.estadoVinculacion) {
+                    cheque.estadoVinculacion = 'pendiente';
+                }
+            }
+        });
+    }
+
     actualizarEstadisticasVinculacion();
 }
 
@@ -1051,11 +1110,21 @@ function analizarVencimientos() {
  * Actualizar estadísticas de vinculación
  */
 function actualizarEstadisticasVinculacion() {
-    const registros = stateMayores.registrosMayor;
+    let vinculados, pendientes, vencidos;
 
-    const vinculados = registros.filter(r => r.estado === 'vinculado').length;
-    const pendientes = registros.filter(r => r.estado === 'pendiente').length;
-    const vencidos = registros.filter(r => r.estado === 'vencido').length;
+    // Si estamos usando cheques como origen, contar desde el listado de cheques
+    if (usarChequesComoOrigen()) {
+        const cheques = stateMayores.listadoChequesCargados;
+        vinculados = cheques.filter(c => c.estadoVinculacion === 'vinculado').length;
+        pendientes = cheques.filter(c => !c.estadoVinculacion || c.estadoVinculacion === 'pendiente').length;
+        vencidos = cheques.filter(c => c.estadoVinculacion === 'vencido').length;
+    } else {
+        // Comportamiento estándar: contar desde registros del mayor
+        const registros = stateMayores.registrosMayor;
+        vinculados = registros.filter(r => r.estado === 'vinculado').length;
+        pendientes = registros.filter(r => r.estado === 'pendiente').length;
+        vencidos = registros.filter(r => r.estado === 'vencido').length;
+    }
 
     document.getElementById('cuponesVinculados').textContent = vinculados;
     document.getElementById('cuponesPendientes').textContent = pendientes;
@@ -1252,12 +1321,23 @@ function actualizarBarraSeleccionMayores() {
 
     const cantOrigen = stateMayores.cuponesSeleccionados.length;
     const cantDestino = stateMayores.liquidacionesSeleccionadas.length;
+    const modoChequesOrigen = usarChequesComoOrigen();
 
-    // Calcular totales usando configuración dinámica
-    const totalOrigen = stateMayores.registrosMayor
-        .filter(r => stateMayores.cuponesSeleccionados.includes(r.id))
-        .reduce((sum, r) => sum + obtenerMontoOrigen(r), 0);
+    // Calcular totales de origen (cheques o registros del mayor)
+    let totalOrigen = 0;
+    if (modoChequesOrigen) {
+        // Buscar en el listado de cheques
+        totalOrigen = stateMayores.listadoChequesCargados
+            .filter(c => stateMayores.cuponesSeleccionados.includes(c.id))
+            .reduce((sum, c) => sum + (c.importe || 0), 0);
+    } else {
+        // Buscar en registros del mayor
+        totalOrigen = stateMayores.registrosMayor
+            .filter(r => stateMayores.cuponesSeleccionados.includes(r.id))
+            .reduce((sum, r) => sum + obtenerMontoOrigen(r), 0);
+    }
 
+    // Calcular totales de destino (siempre registros del mayor)
     const totalDestino = stateMayores.registrosMayor
         .filter(r => stateMayores.liquidacionesSeleccionadas.includes(r.id))
         .reduce((sum, r) => sum + obtenerMontoDestino(r), 0);
@@ -1457,6 +1537,25 @@ function seleccionarTodasLiquidaciones() {
 }
 
 /**
+ * Buscar un elemento de origen por ID (puede ser un registro del mayor o un cheque)
+ * @param {string} id - ID del elemento
+ * @returns {Object|null} Elemento encontrado o null
+ */
+function buscarElementoOrigen(id) {
+    // Primero buscar en registros del mayor
+    const registro = stateMayores.registrosMayor.find(r => r.id === id);
+    if (registro) return { elemento: registro, tipo: 'registro' };
+
+    // Si usamos cheques como origen, buscar en el listado de cheques
+    if (usarChequesComoOrigen()) {
+        const cheque = stateMayores.listadoChequesCargados.find(c => c.id === id);
+        if (cheque) return { elemento: cheque, tipo: 'cheque' };
+    }
+
+    return null;
+}
+
+/**
  * Vincular elementos seleccionados
  */
 function vincularSeleccionados() {
@@ -1466,14 +1565,26 @@ function vincularSeleccionados() {
     }
 
     const vinculacionId = `vinc_${Date.now()}`;
+    const modoChequesOrigen = usarChequesComoOrigen();
 
-    // Marcar cupones como vinculados
+    // Marcar cupones/cheques como vinculados
     stateMayores.cuponesSeleccionados.forEach(id => {
-        const cupon = stateMayores.registrosMayor.find(r => r.id === id);
-        if (cupon) {
-            cupon.estado = 'vinculado';
-            cupon.vinculadoCon = [...(cupon.vinculadoCon || []), ...stateMayores.liquidacionesSeleccionadas];
-            cupon.vinculacionId = vinculacionId;
+        if (modoChequesOrigen) {
+            // Buscar en listado de cheques
+            const cheque = stateMayores.listadoChequesCargados.find(c => c.id === id);
+            if (cheque) {
+                cheque.estadoVinculacion = 'vinculado';
+                cheque.vinculadoCon = [...(cheque.vinculadoCon || []), ...stateMayores.liquidacionesSeleccionadas];
+                cheque.vinculacionId = vinculacionId;
+            }
+        } else {
+            // Comportamiento estándar: buscar en registros del mayor
+            const cupon = stateMayores.registrosMayor.find(r => r.id === id);
+            if (cupon) {
+                cupon.estado = 'vinculado';
+                cupon.vinculadoCon = [...(cupon.vinculadoCon || []), ...stateMayores.liquidacionesSeleccionadas];
+                cupon.vinculacionId = vinculacionId;
+            }
         }
     });
 
@@ -1492,7 +1603,8 @@ function vincularSeleccionados() {
         id: vinculacionId,
         cupones: [...stateMayores.cuponesSeleccionados],
         liquidaciones: [...stateMayores.liquidacionesSeleccionadas],
-        fecha: new Date().toISOString()
+        fecha: new Date().toISOString(),
+        tipoOrigen: modoChequesOrigen ? 'cheques' : 'registros'
     });
 
     // Limpiar selección
@@ -1503,7 +1615,7 @@ function vincularSeleccionados() {
     renderizarVinculacion();
     renderizarTablaMayor();
 
-    console.log('✅ Vinculación creada:', vinculacionId);
+    console.log('✅ Vinculación creada:', vinculacionId, modoChequesOrigen ? '(cheques)' : '(registros)');
 }
 
 /**
@@ -1517,12 +1629,25 @@ function desvincularSeleccionados() {
         return;
     }
 
+    const modoChequesOrigen = usarChequesComoOrigen();
+
     idsADesvincular.forEach(id => {
+        // Buscar en registros del mayor
         const registro = stateMayores.registrosMayor.find(r => r.id === id);
         if (registro) {
             registro.estado = 'pendiente';
             registro.vinculadoCon = [];
             registro.vinculacionId = null;
+        }
+
+        // Si estamos en modo cheques, también buscar en el listado de cheques
+        if (modoChequesOrigen) {
+            const cheque = stateMayores.listadoChequesCargados.find(c => c.id === id);
+            if (cheque) {
+                cheque.estadoVinculacion = 'pendiente';
+                cheque.vinculadoCon = [];
+                cheque.vinculacionId = null;
+            }
         }
     });
 
@@ -1785,6 +1910,31 @@ async function ejecutarConciliacion() {
 }
 
 /**
+ * Actualizar el estado de vinculación de un registro de origen
+ * Si es un cheque, actualiza tanto el objeto como el cheque original en listadoChequesCargados
+ * @param {Object} origen - Registro de origen o cheque adaptado
+ * @param {string} estado - Estado de vinculación ('vinculado', 'pendiente', etc.)
+ * @param {Array} vinculadoCon - IDs de registros vinculados
+ * @param {string} vinculacionId - ID de la vinculación
+ */
+function actualizarEstadoVinculacionOrigen(origen, estado, vinculadoCon, vinculacionId) {
+    // Actualizar el objeto de origen
+    origen.estado = estado;
+    origen.vinculadoCon = vinculadoCon;
+    origen.vinculacionId = vinculacionId;
+
+    // Si es un cheque, también actualizar el cheque original en listadoChequesCargados
+    if (origen.esCheque && usarChequesComoOrigen()) {
+        const chequeOriginal = stateMayores.listadoChequesCargados.find(c => c.id === origen.id);
+        if (chequeOriginal) {
+            chequeOriginal.estadoVinculacion = estado;
+            chequeOriginal.vinculadoCon = vinculadoCon;
+            chequeOriginal.vinculacionId = vinculacionId;
+        }
+    }
+}
+
+/**
  * Conciliación N:1 Asíncrona - Varios orígenes con un destino
  * @param {Array} origenes - Registros de origen
  * @param {Array} destinos - Registros de destino
@@ -1799,6 +1949,7 @@ async function conciliarN1Async(origenes, destinos, tolerancia, diasMaximos, ori
     let vinculaciones = 0;
     const total = destinos.length;
     const intervaloActualizacion = Math.max(1, Math.floor(total / 50)); // Actualizar cada 2%
+    const modoChequesOrigen = usarChequesComoOrigen();
 
     for (let i = 0; i < destinos.length; i++) {
         const destino = destinos[i];
@@ -1827,11 +1978,9 @@ async function conciliarN1Async(origenes, destinos, tolerancia, diasMaximos, ori
             // Crear vinculación
             const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
 
-            // Marcar orígenes
+            // Marcar orígenes (incluyendo cheques si corresponde)
             combinacion.forEach(origen => {
-                origen.estado = 'vinculado';
-                origen.vinculadoCon = [destino.id];
-                origen.vinculacionId = vinculacionId;
+                actualizarEstadoVinculacionOrigen(origen, 'vinculado', [destino.id], vinculacionId);
                 origenesVinculados.add(origen.id);
             });
 
@@ -1847,6 +1996,7 @@ async function conciliarN1Async(origenes, destinos, tolerancia, diasMaximos, ori
                 cupones: combinacion.map(o => o.id),
                 liquidaciones: [destino.id],
                 tipo: 'automatica',
+                tipoOrigen: modoChequesOrigen ? 'cheques' : 'registros',
                 fecha: new Date().toISOString()
             });
 
@@ -1877,6 +2027,7 @@ async function conciliar11Async(origenes, destinos, tolerancia, diasMaximos, ori
     let vinculaciones = 0;
     const total = origenes.length;
     const intervaloActualizacion = Math.max(1, Math.floor(total / 50)); // Actualizar cada 2%
+    const modoChequesOrigen = usarChequesComoOrigen();
 
     for (let i = 0; i < origenes.length; i++) {
         const origen = origenes[i];
@@ -1898,9 +2049,8 @@ async function conciliar11Async(origenes, destinos, tolerancia, diasMaximos, ori
                 // Match encontrado
                 const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
 
-                origen.estado = 'vinculado';
-                origen.vinculadoCon = [destino.id];
-                origen.vinculacionId = vinculacionId;
+                // Usar helper para actualizar origen (incluyendo cheques)
+                actualizarEstadoVinculacionOrigen(origen, 'vinculado', [destino.id], vinculacionId);
 
                 destino.estado = 'vinculado';
                 destino.vinculadoCon = [origen.id];
@@ -1914,6 +2064,7 @@ async function conciliar11Async(origenes, destinos, tolerancia, diasMaximos, ori
                     cupones: [origen.id],
                     liquidaciones: [destino.id],
                     tipo: 'automatica',
+                    tipoOrigen: modoChequesOrigen ? 'cheques' : 'registros',
                     fecha: new Date().toISOString()
                 });
 
@@ -1949,6 +2100,7 @@ async function conciliar1NAsync(origenes, destinos, tolerancia, diasMaximos, ori
     let origenesSinCandidatos = 0;
     const total = origenes.length;
     const intervaloActualizacion = Math.max(1, Math.floor(total / 50)); // Actualizar cada 2%
+    const modoChequesOrigen = usarChequesComoOrigen();
 
     console.log(`🔍 conciliar1NAsync: Evaluando ${origenes.length} orígenes contra ${destinos.length} destinos`);
 
@@ -1988,10 +2140,8 @@ async function conciliar1NAsync(origenes, destinos, tolerancia, diasMaximos, ori
             // Crear vinculación
             const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
 
-            // Marcar origen
-            origen.estado = 'vinculado';
-            origen.vinculadoCon = combinacion.map(d => d.id);
-            origen.vinculacionId = vinculacionId;
+            // Usar helper para actualizar origen (incluyendo cheques)
+            actualizarEstadoVinculacionOrigen(origen, 'vinculado', combinacion.map(d => d.id), vinculacionId);
             origenesVinculados.add(origen.id);
 
             // Marcar destinos
@@ -2008,6 +2158,7 @@ async function conciliar1NAsync(origenes, destinos, tolerancia, diasMaximos, ori
                 cupones: [origen.id],
                 liquidaciones: combinacion.map(d => d.id),
                 tipo: 'automatica',
+                tipoOrigen: modoChequesOrigen ? 'cheques' : 'registros',
                 fecha: new Date().toISOString()
             });
 
