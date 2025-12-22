@@ -447,6 +447,8 @@ const sourceTypes = {
     retenciones: { name: 'Mis Retenciones ARCA', icon: '📋' },
     retenciones_suss: { name: 'Retenciones SUSS', icon: '🛡️' },
     retenciones_resto: { name: 'Resto de Retenciones', icon: '📋' },
+    sifere_web: { name: 'SIFERE WEB', icon: '🌐' },
+    sifere_web_retenciones: { name: 'SIFERE WEB - Retenciones', icon: '📋' },
     tabla: { name: 'Tabla de Datos', icon: '📊' },
     soscontador: { name: 'Libro Diario SOS Contador', icon: '📒' },
     puenteweb: { name: 'Libro Diario Puente Web', icon: '🌐' },
@@ -461,12 +463,15 @@ function initializeElements() {
         // Steps
         step0: document.getElementById('step0'),
         stepRetencionesSubmenu: document.getElementById('stepRetencionesSubmenu'),
+        stepSifereWebSubmenu: document.getElementById('stepSifereWebSubmenu'),
         step1: document.getElementById('step1'),
         step2: document.getElementById('step2'),
         step3: document.getElementById('step3'),
 
         // Submenú de Retenciones
         btnVolverTipos: document.getElementById('btnVolverTipos'),
+        // Submenú de SIFERE WEB
+        btnVolverTiposSifere: document.getElementById('btnVolverTiposSifere'),
 
         // Header
         subtitle: document.getElementById('subtitle'),
@@ -548,6 +553,11 @@ function attachEventListeners() {
         elements.btnVolverTipos.addEventListener('click', () => volverASeleccionTipos());
     }
 
+    // Submenú de SIFERE WEB: Botón volver
+    if (elements.btnVolverTiposSifere) {
+        elements.btnVolverTiposSifere.addEventListener('click', () => volverASeleccionTiposSifere());
+    }
+
     // Step 1: Template download specific
     if (elements.btnDownloadTemplateSpecific) {
         elements.btnDownloadTemplateSpecific.addEventListener('click', () => downloadTemplateSpecific());
@@ -621,6 +631,9 @@ function goToStep(step) {
     elements.step0.classList.add('hidden');
     if (elements.stepRetencionesSubmenu) {
         elements.stepRetencionesSubmenu.classList.add('hidden');
+    }
+    if (elements.stepSifereWebSubmenu) {
+        elements.stepSifereWebSubmenu.classList.add('hidden');
     }
     elements.step1.classList.add('hidden');
     elements.step2.classList.add('hidden');
@@ -919,6 +932,12 @@ function selectSourceType(type) {
         return;
     }
 
+    // Si seleccionan "sifere_web" (el botón principal), mostrar el submenú
+    if (type === 'sifere_web') {
+        mostrarSubmenuSifereWeb();
+        return;
+    }
+
     state.sourceType = type;
     elements.sourceTypeName.textContent = sourceTypes[type].name;
 
@@ -931,6 +950,7 @@ function selectSourceType(type) {
         retenciones: 'Descargar Plantilla Retenciones',
         retenciones_suss: 'Descargar Plantilla Retenciones SUSS',
         retenciones_resto: 'Descargar Plantilla Retenciones',
+        sifere_web_retenciones: 'Descargar Plantilla SIFERE WEB Retenciones',
         tabla: 'Descargar Plantilla Tabla de Datos',
         soscontador: 'Descargar Plantilla SOS Contador',
         puenteweb: 'Descargar Plantilla Puente Web'
@@ -966,6 +986,22 @@ function mostrarSubmenuRetenciones() {
  */
 function volverASeleccionTipos() {
     elements.stepRetencionesSubmenu.classList.add('hidden');
+    elements.step0.classList.remove('hidden');
+}
+
+/**
+ * Muestra el submenú de selección de tipo de archivo SIFERE WEB
+ */
+function mostrarSubmenuSifereWeb() {
+    elements.step0.classList.add('hidden');
+    elements.stepSifereWebSubmenu.classList.remove('hidden');
+}
+
+/**
+ * Vuelve a la selección de tipos de fuente desde el submenú de SIFERE WEB
+ */
+function volverASeleccionTiposSifere() {
+    elements.stepSifereWebSubmenu.classList.add('hidden');
     elements.step0.classList.remove('hidden');
 }
 
@@ -1100,6 +1136,12 @@ async function handleFileUpload(e) {
         } else if (state.sourceType === 'soscontador') {
             // SOS Contador tiene estructura especial - parsear desde fila 7
             jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
+        } else if (state.sourceType === 'sifere_web_retenciones') {
+            // SIFERE WEB tiene 2 filas de encabezado antes de los headers
+            // Fila 1: "Retenciones SIRCAR - Jurisdicción..."
+            // Fila 2: "Contribuyente..."
+            // Fila 3: Headers de columnas
+            jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true, range: 2 });
         } else {
             jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
         }
@@ -2553,6 +2595,39 @@ function groupSimilarEntries(data) {
             groups[key].items.push(row);
         });
 
+    } else if (state.sourceType === 'sifere_web_retenciones') {
+        // SIFERE WEB - Retenciones de Ingresos Brutos
+        // Agrupar por Régimen (ej: "30 - Retenciones IIBB")
+        // Cada línea genera UN asiento independiente
+        data.forEach((row) => {
+            // Obtener columnas del archivo SIFERE WEB
+            const regimen = String(row['Régimen'] || row['Regimen'] || '').trim();
+
+            if (!regimen) return;
+
+            // Clave de agrupación: Régimen
+            const key = regimen;
+
+            // Obtener importe (Monto Retenido)
+            const importe = parseAmount(row['Monto Retenido'] || 0);
+
+            if (!groups[key]) {
+                groups[key] = {
+                    concepto: key,
+                    ejemploCompleto: `Régimen: ${regimen}`,
+                    count: 0,
+                    totalDebe: 0,
+                    totalHaber: 0,
+                    items: [],
+                    regimen: regimen
+                };
+            }
+
+            groups[key].count++;
+            groups[key].totalDebe += importe;
+            groups[key].items.push(row);
+        });
+
     } else {
         // Extractos bancarios - NUEVA LÓGICA: Agrupación más específica
         // En lugar de agrupar por categorías amplias, agrupamos por descripción exacta
@@ -3902,6 +3977,318 @@ function handleRetencionSUSSCuentaInputKeydown(e, idx, regimenKey) {
 }
 
 // ============================================
+// FUNCIONES PARA SIFERE WEB RETENCIONES
+// ============================================
+
+/**
+ * Extrae los regímenes únicos de las retenciones SIFERE WEB cargadas
+ * @returns {Array} Array con información de cada régimen único
+ */
+function extraerRegimenesUnicosSifereWeb() {
+    const regimenesMap = new Map();
+
+    state.groupedData.forEach(grupo => {
+        grupo.items.forEach(item => {
+            const regimen = String(item['Régimen'] || item['Regimen'] || '').trim();
+            const importe = parseAmount(item['Monto Retenido'] || 0);
+
+            if (regimen) {
+                const key = regimen;
+
+                if (!regimenesMap.has(key)) {
+                    regimenesMap.set(key, {
+                        codigo: regimen,
+                        descripcion: regimen,
+                        key: key,
+                        contador: 0,
+                        totalImporte: 0
+                    });
+                }
+
+                const info = regimenesMap.get(key);
+                info.contador++;
+                info.totalImporte += Math.abs(importe);
+            }
+        });
+    });
+
+    return Array.from(regimenesMap.values())
+        .sort((a, b) => b.contador - a.contador);
+}
+
+/**
+ * Renderiza la interfaz de asignación de cuentas para Retenciones SIFERE WEB
+ * Agrupa por Régimen (débito) y usa contrapartida global (crédito)
+ */
+function renderAsignacionSifereWebRetenciones() {
+    const regimenesUnicos = extraerRegimenesUnicosSifereWeb();
+
+    // Guardar en state para uso posterior
+    state.regimenesUnicosSifereWeb = regimenesUnicos;
+
+    // Contar total de retenciones (líneas)
+    let totalRetenciones = 0;
+    state.groupedData.forEach(g => {
+        totalRetenciones += g.items.length;
+    });
+
+    // Inicializar mapas de asignación si no existen
+    if (!state.cuentasPorRegimenSifereWeb) {
+        state.cuentasPorRegimenSifereWeb = {};
+    }
+    if (!state.nombresCuentasPorRegimenSifereWeb) {
+        state.nombresCuentasPorRegimenSifereWeb = {};
+    }
+
+    console.log('Estructura SIFERE WEB Retenciones:', {
+        totalRetenciones: totalRetenciones,
+        totalAsientos: totalRetenciones,
+        regimenesUnicos: regimenesUnicos.length
+    });
+
+    elements.groupStats.textContent = `${totalRetenciones} retenciones → ${totalRetenciones} asientos | ${regimenesUnicos.length} régimen(es)`;
+
+    // Mostrar sección de cuenta de contrapartida
+    elements.bankAccountSection.classList.remove('hidden');
+    elements.bankAccountLabel.textContent = 'Cuenta de CONTRAPARTIDA (activo contra el cual se compensan las retenciones)';
+    elements.bankAccountInput.placeholder = getSelectedClientId() ? '🔍 Buscar cuenta contrapartida...' : 'Ej: 11020101';
+    elements.bankAccountInput.value = state.bankAccount || '';
+    elements.compensacionesInfo.classList.add('hidden');
+
+    // HTML principal
+    let html = `
+        <div class="asignacion-retenciones-container">
+            <div class="descripcion-info-box" style="background: #e3f2fd; padding: 16px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+                <h3 style="margin: 0 0 8px 0; color: #1565c0;">🌐 Asignar Cuentas Contables - SIFERE WEB Retenciones IIBB</h3>
+                <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+                    <p style="margin: 0; color: #333;">
+                        <strong>${totalRetenciones} retenciones</strong> → Generarán <strong>${totalRetenciones} asientos</strong>
+                    </p>
+                    <p style="margin: 0; color: #333;">
+                        <strong>${regimenesUnicos.length}</strong> régimen(es) diferentes
+                    </p>
+                </div>
+                <p style="margin: 8px 0 0 0; color: #666; font-size: 13px;">
+                    Cada retención genera un asiento independiente con la cuenta del régimen al DEBE y la contrapartida al HABER.
+                </p>
+            </div>
+
+            <!-- SECCIÓN REGÍMENES (DÉBITO) -->
+            <div class="seccion-cuentas" style="margin-bottom: 24px;">
+                <h4 style="color: #1565c0; border-bottom: 2px solid #1565c0; padding-bottom: 8px; margin-bottom: 16px;">
+                    Regímenes de Retención (Débito)
+                </h4>
+                <p style="color: #666; font-size: 13px; margin-bottom: 16px;">
+                    Asigna una cuenta para cada régimen. Se aplicará a <strong>TODAS</strong> las retenciones de ese régimen.
+                </p>
+    `;
+
+    // Renderizar regímenes
+    regimenesUnicos.forEach((regimen, idx) => {
+        const cuentaAsignada = state.cuentasPorRegimenSifereWeb[regimen.key] || '';
+        const nombreCuenta = state.nombresCuentasPorRegimenSifereWeb[regimen.key] || '';
+        let valorInput = cuentaAsignada;
+        if (cuentaAsignada && nombreCuenta) {
+            valorInput = `${cuentaAsignada} - ${nombreCuenta}`;
+        }
+
+        html += `
+            <div class="asignacion-item" style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+                <div style="display: flex; align-items: flex-start; gap: 16px;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <strong style="color: #1565c0; font-size: 15px;">${regimen.descripcion}</strong>
+                            <span class="badge" style="background: #2196f3; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
+                                ${regimen.contador} retención(es)
+                            </span>
+                        </div>
+                        <div style="color: #666; font-size: 13px;">
+                            Total: $${regimen.totalImporte.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        </div>
+                    </div>
+                    <div style="min-width: 400px;">
+                        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Cuenta contable (Débito)</label>
+                        <div class="input-with-dropdown">
+                            <input
+                                type="text"
+                                class="input-text sifere-cuenta-input"
+                                data-sifere-key="${regimen.key}"
+                                data-sifere-idx="${idx}"
+                                value="${valorInput}"
+                                placeholder="${getSelectedClientId() ? '🔍 Buscar cuenta...' : 'Código de cuenta'}"
+                                style="width: 100%; padding: 0.75rem; font-size: 0.95rem; ${valorInput ? 'border-color: #4caf50; background: #e8f5e9;' : ''}"
+                            >
+                            <div class="account-dropdown hidden" id="dropdown-sifere-${idx}"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+        </div>
+    `;
+
+    elements.groupsList.innerHTML = html;
+
+    // Attach event listeners para inputs de SIFERE WEB
+    document.querySelectorAll('.sifere-cuenta-input').forEach(input => {
+        const regimenKey = input.dataset.sifereKey;
+        const idx = parseInt(input.dataset.sifereIdx);
+
+        input.addEventListener('input', (e) => {
+            if (getSelectedClientId()) {
+                handleSifereCuentaInputChange(idx, regimenKey);
+            }
+        });
+
+        input.addEventListener('focus', () => {
+            if (getSelectedClientId()) {
+                state.activeSearchField = `sifere-${idx}`;
+                showSifereCuentaDropdown(idx, regimenKey);
+            }
+        });
+
+        input.addEventListener('keydown', (e) => {
+            handleSifereCuentaInputKeydown(e, idx, regimenKey);
+        });
+    });
+}
+
+// Funciones de búsqueda para SIFERE WEB Retenciones
+function handleSifereCuentaInputChange(idx, regimenKey) {
+    const input = document.querySelector(`input[data-sifere-idx="${idx}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-sifere-${idx}`);
+
+    if (!dropdown) return;
+
+    if (searchTerm.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+
+    const filteredAccounts = state.planCuentas.filter(account => {
+        const codigo = String(account.codigo || '').toUpperCase();
+        const nombre = String(account.nombre || '').toUpperCase();
+        return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+    }).slice(0, 50);
+
+    if (filteredAccounts.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = filteredAccounts.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectSifereCuenta('${regimenKey.replace(/'/g, "\\'")}', ${idx}, '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function showSifereCuentaDropdown(idx, regimenKey) {
+    const input = document.querySelector(`input[data-sifere-idx="${idx}"]`);
+    if (!input) return;
+
+    const searchTerm = input.value.trim().toUpperCase();
+    const dropdown = document.getElementById(`dropdown-sifere-${idx}`);
+
+    if (!dropdown) return;
+
+    if (state.planCuentas.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No hay plan de cuentas cargado</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    let accountsToShow = state.planCuentas;
+    if (searchTerm.length > 0) {
+        accountsToShow = accountsToShow.filter(account => {
+            const codigo = String(account.codigo || '').toUpperCase();
+            const nombre = String(account.nombre || '').toUpperCase();
+            return codigo.includes(searchTerm) || nombre.includes(searchTerm);
+        });
+    }
+
+    accountsToShow = accountsToShow.slice(0, 50);
+
+    if (accountsToShow.length === 0) {
+        dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron cuentas</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = accountsToShow.map((account, i) => `
+        <div class="dropdown-item" data-index="${i}" onclick="selectSifereCuenta('${regimenKey.replace(/'/g, "\\'")}', ${idx}, '${account.codigo}', '${account.nombre.replace(/'/g, "\\'")}')">
+            <strong>${account.codigo}</strong> - ${account.nombre}
+        </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function selectSifereCuenta(regimenKey, idx, codigo, nombre) {
+    state.cuentasPorRegimenSifereWeb[regimenKey] = codigo;
+    state.nombresCuentasPorRegimenSifereWeb[regimenKey] = nombre;
+
+    const input = document.querySelector(`input[data-sifere-idx="${idx}"]`);
+    if (input) {
+        input.value = `${codigo} - ${nombre}`;
+        input.style.borderColor = '#4caf50';
+        input.style.background = '#e8f5e9';
+    }
+
+    const dropdown = document.getElementById(`dropdown-sifere-${idx}`);
+    if (dropdown) {
+        dropdown.classList.add('hidden');
+    }
+
+    console.log(`SIFERE WEB ${regimenKey} → Cuenta ${codigo} - ${nombre}`);
+}
+
+function handleSifereCuentaInputKeydown(e, idx, regimenKey) {
+    const dropdown = document.getElementById(`dropdown-sifere-${idx}`);
+    if (!dropdown || dropdown.classList.contains('hidden')) return;
+
+    const items = dropdown.querySelectorAll('.dropdown-item');
+    if (items.length === 0) return;
+
+    const currentActive = dropdown.querySelector('.dropdown-item.active');
+    let currentIndex = currentActive ? parseInt(currentActive.dataset.index) : -1;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        currentIndex = Math.min(currentIndex + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        currentIndex = Math.max(currentIndex - 1, 0);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentIndex >= 0 && items[currentIndex]) {
+            items[currentIndex].click();
+        }
+        return;
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        dropdown.classList.add('hidden');
+        return;
+    } else {
+        return;
+    }
+
+    items.forEach(item => item.classList.remove('active'));
+    if (items[currentIndex]) {
+        items[currentIndex].classList.add('active');
+        items[currentIndex].scrollIntoView({ block: 'nearest' });
+    }
+}
+
+// ============================================
 // RENDERIZADO DE LISTA DE GRUPOS
 // ============================================
 function renderGroupsList() {
@@ -3938,6 +4325,12 @@ function renderGroupsList() {
     // PARA RETENCIONES SUSS: Renderizar interfaz de asignación por régimen
     if (state.sourceType === 'retenciones_suss') {
         renderAsignacionRetencionesSUSS();
+        return;
+    }
+
+    // PARA SIFERE WEB RETENCIONES: Renderizar interfaz de asignación por régimen
+    if (state.sourceType === 'sifere_web_retenciones') {
+        renderAsignacionSifereWebRetenciones();
         return;
     }
 
@@ -6237,6 +6630,85 @@ function generateFinalExcel() {
             return; // No continuar con la lógica genérica
         }
 
+        // LÓGICA ESPECÍFICA PARA SIFERE WEB RETENCIONES: Un asiento por cada línea de retención
+        // Cada retención genera: DEBE (cuenta del régimen) + HABER (contrapartida)
+        // Leyenda: Régimen + Agente + CUIT + Nro Constancia
+        if (state.sourceType === 'sifere_web_retenciones') {
+            // Procesar cada retención del grupo (cada item es una retención individual)
+            g.items.forEach(item => {
+                // Obtener datos de las columnas específicas de SIFERE WEB
+                const cuit = String(item['CUIT'] || '').trim();
+                const agente = String(item['Agente'] || '').trim();
+                const regimen = String(item['Régimen'] || item['Regimen'] || '').trim();
+                const comprobante = String(item['Comprobante'] || '').trim();
+                const tipoComprobante = String(item['Tipo Comprobante'] || '').trim();
+                const fechaRetencion = item['Fecha Retención'] || item['Fecha Retencion'] || '';
+                const nroConstancia = String(item['Nro Constancia'] || '').trim();
+                const importe = parseAmount(item['Monto Retenido'] || 0);
+
+                if (importe <= 0) return; // Saltar si no hay importe
+
+                // Construir la leyenda: Régimen + Agente + CUIT + Comprobante + Nro Constancia
+                const leyendaParts = [];
+                if (regimen) leyendaParts.push(regimen);
+                if (agente) leyendaParts.push(agente);
+                if (cuit) leyendaParts.push(cuit);
+                if (tipoComprobante && comprobante) leyendaParts.push(`${tipoComprobante} ${comprobante}`);
+                if (nroConstancia) leyendaParts.push(`Const. ${nroConstancia}`);
+                const leyenda = leyendaParts.join(' / ');
+
+                // Obtener la cuenta para este régimen
+                const regimenKey = regimen;
+                const cuentaRegimen = state.cuentasPorRegimenSifereWeb?.[regimenKey] || '';
+                const nombreCuentaRegimen = state.nombresCuentasPorRegimenSifereWeb?.[regimenKey] || '';
+
+                // Formatear fecha (puede venir como DD/MM/YYYY o como fecha Excel)
+                let fechaFormateada = '';
+                if (fechaRetencion) {
+                    if (typeof fechaRetencion === 'number') {
+                        const date = new Date((fechaRetencion - 25569) * 86400000);
+                        fechaFormateada = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+                    } else {
+                        fechaFormateada = String(fechaRetencion);
+                    }
+                }
+
+                // Línea de DÉBITO (cuenta del régimen - activo)
+                allData.push({
+                    Fecha: fechaFormateada,
+                    Numero: numeroAsiento,
+                    Cuenta: cuentaRegimen,
+                    'Descripción Cuenta': nombreCuentaRegimen,
+                    Debe: parseFloat(importe.toFixed(2)),
+                    Haber: 0,
+                    'Tipo de auxiliar': 1,
+                    Auxiliar: 1,
+                    Importe: parseFloat(importe.toFixed(2)),
+                    Leyenda: leyenda,
+                    ExtraContable: 's'
+                });
+
+                // Línea de HABER (contrapartida)
+                allData.push({
+                    Fecha: fechaFormateada,
+                    Numero: numeroAsiento,
+                    Cuenta: contrapartida,
+                    'Descripción Cuenta': '',
+                    Debe: 0,
+                    Haber: parseFloat(importe.toFixed(2)),
+                    'Tipo de auxiliar': 1,
+                    Auxiliar: 1,
+                    Importe: parseFloat((-importe).toFixed(2)),
+                    Leyenda: leyenda,
+                    ExtraContable: 's'
+                });
+
+                numeroAsiento++;
+            });
+
+            return; // No continuar con la lógica genérica
+        }
+
         // LÓGICA ESPECÍFICA PARA PUENTE WEB: Un asiento por grupo (NRO_ASIENTO)
         // Cada movimiento usa la cuenta del sistema mapeada desde la cuenta Puente Web
         if (state.sourceType === 'puenteweb') {
@@ -7317,6 +7789,66 @@ function downloadTemplateSpecific() {
                 ['- Solo se requiere asignar cuentas a las columnas que tienen valores'],
                 ['- El formato de importes puede ser argentino (1.000.561,77) o estándar (1000561.77)'],
                 ['- La fecha se usa como fecha del asiento contable']
+            ];
+            break;
+
+        case 'sifere_web_retenciones':
+            datos = [
+                ['Retenciones SIRCAR - Jurisdicción 915 - Período 08/2024 al 07/2025'],
+                ['Contribuyente 30-71517120-8 - EMPRESA EJEMPLO SRL'],
+                ['CUIT', 'Agente', 'Mes', 'Año', 'DDJJ', 'Rect', 'Comprobante', 'Tipo Comprobante', 'Régimen', 'Monto Sujeto', 'Alícuota', 'Monto Retenido', 'Fecha Retención', 'Tipo Operación', 'Fecha Constancia', 'Nro Constancia', 'Nro Constancia Original'],
+                ['30-54707407-2', 'MARIO CERVI E HIJOS SACIAFEI', 8, 2024, 34898498, 1, 38098, 'Factura', '30 - Retenciones IIBB', 304792.25, 1.50, 4571.88, '08/08/2024', '', '', '', ''],
+                ['33-70751936-9', 'DIRECCION ADMINISTRATIVA', 11, 2024, 35413122, 1, 15, 'Factura', '30 - Retenciones IIBB', 228481.33, 1.50, 3427.22, '08/11/2024', '', '', '', ''],
+                ['30-54707407-2', 'PROVEEDOR EJEMPLO SA', 11, 2024, 35458574, 1, 38653, 'Factura', '30 - Retenciones IIBB', 188631.31, 1.50, 2829.47, '25/11/2024', '', '', '', ''],
+                ['30-54572139-9', 'COOPERATIVA EJEMPLO LTDA', 2, 2025, 35980978, 1, 40093, 'Factura', '30 - Retenciones IIBB', 471720.79, 1.50, 7075.81, '05/02/2025', '', '', '', '']
+            ];
+            fileName = 'plantilla_sifere_web_retenciones.xlsx';
+            instrucciones = [
+                ['PLANTILLA SIFERE WEB - RETENCIONES DE INGRESOS BRUTOS'],
+                [''],
+                ['Este formato corresponde a la exportación de retenciones desde SIFERE WEB.'],
+                ['El archivo debe tener las primeras 2 filas de encabezado como se muestra en la plantilla.'],
+                [''],
+                ['ESTRUCTURA DEL ARCHIVO:'],
+                [''],
+                ['- Fila 1: Título "Retenciones SIRCAR - Jurisdicción XXX - Período..."'],
+                ['- Fila 2: "Contribuyente XX-XXXXXXXX-X - RAZÓN SOCIAL"'],
+                ['- Fila 3: Headers de columnas'],
+                ['- Fila 4+: Datos de retenciones'],
+                [''],
+                ['COLUMNAS REQUERIDAS:'],
+                [''],
+                ['- CUIT: CUIT del agente de retención (formato XX-XXXXXXXX-X)'],
+                ['- Agente: Nombre del agente de retención'],
+                ['- Mes: Mes de la retención (número)'],
+                ['- Año: Año de la retención (número)'],
+                ['- DDJJ: Número de DDJJ'],
+                ['- Rect: Indicador de rectificativa'],
+                ['- Comprobante: Número de comprobante'],
+                ['- Tipo Comprobante: Tipo (ej: Factura, Recibo, etc.)'],
+                ['- Régimen: Código y descripción del régimen (ej: "30 - Retenciones IIBB")'],
+                ['- Monto Sujeto: Base imponible de la retención'],
+                ['- Alícuota: Porcentaje de retención'],
+                ['- Monto Retenido: Importe retenido (COLUMNA PRINCIPAL)'],
+                ['- Fecha Retención: Fecha de la retención (DD/MM/YYYY)'],
+                ['- Tipo Operación: Tipo de operación (opcional)'],
+                ['- Fecha Constancia: Fecha de la constancia (opcional)'],
+                ['- Nro Constancia: Número de constancia (opcional)'],
+                ['- Nro Constancia Original: Nro original si es rectificativa (opcional)'],
+                [''],
+                ['GENERACIÓN DE ASIENTOS:'],
+                [''],
+                ['Cada retención genera UN asiento contable con 2 líneas:'],
+                [''],
+                ['DEBE: Cuenta del régimen (ej: Retenciones IIBB a Computar)'],
+                ['HABER: Contrapartida (ej: Clientes, Ventas, etc.)'],
+                [''],
+                ['La leyenda incluye: Régimen + Agente + CUIT + Tipo/Nro Comprobante + Nro Constancia'],
+                [''],
+                ['AGRUPACIÓN:'],
+                [''],
+                ['Las retenciones se agrupan por RÉGIMEN para facilitar la asignación de cuentas.'],
+                ['Todas las retenciones del mismo régimen usarán la misma cuenta contable.']
             ];
             break;
 
