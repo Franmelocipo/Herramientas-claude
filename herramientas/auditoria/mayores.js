@@ -7392,8 +7392,11 @@ function obtenerChequesNoVinculadosMesesAnteriores(mesKey) {
 
         chequesDelMesAnterior.forEach(cheque => {
             const chequeId = cheque.id || cheque.interno;
-            // Solo agregar si no está vinculado (verificar tanto el campo como la lista de vinculados)
-            const estaVinculado = cheque.asientoAsociado || chequesVinculadosIds.has(chequeId);
+            // Solo agregar si no está vinculado en algún mes procesado
+            // IMPORTANTE: No usamos cheque.asientoAsociado porque puede estar seteado por la
+            // vinculación automática durante la importación, que no respeta los límites de meses.
+            // Solo consideramos vinculados los cheques que están en asientos de mesesProcesados.
+            const estaVinculado = chequesVinculadosIds.has(chequeId);
             if (!estaVinculado && !chequesYaAgregadosIds.has(chequeId)) {
                 chequesAnteriores.push({
                     ...cheque,
