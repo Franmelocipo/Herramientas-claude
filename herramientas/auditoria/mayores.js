@@ -8227,118 +8227,259 @@ function agruparAsientosSimilares(asientos, chequesDisponibles, toleranciaDias =
 
 /**
  * Optimizar distribución de cheques entre asientos de un grupo similar.
- * Intenta encontrar la combinación que minimiza las diferencias totales.
- * Prioriza encontrar asignaciones que completen exactamente los asientos.
+ * IMPORTANTE: Considera TODOS los cheques del grupo (ya asociados + sin asociar)
+ * y busca la distribución óptima que minimice las diferencias, priorizando
+ * dejar todos los asientos con diferencia 0.
  */
 function optimizarDistribucionGrupo(grupo) {
     const { asientos, chequesCandidatos } = grupo;
 
-    // Si no hay múltiples asientos o cheques, no hay nada que optimizar
-    if (asientos.length <= 1 || chequesCandidatos.length === 0) {
+    // Si no hay múltiples asientos, no hay nada que optimizar
+    if (asientos.length <= 1) {
         return null;
     }
 
-    // Calcular montos faltantes de cada asiento
-    const asientosConFaltante = asientos.map(a => {
-        const sumaActual = (a.chequesAsociados || []).reduce((sum, ch) => sum + ch.importe, 0);
-        return {
-            asiento: a,
-            faltante: a.debe - sumaActual,
-            capacidadDisponible: a.debe - sumaActual
-        };
-    }).filter(a => a.faltante > 0.01); // Solo asientos con faltante
+    // Recopilar TODOS los cheques del grupo (ya asociados + sin asociar)
+    const todosLosCheques = [];
+    const chequeIds = new Set();
 
-    if (asientosConFaltante.length === 0) return null;
-
-    // Paso 1: Buscar cheques que completen exactamente la diferencia de un asiento
-    const distribucion = new Map(); // asientoId -> [cheques]
-    const chequesUsados = new Set();
-
-    // Inicializar distribución
-    for (const a of asientosConFaltante) {
-        distribucion.set(a.asiento.id, []);
-    }
-
-    // Buscar matches exactos (cheque que completa exactamente un faltante)
-    for (const a of asientosConFaltante) {
-        for (const cheque of chequesCandidatos) {
-            if (chequesUsados.has(cheque.id)) continue;
-
-            // Verificar si este cheque completa exactamente el faltante
-            if (Math.abs(cheque.importe - a.faltante) <= 0.50) {
-                distribucion.get(a.asiento.id).push(cheque);
-                chequesUsados.add(cheque.id);
-                a.capacidadDisponible = 0;
-                break;
+    // Agregar cheques ya asociados a los asientos del grupo
+    for (const asiento of asientos) {
+        for (const cheque of (asiento.chequesAsociados || [])) {
+            if (!chequeIds.has(cheque.id)) {
+                todosLosCheques.push(cheque);
+                chequeIds.add(cheque.id);
             }
         }
     }
 
-    // Paso 2: Para cheques restantes, buscar combinaciones que completen asientos
-    // Usar algoritmo voraz mejorado: asignar al asiento donde el cheque "encaja mejor"
-    const chequesRestantes = chequesCandidatos.filter(ch => !chequesUsados.has(ch.id));
-
-    // Ordenar cheques de mayor a menor para optimizar empaquetado
-    chequesRestantes.sort((a, b) => b.importe - a.importe);
-
-    for (const cheque of chequesRestantes) {
-        let mejorAsiento = null;
-        let mejorScore = -Infinity;
-
-        for (const a of asientosConFaltante) {
-            if (a.capacidadDisponible < cheque.importe - 0.50) continue;
-
-            // Calcular score: priorizar asientos donde el cheque reduce más la diferencia
-            // pero sin exceder el monto
-            const nuevoFaltante = a.capacidadDisponible - cheque.importe;
-
-            // Score más alto si completa exactamente o deja poco faltante
-            let score;
-            if (Math.abs(nuevoFaltante) <= 0.50) {
-                // Completa exactamente: máxima prioridad
-                score = 1000000;
-            } else if (nuevoFaltante > 0) {
-                // Deja faltante: preferir dejar poco faltante
-                score = 100000 - nuevoFaltante;
-            } else {
-                // Excedería (no debería pasar por el filtro, pero por seguridad)
-                continue;
-            }
-
-            if (score > mejorScore) {
-                mejorScore = score;
-                mejorAsiento = a;
-            }
-        }
-
-        if (mejorAsiento) {
-            distribucion.get(mejorAsiento.asiento.id).push(cheque);
-            chequesUsados.add(cheque.id);
-            mejorAsiento.capacidadDisponible -= cheque.importe;
+    // Agregar cheques candidatos (sin asociar)
+    for (const cheque of chequesCandidatos) {
+        if (!chequeIds.has(cheque.id)) {
+            todosLosCheques.push(cheque);
+            chequeIds.add(cheque.id);
         }
     }
 
-    // Paso 3: Verificar si la distribución optimizada es mejor que la actual
-    // Calcular diferencias totales con la distribución propuesta
-    let diferenciaTotal = 0;
-    let asientosCompletos = 0;
+    if (todosLosCheques.length === 0) return null;
 
-    for (const a of asientosConFaltante) {
-        const chequesAsignados = distribucion.get(a.asiento.id) || [];
-        const sumaAsignada = chequesAsignados.reduce((sum, ch) => sum + ch.importe, 0);
-        const sumaActual = (a.asiento.chequesAsociados || []).reduce((sum, ch) => sum + ch.importe, 0);
-        const nuevaDiferencia = a.asiento.debe - sumaActual - sumaAsignada;
+    // Calcular totales para verificar si una solución perfecta es posible
+    const totalCheques = todosLosCheques.reduce((sum, ch) => sum + ch.importe, 0);
+    const totalAsientos = asientos.reduce((sum, a) => sum + a.debe, 0);
+    const solucionPerfectaPosible = Math.abs(totalCheques - totalAsientos) <= 0.50;
 
-        diferenciaTotal += Math.abs(nuevaDiferencia);
-        if (Math.abs(nuevaDiferencia) <= 0.01) asientosCompletos++;
+    // Preparar datos de asientos
+    const datosAsientos = asientos.map(a => ({
+        asiento: a,
+        objetivo: a.debe,
+        id: a.id
+    }));
+
+    // Intentar encontrar la distribución óptima usando búsqueda con backtracking
+    const mejorDistribucion = buscarDistribucionOptima(todosLosCheques, datosAsientos, solucionPerfectaPosible);
+
+    if (!mejorDistribucion) return null;
+
+    // Verificar si la nueva distribución es mejor que la actual
+    let diferenciaActual = 0;
+    for (const asiento of asientos) {
+        const sumaActual = (asiento.chequesAsociados || []).reduce((sum, ch) => sum + ch.importe, 0);
+        diferenciaActual += Math.abs(asiento.debe - sumaActual);
     }
 
-    return {
-        distribucion,
-        diferenciaTotal,
-        asientosCompletos,
-        chequesUsados
-    };
+    // Solo retornar si mejora la situación
+    if (mejorDistribucion.diferenciaTotal >= diferenciaActual - 0.01) {
+        return null;
+    }
+
+    return mejorDistribucion;
+}
+
+/**
+ * Buscar la distribución óptima de cheques entre asientos usando backtracking.
+ * Prioriza encontrar distribuciones con diferencia 0 en todos los asientos.
+ */
+function buscarDistribucionOptima(cheques, datosAsientos, buscarPerfecta) {
+    const n = cheques.length;
+    const m = datosAsientos.length;
+
+    // Para optimizar, ordenar cheques de mayor a menor
+    const chequesOrdenados = [...cheques].sort((a, b) => b.importe - a.importe);
+
+    let mejorResultado = null;
+    let mejorDiferencia = Infinity;
+
+    // Inicializar distribución: cada asiento tiene array vacío
+    const distribucionActual = new Map();
+    const sumasActuales = new Map();
+    for (const dato of datosAsientos) {
+        distribucionActual.set(dato.id, []);
+        sumasActuales.set(dato.id, 0);
+    }
+
+    /**
+     * Función recursiva de backtracking
+     * @param {number} idx - Índice del cheque actual
+     */
+    function backtrack(idx) {
+        // Caso base: todos los cheques asignados
+        if (idx === n) {
+            let diferenciaTotal = 0;
+            let todosCompletos = true;
+
+            for (const dato of datosAsientos) {
+                const suma = sumasActuales.get(dato.id);
+                const diff = Math.abs(dato.objetivo - suma);
+                diferenciaTotal += diff;
+                if (diff > 0.50) todosCompletos = false;
+            }
+
+            // Si buscamos solución perfecta y no la encontramos, seguir buscando
+            if (buscarPerfecta && !todosCompletos && mejorResultado === null) {
+                // Guardar como mejor parcial solo si es mejor
+                if (diferenciaTotal < mejorDiferencia) {
+                    mejorDiferencia = diferenciaTotal;
+                    mejorResultado = {
+                        distribucion: new Map(),
+                        diferenciaTotal,
+                        asientosCompletos: datosAsientos.filter(d => Math.abs(d.objetivo - sumasActuales.get(d.id)) <= 0.50).length,
+                        chequesUsados: new Set(cheques.map(c => c.id)),
+                        requiereReasignacion: true
+                    };
+                    for (const [id, arr] of distribucionActual) {
+                        mejorResultado.distribucion.set(id, [...arr]);
+                    }
+                }
+                return;
+            }
+
+            if (diferenciaTotal < mejorDiferencia) {
+                mejorDiferencia = diferenciaTotal;
+                mejorResultado = {
+                    distribucion: new Map(),
+                    diferenciaTotal,
+                    asientosCompletos: datosAsientos.filter(d => Math.abs(d.objetivo - sumasActuales.get(d.id)) <= 0.50).length,
+                    chequesUsados: new Set(cheques.map(c => c.id)),
+                    requiereReasignacion: true
+                };
+                for (const [id, arr] of distribucionActual) {
+                    mejorResultado.distribucion.set(id, [...arr]);
+                }
+
+                // Si encontramos solución perfecta, podemos parar
+                if (todosCompletos) {
+                    return true; // Signal to stop
+                }
+            }
+            return;
+        }
+
+        const cheque = chequesOrdenados[idx];
+
+        // Intentar asignar el cheque a cada asiento
+        for (const dato of datosAsientos) {
+            const sumaActual = sumasActuales.get(dato.id);
+            const nuevaSuma = sumaActual + cheque.importe;
+
+            // Poda: no exceder el objetivo por más de un margen razonable
+            // (permitimos un pequeño exceso para manejar redondeos)
+            if (nuevaSuma > dato.objetivo + 0.50) continue;
+
+            // Asignar cheque a este asiento
+            distribucionActual.get(dato.id).push(cheque);
+            sumasActuales.set(dato.id, nuevaSuma);
+
+            const result = backtrack(idx + 1);
+            if (result === true) return true; // Solución perfecta encontrada
+
+            // Deshacer asignación
+            distribucionActual.get(dato.id).pop();
+            sumasActuales.set(dato.id, sumaActual);
+        }
+
+        // También intentar no asignar el cheque a ningún asiento del grupo
+        // (quedará sin asociar)
+        backtrack(idx + 1);
+    }
+
+    // Limitar tiempo de búsqueda para casos con muchos cheques
+    const maxIteraciones = 100000;
+    let iteraciones = 0;
+
+    function backtrackLimitado(idx) {
+        iteraciones++;
+        if (iteraciones > maxIteraciones) return 'limit';
+
+        if (idx === n) {
+            let diferenciaTotal = 0;
+            let todosCompletos = true;
+
+            for (const dato of datosAsientos) {
+                const suma = sumasActuales.get(dato.id);
+                const diff = Math.abs(dato.objetivo - suma);
+                diferenciaTotal += diff;
+                if (diff > 0.50) todosCompletos = false;
+            }
+
+            if (diferenciaTotal < mejorDiferencia) {
+                mejorDiferencia = diferenciaTotal;
+                mejorResultado = {
+                    distribucion: new Map(),
+                    diferenciaTotal,
+                    asientosCompletos: datosAsientos.filter(d => Math.abs(d.objetivo - sumasActuales.get(d.id)) <= 0.50).length,
+                    chequesUsados: new Set(cheques.map(c => c.id)),
+                    requiereReasignacion: true
+                };
+                for (const [id, arr] of distribucionActual) {
+                    mejorResultado.distribucion.set(id, [...arr]);
+                }
+
+                if (todosCompletos) return true;
+            }
+            return;
+        }
+
+        const cheque = chequesOrdenados[idx];
+
+        // Ordenar asientos por proximidad al objetivo para mejorar poda
+        const asientosOrdenados = [...datosAsientos].sort((a, b) => {
+            const diffA = a.objetivo - sumasActuales.get(a.id);
+            const diffB = b.objetivo - sumasActuales.get(b.id);
+            // Priorizar asientos donde el cheque encaja mejor
+            const fitA = Math.abs(diffA - cheque.importe);
+            const fitB = Math.abs(diffB - cheque.importe);
+            return fitA - fitB;
+        });
+
+        for (const dato of asientosOrdenados) {
+            const sumaActual = sumasActuales.get(dato.id);
+            const nuevaSuma = sumaActual + cheque.importe;
+
+            if (nuevaSuma > dato.objetivo + 0.50) continue;
+
+            distribucionActual.get(dato.id).push(cheque);
+            sumasActuales.set(dato.id, nuevaSuma);
+
+            const result = backtrackLimitado(idx + 1);
+            if (result === true) return true;
+            if (result === 'limit') return 'limit';
+
+            distribucionActual.get(dato.id).pop();
+            sumasActuales.set(dato.id, sumaActual);
+        }
+
+        // No asignar a ninguno
+        return backtrackLimitado(idx + 1);
+    }
+
+    // Usar versión con límite si hay muchos cheques
+    if (n > 15) {
+        backtrackLimitado(0);
+    } else {
+        backtrack(0);
+    }
+
+    return mejorResultado;
 }
 
 /**
@@ -8396,14 +8537,40 @@ function reprocesarChequesMes() {
 
     for (const grupo of grupos) {
         // Solo optimizar grupos con múltiples asientos
-        if (grupo.asientos.length > 1 && grupo.chequesCandidatos.length > 0) {
+        if (grupo.asientos.length > 1) {
             const resultado = optimizarDistribucionGrupo(grupo);
 
-            if (resultado && resultado.chequesUsados.size > 0) {
-                // Aplicar la distribución optimizada
-                for (const [asientoId, cheques] of resultado.distribucion) {
-                    if (cheques.length === 0) continue;
+            if (resultado && resultado.distribucion) {
+                // Si requiere reasignación, primero limpiar los cheques de los asientos del grupo
+                if (resultado.requiereReasignacion) {
+                    // Recopilar IDs de cheques que serán reasignados
+                    const chequesReasignados = new Set();
+                    for (const [, cheques] of resultado.distribucion) {
+                        for (const cheque of cheques) {
+                            chequesReasignados.add(cheque.id);
+                        }
+                    }
 
+                    // Remover cheques de los asientos del grupo que serán reasignados
+                    for (const asiento of grupo.asientos) {
+                        if (asiento.chequesAsociados && asiento.chequesAsociados.length > 0) {
+                            // Filtrar: mantener solo los cheques que NO serán reasignados
+                            const chequesOriginales = asiento.chequesAsociados.filter(
+                                ch => !chequesReasignados.has(ch.id)
+                            );
+                            // Los cheques removidos se marcan como disponibles
+                            for (const ch of asiento.chequesAsociados) {
+                                if (chequesReasignados.has(ch.id)) {
+                                    chequesYaVinculadosIds.delete(ch.id);
+                                }
+                            }
+                            asiento.chequesAsociados = chequesOriginales;
+                        }
+                    }
+                }
+
+                // Aplicar la nueva distribución
+                for (const [asientoId, cheques] of resultado.distribucion) {
                     const asiento = asientos.find(a => a.id === asientoId);
                     if (!asiento) continue;
 
@@ -8413,9 +8580,9 @@ function reprocesarChequesMes() {
                     }
 
                     for (const cheque of cheques) {
-                        // Evitar duplicados
-                        if (chequesYaVinculadosIds.has(cheque.id)) continue;
-                        if (chequesUsadosEnOptimizacion.has(cheque.id)) continue;
+                        // Verificar que no esté ya en este asiento
+                        const yaExiste = asiento.chequesAsociados.some(ch => ch.id === cheque.id);
+                        if (yaExiste) continue;
 
                         const chequeEnriquecido = {
                             id: cheque.id || `cheque_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
