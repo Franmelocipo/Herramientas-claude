@@ -1731,6 +1731,13 @@ function conciliarAutomaticamente() {
         return;
     }
 
+    // Configurar modo N:1 por defecto para cheques de terceros
+    // ya que es el patrón más común (varios cheques van juntos a un proveedor)
+    const modoConciliacion = document.getElementById('modoConciliacion');
+    if (modoConciliacion && usarChequesComoOrigen()) {
+        modoConciliacion.value = 'N:1';
+    }
+
     // Mostrar panel de configuración
     document.getElementById('panelConfigConciliacion').style.display = 'block';
     document.getElementById('resultadosConciliacion').style.display = 'none';
@@ -1972,7 +1979,19 @@ async function conciliarN1Async(origenes, destinos, tolerancia, diasMaximos, ori
         if (origenesCandidatos.length === 0) continue;
 
         // Intentar encontrar combinación de orígenes que sumen el monto del destino
-        const combinacion = buscarCombinacionSumaGenerica(origenesCandidatos, montoDestino, tolerancia, obtenerMontoOrigen);
+        // Para cheques, usar búsqueda mejorada que prioriza por destino
+        let combinacion;
+        if (modoChequesOrigen) {
+            // Usar búsqueda inteligente que agrupa cheques por destino
+            combinacion = buscarCombinacionChequesPorDestino(
+                origenesCandidatos,
+                montoDestino,
+                tolerancia,
+                destino.descripcion || destino.leyenda || ''
+            );
+        } else {
+            combinacion = buscarCombinacionSumaGenerica(origenesCandidatos, montoDestino, tolerancia, obtenerMontoOrigen);
+        }
 
         if (combinacion && combinacion.length > 0) {
             // Crear vinculación
@@ -2386,6 +2405,157 @@ function conciliar1N(origenes, destinos, tolerancia, diasMaximos, origenesVincul
     console.log(`   - Vinculaciones exitosas: ${vinculaciones}`);
 
     return vinculaciones;
+}
+
+/**
+ * Normalizar texto para comparación (quitar tildes, espacios extra, mayúsculas)
+ * @param {string} texto - Texto a normalizar
+ * @returns {string} Texto normalizado
+ */
+function normalizarTextoParaComparacion(texto) {
+    if (!texto) return '';
+    return texto
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')  // Quitar tildes
+        .replace(/[^a-z0-9\s]/g, ' ')      // Reemplazar caracteres especiales por espacios
+        .replace(/\s+/g, ' ')              // Múltiples espacios a uno
+        .trim();
+}
+
+/**
+ * Calcular similitud entre dos textos (basado en palabras compartidas)
+ * @param {string} texto1 - Primer texto
+ * @param {string} texto2 - Segundo texto
+ * @returns {number} Similitud entre 0 y 1
+ */
+function calcularSimilitudTextos(texto1, texto2) {
+    const norm1 = normalizarTextoParaComparacion(texto1);
+    const norm2 = normalizarTextoParaComparacion(texto2);
+
+    if (!norm1 || !norm2) return 0;
+
+    const palabras1 = norm1.split(' ').filter(p => p.length > 2);
+    const palabras2 = norm2.split(' ').filter(p => p.length > 2);
+
+    if (palabras1.length === 0 || palabras2.length === 0) return 0;
+
+    // Contar palabras compartidas
+    const compartidas = palabras1.filter(p => palabras2.some(p2 =>
+        p2.includes(p) || p.includes(p2)
+    )).length;
+
+    // Calcular similitud como proporción de palabras compartidas
+    const maxPalabras = Math.max(palabras1.length, palabras2.length);
+    return compartidas / maxPalabras;
+}
+
+/**
+ * Buscar combinación de cheques priorizando los que tienen el mismo destino
+ * Esta función agrupa cheques por destino y prioriza grupos que matchean con la descripción del uso
+ * @param {Array} cheques - Lista de cheques candidatos
+ * @param {number} montoObjetivo - Monto a alcanzar
+ * @param {number} tolerancia - Tolerancia permitida
+ * @param {string} descripcionUso - Descripción del registro de uso (haber)
+ * @returns {Array|null} Combinación encontrada o null
+ */
+function buscarCombinacionChequesPorDestino(cheques, montoObjetivo, tolerancia, descripcionUso) {
+    if (!cheques || cheques.length === 0) return null;
+
+    // 1. Primero intentar match exacto con un solo cheque
+    for (const cheque of cheques) {
+        const monto = cheque.importe || cheque.debe || 0;
+        if (Math.abs(monto - montoObjetivo) <= tolerancia) {
+            return [cheque];
+        }
+    }
+
+    // 2. Agrupar cheques por destino
+    const chequesPorDestino = new Map();
+    const chequesSinDestino = [];
+
+    for (const cheque of cheques) {
+        const destino = cheque.destino || cheque.chequeOriginal?.destino;
+        if (destino && destino.trim()) {
+            const destinoNorm = normalizarTextoParaComparacion(destino);
+            if (!chequesPorDestino.has(destinoNorm)) {
+                chequesPorDestino.set(destinoNorm, {
+                    destino: destino,
+                    destinoNorm: destinoNorm,
+                    cheques: [],
+                    sumaTotal: 0
+                });
+            }
+            const grupo = chequesPorDestino.get(destinoNorm);
+            grupo.cheques.push(cheque);
+            grupo.sumaTotal += cheque.importe || cheque.debe || 0;
+        } else {
+            chequesSinDestino.push(cheque);
+        }
+    }
+
+    // 3. Calcular similitud de cada grupo con la descripción del uso
+    const grupos = Array.from(chequesPorDestino.values());
+    grupos.forEach(grupo => {
+        grupo.similitud = calcularSimilitudTextos(grupo.destino, descripcionUso);
+    });
+
+    // 4. Ordenar grupos: primero por similitud (descendente), luego por suma total (descendente)
+    grupos.sort((a, b) => {
+        if (b.similitud !== a.similitud) return b.similitud - a.similitud;
+        return b.sumaTotal - a.sumaTotal;
+    });
+
+    // 5. Intentar encontrar combinación dentro de cada grupo (priorizando los más similares)
+    for (const grupo of grupos) {
+        if (grupo.cheques.length === 0) continue;
+
+        // Si la suma del grupo es exacta, usar todos los cheques del grupo
+        if (Math.abs(grupo.sumaTotal - montoObjetivo) <= tolerancia) {
+            console.log(`✅ Grupo completo "${grupo.destino}" suma exactamente al objetivo (similitud: ${(grupo.similitud * 100).toFixed(0)}%)`);
+            return grupo.cheques;
+        }
+
+        // Intentar encontrar una combinación dentro del grupo
+        const combinacion = buscarCombinacionSumaGenerica(
+            grupo.cheques,
+            montoObjetivo,
+            tolerancia,
+            c => c.importe || c.debe || 0
+        );
+        if (combinacion) {
+            console.log(`✅ Combinación encontrada en grupo "${grupo.destino}" (similitud: ${(grupo.similitud * 100).toFixed(0)}%)`);
+            return combinacion;
+        }
+    }
+
+    // 6. Intentar combinaciones mezclando grupos con alta similitud
+    const gruposConSimilitud = grupos.filter(g => g.similitud > 0.3);
+    if (gruposConSimilitud.length > 1) {
+        const chequesDeSimilares = gruposConSimilitud.flatMap(g => g.cheques);
+        const combinacion = buscarCombinacionSumaGenerica(
+            chequesDeSimilares,
+            montoObjetivo,
+            tolerancia,
+            c => c.importe || c.debe || 0
+        );
+        if (combinacion) {
+            console.log(`✅ Combinación encontrada mezclando ${gruposConSimilitud.length} grupos con similitud`);
+            return combinacion;
+        }
+    }
+
+    // 7. Como fallback, buscar en todos los cheques sin restricción de destino
+    const combinacion = buscarCombinacionSumaGenerica(
+        cheques,
+        montoObjetivo,
+        tolerancia,
+        c => c.importe || c.debe || 0
+    );
+    if (combinacion) {
+        console.log(`ℹ️ Combinación encontrada sin restricción de destino`);
+    }
+    return combinacion;
 }
 
 /**
