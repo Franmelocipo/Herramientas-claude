@@ -437,21 +437,33 @@
                             <p><strong>Lógica de vinculación:</strong> Los cupones (débitos) deben vincularse con liquidaciones (créditos) dentro de 40 días.</p>
                         </div>
 
-                        <!-- Filtros de vinculación -->
-                        <div class="vinculacion-filtros">
-                            <div class="filtro-item">
-                                <label>Estado:</label>
-                                <select id="filtroEstadoVinculacion" class="input-text" onchange="filtrarVinculaciones()">
-                                    <option value="">Todos</option>
-                                    <option value="pendiente">Pendientes</option>
-                                    <option value="vinculado">Vinculados</option>
-                                    <option value="vencido">Vencidos</option>
-                                    <option value="devolucion">Devoluciones</option>
-                                </select>
-                            </div>
-                            <div class="filtro-item">
-                                <label>Buscar:</label>
-                                <input type="text" id="filtroTextoVinculacion" class="input-text" placeholder="Buscar en descripción..." oninput="filtrarVinculaciones()">
+                        <!-- Filtros de vinculación mejorados -->
+                        <div class="vinculacion-filtros-mejorados">
+                            <div class="filtros-row">
+                                <div class="filtro-item">
+                                    <label>Estado:</label>
+                                    <select id="filtroEstadoVinculacion" class="input-text" onchange="filtrarVinculaciones()">
+                                        <option value="">Todos</option>
+                                        <option value="pendiente" selected>Pendientes</option>
+                                        <option value="vinculado">Vinculados</option>
+                                        <option value="vencido">Vencidos</option>
+                                        <option value="devolucion">Devoluciones</option>
+                                    </select>
+                                </div>
+                                <div class="filtro-item">
+                                    <label>Buscar:</label>
+                                    <input type="text" id="filtroTextoVinculacion" class="input-text" placeholder="Buscar en descripción..." oninput="filtrarVinculaciones()">
+                                </div>
+                                <div class="filtro-item">
+                                    <label>Ordenar por:</label>
+                                    <select id="ordenVinculacion" class="input-text" onchange="filtrarVinculaciones()">
+                                        <option value="fecha-asc">Fecha ↑ (más antigua)</option>
+                                        <option value="fecha-desc">Fecha ↓ (más reciente)</option>
+                                        <option value="monto-asc">Monto ↑ (menor a mayor)</option>
+                                        <option value="monto-desc">Monto ↓ (mayor a menor)</option>
+                                        <option value="descripcion-asc">Descripción A-Z</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
 
@@ -482,6 +494,102 @@
                                 </div>
                                 <div class="registros-lista" id="listaLiquidaciones">
                                     <!-- Se llena dinámicamente -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Panel de comparación inferior (aparece al seleccionar) -->
+                        <div id="panelComparacion" class="panel-comparacion" style="display: none;">
+                            <div class="comparacion-header">
+                                <div class="comparacion-titulo">
+                                    <span class="comparacion-icon">⚖️</span>
+                                    <h5>Comparación de Movimientos Seleccionados</h5>
+                                </div>
+                                <button onclick="cerrarPanelComparacion()" class="btn-cerrar-panel" title="Cerrar panel">✕</button>
+                            </div>
+                            <div class="comparacion-content">
+                                <div class="comparacion-columnas">
+                                    <!-- Columna Ingresos seleccionados -->
+                                    <div class="comparacion-col ingresos-col">
+                                        <div class="col-titulo">
+                                            <span class="badge-count" id="badgeIngresosCount">0</span>
+                                            <span>Ingresos (Debe)</span>
+                                        </div>
+                                        <div class="comparacion-tabla-container">
+                                            <table class="comparacion-tabla">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Fecha</th>
+                                                        <th>Descripción</th>
+                                                        <th class="text-right">Importe</th>
+                                                        <th class="col-acciones"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="tablaIngresosSeleccionados">
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div class="subtotal-row">
+                                            <span>Subtotal:</span>
+                                            <span class="subtotal-valor debe" id="subtotalIngresos">$0,00</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Indicador de diferencia central -->
+                                    <div class="comparacion-diferencia">
+                                        <div class="diferencia-box" id="diferenciaBox">
+                                            <div class="diferencia-label">Diferencia</div>
+                                            <div class="diferencia-valor" id="diferenciaValor">$0,00</div>
+                                            <div class="diferencia-estado" id="diferenciaEstado"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Columna Usos seleccionados -->
+                                    <div class="comparacion-col usos-col">
+                                        <div class="col-titulo">
+                                            <span class="badge-count" id="badgeUsosCount">0</span>
+                                            <span>Usos (Haber)</span>
+                                        </div>
+                                        <div class="comparacion-tabla-container">
+                                            <table class="comparacion-tabla">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Fecha</th>
+                                                        <th>Descripción</th>
+                                                        <th class="text-right">Importe</th>
+                                                        <th class="col-acciones"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="tablaUsosSeleccionados">
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div class="subtotal-row">
+                                            <span>Subtotal:</span>
+                                            <span class="subtotal-valor haber" id="subtotalUsos">$0,00</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Información adicional y días entre movimientos -->
+                                <div class="comparacion-info" id="comparacionInfo" style="display: none;">
+                                    <div class="info-item">
+                                        <span class="info-label">Días entre movimientos:</span>
+                                        <span class="info-valor" id="diasEntreMovimientos">-</span>
+                                    </div>
+                                    <div class="info-item" id="infoCoincidenciaMonto" style="display: none;">
+                                        <span class="coincidencia-badge">✓ Montos coinciden</span>
+                                    </div>
+                                </div>
+
+                                <!-- Acciones del panel de comparación -->
+                                <div class="comparacion-acciones">
+                                    <button onclick="limpiarSeleccionMayores()" class="btn-secondary">
+                                        <span>✕</span> Limpiar selección
+                                    </button>
+                                    <button onclick="vincularDesdeComparacion()" class="btn-vincular-comparacion" id="btnVincularComparacion" disabled>
+                                        <span>🔗</span> Vincular Seleccionados
+                                    </button>
                                 </div>
                             </div>
                         </div>
