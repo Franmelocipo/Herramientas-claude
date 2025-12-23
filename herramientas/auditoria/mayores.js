@@ -2459,7 +2459,48 @@ function calcularSimilitudTextos(texto1, texto2) {
  */
 function obtenerFechaSalidaCheque(cheque) {
     const original = cheque.chequeOriginal || cheque;
-    return original.fechaTransferencia || original.fechaDeposito || null;
+    const fecha = original.fechaTransferencia || original.fechaDeposito || null;
+
+    // Validar que sea una fecha válida
+    if (!fecha) return null;
+
+    // Si ya es un Date válido, retornarlo
+    if (fecha instanceof Date && !isNaN(fecha.getTime())) {
+        return fecha;
+    }
+
+    // Intentar parsear si es string
+    if (typeof fecha === 'string' || typeof fecha === 'number') {
+        const parsed = new Date(fecha);
+        if (!isNaN(parsed.getTime())) {
+            return parsed;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Convertir fecha a string ISO de forma segura
+ * @param {Date|string|number} fecha - Fecha a convertir
+ * @returns {string} String en formato YYYY-MM-DD o 'sin_fecha'
+ */
+function fechaAStringISO(fecha) {
+    if (!fecha) return 'sin_fecha';
+
+    let dateObj = fecha;
+
+    // Si no es un Date, intentar convertir
+    if (!(fecha instanceof Date)) {
+        dateObj = new Date(fecha);
+    }
+
+    // Validar que sea válido
+    if (isNaN(dateObj.getTime())) {
+        return 'sin_fecha';
+    }
+
+    return dateObj.toISOString().split('T')[0];
 }
 
 /**
@@ -2517,7 +2558,7 @@ function buscarCombinacionChequesPorDestino(cheques, montoObjetivo, tolerancia, 
         const original = cheque.chequeOriginal || cheque;
         const destino = original.destino || '';
         const fechaSalida = obtenerFechaSalidaCheque(cheque);
-        const fechaSalidaStr = fechaSalida ? fechaSalida.toISOString().split('T')[0] : 'sin_fecha';
+        const fechaSalidaStr = fechaAStringISO(fechaSalida);
 
         // Clave compuesta: destino + fecha de salida
         const destinoNorm = normalizarTextoParaComparacion(destino) || 'sin_destino';
@@ -2596,7 +2637,7 @@ function buscarCombinacionChequesPorDestino(cheques, montoObjetivo, tolerancia, 
 
             // Si todos los cheques del mismo día suman el objetivo
             if (Math.abs(sumaMismaFecha - montoObjetivo) <= tolerancia) {
-                console.log(`✅ Todos los cheques de la fecha ${fechaUso.toISOString().split('T')[0]} suman al objetivo`);
+                console.log(`✅ Todos los cheques de la fecha ${fechaAStringISO(fechaUso)} suman al objetivo`);
                 return chequesMismaFechaTodos;
             }
 
