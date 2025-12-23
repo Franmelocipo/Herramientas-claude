@@ -1184,6 +1184,7 @@ function renderizarVinculacion() {
     // Aplicar filtros
     const filtroEstado = document.getElementById('filtroEstadoVinculacion')?.value || '';
     const filtroTexto = document.getElementById('filtroTextoVinculacion')?.value?.toLowerCase() || '';
+    const ordenamiento = document.getElementById('ordenVinculacion')?.value || 'fecha-asc';
 
     const origenFiltrados = registrosOrigen.filter(c => {
         if (filtroEstado && c.estado !== filtroEstado) return false;
@@ -1198,6 +1199,30 @@ function renderizarVinculacion() {
         return true;
     });
 
+    // Aplicar ordenamiento
+    const ordenarRegistros = (arr, esOrigen) => {
+        const [campo, direccion] = ordenamiento.split('-');
+        const factor = direccion === 'asc' ? 1 : -1;
+
+        return [...arr].sort((a, b) => {
+            if (campo === 'fecha') {
+                const fechaA = a.fecha instanceof Date ? a.fecha : new Date(a.fecha);
+                const fechaB = b.fecha instanceof Date ? b.fecha : new Date(b.fecha);
+                return (fechaA - fechaB) * factor;
+            } else if (campo === 'monto') {
+                const montoA = esOrigen ? obtenerMontoOrigen(a) : obtenerMontoDestino(a);
+                const montoB = esOrigen ? obtenerMontoOrigen(b) : obtenerMontoDestino(b);
+                return (montoA - montoB) * factor;
+            } else if (campo === 'descripcion') {
+                return a.descripcion.localeCompare(b.descripcion) * factor;
+            }
+            return 0;
+        });
+    };
+
+    const origenOrdenados = ordenarRegistros(origenFiltrados, true);
+    const destinoOrdenados = ordenarRegistros(destinoFiltrados, false);
+
     // Calcular totales usando los montos según configuración
     const totalOrigen = origenFiltrados.reduce((sum, c) => sum + obtenerMontoOrigen(c), 0);
     const totalDestino = destinoFiltrados.reduce((sum, l) => sum + obtenerMontoDestino(l), 0);
@@ -1208,9 +1233,9 @@ function renderizarVinculacion() {
     // Renderizar lista de origen (cupones o emisiones)
     const listaCupones = document.getElementById('listaCupones');
     const claseMontoOrigen = config.tipoOrigen === 'debe' ? 'debe' : 'haber';
-    listaCupones.innerHTML = origenFiltrados.length === 0
+    listaCupones.innerHTML = origenOrdenados.length === 0
         ? `<div class="empty-state" style="padding: 20px; text-align: center; color: #94a3b8;">No hay ${config.etiquetaOrigen.toLowerCase()}</div>`
-        : origenFiltrados.map(c => `
+        : origenOrdenados.map(c => `
             <div class="registro-item ${c.estado} ${stateMayores.cuponesSeleccionados.includes(c.id) ? 'selected' : ''}"
                  onclick="toggleSeleccionCupon('${c.id}')" data-id="${c.id}">
                 <input type="checkbox" class="registro-checkbox"
@@ -1228,9 +1253,9 @@ function renderizarVinculacion() {
     // Renderizar lista de destino (liquidaciones o cobros)
     const listaLiquidaciones = document.getElementById('listaLiquidaciones');
     const claseMontoDestino = config.tipoDestino === 'haber' ? 'haber' : 'debe';
-    listaLiquidaciones.innerHTML = destinoFiltrados.length === 0
+    listaLiquidaciones.innerHTML = destinoOrdenados.length === 0
         ? `<div class="empty-state" style="padding: 20px; text-align: center; color: #94a3b8;">No hay ${config.etiquetaDestino.toLowerCase()}</div>`
-        : destinoFiltrados.map(l => `
+        : destinoOrdenados.map(l => `
             <div class="registro-item ${l.esDevolucion ? 'devolucion' : l.estado} ${stateMayores.liquidacionesSeleccionadas.includes(l.id) ? 'selected' : ''}"
                  onclick="toggleSeleccionLiquidacion('${l.id}')" data-id="${l.id}">
                 <input type="checkbox" class="registro-checkbox"
@@ -1367,7 +1392,7 @@ function actualizarBarraSeleccionMayores() {
 
     // Habilitar/deshabilitar botón de vincular
     const btnVincular = document.getElementById('btnVincularMayores');
-    btnVincular.disabled = cantOrigen === 0 || cantDestino === 0;
+    if (btnVincular) btnVincular.disabled = cantOrigen === 0 || cantDestino === 0;
 
     // Mostrar/ocultar barra
     if (cantOrigen > 0 || cantDestino > 0) {
@@ -1375,6 +1400,9 @@ function actualizarBarraSeleccionMayores() {
     } else {
         bar.classList.add('hidden');
     }
+
+    // Actualizar panel de comparación inferior
+    actualizarPanelComparacion();
 }
 
 /**
@@ -1400,7 +1428,228 @@ function limpiarSeleccionMayores() {
     const selectAll = document.getElementById('selectAllMayor');
     if (selectAll) selectAll.checked = false;
 
+    // Cerrar panel de comparación
+    cerrarPanelComparacion();
+
     actualizarBarraSeleccionMayores();
+}
+
+/**
+ * Actualizar panel de comparación inferior
+ */
+function actualizarPanelComparacion() {
+    const panel = document.getElementById('panelComparacion');
+    if (!panel) return;
+
+    const cantOrigen = stateMayores.cuponesSeleccionados.length;
+    const cantDestino = stateMayores.liquidacionesSeleccionadas.length;
+    const config = obtenerConfigVinculacion();
+    const modoChequesOrigen = usarChequesComoOrigen();
+
+    // Mostrar/ocultar panel
+    if (cantOrigen > 0 || cantDestino > 0) {
+        panel.style.display = 'block';
+    } else {
+        panel.style.display = 'none';
+        return;
+    }
+
+    // Obtener registros seleccionados de origen
+    let registrosOrigen = [];
+    if (modoChequesOrigen) {
+        registrosOrigen = stateMayores.listadoChequesCargados
+            .filter(c => stateMayores.cuponesSeleccionados.includes(c.id));
+    } else {
+        registrosOrigen = stateMayores.registrosMayor
+            .filter(r => stateMayores.cuponesSeleccionados.includes(r.id));
+    }
+
+    // Obtener registros seleccionados de destino
+    const registrosDestino = stateMayores.registrosMayor
+        .filter(r => stateMayores.liquidacionesSeleccionadas.includes(r.id));
+
+    // Calcular totales
+    const totalOrigen = registrosOrigen.reduce((sum, r) => {
+        return sum + (modoChequesOrigen ? (r.importe || 0) : obtenerMontoOrigen(r));
+    }, 0);
+    const totalDestino = registrosDestino.reduce((sum, r) => sum + obtenerMontoDestino(r), 0);
+    const diferencia = totalOrigen - totalDestino;
+    const diferenciaAbs = Math.abs(diferencia);
+
+    // Actualizar badges de conteo
+    document.getElementById('badgeIngresosCount').textContent = cantOrigen;
+    document.getElementById('badgeUsosCount').textContent = cantDestino;
+
+    // Renderizar tabla de ingresos (origen)
+    const tablaIngresos = document.getElementById('tablaIngresosSeleccionados');
+    tablaIngresos.innerHTML = registrosOrigen.length === 0
+        ? '<tr><td colspan="4" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Seleccione registros de ingresos</td></tr>'
+        : registrosOrigen.map(r => {
+            const fecha = r.fecha instanceof Date ? r.fecha : new Date(r.fecha);
+            const monto = modoChequesOrigen ? (r.importe || 0) : obtenerMontoOrigen(r);
+            return `
+                <tr>
+                    <td>${formatearFecha(fecha)}</td>
+                    <td title="${r.descripcion}">${truncarTexto(r.descripcion, 30)}</td>
+                    <td class="text-right" style="color: #f87171; font-weight: 600;">${formatearMoneda(monto)}</td>
+                    <td class="col-acciones">
+                        <button class="btn-quitar" onclick="quitarSeleccionOrigen('${r.id}')" title="Quitar">✕</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+    // Renderizar tabla de usos (destino)
+    const tablaUsos = document.getElementById('tablaUsosSeleccionados');
+    tablaUsos.innerHTML = registrosDestino.length === 0
+        ? '<tr><td colspan="4" style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">Seleccione registros de usos</td></tr>'
+        : registrosDestino.map(r => {
+            const fecha = r.fecha instanceof Date ? r.fecha : new Date(r.fecha);
+            const monto = obtenerMontoDestino(r);
+            return `
+                <tr>
+                    <td>${formatearFecha(fecha)}</td>
+                    <td title="${r.descripcion}">${truncarTexto(r.descripcion, 30)}</td>
+                    <td class="text-right" style="color: #4ade80; font-weight: 600;">${formatearMoneda(monto)}</td>
+                    <td class="col-acciones">
+                        <button class="btn-quitar" onclick="quitarSeleccionDestino('${r.id}')" title="Quitar">✕</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+    // Actualizar subtotales
+    document.getElementById('subtotalIngresos').textContent = formatearMoneda(totalOrigen);
+    document.getElementById('subtotalUsos').textContent = formatearMoneda(totalDestino);
+
+    // Actualizar diferencia
+    const signo = diferencia > 0 ? '+' : diferencia < 0 ? '-' : '';
+    document.getElementById('diferenciaValor').textContent = signo + formatearMoneda(diferenciaAbs);
+
+    // Actualizar estado de diferencia
+    const diferenciaBox = document.getElementById('diferenciaBox');
+    const diferenciaEstado = document.getElementById('diferenciaEstado');
+    diferenciaBox.classList.remove('match', 'warning', 'error');
+
+    if (diferenciaAbs === 0) {
+        diferenciaBox.classList.add('match');
+        diferenciaEstado.textContent = 'Coincidencia exacta';
+    } else if (diferenciaAbs <= 1) {
+        diferenciaBox.classList.add('warning');
+        diferenciaEstado.textContent = 'Diferencia mínima';
+    } else {
+        diferenciaBox.classList.add('error');
+        diferenciaEstado.textContent = 'Diferencia significativa';
+    }
+
+    // Calcular días entre movimientos (si hay selección en ambos lados)
+    const infoPanel = document.getElementById('comparacionInfo');
+    const coincidenciaMonto = document.getElementById('infoCoincidenciaMonto');
+
+    if (cantOrigen > 0 && cantDestino > 0) {
+        infoPanel.style.display = 'flex';
+
+        // Calcular rango de fechas
+        const fechasOrigen = registrosOrigen.map(r => r.fecha instanceof Date ? r.fecha : new Date(r.fecha));
+        const fechasDestino = registrosDestino.map(r => r.fecha instanceof Date ? r.fecha : new Date(r.fecha));
+
+        const minFechaOrigen = new Date(Math.min(...fechasOrigen));
+        const maxFechaOrigen = new Date(Math.max(...fechasOrigen));
+        const minFechaDestino = new Date(Math.min(...fechasDestino));
+        const maxFechaDestino = new Date(Math.max(...fechasDestino));
+
+        // Días entre el último origen y el primer destino
+        const diasDiff = Math.round((minFechaDestino - maxFechaOrigen) / (1000 * 60 * 60 * 24));
+        const diasEntreElement = document.getElementById('diasEntreMovimientos');
+
+        if (diasDiff >= 0) {
+            diasEntreElement.textContent = `${diasDiff} días`;
+            diasEntreElement.style.color = diasDiff <= 40 ? '#4ade80' : '#f87171';
+        } else {
+            diasEntreElement.textContent = `${Math.abs(diasDiff)} días (uso antes de ingreso)`;
+            diasEntreElement.style.color = '#fbbf24';
+        }
+
+        // Mostrar badge de coincidencia si montos coinciden
+        if (diferenciaAbs <= 0.01) {
+            coincidenciaMonto.style.display = 'block';
+        } else {
+            coincidenciaMonto.style.display = 'none';
+        }
+    } else {
+        infoPanel.style.display = 'none';
+    }
+
+    // Habilitar/deshabilitar botón de vincular
+    const btnVincular = document.getElementById('btnVincularComparacion');
+    if (btnVincular) {
+        btnVincular.disabled = cantOrigen === 0 || cantDestino === 0;
+    }
+}
+
+/**
+ * Truncar texto para mostrar en tabla
+ */
+function truncarTexto(texto, maxLen) {
+    if (!texto) return '';
+    return texto.length > maxLen ? texto.substring(0, maxLen) + '...' : texto;
+}
+
+/**
+ * Quitar un registro de la selección de origen
+ */
+function quitarSeleccionOrigen(id) {
+    const index = stateMayores.cuponesSeleccionados.indexOf(id);
+    if (index > -1) {
+        stateMayores.cuponesSeleccionados.splice(index, 1);
+    }
+
+    // Actualizar visual en la lista principal
+    const item = document.querySelector(`.cupones-columna .registro-item[data-id="${id}"]`);
+    if (item) {
+        item.classList.remove('selected');
+        const checkbox = item.querySelector('.registro-checkbox');
+        if (checkbox) checkbox.checked = false;
+    }
+
+    actualizarBarraSeleccionMayores();
+}
+
+/**
+ * Quitar un registro de la selección de destino
+ */
+function quitarSeleccionDestino(id) {
+    const index = stateMayores.liquidacionesSeleccionadas.indexOf(id);
+    if (index > -1) {
+        stateMayores.liquidacionesSeleccionadas.splice(index, 1);
+    }
+
+    // Actualizar visual en la lista principal
+    const item = document.querySelector(`.liquidaciones-columna .registro-item[data-id="${id}"]`);
+    if (item) {
+        item.classList.remove('selected');
+        const checkbox = item.querySelector('.registro-checkbox');
+        if (checkbox) checkbox.checked = false;
+    }
+
+    actualizarBarraSeleccionMayores();
+}
+
+/**
+ * Cerrar panel de comparación
+ */
+function cerrarPanelComparacion() {
+    const panel = document.getElementById('panelComparacion');
+    if (panel) {
+        panel.style.display = 'none';
+    }
+}
+
+/**
+ * Vincular desde el panel de comparación
+ */
+function vincularDesdeComparacion() {
+    vincularSeleccionadosManual();
 }
 
 /**

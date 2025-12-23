@@ -1936,6 +1936,458 @@ body {
     }
 }
 
+/* ============================================
+   FILTROS MEJORADOS DE VINCULACIÓN
+   ============================================ */
+
+.vinculacion-filtros-mejorados {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.vinculacion-filtros-mejorados .filtros-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+}
+
+.vinculacion-filtros-mejorados .filtro-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 180px;
+    flex: 1;
+}
+
+.vinculacion-filtros-mejorados .filtro-item label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.vinculacion-filtros-mejorados .input-text {
+    padding: 8px 12px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+.vinculacion-filtros-mejorados .input-text:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    outline: none;
+}
+
+/* ============================================
+   PANEL DE COMPARACIÓN INFERIOR
+   ============================================ */
+
+.panel-comparacion {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    border-radius: 12px;
+    margin-top: 16px;
+    overflow: hidden;
+    animation: slideUp 0.3s ease;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.comparacion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.comparacion-titulo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.comparacion-icon {
+    font-size: 20px;
+}
+
+.comparacion-header h5 {
+    margin: 0;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.btn-cerrar-panel {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.btn-cerrar-panel:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.comparacion-content {
+    padding: 20px;
+}
+
+.comparacion-columnas {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 16px;
+    align-items: start;
+}
+
+.comparacion-col {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.comparacion-col .col-titulo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.ingresos-col .col-titulo {
+    background: linear-gradient(135deg, rgba(220, 38, 38, 0.3) 0%, rgba(239, 68, 68, 0.2) 100%);
+    color: #fca5a5;
+}
+
+.usos-col .col-titulo {
+    background: linear-gradient(135deg, rgba(22, 163, 74, 0.3) 0%, rgba(34, 197, 94, 0.2) 100%);
+    color: #86efac;
+}
+
+.badge-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 11px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.comparacion-tabla-container {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.comparacion-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.comparacion-tabla th {
+    padding: 8px 12px;
+    text-align: left;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 500;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.comparacion-tabla td {
+    padding: 10px 12px;
+    color: rgba(255, 255, 255, 0.9);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.comparacion-tabla tr:hover td {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.comparacion-tabla .text-right {
+    text-align: right;
+}
+
+.comparacion-tabla .col-acciones {
+    width: 32px;
+    text-align: center;
+}
+
+.comparacion-tabla .btn-quitar {
+    background: rgba(239, 68, 68, 0.2);
+    border: none;
+    color: #fca5a5;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    opacity: 0.7;
+    transition: all 0.2s ease;
+}
+
+.comparacion-tabla .btn-quitar:hover {
+    opacity: 1;
+    background: rgba(239, 68, 68, 0.4);
+}
+
+.subtotal-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.2);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.subtotal-row span:first-child {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.subtotal-valor.debe {
+    color: #f87171;
+}
+
+.subtotal-valor.haber {
+    color: #4ade80;
+}
+
+/* Indicador de diferencia central */
+.comparacion-diferencia {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 10px;
+}
+
+.diferencia-box {
+    text-align: center;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    min-width: 120px;
+}
+
+.diferencia-label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+}
+
+.diferencia-valor {
+    font-size: 24px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 6px;
+}
+
+.diferencia-box.match .diferencia-valor {
+    color: #4ade80;
+}
+
+.diferencia-box.warning .diferencia-valor {
+    color: #fbbf24;
+}
+
+.diferencia-box.error .diferencia-valor {
+    color: #f87171;
+}
+
+.diferencia-estado {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    display: inline-block;
+}
+
+.diferencia-box.match .diferencia-estado {
+    background: rgba(74, 222, 128, 0.2);
+    color: #4ade80;
+}
+
+.diferencia-box.warning .diferencia-estado {
+    background: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+}
+
+.diferencia-box.error .diferencia-estado {
+    background: rgba(248, 113, 113, 0.2);
+    color: #f87171;
+}
+
+/* Información adicional */
+.comparacion-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+.comparacion-info .info-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.comparacion-info .info-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.comparacion-info .info-valor {
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+}
+
+.coincidencia-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: rgba(74, 222, 128, 0.2);
+    color: #4ade80;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Acciones del panel de comparación */
+.comparacion-acciones {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.comparacion-acciones .btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.comparacion-acciones .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-vincular-comparacion {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border: none;
+    color: white;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-vincular-comparacion:hover:not(:disabled) {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.btn-vincular-comparacion:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Responsive para panel de comparación */
+@media (max-width: 1024px) {
+    .comparacion-columnas {
+        grid-template-columns: 1fr;
+    }
+
+    .comparacion-diferencia {
+        padding: 10px;
+    }
+
+    .diferencia-box {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 20px;
+    }
+
+    .diferencia-label {
+        margin-bottom: 0;
+    }
+
+    .diferencia-valor {
+        margin-bottom: 0;
+        font-size: 20px;
+    }
+}
+
+@media (max-width: 768px) {
+    .vinculacion-filtros-mejorados .filtros-row {
+        flex-direction: column;
+    }
+
+    .vinculacion-filtros-mejorados .filtro-item {
+        width: 100%;
+    }
+
+    .comparacion-acciones {
+        flex-direction: column;
+    }
+
+    .comparacion-acciones button {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
 /* Preview header */
 .preview-header {
     display: flex;
