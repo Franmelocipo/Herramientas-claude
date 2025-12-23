@@ -1979,15 +1979,16 @@ async function conciliarN1Async(origenes, destinos, tolerancia, diasMaximos, ori
         if (origenesCandidatos.length === 0) continue;
 
         // Intentar encontrar combinación de orígenes que sumen el monto del destino
-        // Para cheques, usar búsqueda mejorada que prioriza por destino
+        // Para cheques, usar búsqueda mejorada que prioriza por destino y fecha de salida
         let combinacion;
         if (modoChequesOrigen) {
-            // Usar búsqueda inteligente que agrupa cheques por destino
+            // Usar búsqueda inteligente que agrupa cheques por destino y fecha de salida
             combinacion = buscarCombinacionChequesPorDestino(
                 origenesCandidatos,
                 montoDestino,
                 tolerancia,
-                destino.descripcion || destino.leyenda || ''
+                destino.descripcion || destino.leyenda || '',
+                fechaDestino  // Pasar fecha del uso para matching con fecha de transferencia/depósito
             );
         } else {
             combinacion = buscarCombinacionSumaGenerica(origenesCandidatos, montoDestino, tolerancia, obtenerMontoOrigen);
@@ -2451,18 +2452,57 @@ function calcularSimilitudTextos(texto1, texto2) {
 }
 
 /**
- * Buscar combinación de cheques priorizando los que tienen el mismo destino
- * Esta función agrupa cheques por destino y prioriza grupos que matchean con la descripción del uso
+ * Obtener la fecha de "salida" de un cheque (cuando dejó la empresa)
+ * Prioriza: fechaTransferencia > fechaDeposito
+ * @param {Object} cheque - Cheque a analizar
+ * @returns {Date|null} Fecha de salida o null
+ */
+function obtenerFechaSalidaCheque(cheque) {
+    const original = cheque.chequeOriginal || cheque;
+    return original.fechaTransferencia || original.fechaDeposito || null;
+}
+
+/**
+ * Verificar si dos fechas son el mismo día
+ * @param {Date} fecha1 - Primera fecha
+ * @param {Date} fecha2 - Segunda fecha
+ * @returns {boolean} true si son el mismo día
+ */
+function sonMismoDia(fecha1, fecha2) {
+    if (!fecha1 || !fecha2) return false;
+    const d1 = new Date(fecha1);
+    const d2 = new Date(fecha2);
+    return d1.getFullYear() === d2.getFullYear() &&
+           d1.getMonth() === d2.getMonth() &&
+           d1.getDate() === d2.getDate();
+}
+
+/**
+ * Buscar combinación de cheques priorizando los que tienen el mismo destino y fecha de salida
+ * Usa fechaTransferencia/fechaDeposito para matching preciso con la fecha del uso
  * @param {Array} cheques - Lista de cheques candidatos
  * @param {number} montoObjetivo - Monto a alcanzar
  * @param {number} tolerancia - Tolerancia permitida
  * @param {string} descripcionUso - Descripción del registro de uso (haber)
+ * @param {Date} fechaUso - Fecha del registro de uso (haber) - opcional
  * @returns {Array|null} Combinación encontrada o null
  */
-function buscarCombinacionChequesPorDestino(cheques, montoObjetivo, tolerancia, descripcionUso) {
+function buscarCombinacionChequesPorDestino(cheques, montoObjetivo, tolerancia, descripcionUso, fechaUso = null) {
     if (!cheques || cheques.length === 0) return null;
 
-    // 1. Primero intentar match exacto con un solo cheque
+    // 1. Primero intentar match exacto con un solo cheque (priorizando fecha de salida coincidente)
+    const chequesMismaFecha = fechaUso ? cheques.filter(c => sonMismoDia(obtenerFechaSalidaCheque(c), fechaUso)) : [];
+
+    // Buscar match exacto primero entre los de misma fecha
+    for (const cheque of chequesMismaFecha) {
+        const monto = cheque.importe || cheque.debe || 0;
+        if (Math.abs(monto - montoObjetivo) <= tolerancia) {
+            console.log(`✅ Match exacto con cheque de misma fecha de salida`);
+            return [cheque];
+        }
+    }
+
+    // Luego buscar en todos
     for (const cheque of cheques) {
         const monto = cheque.importe || cheque.debe || 0;
         if (Math.abs(monto - montoObjetivo) <= tolerancia) {
@@ -2470,49 +2510,67 @@ function buscarCombinacionChequesPorDestino(cheques, montoObjetivo, tolerancia, 
         }
     }
 
-    // 2. Agrupar cheques por destino
-    const chequesPorDestino = new Map();
-    const chequesSinDestino = [];
+    // 2. Agrupar cheques por destino Y fecha de salida (clave compuesta)
+    const chequesPorGrupo = new Map();
 
     for (const cheque of cheques) {
-        const destino = cheque.destino || cheque.chequeOriginal?.destino;
-        if (destino && destino.trim()) {
-            const destinoNorm = normalizarTextoParaComparacion(destino);
-            if (!chequesPorDestino.has(destinoNorm)) {
-                chequesPorDestino.set(destinoNorm, {
-                    destino: destino,
-                    destinoNorm: destinoNorm,
-                    cheques: [],
-                    sumaTotal: 0
-                });
-            }
-            const grupo = chequesPorDestino.get(destinoNorm);
-            grupo.cheques.push(cheque);
-            grupo.sumaTotal += cheque.importe || cheque.debe || 0;
-        } else {
-            chequesSinDestino.push(cheque);
+        const original = cheque.chequeOriginal || cheque;
+        const destino = original.destino || '';
+        const fechaSalida = obtenerFechaSalidaCheque(cheque);
+        const fechaSalidaStr = fechaSalida ? fechaSalida.toISOString().split('T')[0] : 'sin_fecha';
+
+        // Clave compuesta: destino + fecha de salida
+        const destinoNorm = normalizarTextoParaComparacion(destino) || 'sin_destino';
+        const claveGrupo = `${destinoNorm}|${fechaSalidaStr}`;
+
+        if (!chequesPorGrupo.has(claveGrupo)) {
+            chequesPorGrupo.set(claveGrupo, {
+                destino: destino,
+                destinoNorm: destinoNorm,
+                fechaSalida: fechaSalida,
+                fechaSalidaStr: fechaSalidaStr,
+                cheques: [],
+                sumaTotal: 0
+            });
         }
+        const grupo = chequesPorGrupo.get(claveGrupo);
+        grupo.cheques.push(cheque);
+        grupo.sumaTotal += cheque.importe || cheque.debe || 0;
     }
 
-    // 3. Calcular similitud de cada grupo con la descripción del uso
-    const grupos = Array.from(chequesPorDestino.values());
+    // 3. Calcular score de cada grupo
+    const grupos = Array.from(chequesPorGrupo.values());
     grupos.forEach(grupo => {
-        grupo.similitud = calcularSimilitudTextos(grupo.destino, descripcionUso);
+        // Similitud de destino con descripción del uso
+        grupo.similitudDestino = calcularSimilitudTextos(grupo.destino, descripcionUso);
+
+        // Coincidencia de fecha de salida con fecha del uso
+        grupo.coincideFecha = fechaUso && sonMismoDia(grupo.fechaSalida, fechaUso);
+
+        // Score combinado: fecha exacta es muy importante, destino también
+        grupo.score = (grupo.coincideFecha ? 100 : 0) + (grupo.similitudDestino * 50);
     });
 
-    // 4. Ordenar grupos: primero por similitud (descendente), luego por suma total (descendente)
+    // 4. Ordenar grupos por score (descendente)
     grupos.sort((a, b) => {
-        if (b.similitud !== a.similitud) return b.similitud - a.similitud;
+        if (b.score !== a.score) return b.score - a.score;
         return b.sumaTotal - a.sumaTotal;
     });
 
-    // 5. Intentar encontrar combinación dentro de cada grupo (priorizando los más similares)
+    // 5. Log de grupos encontrados (para debug)
+    if (grupos.length > 0 && grupos[0].score > 0) {
+        console.log(`🔍 Grupos encontrados: ${grupos.length}, mejor score: ${grupos[0].score.toFixed(0)} ` +
+                    `(fecha: ${grupos[0].coincideFecha ? 'SÍ' : 'NO'}, destino: ${(grupos[0].similitudDestino * 100).toFixed(0)}%)`);
+    }
+
+    // 6. Intentar encontrar combinación dentro de cada grupo (priorizando los de mayor score)
     for (const grupo of grupos) {
         if (grupo.cheques.length === 0) continue;
 
         // Si la suma del grupo es exacta, usar todos los cheques del grupo
         if (Math.abs(grupo.sumaTotal - montoObjetivo) <= tolerancia) {
-            console.log(`✅ Grupo completo "${grupo.destino}" suma exactamente al objetivo (similitud: ${(grupo.similitud * 100).toFixed(0)}%)`);
+            console.log(`✅ Grupo completo "${grupo.destino}" (${grupo.fechaSalidaStr}) suma exactamente al objetivo ` +
+                        `(score: ${grupo.score.toFixed(0)}, fecha: ${grupo.coincideFecha ? 'coincide' : 'no coincide'})`);
             return grupo.cheques;
         }
 
@@ -2524,14 +2582,40 @@ function buscarCombinacionChequesPorDestino(cheques, montoObjetivo, tolerancia, 
             c => c.importe || c.debe || 0
         );
         if (combinacion) {
-            console.log(`✅ Combinación encontrada en grupo "${grupo.destino}" (similitud: ${(grupo.similitud * 100).toFixed(0)}%)`);
+            console.log(`✅ Combinación de ${combinacion.length} cheques en grupo "${grupo.destino}" (${grupo.fechaSalidaStr})`);
             return combinacion;
         }
     }
 
-    // 6. Intentar combinaciones mezclando grupos con alta similitud
-    const gruposConSimilitud = grupos.filter(g => g.similitud > 0.3);
-    if (gruposConSimilitud.length > 1) {
+    // 7. Intentar combinaciones mezclando grupos con misma fecha de salida (aunque distinto destino)
+    if (fechaUso) {
+        const gruposMismaFecha = grupos.filter(g => g.coincideFecha);
+        if (gruposMismaFecha.length > 1) {
+            const chequesMismaFechaTodos = gruposMismaFecha.flatMap(g => g.cheques);
+            const sumaMismaFecha = chequesMismaFechaTodos.reduce((sum, c) => sum + (c.importe || c.debe || 0), 0);
+
+            // Si todos los cheques del mismo día suman el objetivo
+            if (Math.abs(sumaMismaFecha - montoObjetivo) <= tolerancia) {
+                console.log(`✅ Todos los cheques de la fecha ${fechaUso.toISOString().split('T')[0]} suman al objetivo`);
+                return chequesMismaFechaTodos;
+            }
+
+            const combinacion = buscarCombinacionSumaGenerica(
+                chequesMismaFechaTodos,
+                montoObjetivo,
+                tolerancia,
+                c => c.importe || c.debe || 0
+            );
+            if (combinacion) {
+                console.log(`✅ Combinación encontrada entre ${gruposMismaFecha.length} grupos de misma fecha`);
+                return combinacion;
+            }
+        }
+    }
+
+    // 8. Intentar combinaciones mezclando grupos con alto score de destino
+    const gruposConSimilitud = grupos.filter(g => g.similitudDestino > 0.3);
+    if (gruposConSimilitud.length > 0) {
         const chequesDeSimilares = gruposConSimilitud.flatMap(g => g.cheques);
         const combinacion = buscarCombinacionSumaGenerica(
             chequesDeSimilares,
@@ -2540,12 +2624,12 @@ function buscarCombinacionChequesPorDestino(cheques, montoObjetivo, tolerancia, 
             c => c.importe || c.debe || 0
         );
         if (combinacion) {
-            console.log(`✅ Combinación encontrada mezclando ${gruposConSimilitud.length} grupos con similitud`);
+            console.log(`✅ Combinación encontrada entre grupos con destino similar`);
             return combinacion;
         }
     }
 
-    // 7. Como fallback, buscar en todos los cheques sin restricción de destino
+    // 9. Como fallback, buscar en todos los cheques sin restricción
     const combinacion = buscarCombinacionSumaGenerica(
         cheques,
         montoObjetivo,
