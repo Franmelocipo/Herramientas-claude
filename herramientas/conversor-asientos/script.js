@@ -8416,7 +8416,14 @@ function generarBalanceSumasYSaldos() {
     const balancePorCuenta = {};
 
     // Crear un mapa del plan de cuentas para búsqueda rápida
+    // Primero agregar del plan de cuentas principal (state.planCuentas)
     const planCuentasMap = {};
+    if (state.planCuentas && Array.isArray(state.planCuentas)) {
+        state.planCuentas.forEach(cuenta => {
+            planCuentasMap[cuenta.codigo] = cuenta.nombre;
+        });
+    }
+    // Luego agregar/sobrescribir con plan de cuentas del cliente (tiene prioridad)
     if (state.planCuentasCliente && Array.isArray(state.planCuentasCliente)) {
         state.planCuentasCliente.forEach(cuenta => {
             planCuentasMap[cuenta.codigo] = cuenta.nombre;
