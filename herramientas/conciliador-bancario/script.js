@@ -2614,7 +2614,18 @@ function verificarCompatibilidadEtiquetas(movMayor, movExtracto) {
  */
 function buscarCombinacionQueSume(importeObjetivo, fechaRef, lista, maxElementos, validarEntidades = false, descripcionExtracto = null, categoriaRef = '', textoReferenciaParaPalabras = null, esListaMayor = false) {
     // Filtrar por fecha primero
-    let candidatos = lista.filter(m => fechaDentroTolerancia(fechaRef, m.fecha));
+    // IMPORTANTE: fechaDentroTolerancia espera (fechaMayor, fechaExtracto)
+    // - Si esListaMayor=false: lista es de extractos, fechaRef es del mayor → (fechaRef, m.fecha)
+    // - Si esListaMayor=true: lista es de mayores, fechaRef es del extracto → (m.fecha, fechaRef)
+    let candidatos = lista.filter(m => {
+        if (esListaMayor) {
+            // Lista de mayores: m.fecha es del mayor, fechaRef es del extracto
+            return fechaDentroTolerancia(m.fecha, fechaRef);
+        } else {
+            // Lista de extractos: fechaRef es del mayor, m.fecha es del extracto
+            return fechaDentroTolerancia(fechaRef, m.fecha);
+        }
+    });
 
     if (candidatos.length === 0) return null;
 
@@ -2723,29 +2734,57 @@ function encontrarCombinacion(lista, objetivo, n, validarEntidades = false, desc
     return buscar(0, 0, 0);
 }
 
-function fechaDentroTolerancia(fecha1, fecha2) {
-    if (!fecha1 || !fecha2) return false;
+/**
+ * Verifica si dos fechas están dentro de la tolerancia configurada.
+ *
+ * Para CRÉDITOS: La fecha del extracto bancario puede ser igual o hasta N días
+ * POSTERIOR a la fecha del mayor contable. Nunca puede ser anterior, porque
+ * no se puede hacer un recibo de cobro antes de que ocurra el cobro efectivo.
+ *
+ * Para DÉBITOS: Se mantiene la lógica simétrica (diferencia absoluta).
+ *
+ * @param {Date} fechaMayor - Fecha del movimiento del mayor contable
+ * @param {Date} fechaExtracto - Fecha del movimiento del extracto bancario
+ * @returns {boolean} true si las fechas están dentro de tolerancia
+ */
+function fechaDentroTolerancia(fechaMayor, fechaExtracto) {
+    if (!fechaMayor || !fechaExtracto) return false;
 
     // Normalizar ambas fechas a medianoche para comparar solo días
-    const f1 = new Date(fecha1);
-    const f2 = new Date(fecha2);
-    f1.setHours(0, 0, 0, 0);
-    f2.setHours(0, 0, 0, 0);
+    const fMayor = new Date(fechaMayor);
+    const fExtracto = new Date(fechaExtracto);
+    fMayor.setHours(0, 0, 0, 0);
+    fExtracto.setHours(0, 0, 0, 0);
 
-    const diffMs = Math.abs(f1.getTime() - f2.getTime());
+    // Para CRÉDITOS: El extracto puede ser igual o posterior al mayor (máximo N días)
+    // Esto es porque el recibo se hace cuando el cliente envía el comprobante,
+    // pero la transferencia puede llegar hasta 2 días después.
+    // Nunca puede ser anterior (no se puede hacer recibo antes del cobro efectivo).
+    if (state.tipoConciliacion === 'creditos') {
+        // Diferencia en milisegundos: extracto - mayor
+        // Si es positivo: extracto es posterior (válido)
+        // Si es negativo: extracto es anterior (inválido)
+        const diffMs = fExtracto.getTime() - fMayor.getTime();
+        const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        // CRÍTICO: Si tolerancia es 0, las fechas deben ser exactamente iguales
+        if (state.toleranciaFecha === 0) {
+            return diffDias === 0;
+        }
+
+        // El extracto debe ser igual o posterior (0 a N días después)
+        // diffDias >= 0: extracto no es anterior al mayor
+        // diffDias <= tolerancia: extracto no es demasiado posterior
+        return diffDias >= 0 && diffDias <= state.toleranciaFecha;
+    }
+
+    // Para DÉBITOS: Mantener lógica simétrica (diferencia absoluta)
+    const diffMs = Math.abs(fMayor.getTime() - fExtracto.getTime());
     const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
     // CRÍTICO: Si tolerancia es 0, las fechas deben ser exactamente iguales
-    // Usar comparación estricta para evitar coerción de tipos
     if (state.toleranciaFecha === 0) {
-        const resultado = diffDias === 0;
-        // DEBUG: Descomentar para diagnosticar problemas de tolerancia 0
-        // console.log('=== COMPARACIÓN DE FECHAS (tolerancia 0) ===');
-        // console.log('Fecha 1:', f1.toLocaleDateString('es-AR'));
-        // console.log('Fecha 2:', f2.toLocaleDateString('es-AR'));
-        // console.log('Diferencia en días:', diffDias);
-        // console.log('¿Dentro de tolerancia?:', resultado);
-        return resultado;
+        return diffDias === 0;
     }
 
     return diffDias <= state.toleranciaFecha;
