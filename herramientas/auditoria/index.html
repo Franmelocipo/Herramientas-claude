@@ -175,6 +175,7 @@
                     <!-- Toolbar -->
                     <div class="btn-group mb-4 toolbar">
                         <button onclick="mostrarSubirMayor()" class="btn-primary">📤 Cargar Mayor</button>
+                        <button id="btnActualizarMayor" onclick="mostrarActualizarMayor()" class="btn-secondary" style="display: none;">🔄 Actualizar Mayor</button>
                         <button id="btnCargarListadoCheques" onclick="mostrarCargarListadoCheques()" class="btn-secondary" style="display: none;">📋 Cargar Listado Cheques</button>
                         <button id="btnGestionConciliacionesMayor" onclick="abrirGestionConciliacionesMayor()" class="btn-secondary" disabled>📂 Gestionar Conciliaciones</button>
                         <button onclick="exportarAnalisisMayor()" class="btn-template">📥 Exportar Análisis</button>
@@ -1082,6 +1083,36 @@
             <div class="btn-group">
                 <button onclick="cerrarSubirMayor()" class="btn-secondary">Cancelar</button>
                 <button onclick="procesarMayor()" class="btn-primary">Procesar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Actualizar Mayor Contable -->
+    <div id="modalActualizarMayor" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>🔄 Actualizar Mayor Contable</h3>
+            <div class="info-box mb-4">
+                <strong>Actualización de mayor:</strong> Cargue un archivo actualizado del mayor.
+                Se detectarán automáticamente los asientos nuevos (por número de asiento) y se agregarán
+                manteniendo las vinculaciones existentes.
+            </div>
+            <div class="stats-actualizacion mb-4" id="statsActualizacionPrevia">
+                <div class="stat-mini">
+                    <span class="stat-label">Registros actuales:</span>
+                    <span class="stat-value" id="registrosActuales">0</span>
+                </div>
+                <div class="stat-mini">
+                    <span class="stat-label">Vinculados:</span>
+                    <span class="stat-value" id="registrosVinculados">0</span>
+                </div>
+            </div>
+            <label>Archivo Excel actualizado:</label>
+            <input type="file" id="mayorFileActualizar" accept=".xlsx,.xls" class="input-text mb-4" onchange="handleMayorActualizarFileChange(event)">
+            <div id="mayorActualizarFileInfo" class="file-info"></div>
+            <div id="mayorActualizarPreviewInfo" class="preview-info" style="display: none;"></div>
+            <div class="btn-group">
+                <button onclick="cerrarActualizarMayor()" class="btn-secondary">Cancelar</button>
+                <button onclick="procesarActualizacionMayor()" class="btn-primary">Actualizar</button>
             </div>
         </div>
     </div>

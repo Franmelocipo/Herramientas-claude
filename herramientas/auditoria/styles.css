@@ -2521,6 +2521,53 @@ body {
     margin-left: 26px;
 }
 
+/* Estilos para actualización de mayor */
+.stats-actualizacion {
+    display: flex;
+    gap: 16px;
+    padding: 12px;
+    background: #f1f5f9;
+    border-radius: 8px;
+}
+
+.stat-mini {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stat-mini .stat-label {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.stat-mini .stat-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.preview-actualizacion {
+    padding: 12px;
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+    border-radius: 8px;
+    line-height: 1.8;
+}
+
+.preview-actualizacion .stat-nuevo {
+    color: #166534;
+}
+
+.preview-actualizacion .stat-nuevo.destacado {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.preview-actualizacion .stat-existente {
+    color: #475569;
+}
+
 /* Panel de progreso de conciliación */
 .progreso-conciliacion {
     background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
