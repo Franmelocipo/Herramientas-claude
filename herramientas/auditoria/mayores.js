@@ -540,17 +540,20 @@ function verificarCriteriosVinculacionSaldoCero(origen, destino, config, toleran
 
     if (!resultado.detalle.importeOk) return resultado;
 
-    // Verificar palabras coincidentes si está habilitado
-    if (config.usarCoincidenciaPalabras) {
+    // Verificar palabras coincidentes si está habilitado Y se requieren palabras
+    const palabrasMinimas = typeof config.palabrasMinimasCoincidentes === 'number'
+        ? config.palabrasMinimasCoincidentes
+        : 2;
+
+    if (config.usarCoincidenciaPalabras && palabrasMinimas > 0) {
         const leyendaOrigen = origen.descripcion || origen.leyenda || '';
         const leyendaDestino = destino.descripcion || destino.leyenda || '';
         const coincidencia = calcularPalabrasCoincidentes(leyendaOrigen, leyendaDestino);
         resultado.detalle.palabrasCoincidentes = coincidencia;
 
-        const palabrasMinimas = config.palabrasMinimasCoincidentes || 2;
         resultado.detalle.palabrasOk = coincidencia.cantidad >= palabrasMinimas;
     } else {
-        resultado.detalle.palabrasOk = true; // Si no se usa, siempre OK
+        resultado.detalle.palabrasOk = true; // Si no se usa o palabras mínimas es 0, siempre OK
     }
 
     resultado.cumple = resultado.detalle.diasOk && resultado.detalle.importeOk && resultado.detalle.palabrasOk;
@@ -573,7 +576,9 @@ function obtenerConfigSaldoCero() {
     const config = stateMayores.tipoMayorActual?.configuracion || {};
     return {
         usarCoincidenciaPalabras: config.usarCoincidenciaPalabras !== false,
-        palabrasMinimasCoincidentes: config.palabrasMinimasCoincidentes || 2,
+        palabrasMinimasCoincidentes: typeof config.palabrasMinimasCoincidentes === 'number'
+            ? config.palabrasMinimasCoincidentes
+            : 2,
         toleranciaImportePorcentaje: config.toleranciaImportePorcentaje || 0,
         permitirVinculacionBidireccional: config.permitirVinculacionBidireccional !== false
     };
@@ -2316,11 +2321,13 @@ async function ejecutarConciliacion() {
     // Debug: mostrar muestra de registros
     if (origenPendientes.length > 0) {
         const muestra = origenPendientes[0];
-        console.log(`   Ejemplo origen: fecha=${muestra.fecha}, monto=${obtenerMontoOrigen(muestra)}, leyenda=${muestra.leyenda?.substring(0, 50)}`);
+        const descOrigen = muestra.descripcion || muestra.leyenda || '';
+        console.log(`   Ejemplo origen: fecha=${muestra.fecha}, monto=${obtenerMontoOrigen(muestra)}, descripcion=${descOrigen.substring(0, 50)}`);
     }
     if (destinoPendientes.length > 0) {
         const muestra = destinoPendientes[0];
-        console.log(`   Ejemplo destino: fecha=${muestra.fecha}, monto=${obtenerMontoDestino(muestra)}, leyenda=${muestra.leyenda?.substring(0, 50)}`);
+        const descDestino = muestra.descripcion || muestra.leyenda || '';
+        console.log(`   Ejemplo destino: fecha=${muestra.fecha}, monto=${obtenerMontoDestino(muestra)}, descripcion=${descDestino.substring(0, 50)}`);
     }
 
     actualizarProgresoConciliacion(15, `Iniciando conciliación ${modo}...`);
