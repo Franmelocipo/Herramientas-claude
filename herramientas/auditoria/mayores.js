@@ -235,6 +235,37 @@ const TIPOS_MAYOR_DEFAULT = [
             iconoDestino: '📤',
             descripcionVinculacion: 'Los ingresos de cheques (debe) deben vincularse con sus usos o depósitos (haber). El tiempo entre un movimiento y otro es variable.'
         }
+    },
+    {
+        id: 'mayor_saldo_cero',
+        nombre: 'Análisis Mayor Saldo Cero',
+        descripcion: 'Análisis de cuentas transitorias donde movimientos del debe se compensan con movimientos del haber',
+        logica: 'vinculacion',
+        icono: '⚖️',
+        configuracion: {
+            diasVencimiento: 30,  // Tolerancia de días por defecto
+            debeEsCupon: true,
+            haberEsLiquidacion: true,
+            // Configuración genérica de vinculación
+            tipoOrigen: 'debe',      // Los movimientos al debe son el origen
+            tipoDestino: 'haber',    // Los movimientos al haber son el destino
+            etiquetaOrigen: 'Débitos',
+            etiquetaDestino: 'Créditos',
+            etiquetaSingularOrigen: 'débito',
+            etiquetaSingularDestino: 'crédito',
+            articuloOrigen: 'un',
+            articuloDestino: 'un',
+            articuloPluralOrigen: 'varios',
+            articuloPluralDestino: 'varios',
+            iconoOrigen: '📤',
+            iconoDestino: '📥',
+            descripcionVinculacion: 'Los débitos deben vincularse con créditos de importe similar y leyendas relacionadas.',
+            // Configuración específica para mayor saldo cero
+            usarCoincidenciaPalabras: true,     // Habilita la coincidencia de palabras
+            palabrasMinimasCoincidentes: 2,     // Mínimo de palabras que deben coincidir
+            toleranciaImportePorcentaje: 0,     // Tolerancia de importe en porcentaje (0 = solo tolerancia fija)
+            permitirVinculacionBidireccional: true  // Permite vincular en ambas direcciones (debe→haber o haber→debe)
+        }
     }
 ];
 
@@ -382,6 +413,170 @@ function esRegistroOrigen(registro) {
     } else {
         return registro.haber > 0;
     }
+}
+
+// ============================================
+// FUNCIONES PARA ANÁLISIS MAYOR SALDO CERO
+// ============================================
+
+/**
+ * Palabras comunes a ignorar en la comparación de leyendas
+ */
+const PALABRAS_IGNORAR = new Set([
+    'de', 'la', 'el', 'los', 'las', 'un', 'una', 'unos', 'unas',
+    'y', 'o', 'a', 'en', 'por', 'para', 'con', 'sin', 'sobre',
+    'que', 'del', 'al', 'se', 'su', 'sus', 'es', 'son',
+    'según', 'segun', 'comprobante', 'venta', 'compra',
+    '-', '/', '(', ')', '.', ',', ':', ';'
+]);
+
+/**
+ * Extraer palabras significativas de una leyenda
+ * @param {string} leyenda - Texto de la leyenda
+ * @param {number} longitudMinima - Longitud mínima de palabra (default: 3)
+ * @returns {Set} Set de palabras normalizadas
+ */
+function extraerPalabrasSignificativas(leyenda, longitudMinima = 3) {
+    if (!leyenda || typeof leyenda !== 'string') return new Set();
+
+    // Normalizar: quitar acentos, convertir a minúsculas
+    const normalizada = leyenda
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+    // Extraer palabras alfanuméricas
+    const palabras = normalizada.match(/[a-z0-9]+/g) || [];
+
+    // Filtrar palabras significativas
+    const significativas = new Set();
+    for (const palabra of palabras) {
+        if (palabra.length >= longitudMinima && !PALABRAS_IGNORAR.has(palabra)) {
+            significativas.add(palabra);
+        }
+    }
+
+    return significativas;
+}
+
+/**
+ * Calcular cantidad de palabras coincidentes entre dos leyendas
+ * @param {string} leyenda1 - Primera leyenda
+ * @param {string} leyenda2 - Segunda leyenda
+ * @param {number} longitudMinima - Longitud mínima de palabra (default: 3)
+ * @returns {Object} { cantidad: number, palabras: string[] }
+ */
+function calcularPalabrasCoincidentes(leyenda1, leyenda2, longitudMinima = 3) {
+    const palabras1 = extraerPalabrasSignificativas(leyenda1, longitudMinima);
+    const palabras2 = extraerPalabrasSignificativas(leyenda2, longitudMinima);
+
+    const coincidentes = [];
+    for (const palabra of palabras1) {
+        if (palabras2.has(palabra)) {
+            coincidentes.push(palabra);
+        }
+    }
+
+    return {
+        cantidad: coincidentes.length,
+        palabras: coincidentes,
+        totalPalabras1: palabras1.size,
+        totalPalabras2: palabras2.size
+    };
+}
+
+/**
+ * Verificar si dos registros cumplen los criterios de vinculación para mayor saldo cero
+ * @param {Object} origen - Registro de origen
+ * @param {Object} destino - Registro de destino
+ * @param {Object} config - Configuración de vinculación
+ * @param {number} toleranciaImporte - Tolerancia de importe absoluta
+ * @param {number} diasMaximos - Días máximos entre movimientos
+ * @returns {Object} { cumple: boolean, detalle: Object }
+ */
+function verificarCriteriosVinculacionSaldoCero(origen, destino, config, toleranciaImporte, diasMaximos) {
+    const resultado = {
+        cumple: false,
+        detalle: {
+            diasDiferencia: null,
+            diasOk: false,
+            diferenciaImporte: null,
+            importeOk: false,
+            palabrasCoincidentes: null,
+            palabrasOk: false
+        }
+    };
+
+    // Verificar fechas válidas
+    if (!origen.fecha || !destino.fecha) {
+        return resultado;
+    }
+
+    // Calcular diferencia de días (permitir ambas direcciones si está configurado)
+    const diasDiferencia = Math.floor((destino.fecha - origen.fecha) / (1000 * 60 * 60 * 24));
+    resultado.detalle.diasDiferencia = diasDiferencia;
+
+    if (config.permitirVinculacionBidireccional) {
+        resultado.detalle.diasOk = Math.abs(diasDiferencia) <= diasMaximos;
+    } else {
+        resultado.detalle.diasOk = diasDiferencia >= 0 && diasDiferencia <= diasMaximos;
+    }
+
+    if (!resultado.detalle.diasOk) return resultado;
+
+    // Calcular diferencia de importe
+    const montoOrigen = obtenerMontoOrigen(origen);
+    const montoDestino = obtenerMontoDestino(destino);
+    const diferenciaImporte = Math.abs(montoOrigen - montoDestino);
+    resultado.detalle.diferenciaImporte = diferenciaImporte;
+
+    // Verificar tolerancia de importe (absoluta o porcentual)
+    let toleranciaEfectiva = toleranciaImporte;
+    if (config.toleranciaImportePorcentaje && config.toleranciaImportePorcentaje > 0) {
+        const toleranciaPorcentual = montoOrigen * (config.toleranciaImportePorcentaje / 100);
+        toleranciaEfectiva = Math.max(toleranciaImporte, toleranciaPorcentual);
+    }
+    resultado.detalle.importeOk = diferenciaImporte <= toleranciaEfectiva;
+
+    if (!resultado.detalle.importeOk) return resultado;
+
+    // Verificar palabras coincidentes si está habilitado
+    if (config.usarCoincidenciaPalabras) {
+        const leyendaOrigen = origen.descripcion || origen.leyenda || '';
+        const leyendaDestino = destino.descripcion || destino.leyenda || '';
+        const coincidencia = calcularPalabrasCoincidentes(leyendaOrigen, leyendaDestino);
+        resultado.detalle.palabrasCoincidentes = coincidencia;
+
+        const palabrasMinimas = config.palabrasMinimasCoincidentes || 2;
+        resultado.detalle.palabrasOk = coincidencia.cantidad >= palabrasMinimas;
+    } else {
+        resultado.detalle.palabrasOk = true; // Si no se usa, siempre OK
+    }
+
+    resultado.cumple = resultado.detalle.diasOk && resultado.detalle.importeOk && resultado.detalle.palabrasOk;
+    return resultado;
+}
+
+/**
+ * Verificar si el tipo de mayor actual es "mayor_saldo_cero"
+ * @returns {boolean}
+ */
+function esMayorSaldoCero() {
+    return stateMayores.tipoMayorActual?.id === 'mayor_saldo_cero';
+}
+
+/**
+ * Obtener configuración específica de mayor saldo cero
+ * @returns {Object}
+ */
+function obtenerConfigSaldoCero() {
+    const config = stateMayores.tipoMayorActual?.configuracion || {};
+    return {
+        usarCoincidenciaPalabras: config.usarCoincidenciaPalabras !== false,
+        palabrasMinimasCoincidentes: config.palabrasMinimasCoincidentes || 2,
+        toleranciaImportePorcentaje: config.toleranciaImportePorcentaje || 0,
+        permitirVinculacionBidireccional: config.permitirVinculacionBidireccional !== false
+    };
 }
 
 // ============================================
@@ -1980,16 +2175,53 @@ function conciliarAutomaticamente() {
         return;
     }
 
-    // Configurar modo N:1 por defecto para cheques de terceros
-    // ya que es el patrón más común (varios cheques van juntos a un proveedor)
+    // Configurar modo según tipo de mayor
     const modoConciliacion = document.getElementById('modoConciliacion');
-    if (modoConciliacion && usarChequesComoOrigen()) {
-        modoConciliacion.value = 'N:1';
+    if (modoConciliacion) {
+        if (usarChequesComoOrigen()) {
+            // Modo N:1 por defecto para cheques de terceros
+            modoConciliacion.value = 'N:1';
+        } else if (esMayorSaldoCero()) {
+            // Modo 1:1 por defecto para mayor saldo cero
+            modoConciliacion.value = '1:1';
+        }
+    }
+
+    // Mostrar/ocultar configuración de saldo cero
+    const configSaldoCero = document.getElementById('configSaldoCero');
+    if (configSaldoCero) {
+        if (esMayorSaldoCero()) {
+            configSaldoCero.style.display = 'flex';
+            // Configurar valores por defecto desde la configuración del tipo de mayor
+            const configActual = obtenerConfigSaldoCero();
+            const chkPalabras = document.getElementById('usarCoincidenciaPalabras');
+            const inputPalabrasMin = document.getElementById('palabrasMinimasCoincidentes');
+            const chkBidireccional = document.getElementById('permitirBidireccional');
+
+            if (chkPalabras) chkPalabras.checked = configActual.usarCoincidenciaPalabras;
+            if (inputPalabrasMin) inputPalabrasMin.value = configActual.palabrasMinimasCoincidentes;
+            if (chkBidireccional) chkBidireccional.checked = configActual.permitirVinculacionBidireccional;
+
+            toggleConfigPalabras();
+        } else {
+            configSaldoCero.style.display = 'none';
+        }
     }
 
     // Mostrar panel de configuración
     document.getElementById('panelConfigConciliacion').style.display = 'block';
     document.getElementById('resultadosConciliacion').style.display = 'none';
+}
+
+/**
+ * Toggle para mostrar/ocultar configuración de palabras mínimas
+ */
+function toggleConfigPalabras() {
+    const chk = document.getElementById('usarCoincidenciaPalabras');
+    const configPalabras = document.getElementById('configPalabrasMinimas');
+    if (configPalabras) {
+        configPalabras.style.display = chk && chk.checked ? 'block' : 'none';
+    }
 }
 
 /**
@@ -2014,6 +2246,29 @@ async function ejecutarConciliacion() {
     const diasMaximos = parseInt(document.getElementById('diasMaximos').value) || 40;
     const modo = document.getElementById('modoConciliacion').value;
     const config = obtenerConfigVinculacion();
+
+    // Leer configuración de saldo cero desde el formulario
+    if (esMayorSaldoCero()) {
+        const chkPalabras = document.getElementById('usarCoincidenciaPalabras');
+        const inputPalabrasMin = document.getElementById('palabrasMinimasCoincidentes');
+        const chkBidireccional = document.getElementById('permitirBidireccional');
+
+        // Actualizar configuración del tipo de mayor actual con valores del formulario
+        if (stateMayores.tipoMayorActual && stateMayores.tipoMayorActual.configuracion) {
+            stateMayores.tipoMayorActual.configuracion.usarCoincidenciaPalabras =
+                chkPalabras ? chkPalabras.checked : true;
+            stateMayores.tipoMayorActual.configuracion.palabrasMinimasCoincidentes =
+                inputPalabrasMin ? parseInt(inputPalabrasMin.value) || 2 : 2;
+            stateMayores.tipoMayorActual.configuracion.permitirVinculacionBidireccional =
+                chkBidireccional ? chkBidireccional.checked : true;
+        }
+
+        console.log(`⚖️ Configuración Mayor Saldo Cero:`, {
+            usarPalabras: stateMayores.tipoMayorActual?.configuracion?.usarCoincidenciaPalabras,
+            palabrasMinimas: stateMayores.tipoMayorActual?.configuracion?.palabrasMinimasCoincidentes,
+            bidireccional: stateMayores.tipoMayorActual?.configuracion?.permitirVinculacionBidireccional
+        });
+    }
 
     // Mostrar barra de progreso
     mostrarProgresoConciliacion();
@@ -2298,6 +2553,11 @@ async function conciliar11Async(origenes, destinos, tolerancia, diasMaximos, ori
     const intervaloActualizacion = Math.max(1, Math.floor(total / 50)); // Actualizar cada 2%
     const modoChequesOrigen = usarChequesComoOrigen();
 
+    // Verificar si es mayor saldo cero para usar lógica de palabras coincidentes
+    const esSaldoCero = esMayorSaldoCero();
+    const configSaldoCero = esSaldoCero ? obtenerConfigSaldoCero() : null;
+    const configVinculacion = obtenerConfigVinculacion();
+
     for (let i = 0; i < origenes.length; i++) {
         const origen = origenes[i];
         if (origenesVinculados.has(origen.id)) continue;
@@ -2305,41 +2565,71 @@ async function conciliar11Async(origenes, destinos, tolerancia, diasMaximos, ori
 
         const montoOrigen = obtenerMontoOrigen(origen);
 
+        // Para mayor saldo cero, buscar mejor coincidencia por palabras
+        let mejorDestino = null;
+        let mejorPuntaje = -1;
+
         // Buscar destino que coincida
         for (const destino of destinos) {
             if (destinosVinculados.has(destino.id)) continue;
             if (!destino.fecha) continue;
 
-            const diasDiferencia = Math.floor((destino.fecha - origen.fecha) / (1000 * 60 * 60 * 24));
-            if (diasDiferencia < 0 || diasDiferencia > diasMaximos) continue;
+            if (esSaldoCero && configSaldoCero) {
+                // Usar lógica de mayor saldo cero con palabras coincidentes
+                const verificacion = verificarCriteriosVinculacionSaldoCero(
+                    origen,
+                    destino,
+                    { ...configVinculacion, ...configSaldoCero },
+                    tolerancia,
+                    diasMaximos
+                );
 
-            const diferencia = Math.abs(montoOrigen - obtenerMontoDestino(destino));
-            if (diferencia <= tolerancia) {
-                // Match encontrado
-                const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
+                if (verificacion.cumple) {
+                    // Calcular puntaje basado en palabras coincidentes
+                    const puntaje = verificacion.detalle.palabrasCoincidentes?.cantidad || 0;
+                    if (puntaje > mejorPuntaje) {
+                        mejorPuntaje = puntaje;
+                        mejorDestino = destino;
+                    }
+                }
+            } else {
+                // Lógica original para otros tipos de mayor
+                const diasDiferencia = Math.floor((destino.fecha - origen.fecha) / (1000 * 60 * 60 * 24));
+                if (diasDiferencia < 0 || diasDiferencia > diasMaximos) continue;
 
-                // Usar helper para actualizar origen (incluyendo cheques)
-                actualizarEstadoVinculacionOrigen(origen, 'vinculado', [destino.id], vinculacionId);
-
-                destino.estado = 'vinculado';
-                destino.vinculadoCon = [origen.id];
-                destino.vinculacionId = vinculacionId;
-
-                origenesVinculados.add(origen.id);
-                destinosVinculados.add(destino.id);
-
-                stateMayores.vinculaciones.push({
-                    id: vinculacionId,
-                    cupones: [origen.id],
-                    liquidaciones: [destino.id],
-                    tipo: 'automatica',
-                    tipoOrigen: modoChequesOrigen ? 'cheques' : 'registros',
-                    fecha: new Date().toISOString()
-                });
-
-                vinculaciones++;
-                break;
+                const diferencia = Math.abs(montoOrigen - obtenerMontoDestino(destino));
+                if (diferencia <= tolerancia) {
+                    mejorDestino = destino;
+                    break;
+                }
             }
+        }
+
+        // Si encontramos un destino válido, crear la vinculación
+        if (mejorDestino) {
+            const vinculacionId = `vinc_auto_${Date.now()}_${vinculaciones}`;
+
+            // Usar helper para actualizar origen (incluyendo cheques)
+            actualizarEstadoVinculacionOrigen(origen, 'vinculado', [mejorDestino.id], vinculacionId);
+
+            mejorDestino.estado = 'vinculado';
+            mejorDestino.vinculadoCon = [origen.id];
+            mejorDestino.vinculacionId = vinculacionId;
+
+            origenesVinculados.add(origen.id);
+            destinosVinculados.add(mejorDestino.id);
+
+            stateMayores.vinculaciones.push({
+                id: vinculacionId,
+                cupones: [origen.id],
+                liquidaciones: [mejorDestino.id],
+                tipo: 'automatica',
+                tipoOrigen: modoChequesOrigen ? 'cheques' : 'registros',
+                fecha: new Date().toISOString(),
+                palabrasCoincidentes: mejorPuntaje > 0 ? mejorPuntaje : undefined
+            });
+
+            vinculaciones++;
         }
 
         // Actualizar progreso periódicamente
