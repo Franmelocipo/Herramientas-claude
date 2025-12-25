@@ -971,6 +971,220 @@ function cerrarSubirMayor() {
     document.getElementById('modalSubirMayor').classList.add('hidden');
 }
 
+// ============================================
+// FUNCIONES PARA ACTUALIZAR MAYOR
+// ============================================
+
+/**
+ * Mostrar modal para actualizar mayor
+ */
+function mostrarActualizarMayor() {
+    if (stateMayores.registrosMayor.length === 0) {
+        mostrarNotificacion('Primero debe cargar un mayor contable', 'warning');
+        return;
+    }
+
+    // Actualizar estadísticas previas
+    const registrosActuales = stateMayores.registrosMayor.length;
+    const registrosVinculados = stateMayores.registrosMayor.filter(r => r.estado === 'vinculado').length;
+
+    document.getElementById('registrosActuales').textContent = registrosActuales;
+    document.getElementById('registrosVinculados').textContent = registrosVinculados;
+
+    // Limpiar campos
+    document.getElementById('mayorFileActualizar').value = '';
+    document.getElementById('mayorActualizarFileInfo').innerHTML = '';
+    document.getElementById('mayorActualizarPreviewInfo').style.display = 'none';
+
+    document.getElementById('modalActualizarMayor').classList.remove('hidden');
+}
+
+/**
+ * Cerrar modal de actualizar mayor
+ */
+function cerrarActualizarMayor() {
+    document.getElementById('modalActualizarMayor').classList.add('hidden');
+}
+
+/**
+ * Manejar cambio de archivo para actualización de mayor
+ */
+function handleMayorActualizarFileChange(event) {
+    const file = event.target.files[0];
+    const fileInfo = document.getElementById('mayorActualizarFileInfo');
+    const previewInfo = document.getElementById('mayorActualizarPreviewInfo');
+
+    if (!file) {
+        fileInfo.innerHTML = '';
+        previewInfo.style.display = 'none';
+        return;
+    }
+
+    fileInfo.innerHTML = `<strong>Archivo:</strong> ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+
+    // Leer preview del archivo y detectar asientos nuevos
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+
+            if (jsonData.length > 1) {
+                // Obtener números de asiento existentes
+                const asientosExistentes = new Set(
+                    stateMayores.registrosMayor.map(r => r.asiento).filter(a => a)
+                );
+
+                // Contar asientos nuevos en el archivo
+                let asientosNuevos = 0;
+                let registrosNuevos = 0;
+
+                jsonData.forEach(row => {
+                    const asiento = buscarColumna(row, { excluir: ['Fecha'] }, 'Nro. asiento', 'Nro asiento', 'Número asiento', 'Número C', 'Numero', 'Asiento', 'ASIENTO', 'NroAsiento');
+                    const asientoStr = asiento ? asiento.toString() : '';
+
+                    if (asientoStr && !asientosExistentes.has(asientoStr)) {
+                        registrosNuevos++;
+                        asientosNuevos++;
+                    }
+                });
+
+                previewInfo.innerHTML = `
+                    <div class="preview-actualizacion">
+                        <strong>Vista previa de actualización:</strong><br>
+                        <span class="stat-nuevo">📊 ${jsonData.length} registros en archivo</span><br>
+                        <span class="stat-nuevo destacado">✨ ${registrosNuevos} registros nuevos detectados</span><br>
+                        <span class="stat-existente">📋 ${asientosExistentes.size} asientos existentes se mantendrán</span>
+                    </div>
+                `;
+                previewInfo.style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Error leyendo archivo:', error);
+            previewInfo.innerHTML = '<span style="color: red;">Error al leer el archivo</span>';
+            previewInfo.style.display = 'block';
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+/**
+ * Procesar actualización del mayor
+ */
+async function procesarActualizacionMayor() {
+    const fileInput = document.getElementById('mayorFileActualizar');
+    const file = fileInput.files[0];
+
+    if (!file) {
+        alert('Por favor seleccione un archivo');
+        return;
+    }
+
+    try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+
+        if (jsonData.length === 0) {
+            alert('El archivo está vacío');
+            return;
+        }
+
+        // Obtener números de asiento existentes con sus IDs
+        const asientosExistentes = new Map();
+        stateMayores.registrosMayor.forEach(r => {
+            if (r.asiento) {
+                if (!asientosExistentes.has(r.asiento)) {
+                    asientosExistentes.set(r.asiento, []);
+                }
+                asientosExistentes.get(r.asiento).push(r);
+            }
+        });
+
+        console.log(`📊 Asientos existentes: ${asientosExistentes.size}`);
+
+        // Procesar registros nuevos
+        const registrosNuevos = [];
+        const asientosNuevosSet = new Set();
+
+        jsonData.forEach((row, index) => {
+            const fecha = buscarColumna(row, 'Fecha asien', 'Fecha', 'FECHA', 'fecha');
+            const asiento = buscarColumna(row, { excluir: ['Fecha'] }, 'Nro. asiento', 'Nro asiento', 'Número asiento', 'Número C', 'Numero', 'Asiento', 'ASIENTO', 'NroAsiento');
+            const descripcion = buscarColumna(row, 'Leyenda movimiento', 'Leyenda', 'Descripción', 'DESCRIPCION', 'Concepto', 'CONCEPTO');
+            const debeRaw = buscarColumna(row, 'Debe', 'DEBE');
+            const haberRaw = buscarColumna(row, 'Haber', 'HABER');
+
+            const asientoStr = asiento ? asiento.toString() : '';
+            const debe = parsearNumeroArgentino(debeRaw);
+            const haber = parsearNumeroArgentino(haberRaw);
+
+            // Solo agregar si es un asiento nuevo y tiene movimiento
+            if (asientoStr && !asientosExistentes.has(asientoStr) && (debe > 0 || haber > 0)) {
+                asientosNuevosSet.add(asientoStr);
+
+                registrosNuevos.push({
+                    id: `reg_${Date.now()}_${index}_new`,
+                    fecha: parsearFecha(fecha),
+                    fechaOriginal: fecha,
+                    asiento: asientoStr,
+                    descripcion: descripcion || '',
+                    debe: debe,
+                    haber: haber,
+                    estado: 'pendiente',
+                    vinculadoCon: [],
+                    tipo: debe > 0 ? 'debe' : 'haber',
+                    esDevolucion: false,
+                    esNuevo: true  // Marcar como nuevo para resaltarlo
+                });
+            }
+        });
+
+        // Agregar registros nuevos al estado
+        if (registrosNuevos.length > 0) {
+            stateMayores.registrosMayor = [...stateMayores.registrosMayor, ...registrosNuevos];
+
+            // Ordenar por fecha
+            stateMayores.registrosMayor.sort((a, b) => {
+                if (!a.fecha) return 1;
+                if (!b.fecha) return -1;
+                return a.fecha - b.fecha;
+            });
+
+            // Actualizar UI
+            actualizarEstadisticasMayor();
+            renderizarTablaMayor();
+
+            if (stateMayores.tipoMayorActual?.logica === 'vinculacion') {
+                analizarVencimientos();
+                renderizarVinculacion();
+            }
+
+            cerrarActualizarMayor();
+
+            mostrarNotificacion(
+                `✅ Mayor actualizado: ${registrosNuevos.length} registros nuevos agregados (${asientosNuevosSet.size} asientos)`,
+                'success'
+            );
+
+            console.log(`✅ Actualización completada:`);
+            console.log(`   - Registros nuevos: ${registrosNuevos.length}`);
+            console.log(`   - Asientos nuevos: ${asientosNuevosSet.size}`);
+            console.log(`   - Total registros: ${stateMayores.registrosMayor.length}`);
+        } else {
+            mostrarNotificacion('No se encontraron asientos nuevos en el archivo', 'warning');
+        }
+
+    } catch (error) {
+        console.error('Error procesando actualización:', error);
+        alert('Error al procesar el archivo: ' + error.message);
+    }
+}
+
 /**
  * Manejar cambio de archivo de mayor
  */
@@ -1180,9 +1394,11 @@ async function procesarMayor() {
         // Mostrar info del mayor
         document.getElementById('infoMayorCargado').style.display = 'block';
 
-        // Mostrar botón de guardar en toolbar
+        // Mostrar botones de guardar y actualizar en toolbar
         const btnGuardar = document.getElementById('btnGuardarConciliacion');
         if (btnGuardar) btnGuardar.style.display = 'inline-flex';
+        const btnActualizar = document.getElementById('btnActualizarMayor');
+        if (btnActualizar) btnActualizar.style.display = 'inline-flex';
 
         console.log(`✅ Mayor procesado: ${registros.length} registros`);
         if (registros.length > 0) {
@@ -4796,10 +5012,14 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
     document.getElementById('infoMayorCargado').style.display =
         stateMayores.registrosMayor.length > 0 ? 'block' : 'none';
 
-    // Mostrar/ocultar botón de guardar en toolbar
+    // Mostrar/ocultar botones de guardar y actualizar en toolbar
     const btnGuardar = document.getElementById('btnGuardarConciliacion');
     if (btnGuardar) {
         btnGuardar.style.display = stateMayores.registrosMayor.length > 0 ? 'inline-flex' : 'none';
+    }
+    const btnActualizar = document.getElementById('btnActualizarMayor');
+    if (btnActualizar) {
+        btnActualizar.style.display = stateMayores.registrosMayor.length > 0 ? 'inline-flex' : 'none';
     }
 
     console.log(`✅ Conciliación "${conciliacion.nombre}" cargada: ${registros.length} registros`);
