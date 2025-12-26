@@ -52,7 +52,13 @@ const stateMayores = {
     mesActualConciliacion: null,   // Mes actualmente seleccionado para conciliar
     listadoChequesGuardadoId: null, // ID del listado de cheques guardado
     // Estado para movimientos eliminados
-    movimientosEliminados: []      // Array de movimientos eliminados con notas
+    movimientosEliminados: [],     // Array de movimientos eliminados con notas
+    // Estado para módulo Deudores/Proveedores
+    agrupacionesRazonSocial: {},   // { razonSocial: { registros: [], saldoDebe: 0, saldoHaber: 0, saldo: 0 } }
+    registrosSinAsignar: [],       // Registros sin razón social asignada
+    agrupacionesExpandidas: new Set(), // IDs de agrupaciones expandidas
+    registrosSeleccionadosDP: [],  // Registros seleccionados para mover
+    agrupacionOrigenMovimiento: null  // Agrupación de origen al mover registros
 };
 
 // Variables para gestión de conciliaciones
@@ -265,6 +271,31 @@ const TIPOS_MAYOR_DEFAULT = [
             palabrasMinimasCoincidentes: 2,     // Mínimo de palabras que deben coincidir
             toleranciaImportePorcentaje: 0,     // Tolerancia de importe en porcentaje (0 = solo tolerancia fija)
             permitirVinculacionBidireccional: true  // Permite vincular en ambas direcciones (debe→haber o haber→debe)
+        }
+    },
+    {
+        id: 'deudores_proveedores',
+        nombre: 'Deudores por Ventas / Proveedores',
+        descripcion: 'Análisis de mayores de deudores por ventas o proveedores. Agrupa por razón social y permite vincular registros del debe y haber.',
+        logica: 'agrupacion_razon_social',
+        icono: '👥',
+        configuracion: {
+            // Este tipo usa una lógica diferente: agrupación por razón social
+            diasVencimiento: 365,  // Plazo amplio para cuentas corrientes
+            // No usa el sistema de vinculación estándar
+            tipoOrigen: 'debe',
+            tipoDestino: 'haber',
+            etiquetaOrigen: 'Débitos',
+            etiquetaDestino: 'Créditos',
+            etiquetaSingularOrigen: 'débito',
+            etiquetaSingularDestino: 'crédito',
+            articuloOrigen: 'un',
+            articuloDestino: 'un',
+            articuloPluralOrigen: 'varios',
+            articuloPluralDestino: 'varios',
+            iconoOrigen: '📤',
+            iconoDestino: '📥',
+            descripcionVinculacion: 'Los registros se agrupan por razón social extraída de la leyenda del movimiento.'
         }
     }
 ];
@@ -783,16 +814,22 @@ function renderizarTiposMayor() {
         return;
     }
 
-    container.innerHTML = TIPOS_MAYOR.map(tipo => `
-        <div class="tipo-mayor-card" onclick="seleccionarTipoMayor('${tipo.id}')" data-tipo="${tipo.id}">
-            <h4>
-                <span>${tipo.icono || '📊'}</span>
-                ${tipo.nombre}
-                <span class="tipo-badge">${tipo.logica === 'vinculacion' ? 'Vinculación' : 'Simple'}</span>
-            </h4>
-            <p>${tipo.descripcion}</p>
-        </div>
-    `).join('');
+    container.innerHTML = TIPOS_MAYOR.map(tipo => {
+        let badgeTexto = 'Simple';
+        if (tipo.logica === 'vinculacion') badgeTexto = 'Vinculación';
+        else if (tipo.logica === 'agrupacion_razon_social') badgeTexto = 'Agrupación';
+
+        return `
+            <div class="tipo-mayor-card" onclick="seleccionarTipoMayor('${tipo.id}')" data-tipo="${tipo.id}">
+                <h4>
+                    <span>${tipo.icono || '📊'}</span>
+                    ${tipo.nombre}
+                    <span class="tipo-badge">${badgeTexto}</span>
+                </h4>
+                <p>${tipo.descripcion}</p>
+            </div>
+        `;
+    }).join('');
 }
 
 /**
@@ -817,14 +854,22 @@ function seleccionarTipoMayor(tipoId) {
 
     // Mostrar/ocultar panel de vinculación según el tipo
     const panelVinculacion = document.getElementById('panelVinculacionCupones');
+    const panelDeudoresProveedores = document.getElementById('panelDeudoresProveedores');
+
     if (tipo.logica === 'vinculacion') {
-        panelVinculacion.style.display = 'block';
+        if (panelVinculacion) panelVinculacion.style.display = 'block';
+        if (panelDeudoresProveedores) panelDeudoresProveedores.style.display = 'none';
         // Actualizar etiquetas dinámicas según el tipo de mayor
         actualizarEtiquetasVinculacion();
         // Actualizar títulos del paso de vinculación
         actualizarTitulosPasoVinculacion();
+    } else if (tipo.logica === 'agrupacion_razon_social') {
+        // Panel de deudores/proveedores
+        if (panelVinculacion) panelVinculacion.style.display = 'none';
+        if (panelDeudoresProveedores) panelDeudoresProveedores.style.display = 'block';
     } else {
-        panelVinculacion.style.display = 'none';
+        if (panelVinculacion) panelVinculacion.style.display = 'none';
+        if (panelDeudoresProveedores) panelDeudoresProveedores.style.display = 'none';
     }
 
     // Mostrar/ocultar panel de conciliación cheques vs debe (Paso 1)
@@ -1389,6 +1434,9 @@ async function procesarMayor() {
         if (stateMayores.tipoMayorActual?.logica === 'vinculacion') {
             analizarVencimientos();
             renderizarVinculacion();
+        } else if (stateMayores.tipoMayorActual?.logica === 'agrupacion_razon_social') {
+            // Procesar agrupaciones para deudores/proveedores
+            inicializarPanelDeudoresProveedores();
         }
 
         // Mostrar info del mayor
@@ -11012,6 +11060,742 @@ function confirmarVinculacionMultiple() {
     renderizarListaMeses();
 
     mostrarNotificacion(`${vinculados} cheque(s) vinculado(s) al asiento exitosamente`, 'success');
+}
+
+// ============================================
+// MÓDULO: DEUDORES POR VENTAS / PROVEEDORES
+// ============================================
+
+/**
+ * Verificar si el tipo de mayor actual es "deudores_proveedores"
+ * @returns {boolean}
+ */
+function esDeudoresProveedores() {
+    return stateMayores.tipoMayorActual?.id === 'deudores_proveedores';
+}
+
+/**
+ * Extraer razón social de una leyenda de movimiento
+ * Busca patrones comunes como "RAZÓN SOCIAL - concepto" o "concepto RAZÓN SOCIAL"
+ * @param {string} leyenda - Leyenda del movimiento
+ * @returns {string} Razón social extraída o 'Sin Asignar'
+ */
+function extraerRazonSocialDeLeyenda(leyenda) {
+    if (!leyenda || typeof leyenda !== 'string') return 'Sin Asignar';
+
+    const leyendaLimpia = leyenda.trim();
+
+    // Palabras clave que indican el inicio del concepto (no de la razón social)
+    const palabrasClaveConcepto = [
+        'FACTURA', 'FACT', 'FC', 'FA', 'FB', 'NC', 'ND', 'REC', 'RECIBO',
+        'PAGO', 'COBRO', 'CHEQUE', 'CH', 'TRANSF', 'TRANSFERENCIA',
+        'DEP', 'DEPOSITO', 'DEPÓSITO', 'RET', 'RETENCIÓN', 'RETENCION',
+        'NOTA DE CREDITO', 'NOTA DE DEBITO', 'NOTA CREDITO', 'NOTA DEBITO',
+        'COMPRA', 'VENTA', 'OP', 'ORDEN', 'SEGÚN', 'SEGUN', 'S/'
+    ];
+
+    // Patrón 1: Razón social antes de " - " o " / "
+    let match = leyendaLimpia.match(/^(.+?)\s*[-\/]\s+/);
+    if (match && match[1].length >= 3) {
+        const posibleRS = match[1].trim().toUpperCase();
+        // Verificar que no sea una palabra clave de concepto
+        const esPalabraClave = palabrasClaveConcepto.some(p => posibleRS.startsWith(p));
+        if (!esPalabraClave && posibleRS.length >= 3) {
+            return normalizarRazonSocial(posibleRS);
+        }
+    }
+
+    // Patrón 2: Buscar después de palabras clave como "A:", "DE:", "CLIENTE:", etc.
+    match = leyendaLimpia.match(/(?:A|DE|CLIENTE|PROVEEDOR|PROV|CLI):\s*(.+?)(?:\s*[-\/]|$)/i);
+    if (match && match[1].length >= 3) {
+        return normalizarRazonSocial(match[1].trim().toUpperCase());
+    }
+
+    // Patrón 3: Buscar nombre después de número de documento
+    match = leyendaLimpia.match(/(?:FC|FA|FB|NC|ND|REC)\s*[A-Z]?\s*[\d-]+\s+(.+?)(?:\s*[-\/]|$)/i);
+    if (match && match[1].length >= 3) {
+        return normalizarRazonSocial(match[1].trim().toUpperCase());
+    }
+
+    // Patrón 4: Si la leyenda es corta y no tiene patrones especiales, usarla completa
+    if (leyendaLimpia.length <= 50 && !leyendaLimpia.includes('-')) {
+        // Quitar números de comprobante al inicio
+        const sinComprobante = leyendaLimpia.replace(/^[A-Z]{0,2}\s*[\d-]+\s*/i, '').trim();
+        if (sinComprobante.length >= 3) {
+            return normalizarRazonSocial(sinComprobante.toUpperCase());
+        }
+    }
+
+    // Si no se puede extraer, usar la leyenda completa truncada
+    return normalizarRazonSocial(leyendaLimpia.substring(0, 50).toUpperCase());
+}
+
+/**
+ * Normalizar razón social para agrupar variantes similares
+ * @param {string} razonSocial - Razón social a normalizar
+ * @returns {string} Razón social normalizada
+ */
+function normalizarRazonSocial(razonSocial) {
+    if (!razonSocial) return 'Sin Asignar';
+
+    let normalizada = razonSocial
+        .toUpperCase()
+        .trim()
+        // Quitar acentos
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        // Quitar puntuación al final
+        .replace(/[.,;:]+$/, '')
+        // Quitar espacios múltiples
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    // Quitar sufijos comunes de tipo societario para agrupar
+    normalizada = normalizada
+        .replace(/\s+(S\.?A\.?|S\.?R\.?L\.?|S\.?A\.?S\.?|S\.?C\.?|S\.?H\.?)$/i, '')
+        .trim();
+
+    return normalizada || 'Sin Asignar';
+}
+
+/**
+ * Generar ID único para una agrupación basado en la razón social
+ * @param {string} razonSocial - Razón social
+ * @returns {string} ID único
+ */
+function generarIdAgrupacion(razonSocial) {
+    return 'agrup_' + razonSocial
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '_')
+        .substring(0, 50) + '_' + Date.now().toString(36);
+}
+
+/**
+ * Procesar registros del mayor y agrupar por razón social
+ */
+function procesarAgrupacionesRazonSocial() {
+    const registros = stateMayores.registrosMayor;
+
+    // Limpiar agrupaciones anteriores
+    stateMayores.agrupacionesRazonSocial = {};
+    stateMayores.registrosSinAsignar = [];
+
+    // Agrupar registros por razón social
+    registros.forEach(registro => {
+        // Si el registro ya tiene una razón social asignada manualmente, usarla
+        let razonSocial = registro.razonSocialAsignada ||
+                          extraerRazonSocialDeLeyenda(registro.descripcion);
+
+        // Guardar la razón social en el registro
+        registro.razonSocialExtraida = razonSocial;
+
+        if (razonSocial === 'Sin Asignar') {
+            stateMayores.registrosSinAsignar.push(registro);
+        } else {
+            if (!stateMayores.agrupacionesRazonSocial[razonSocial]) {
+                stateMayores.agrupacionesRazonSocial[razonSocial] = {
+                    id: generarIdAgrupacion(razonSocial),
+                    razonSocial: razonSocial,
+                    registros: [],
+                    saldoDebe: 0,
+                    saldoHaber: 0,
+                    saldo: 0
+                };
+            }
+            stateMayores.agrupacionesRazonSocial[razonSocial].registros.push(registro);
+        }
+    });
+
+    // Calcular saldos por agrupación
+    Object.values(stateMayores.agrupacionesRazonSocial).forEach(agrupacion => {
+        agrupacion.saldoDebe = agrupacion.registros.reduce((sum, r) => sum + (r.debe || 0), 0);
+        agrupacion.saldoHaber = agrupacion.registros.reduce((sum, r) => sum + (r.haber || 0), 0);
+        agrupacion.saldo = agrupacion.saldoDebe - agrupacion.saldoHaber;
+    });
+
+    // Calcular saldo de sin asignar
+    const saldoSinAsignarDebe = stateMayores.registrosSinAsignar.reduce((sum, r) => sum + (r.debe || 0), 0);
+    const saldoSinAsignarHaber = stateMayores.registrosSinAsignar.reduce((sum, r) => sum + (r.haber || 0), 0);
+
+    console.log(`📊 Agrupaciones por razón social: ${Object.keys(stateMayores.agrupacionesRazonSocial).length}`);
+    console.log(`📋 Registros sin asignar: ${stateMayores.registrosSinAsignar.length}`);
+
+    return {
+        agrupaciones: Object.keys(stateMayores.agrupacionesRazonSocial).length,
+        sinAsignar: stateMayores.registrosSinAsignar.length,
+        saldoSinAsignarDebe,
+        saldoSinAsignarHaber
+    };
+}
+
+/**
+ * Renderizar panel de agrupaciones por razón social
+ */
+function renderizarPanelDeudoresProveedores() {
+    const container = document.getElementById('panelDeudoresProveedores');
+    if (!container) return;
+
+    const agrupaciones = Object.values(stateMayores.agrupacionesRazonSocial);
+    const sinAsignar = stateMayores.registrosSinAsignar;
+
+    // Ordenar agrupaciones por saldo (mayor saldo primero)
+    agrupaciones.sort((a, b) => Math.abs(b.saldo) - Math.abs(a.saldo));
+
+    // Calcular totales generales
+    const totalDebe = agrupaciones.reduce((sum, a) => sum + a.saldoDebe, 0) +
+                      sinAsignar.reduce((sum, r) => sum + (r.debe || 0), 0);
+    const totalHaber = agrupaciones.reduce((sum, a) => sum + a.saldoHaber, 0) +
+                       sinAsignar.reduce((sum, r) => sum + (r.haber || 0), 0);
+    const saldoTotal = totalDebe - totalHaber;
+
+    // Actualizar estadísticas
+    document.getElementById('dpTotalAgrupaciones').textContent = agrupaciones.length;
+    document.getElementById('dpTotalDebe').textContent = formatearMoneda(totalDebe);
+    document.getElementById('dpTotalHaber').textContent = formatearMoneda(totalHaber);
+    const saldoEl = document.getElementById('dpSaldoTotal');
+    saldoEl.textContent = formatearMoneda(Math.abs(saldoTotal)) + (saldoTotal >= 0 ? ' (D)' : ' (H)');
+    saldoEl.className = 'stat-value ' + (saldoTotal >= 0 ? 'debe' : 'haber');
+    document.getElementById('dpSinAsignar').textContent = sinAsignar.length;
+
+    // Renderizar lista de agrupaciones
+    const listaContainer = document.getElementById('listaAgrupacionesDP');
+
+    let html = '';
+
+    // Filtro de búsqueda
+    const filtro = document.getElementById('filtroRazonSocialDP')?.value?.toLowerCase() || '';
+
+    // Filtrar agrupaciones
+    const agrupacionesFiltradas = agrupaciones.filter(a =>
+        a.razonSocial.toLowerCase().includes(filtro)
+    );
+
+    // Renderizar cada agrupación
+    agrupacionesFiltradas.forEach(agrupacion => {
+        const expandida = stateMayores.agrupacionesExpandidas.has(agrupacion.id);
+        const claseExpansion = expandida ? 'expandida' : '';
+        const iconoExpansion = expandida ? '▼' : '▶';
+        const claseSaldo = agrupacion.saldo >= 0 ? 'debe' : 'haber';
+
+        html += `
+            <div class="agrupacion-item ${claseExpansion}" data-id="${agrupacion.id}">
+                <div class="agrupacion-header" onclick="toggleAgrupacionDP('${agrupacion.id}')">
+                    <span class="expansion-icon">${iconoExpansion}</span>
+                    <span class="razon-social">${agrupacion.razonSocial}</span>
+                    <span class="cant-registros">(${agrupacion.registros.length} mov.)</span>
+                    <span class="saldo-debe">${formatearMoneda(agrupacion.saldoDebe)}</span>
+                    <span class="saldo-haber">${formatearMoneda(agrupacion.saldoHaber)}</span>
+                    <span class="saldo-neto ${claseSaldo}">${formatearMoneda(Math.abs(agrupacion.saldo))} ${agrupacion.saldo >= 0 ? '(D)' : '(H)'}</span>
+                </div>
+                ${expandida ? renderizarDetalleAgrupacion(agrupacion) : ''}
+            </div>
+        `;
+    });
+
+    // Agregar sección de sin asignar si hay registros
+    if (sinAsignar.length > 0) {
+        const expandidaSinAsignar = stateMayores.agrupacionesExpandidas.has('sin_asignar');
+        const iconoSinAsignar = expandidaSinAsignar ? '▼' : '▶';
+        const saldoSinAsignarDebe = sinAsignar.reduce((sum, r) => sum + (r.debe || 0), 0);
+        const saldoSinAsignarHaber = sinAsignar.reduce((sum, r) => sum + (r.haber || 0), 0);
+        const saldoSinAsignar = saldoSinAsignarDebe - saldoSinAsignarHaber;
+        const claseSaldoSA = saldoSinAsignar >= 0 ? 'debe' : 'haber';
+
+        html += `
+            <div class="agrupacion-item sin-asignar ${expandidaSinAsignar ? 'expandida' : ''}" data-id="sin_asignar">
+                <div class="agrupacion-header" onclick="toggleAgrupacionDP('sin_asignar')">
+                    <span class="expansion-icon">${iconoSinAsignar}</span>
+                    <span class="razon-social">⚠️ Sin Asignar</span>
+                    <span class="cant-registros">(${sinAsignar.length} mov.)</span>
+                    <span class="saldo-debe">${formatearMoneda(saldoSinAsignarDebe)}</span>
+                    <span class="saldo-haber">${formatearMoneda(saldoSinAsignarHaber)}</span>
+                    <span class="saldo-neto ${claseSaldoSA}">${formatearMoneda(Math.abs(saldoSinAsignar))} ${saldoSinAsignar >= 0 ? '(D)' : '(H)'}</span>
+                </div>
+                ${expandidaSinAsignar ? renderizarDetalleAgrupacionSinAsignar() : ''}
+            </div>
+        `;
+    }
+
+    if (html === '') {
+        html = '<div class="empty-state">No hay registros para mostrar. Cargue un mayor contable.</div>';
+    }
+
+    listaContainer.innerHTML = html;
+}
+
+/**
+ * Renderizar detalle de una agrupación (registros incluidos)
+ * @param {Object} agrupacion - Objeto de agrupación
+ * @returns {string} HTML del detalle
+ */
+function renderizarDetalleAgrupacion(agrupacion) {
+    const registros = agrupacion.registros;
+
+    // Ordenar por fecha
+    registros.sort((a, b) => {
+        if (!a.fecha) return 1;
+        if (!b.fecha) return -1;
+        return a.fecha - b.fecha;
+    });
+
+    let html = '<div class="agrupacion-detalle">';
+    html += '<table class="tabla-registros-dp">';
+    html += `
+        <thead>
+            <tr>
+                <th class="col-check">
+                    <input type="checkbox" onchange="toggleSeleccionTodosDP('${agrupacion.id}')"
+                           id="checkAll_${agrupacion.id}">
+                </th>
+                <th class="col-fecha">Fecha</th>
+                <th class="col-asiento">Asiento</th>
+                <th class="col-descripcion">Leyenda</th>
+                <th class="col-debe">Debe</th>
+                <th class="col-haber">Haber</th>
+            </tr>
+        </thead>
+        <tbody>
+    `;
+
+    registros.forEach(registro => {
+        const seleccionado = stateMayores.registrosSeleccionadosDP.includes(registro.id);
+        html += `
+            <tr class="${seleccionado ? 'seleccionado' : ''}" data-id="${registro.id}">
+                <td class="col-check">
+                    <input type="checkbox" ${seleccionado ? 'checked' : ''}
+                           onchange="toggleSeleccionRegistroDP('${registro.id}', '${agrupacion.razonSocial}')">
+                </td>
+                <td class="col-fecha">${formatearFecha(registro.fecha)}</td>
+                <td class="col-asiento">${registro.asiento || '-'}</td>
+                <td class="col-descripcion" title="${registro.descripcion}">${truncarTexto(registro.descripcion, 60)}</td>
+                <td class="col-debe">${registro.debe > 0 ? formatearMoneda(registro.debe) : ''}</td>
+                <td class="col-haber">${registro.haber > 0 ? formatearMoneda(registro.haber) : ''}</td>
+            </tr>
+        `;
+    });
+
+    html += '</tbody></table>';
+    html += '</div>';
+
+    return html;
+}
+
+/**
+ * Renderizar detalle de registros sin asignar
+ * @returns {string} HTML del detalle
+ */
+function renderizarDetalleAgrupacionSinAsignar() {
+    const registros = stateMayores.registrosSinAsignar;
+
+    // Ordenar por fecha
+    registros.sort((a, b) => {
+        if (!a.fecha) return 1;
+        if (!b.fecha) return -1;
+        return a.fecha - b.fecha;
+    });
+
+    let html = '<div class="agrupacion-detalle">';
+    html += '<table class="tabla-registros-dp">';
+    html += `
+        <thead>
+            <tr>
+                <th class="col-check">
+                    <input type="checkbox" onchange="toggleSeleccionTodosDP('sin_asignar')"
+                           id="checkAll_sin_asignar">
+                </th>
+                <th class="col-fecha">Fecha</th>
+                <th class="col-asiento">Asiento</th>
+                <th class="col-descripcion">Leyenda</th>
+                <th class="col-debe">Debe</th>
+                <th class="col-haber">Haber</th>
+            </tr>
+        </thead>
+        <tbody>
+    `;
+
+    registros.forEach(registro => {
+        const seleccionado = stateMayores.registrosSeleccionadosDP.includes(registro.id);
+        html += `
+            <tr class="${seleccionado ? 'seleccionado' : ''}" data-id="${registro.id}">
+                <td class="col-check">
+                    <input type="checkbox" ${seleccionado ? 'checked' : ''}
+                           onchange="toggleSeleccionRegistroDP('${registro.id}', 'Sin Asignar')">
+                </td>
+                <td class="col-fecha">${formatearFecha(registro.fecha)}</td>
+                <td class="col-asiento">${registro.asiento || '-'}</td>
+                <td class="col-descripcion" title="${registro.descripcion}">${truncarTexto(registro.descripcion, 60)}</td>
+                <td class="col-debe">${registro.debe > 0 ? formatearMoneda(registro.debe) : ''}</td>
+                <td class="col-haber">${registro.haber > 0 ? formatearMoneda(registro.haber) : ''}</td>
+            </tr>
+        `;
+    });
+
+    html += '</tbody></table>';
+    html += '</div>';
+
+    return html;
+}
+
+/**
+ * Truncar texto a una longitud máxima
+ * @param {string} texto - Texto a truncar
+ * @param {number} max - Longitud máxima
+ * @returns {string} Texto truncado
+ */
+function truncarTexto(texto, max = 50) {
+    if (!texto) return '';
+    return texto.length > max ? texto.substring(0, max) + '...' : texto;
+}
+
+/**
+ * Toggle expandir/colapsar agrupación
+ * @param {string} agrupacionId - ID de la agrupación
+ */
+function toggleAgrupacionDP(agrupacionId) {
+    if (stateMayores.agrupacionesExpandidas.has(agrupacionId)) {
+        stateMayores.agrupacionesExpandidas.delete(agrupacionId);
+    } else {
+        stateMayores.agrupacionesExpandidas.add(agrupacionId);
+    }
+    renderizarPanelDeudoresProveedores();
+}
+
+/**
+ * Toggle selección de un registro individual
+ * @param {string} registroId - ID del registro
+ * @param {string} razonSocial - Razón social de origen
+ */
+function toggleSeleccionRegistroDP(registroId, razonSocial) {
+    const index = stateMayores.registrosSeleccionadosDP.indexOf(registroId);
+
+    if (index > -1) {
+        stateMayores.registrosSeleccionadosDP.splice(index, 1);
+    } else {
+        stateMayores.registrosSeleccionadosDP.push(registroId);
+    }
+
+    // Guardar la agrupación de origen si es la primera selección
+    if (stateMayores.registrosSeleccionadosDP.length === 1) {
+        stateMayores.agrupacionOrigenMovimiento = razonSocial;
+    }
+
+    actualizarBarraSeleccionDP();
+    renderizarPanelDeudoresProveedores();
+}
+
+/**
+ * Toggle selección de todos los registros de una agrupación
+ * @param {string} agrupacionId - ID de la agrupación
+ */
+function toggleSeleccionTodosDP(agrupacionId) {
+    let registros;
+    let razonSocial;
+
+    if (agrupacionId === 'sin_asignar') {
+        registros = stateMayores.registrosSinAsignar;
+        razonSocial = 'Sin Asignar';
+    } else {
+        const agrupacion = Object.values(stateMayores.agrupacionesRazonSocial)
+            .find(a => a.id === agrupacionId);
+        if (!agrupacion) return;
+        registros = agrupacion.registros;
+        razonSocial = agrupacion.razonSocial;
+    }
+
+    const checkbox = document.getElementById(`checkAll_${agrupacionId}`);
+    const todosSeleccionados = registros.every(r =>
+        stateMayores.registrosSeleccionadosDP.includes(r.id)
+    );
+
+    if (todosSeleccionados) {
+        // Deseleccionar todos
+        registros.forEach(r => {
+            const idx = stateMayores.registrosSeleccionadosDP.indexOf(r.id);
+            if (idx > -1) {
+                stateMayores.registrosSeleccionadosDP.splice(idx, 1);
+            }
+        });
+    } else {
+        // Seleccionar todos
+        registros.forEach(r => {
+            if (!stateMayores.registrosSeleccionadosDP.includes(r.id)) {
+                stateMayores.registrosSeleccionadosDP.push(r.id);
+            }
+        });
+        stateMayores.agrupacionOrigenMovimiento = razonSocial;
+    }
+
+    actualizarBarraSeleccionDP();
+    renderizarPanelDeudoresProveedores();
+}
+
+/**
+ * Actualizar barra de selección flotante
+ */
+function actualizarBarraSeleccionDP() {
+    const barra = document.getElementById('barraSeleccionDP');
+    if (!barra) return;
+
+    const cantSeleccionados = stateMayores.registrosSeleccionadosDP.length;
+
+    if (cantSeleccionados === 0) {
+        barra.classList.add('hidden');
+        return;
+    }
+
+    barra.classList.remove('hidden');
+
+    // Calcular totales de seleccionados
+    let totalDebe = 0;
+    let totalHaber = 0;
+
+    stateMayores.registrosSeleccionadosDP.forEach(id => {
+        const registro = stateMayores.registrosMayor.find(r => r.id === id);
+        if (registro) {
+            totalDebe += registro.debe || 0;
+            totalHaber += registro.haber || 0;
+        }
+    });
+
+    document.getElementById('dpSeleccionCount').textContent = cantSeleccionados;
+    document.getElementById('dpSeleccionDebe').textContent = formatearMoneda(totalDebe);
+    document.getElementById('dpSeleccionHaber').textContent = formatearMoneda(totalHaber);
+
+    // Cargar opciones de destino en el selector
+    actualizarSelectorDestinoDP();
+}
+
+/**
+ * Actualizar selector de destino para mover registros
+ */
+function actualizarSelectorDestinoDP() {
+    const select = document.getElementById('selectDestinoDP');
+    if (!select) return;
+
+    const agrupaciones = Object.values(stateMayores.agrupacionesRazonSocial);
+    const origenActual = stateMayores.agrupacionOrigenMovimiento;
+
+    let options = '<option value="">-- Seleccionar destino --</option>';
+    options += '<option value="__sin_asignar__">⚠️ Sin Asignar</option>';
+
+    agrupaciones
+        .filter(a => a.razonSocial !== origenActual)
+        .sort((a, b) => a.razonSocial.localeCompare(b.razonSocial))
+        .forEach(a => {
+            options += `<option value="${a.razonSocial}">${a.razonSocial}</option>`;
+        });
+
+    // Opción para crear nueva agrupación
+    options += '<option value="__nueva__">➕ Nueva razón social...</option>';
+
+    select.innerHTML = options;
+}
+
+/**
+ * Mover registros seleccionados a otra agrupación
+ */
+function moverRegistrosSeleccionadosDP() {
+    const select = document.getElementById('selectDestinoDP');
+    const destino = select?.value;
+
+    if (!destino) {
+        mostrarNotificacion('Seleccione un destino para mover los registros', 'warning');
+        return;
+    }
+
+    // Si es nueva agrupación, pedir nombre
+    if (destino === '__nueva__') {
+        const nuevaRS = prompt('Ingrese la razón social para la nueva agrupación:');
+        if (!nuevaRS || nuevaRS.trim() === '') {
+            mostrarNotificacion('Debe ingresar una razón social', 'warning');
+            return;
+        }
+        moverRegistrosADestino(normalizarRazonSocial(nuevaRS.trim()));
+        return;
+    }
+
+    const destinoFinal = destino === '__sin_asignar__' ? 'Sin Asignar' : destino;
+    moverRegistrosADestino(destinoFinal);
+}
+
+/**
+ * Mover registros a un destino específico
+ * @param {string} destino - Razón social de destino
+ */
+function moverRegistrosADestino(destino) {
+    const registrosIds = [...stateMayores.registrosSeleccionadosDP];
+
+    if (registrosIds.length === 0) return;
+
+    // Actualizar cada registro
+    registrosIds.forEach(id => {
+        const registro = stateMayores.registrosMayor.find(r => r.id === id);
+        if (registro) {
+            // Asignar la nueva razón social manualmente
+            registro.razonSocialAsignada = destino === 'Sin Asignar' ? null : destino;
+        }
+    });
+
+    // Limpiar selección
+    stateMayores.registrosSeleccionadosDP = [];
+    stateMayores.agrupacionOrigenMovimiento = null;
+
+    // Reprocesar agrupaciones
+    procesarAgrupacionesRazonSocial();
+
+    // Actualizar UI
+    renderizarPanelDeudoresProveedores();
+    actualizarBarraSeleccionDP();
+
+    mostrarNotificacion(`${registrosIds.length} registro(s) movido(s) a "${destino}"`, 'success');
+}
+
+/**
+ * Limpiar selección de registros
+ */
+function limpiarSeleccionDP() {
+    stateMayores.registrosSeleccionadosDP = [];
+    stateMayores.agrupacionOrigenMovimiento = null;
+    actualizarBarraSeleccionDP();
+    renderizarPanelDeudoresProveedores();
+}
+
+/**
+ * Filtrar agrupaciones por texto
+ */
+function filtrarAgrupacionesDP() {
+    renderizarPanelDeudoresProveedores();
+}
+
+/**
+ * Expandir todas las agrupaciones
+ */
+function expandirTodasAgrupacionesDP() {
+    Object.values(stateMayores.agrupacionesRazonSocial).forEach(a => {
+        stateMayores.agrupacionesExpandidas.add(a.id);
+    });
+    if (stateMayores.registrosSinAsignar.length > 0) {
+        stateMayores.agrupacionesExpandidas.add('sin_asignar');
+    }
+    renderizarPanelDeudoresProveedores();
+}
+
+/**
+ * Colapsar todas las agrupaciones
+ */
+function colapsarTodasAgrupacionesDP() {
+    stateMayores.agrupacionesExpandidas.clear();
+    renderizarPanelDeudoresProveedores();
+}
+
+/**
+ * Exportar análisis de deudores/proveedores a Excel
+ */
+function exportarAnalisisDeudoresProveedores() {
+    if (Object.keys(stateMayores.agrupacionesRazonSocial).length === 0) {
+        mostrarNotificacion('No hay datos para exportar', 'warning');
+        return;
+    }
+
+    const wb = XLSX.utils.book_new();
+    const agrupaciones = Object.values(stateMayores.agrupacionesRazonSocial);
+
+    // Hoja 1: Resumen por razón social
+    const resumenData = [
+        ['ANÁLISIS DE DEUDORES/PROVEEDORES'],
+        ['Cliente:', stateMayores.clienteActual?.nombre || '-'],
+        ['Fecha de exportación:', new Date().toLocaleString('es-AR')],
+        [],
+        ['Razón Social', 'Cant. Movimientos', 'Total Debe', 'Total Haber', 'Saldo']
+    ];
+
+    agrupaciones.forEach(a => {
+        resumenData.push([
+            a.razonSocial,
+            a.registros.length,
+            a.saldoDebe,
+            a.saldoHaber,
+            a.saldo
+        ]);
+    });
+
+    // Agregar totales
+    const totalDebe = agrupaciones.reduce((sum, a) => sum + a.saldoDebe, 0);
+    const totalHaber = agrupaciones.reduce((sum, a) => sum + a.saldoHaber, 0);
+    resumenData.push([]);
+    resumenData.push(['TOTALES', '', totalDebe, totalHaber, totalDebe - totalHaber]);
+
+    const wsResumen = XLSX.utils.aoa_to_sheet(resumenData);
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+
+    // Hoja 2: Detalle completo
+    const detalleData = [
+        ['Razón Social', 'Fecha', 'Asiento', 'Leyenda', 'Debe', 'Haber']
+    ];
+
+    agrupaciones.forEach(a => {
+        a.registros.forEach(r => {
+            detalleData.push([
+                a.razonSocial,
+                r.fecha ? formatearFecha(r.fecha) : '',
+                r.asiento || '',
+                r.descripcion || '',
+                r.debe || 0,
+                r.haber || 0
+            ]);
+        });
+    });
+
+    const wsDetalle = XLSX.utils.aoa_to_sheet(detalleData);
+    XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle');
+
+    // Hoja 3: Sin asignar
+    if (stateMayores.registrosSinAsignar.length > 0) {
+        const sinAsignarData = [
+            ['REGISTROS SIN ASIGNAR'],
+            [],
+            ['Fecha', 'Asiento', 'Leyenda', 'Debe', 'Haber']
+        ];
+
+        stateMayores.registrosSinAsignar.forEach(r => {
+            sinAsignarData.push([
+                r.fecha ? formatearFecha(r.fecha) : '',
+                r.asiento || '',
+                r.descripcion || '',
+                r.debe || 0,
+                r.haber || 0
+            ]);
+        });
+
+        const wsSinAsignar = XLSX.utils.aoa_to_sheet(sinAsignarData);
+        XLSX.utils.book_append_sheet(wb, wsSinAsignar, 'Sin Asignar');
+    }
+
+    // Generar archivo
+    const clienteNombre = (stateMayores.clienteActual?.nombre || 'Cliente')
+        .replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20);
+    const fechaHoy = new Date().toISOString().split('T')[0];
+    const nombreArchivo = `Analisis_DP_${clienteNombre}_${fechaHoy}.xlsx`;
+
+    XLSX.writeFile(wb, nombreArchivo);
+    mostrarNotificacion('Análisis exportado correctamente', 'success');
+}
+
+/**
+ * Inicializar panel de deudores/proveedores cuando se selecciona este tipo
+ */
+function inicializarPanelDeudoresProveedores() {
+    // Procesar agrupaciones
+    procesarAgrupacionesRazonSocial();
+
+    // Limpiar estado de selección
+    stateMayores.registrosSeleccionadosDP = [];
+    stateMayores.agrupacionOrigenMovimiento = null;
+    stateMayores.agrupacionesExpandidas.clear();
+
+    // Renderizar
+    renderizarPanelDeudoresProveedores();
+    actualizarBarraSeleccionDP();
 }
 
 console.log('✅ Módulo de Mayores Contables cargado');

@@ -690,6 +690,101 @@
                         </div><!-- Cierre contenidoPaso2 -->
                     </div>
 
+                    <!-- ============================================ -->
+                    <!-- PANEL: Deudores por Ventas / Proveedores -->
+                    <!-- ============================================ -->
+                    <div id="panelDeudoresProveedores" class="panel-deudores-proveedores" style="display: none;">
+                        <div class="dp-header">
+                            <h4>👥 Análisis por Razón Social</h4>
+                            <div class="dp-descripcion">
+                                <p>Los registros se agrupan automáticamente por razón social extraída de la leyenda del movimiento.
+                                   Puede expandir cada agrupación para ver el detalle y mover registros entre grupos.</p>
+                            </div>
+                        </div>
+
+                        <!-- Estadísticas -->
+                        <div class="dp-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Razones Sociales:</span>
+                                <span class="stat-value" id="dpTotalAgrupaciones">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Total Debe:</span>
+                                <span class="stat-value debe" id="dpTotalDebe">$0,00</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Total Haber:</span>
+                                <span class="stat-value haber" id="dpTotalHaber">$0,00</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Saldo:</span>
+                                <span class="stat-value" id="dpSaldoTotal">$0,00</span>
+                            </div>
+                            <div class="stat-item warning">
+                                <span class="stat-label">Sin Asignar:</span>
+                                <span class="stat-value" id="dpSinAsignar">0</span>
+                            </div>
+                        </div>
+
+                        <!-- Toolbar -->
+                        <div class="dp-toolbar">
+                            <div class="dp-filtro">
+                                <input type="text" id="filtroRazonSocialDP" class="input-text"
+                                       placeholder="🔍 Buscar razón social..." oninput="filtrarAgrupacionesDP()">
+                            </div>
+                            <div class="dp-acciones">
+                                <button onclick="expandirTodasAgrupacionesDP()" class="btn-secondary btn-sm">
+                                    📂 Expandir todas
+                                </button>
+                                <button onclick="colapsarTodasAgrupacionesDP()" class="btn-secondary btn-sm">
+                                    📁 Colapsar todas
+                                </button>
+                                <button onclick="exportarAnalisisDeudoresProveedores()" class="btn-template btn-sm">
+                                    📥 Exportar Excel
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Lista de agrupaciones por razón social -->
+                        <div class="dp-lista-container">
+                            <div class="dp-lista-header">
+                                <span class="col-expansion"></span>
+                                <span class="col-razon-social">Razón Social</span>
+                                <span class="col-cantidad">Cant.</span>
+                                <span class="col-debe">Total Debe</span>
+                                <span class="col-haber">Total Haber</span>
+                                <span class="col-saldo">Saldo</span>
+                            </div>
+                            <div id="listaAgrupacionesDP" class="dp-lista-body">
+                                <!-- Se llena dinámicamente -->
+                                <div class="empty-state">Cargue un mayor contable para ver las agrupaciones por razón social.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Barra de selección flotante para Deudores/Proveedores -->
+                    <div id="barraSeleccionDP" class="barra-seleccion-dp hidden">
+                        <div class="seleccion-info-dp">
+                            <span class="seleccion-icono">📋</span>
+                            <span><strong id="dpSeleccionCount">0</strong> registros seleccionados</span>
+                            <span class="seleccion-totales">
+                                (Debe: <span id="dpSeleccionDebe">$0</span> | Haber: <span id="dpSeleccionHaber">$0</span>)
+                            </span>
+                        </div>
+                        <div class="seleccion-acciones-dp">
+                            <label>Mover a:</label>
+                            <select id="selectDestinoDP" class="input-text input-sm">
+                                <option value="">-- Seleccionar destino --</option>
+                            </select>
+                            <button onclick="moverRegistrosSeleccionadosDP()" class="btn-primary btn-sm">
+                                ➡️ Mover
+                            </button>
+                            <button onclick="limpiarSeleccionDP()" class="btn-secondary btn-sm">
+                                ✕ Limpiar
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Tabla de registros del mayor -->
                     <div class="preview-container mt-4">
                         <div class="preview-header">
