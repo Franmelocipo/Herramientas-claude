@@ -11083,58 +11083,121 @@ function esDeudoresProveedores() {
 
 /**
  * Extraer razón social de una leyenda de movimiento
- * Busca patrones comunes como "RAZÓN SOCIAL - concepto" o "concepto RAZÓN SOCIAL"
+ * Busca patrones comunes y extrae el nombre de la empresa/persona
  * @param {string} leyenda - Leyenda del movimiento
  * @returns {string} Razón social extraída o 'Sin Asignar'
  */
 function extraerRazonSocialDeLeyenda(leyenda) {
     if (!leyenda || typeof leyenda !== 'string') return 'Sin Asignar';
 
-    const leyendaLimpia = leyenda.trim();
+    let texto = leyenda.trim();
 
-    // Palabras clave que indican el inicio del concepto (no de la razón social)
-    const palabrasClaveConcepto = [
-        'FACTURA', 'FACT', 'FC', 'FA', 'FB', 'NC', 'ND', 'REC', 'RECIBO',
-        'PAGO', 'COBRO', 'CHEQUE', 'CH', 'TRANSF', 'TRANSFERENCIA',
-        'DEP', 'DEPOSITO', 'DEPÓSITO', 'RET', 'RETENCIÓN', 'RETENCION',
-        'NOTA DE CREDITO', 'NOTA DE DEBITO', 'NOTA CREDITO', 'NOTA DEBITO',
-        'COMPRA', 'VENTA', 'OP', 'ORDEN', 'SEGÚN', 'SEGUN', 'S/'
+    // ============================================
+    // PASO 1: Eliminar prefijos de tipo documento con sus números
+    // ============================================
+
+    // Patrones de prefijos a eliminar (con sus números asociados)
+    const patronesPrefijo = [
+        // OP N°0001-00009078 - , OP 0001-00009078 - , OP N° 0001-00009078 -
+        /^OP\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // RECIBO N° 0001 - , REC 0001 -
+        /^(?:RECIBO|REC)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // FC A 0001-00001234 - , FACT A-0001-00001234 -
+        /^(?:FACTURA|FACT|FC|FA|FB|FE)\s*[A-Z]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // NC A 0001-00001234 - , ND A-0001-00001234 -
+        /^(?:NC|ND|NOTA\s*(?:DE\s*)?(?:CREDITO|DEBITO))\s*[A-Z]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // PAGO N° 123 - , COBRO 123 -
+        /^(?:PAGO|COBRO|COBRANZA)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // CHEQUE N° 12345678 - , CH 12345678 -
+        /^(?:CHEQUE|CH)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // TRANSF 123 - , TRANSFERENCIA N° 123 -
+        /^(?:TRANSF|TRANSFERENCIA)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // DEP 123 - , DEPOSITO N° 123 -
+        /^(?:DEP|DEPOSITO|DEPÓSITO)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // RET 123 - , RETENCION N° 123 -
+        /^(?:RET|RETENCION|RETENCIÓN)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // ORDEN DE PAGO 123 -
+        /^(?:ORDEN\s*(?:DE\s*)?PAGO)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // Cualquier código alfanumérico seguido de guión al inicio: ABC-123 -
+        /^[A-Z]{1,4}\s*[\d\-\.]{4,20}\s*[-–—]\s*/i,
+        // Solo número al inicio seguido de guión: 0001-00001234 -
+        /^[\d\-\.]{4,20}\s*[-–—]\s*/
     ];
 
-    // Patrón 1: Razón social antes de " - " o " / "
-    let match = leyendaLimpia.match(/^(.+?)\s*[-\/]\s+/);
-    if (match && match[1].length >= 3) {
-        const posibleRS = match[1].trim().toUpperCase();
-        // Verificar que no sea una palabra clave de concepto
-        const esPalabraClave = palabrasClaveConcepto.some(p => posibleRS.startsWith(p));
-        if (!esPalabraClave && posibleRS.length >= 3) {
-            return normalizarRazonSocial(posibleRS);
+    // Aplicar cada patrón para limpiar prefijos
+    for (const patron of patronesPrefijo) {
+        texto = texto.replace(patron, '');
+    }
+
+    texto = texto.trim();
+
+    // Si después de limpiar no queda nada útil
+    if (texto.length < 3) {
+        return 'Sin Asignar';
+    }
+
+    // ============================================
+    // PASO 2: Extraer la razón social del texto limpio
+    // ============================================
+
+    // Patrón A: Si hay un guión, tomar todo lo que hay antes o incluir parte después si es tipo societario
+    // Ejemplo: "CORVEN - S.A.C.I.F. (AMORTIGUADORES)" -> "CORVEN - S.A.C.I.F. (AMORTIGUADORES)"
+    // Ejemplo: "EMPRESA SA - Pago factura" -> "EMPRESA SA"
+
+    const partes = texto.split(/\s*[-–—]\s*/);
+
+    if (partes.length >= 2) {
+        // Verificar si la segunda parte parece ser parte del nombre (tipo societario o similar)
+        const primeraParte = partes[0].trim();
+        const segundaParte = partes[1].trim();
+
+        // Patrones que indican que la segunda parte es parte del nombre
+        const esTipoSocietario = /^(?:S\.?A\.?C\.?I\.?F\.?|S\.?A\.?|S\.?R\.?L\.?|S\.?A\.?S\.?|S\.?C\.?|S\.?H\.?|INC|LLC|LTDA?|CIA|COMP)/i.test(segundaParte);
+        const tieneParentesis = segundaParte.startsWith('(');
+
+        if (esTipoSocietario || tieneParentesis) {
+            // Incluir también la segunda parte
+            // Buscar hasta encontrar otra palabra clave que indique fin del nombre
+            let nombreCompleto = primeraParte + ' - ' + segundaParte;
+
+            // Si hay más partes, verificar si también son parte del nombre
+            for (let i = 2; i < partes.length && i < 4; i++) {
+                const parte = partes[i].trim();
+                if (parte.startsWith('(') || /^(?:S\.?A|S\.?R\.?L|DIV|SUC)/i.test(parte)) {
+                    nombreCompleto += ' - ' + parte;
+                } else {
+                    break;
+                }
+            }
+
+            return normalizarRazonSocial(nombreCompleto);
+        }
+
+        // Si la segunda parte no parece parte del nombre, usar solo la primera
+        if (primeraParte.length >= 3) {
+            return normalizarRazonSocial(primeraParte);
         }
     }
 
-    // Patrón 2: Buscar después de palabras clave como "A:", "DE:", "CLIENTE:", etc.
-    match = leyendaLimpia.match(/(?:A|DE|CLIENTE|PROVEEDOR|PROV|CLI):\s*(.+?)(?:\s*[-\/]|$)/i);
+    // Patrón B: Si no hay guión claro, buscar patrones de "A:", "DE:", etc.
+    let match = texto.match(/(?:^|\s)(?:A|DE|CLIENTE|PROVEEDOR|PROV|CLI|PARA):\s*(.+?)(?:\s*[-–—]|$)/i);
     if (match && match[1].length >= 3) {
-        return normalizarRazonSocial(match[1].trim().toUpperCase());
+        return normalizarRazonSocial(match[1].trim());
     }
 
-    // Patrón 3: Buscar nombre después de número de documento
-    match = leyendaLimpia.match(/(?:FC|FA|FB|NC|ND|REC)\s*[A-Z]?\s*[\d-]+\s+(.+?)(?:\s*[-\/]|$)/i);
+    // Patrón C: Buscar "S/FACTURA", "S/RECIBO", etc. y tomar lo que está antes
+    match = texto.match(/^(.+?)\s+S\/(?:FACTURA|FACT|FC|REC|RECIBO|OP|PAGO)/i);
     if (match && match[1].length >= 3) {
-        return normalizarRazonSocial(match[1].trim().toUpperCase());
+        return normalizarRazonSocial(match[1].trim());
     }
 
-    // Patrón 4: Si la leyenda es corta y no tiene patrones especiales, usarla completa
-    if (leyendaLimpia.length <= 50 && !leyendaLimpia.includes('-')) {
-        // Quitar números de comprobante al inicio
-        const sinComprobante = leyendaLimpia.replace(/^[A-Z]{0,2}\s*[\d-]+\s*/i, '').trim();
-        if (sinComprobante.length >= 3) {
-            return normalizarRazonSocial(sinComprobante.toUpperCase());
-        }
+    // Patrón D: Si el texto es relativamente corto, usarlo como razón social
+    if (texto.length <= 60) {
+        return normalizarRazonSocial(texto);
     }
 
-    // Si no se puede extraer, usar la leyenda completa truncada
-    return normalizarRazonSocial(leyendaLimpia.substring(0, 50).toUpperCase());
+    // Patrón E: Truncar texto largo
+    return normalizarRazonSocial(texto.substring(0, 60));
 }
 
 /**
@@ -11151,16 +11214,31 @@ function normalizarRazonSocial(razonSocial) {
         // Quitar acentos
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
-        // Quitar puntuación al final
+        // Quitar puntuación al final (pero no paréntesis)
         .replace(/[.,;:]+$/, '')
         // Quitar espacios múltiples
         .replace(/\s+/g, ' ')
         .trim();
 
-    // Quitar sufijos comunes de tipo societario para agrupar
-    normalizada = normalizada
-        .replace(/\s+(S\.?A\.?|S\.?R\.?L\.?|S\.?A\.?S\.?|S\.?C\.?|S\.?H\.?)$/i, '')
-        .trim();
+    // Cerrar paréntesis abiertos si están truncados
+    const abiertos = (normalizada.match(/\(/g) || []).length;
+    const cerrados = (normalizada.match(/\)/g) || []).length;
+    if (abiertos > cerrados) {
+        // Truncar en el paréntesis abierto si el contenido está incompleto
+        const ultimoParentesis = normalizada.lastIndexOf('(');
+        if (ultimoParentesis > 0) {
+            const contenidoParentesis = normalizada.substring(ultimoParentesis + 1);
+            // Si el contenido es muy corto, probablemente está truncado
+            if (contenidoParentesis.length < 3) {
+                normalizada = normalizada.substring(0, ultimoParentesis).trim();
+            } else {
+                normalizada += ')';
+            }
+        }
+    }
+
+    // NO quitar tipos societarios ya que son parte del nombre distintivo
+    // Ejemplo: "CORVEN - S.A.C.I.F. (AMORTIGUADORES)" debe quedar así
 
     return normalizada || 'Sin Asignar';
 }
