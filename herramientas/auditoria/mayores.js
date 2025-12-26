@@ -11261,10 +11261,89 @@ function normalizarRazonSocial(razonSocial) {
         }
     }
 
-    // NO quitar tipos societarios ya que son parte del nombre distintivo
-    // Ejemplo: "CORVEN - S.A.C.I.F. (AMORTIGUADORES)" debe quedar así
+    // Normalizar sufijos societarios truncados o con variaciones
+    // "EMPRESA S" -> "EMPRESA"
+    // "EMPRESA S." -> "EMPRESA"
+    // "EMPRESA S A" -> "EMPRESA SA"
+    // "EMPRESA S.A" -> "EMPRESA SA"
+    // "EMPRESA S.A." -> "EMPRESA SA"
+    normalizada = normalizada
+        // Quitar sufijo truncado al final (solo letra S o letras sueltas)
+        .replace(/\s+S\.?$/i, '')
+        // Normalizar S.A.C.I.F. -> SACIF
+        .replace(/S\.?\s*A\.?\s*C\.?\s*I\.?\s*F\.?/g, 'SACIF')
+        // Normalizar S.A. / S A / S.A -> SA
+        .replace(/S\.?\s*A\.?(?:\s|$)/g, 'SA ')
+        // Normalizar S.R.L. / S R L / S.R.L -> SRL
+        .replace(/S\.?\s*R\.?\s*L\.?(?:\s|$)/g, 'SRL ')
+        // Normalizar S.A.S. -> SAS
+        .replace(/S\.?\s*A\.?\s*S\.?(?:\s|$)/g, 'SAS ')
+        // Limpiar espacios extra
+        .replace(/\s+/g, ' ')
+        .trim();
 
     return normalizada || 'Sin Asignar';
+}
+
+/**
+ * Generar clave de agrupación para detectar razones sociales similares
+ * Esta clave se usa para agrupar variantes del mismo nombre
+ * @param {string} razonSocial - Razón social normalizada
+ * @returns {string} Clave de agrupación
+ */
+function generarClaveAgrupacion(razonSocial) {
+    if (!razonSocial || razonSocial === 'Sin Asignar') return razonSocial;
+
+    let clave = razonSocial
+        .toUpperCase()
+        // Quitar todo tipo de puntuación
+        .replace(/[.,;:\-–—\/\\()'"]/g, ' ')
+        // Quitar sufijos societarios para comparación
+        .replace(/\b(?:SA|SRL|SAS|SACIF|SCA|SH|INC|LLC|LTDA?|CIA)\b/g, '')
+        // Quitar espacios múltiples
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    // Extraer las primeras 3-4 palabras significativas (ignorar palabras muy cortas)
+    const palabras = clave.split(' ').filter(p => p.length >= 2);
+
+    // Usar las primeras 4 palabras como clave
+    clave = palabras.slice(0, 4).join(' ');
+
+    return clave || razonSocial;
+}
+
+/**
+ * Calcular similitud entre dos strings (0 a 1)
+ * @param {string} str1 - Primera cadena
+ * @param {string} str2 - Segunda cadena
+ * @returns {number} Similitud entre 0 y 1
+ */
+function calcularSimilitud(str1, str2) {
+    if (!str1 || !str2) return 0;
+    if (str1 === str2) return 1;
+
+    const s1 = str1.toUpperCase();
+    const s2 = str2.toUpperCase();
+
+    // Si uno contiene al otro, alta similitud
+    if (s1.includes(s2) || s2.includes(s1)) {
+        return 0.9;
+    }
+
+    // Comparar palabras en común
+    const palabras1 = new Set(s1.split(/\s+/).filter(p => p.length >= 2));
+    const palabras2 = new Set(s2.split(/\s+/).filter(p => p.length >= 2));
+
+    if (palabras1.size === 0 || palabras2.size === 0) return 0;
+
+    let coincidencias = 0;
+    for (const p of palabras1) {
+        if (palabras2.has(p)) coincidencias++;
+    }
+
+    const totalPalabras = Math.max(palabras1.size, palabras2.size);
+    return coincidencias / totalPalabras;
 }
 
 /**
@@ -11299,6 +11378,9 @@ async function procesarAgrupacionesRazonSocial() {
     stateMayores.dpTotalesCache = null;
     stateMayores.agrupacionesOrdenadas = [];
 
+    // Mapa de claves de agrupación a razón social canónica
+    const claveACanonica = new Map();
+
     // Procesar en lotes para no bloquear UI
     const TAMANO_LOTE = 500;
     let procesados = 0;
@@ -11308,27 +11390,63 @@ async function procesarAgrupacionesRazonSocial() {
 
         // Procesar lote
         for (const registro of lote) {
-            // Si el registro ya tiene una razón social asignada manualmente, usarla
+            // Si el registro ya tiene una razón social asignada manualmente, usarla directamente
             let razonSocial = registro.razonSocialAsignada ||
                               extraerRazonSocialDeLeyenda(registro.descripcion);
 
-            // Guardar la razón social en el registro
+            // Guardar la razón social extraída en el registro
             registro.razonSocialExtraida = razonSocial;
 
             if (razonSocial === 'Sin Asignar') {
                 stateMayores.registrosSinAsignar.push(registro);
             } else {
-                if (!stateMayores.agrupacionesRazonSocial[razonSocial]) {
-                    stateMayores.agrupacionesRazonSocial[razonSocial] = {
-                        id: generarIdAgrupacion(razonSocial),
-                        razonSocial: razonSocial,
+                // Generar clave de agrupación para detectar variantes
+                const clave = generarClaveAgrupacion(razonSocial);
+
+                // Buscar si ya existe una agrupación con clave similar
+                let razonSocialCanonica = razonSocial;
+
+                if (claveACanonica.has(clave)) {
+                    // Usar la razón social canónica existente
+                    razonSocialCanonica = claveACanonica.get(clave);
+                } else {
+                    // Buscar si hay alguna clave similar (para casos como nombres en diferente orden)
+                    let encontrada = false;
+                    for (const [claveExistente, rsCanonica] of claveACanonica.entries()) {
+                        // Calcular similitud entre claves
+                        const similitud = calcularSimilitud(clave, claveExistente);
+                        if (similitud >= 0.75) {
+                            // Alta similitud, usar la razón social canónica existente
+                            razonSocialCanonica = rsCanonica;
+                            claveACanonica.set(clave, rsCanonica); // Cachear para futuras búsquedas
+                            encontrada = true;
+                            break;
+                        }
+                    }
+
+                    if (!encontrada) {
+                        // Nueva razón social, usar esta como canónica
+                        claveACanonica.set(clave, razonSocial);
+                    }
+                }
+
+                // Agregar a la agrupación
+                if (!stateMayores.agrupacionesRazonSocial[razonSocialCanonica]) {
+                    stateMayores.agrupacionesRazonSocial[razonSocialCanonica] = {
+                        id: generarIdAgrupacion(razonSocialCanonica),
+                        razonSocial: razonSocialCanonica,
                         registros: [],
+                        variantes: new Set([razonSocialCanonica]), // Incluir la canónica en variantes
                         saldoDebe: 0,
                         saldoHaber: 0,
                         saldo: 0
                     };
                 }
-                stateMayores.agrupacionesRazonSocial[razonSocial].registros.push(registro);
+
+                // Agregar variante (siempre, el Set evita duplicados)
+                stateMayores.agrupacionesRazonSocial[razonSocialCanonica].variantes.add(razonSocial);
+
+                stateMayores.agrupacionesRazonSocial[razonSocialCanonica].registros.push(registro);
             }
         }
 
@@ -11565,10 +11683,17 @@ function crearElementoAgrupacion(agrupacion) {
     const claseSaldo = agrupacion.saldo >= 0 ? 'debe' : 'haber';
     const iconoExpansion = expandida ? '▼' : '▶';
 
+    // Verificar si hay variantes fusionadas
+    const tieneVariantes = agrupacion.variantes && agrupacion.variantes.size > 1;
+    const variantesHtml = tieneVariantes
+        ? `<span class="variantes-badge" title="Variantes detectadas: ${Array.from(agrupacion.variantes).map(v => escapeHtml(v)).join(', ')}">🔗 ${agrupacion.variantes.size} variantes</span>`
+        : '';
+
     div.innerHTML = `
         <div class="agrupacion-header" onclick="toggleAgrupacionDP('${agrupacion.id}')">
             <span class="expansion-icon">${iconoExpansion}</span>
             <span class="razon-social">${escapeHtml(agrupacion.razonSocial)}</span>
+            ${variantesHtml}
             <span class="cant-registros">(${agrupacion.registros.length} mov.)</span>
             <span class="saldo-debe">${formatearMoneda(agrupacion.saldoDebe)}</span>
             <span class="saldo-haber">${formatearMoneda(agrupacion.saldoHaber)}</span>
