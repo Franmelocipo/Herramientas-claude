@@ -11098,6 +11098,14 @@ function extraerRazonSocialDeLeyenda(leyenda) {
 
     // Patrones de prefijos a eliminar (con sus números asociados)
     const patronesPrefijo = [
+        // "Compra según comprobante - A-0001-00000435 -" -> extraer lo que viene después
+        /^(?:COMPRA|VENTA|COBRO|PAGO)\s+(?:SEGUN|SEGÚN)\s+(?:COMPROBANTE|COMPROB|COMP)\s*[-–—]\s*[A-Z]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // "Compra s/comprobante - A-0001-00000435 -"
+        /^(?:COMPRA|VENTA|COBRO|PAGO)\s+S\/\s*(?:COMPROBANTE|COMPROB|COMP)\s*[-–—]\s*[A-Z]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // "Compra según factura - A-0001-00000435 -"
+        /^(?:COMPRA|VENTA|COBRO|PAGO)\s+(?:SEGUN|SEGÚN|S\/)\s*(?:FACTURA|FACT|FC|FA|FB|RECIBO|REC)\s*[-–—]?\s*[A-Z]?\s*[\d\-\.]+\s*[-–—]\s*/i,
+        // "S/Factura A-0001-00000435 -" o "Según Factura A-0001-00000435 -"
+        /^(?:SEGUN|SEGÚN|S\/)\s*(?:FACTURA|FACT|FC|FA|FB|RECIBO|REC|OP|COMPROBANTE)\s*[A-Z]?\s*[\d\-\.]+\s*[-–—]\s*/i,
         // OP N°0001-00009078 - , OP 0001-00009078 - , OP N° 0001-00009078 -
         /^OP\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
         // RECIBO N° 0001 - , REC 0001 -
@@ -11118,7 +11126,7 @@ function extraerRazonSocialDeLeyenda(leyenda) {
         /^(?:RET|RETENCION|RETENCIÓN)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
         // ORDEN DE PAGO 123 -
         /^(?:ORDEN\s*(?:DE\s*)?PAGO)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // Cualquier código alfanumérico seguido de guión al inicio: ABC-123 -
+        // Cualquier código alfanumérico seguido de guión al inicio: ABC-123 - , A-0001-00000435 -
         /^[A-Z]{1,4}\s*[\d\-\.]{4,20}\s*[-–—]\s*/i,
         // Solo número al inicio seguido de guión: 0001-00001234 -
         /^[\d\-\.]{4,20}\s*[-–—]\s*/
@@ -11126,6 +11134,22 @@ function extraerRazonSocialDeLeyenda(leyenda) {
 
     // Aplicar cada patrón para limpiar prefijos
     for (const patron of patronesPrefijo) {
+        texto = texto.replace(patron, '');
+    }
+
+    texto = texto.trim();
+
+    // ============================================
+    // PASO 1.5: Si el texto comienza con frases genéricas sin número, quitarlas
+    // ============================================
+    const frasesGenericas = [
+        /^(?:COMPRA|VENTA|COBRO|PAGO)\s+(?:SEGUN|SEGÚN|S\/)\s*(?:COMPROBANTE|COMPROB|COMP|FACTURA|FACT|FC|FA|FB|RECIBO|REC)\s*[-–—]?\s*/i,
+        /^(?:SEGUN|SEGÚN|S\/)\s*(?:COMPROBANTE|COMPROB|FACTURA|FACT|FC|RECIBO|REC)\s*[-–—]?\s*/i,
+        /^(?:CANCELACION|CANCELACIÓN)\s*(?:DE)?\s*[-–—]?\s*/i,
+        /^(?:APLICACION|APLICACIÓN)\s*(?:DE)?\s*[-–—]?\s*/i
+    ];
+
+    for (const patron of frasesGenericas) {
         texto = texto.replace(patron, '');
     }
 
