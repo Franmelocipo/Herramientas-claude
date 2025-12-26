@@ -11101,6 +11101,29 @@ function extraerRazonSocialDeLeyenda(leyenda) {
     let texto = leyenda.trim();
 
     // ============================================
+    // PASO 0: Extraer razón social de paréntesis al final (prioridad máxima)
+    // Patrones como: "COMP COMPRA CONTADO Factura 00004-00001889 (OLATTE GRUP SAS)"
+    // ============================================
+
+    // Si el texto termina con paréntesis y tiene contenido significativo dentro
+    const matchParentesisFinal = texto.match(/\(([^)]{3,})\)\s*$/);
+    if (matchParentesisFinal) {
+        const contenidoParentesis = matchParentesisFinal[1].trim();
+        // Verificar que el contenido parece ser una razón social (no es solo un código o número)
+        const pareceRazonSocial = /[A-Za-z]{2,}/.test(contenidoParentesis) &&
+                                  !/^[\d\-\.\/]+$/.test(contenidoParentesis);
+
+        // Verificar que el texto antes del paréntesis es una descripción genérica
+        const textoAntes = texto.substring(0, texto.lastIndexOf('(')).trim();
+        const esDescripcionGenerica = /^(?:COMP\s+)?(?:COMPRA|VENTA|COBRO|PAGO)/i.test(textoAntes) ||
+                                      /(?:FACTURA|FACT|FC|RECIBO|REC|OP)\s*[\d\-]+/i.test(textoAntes);
+
+        if (pareceRazonSocial && esDescripcionGenerica) {
+            return normalizarRazonSocial(contenidoParentesis);
+        }
+    }
+
+    // ============================================
     // PASO 1: Eliminar prefijos de tipo documento con sus números
     // ============================================
 
