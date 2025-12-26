@@ -12596,6 +12596,9 @@ async function moverRegistrosADestino(destino) {
     // Reprocesar agrupaciones (asíncrono)
     await procesarAgrupacionesRazonSocial();
 
+    // Re-vincular saldos de inicio y cierre con las nuevas agrupaciones
+    vincularSaldosConAgrupaciones();
+
     // Actualizar UI
     renderizarPanelDeudoresProveedores();
     actualizarBarraSeleccionDP();
