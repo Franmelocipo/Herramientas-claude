@@ -55,10 +55,17 @@ const stateMayores = {
     movimientosEliminados: [],     // Array de movimientos eliminados con notas
     // Estado para módulo Deudores/Proveedores
     agrupacionesRazonSocial: {},   // { razonSocial: { registros: [], saldoDebe: 0, saldoHaber: 0, saldo: 0 } }
+    agrupacionesOrdenadas: [],     // Array ordenado de agrupaciones (cache)
     registrosSinAsignar: [],       // Registros sin razón social asignada
     agrupacionesExpandidas: new Set(), // IDs de agrupaciones expandidas
     registrosSeleccionadosDP: [],  // Registros seleccionados para mover
-    agrupacionOrigenMovimiento: null  // Agrupación de origen al mover registros
+    agrupacionOrigenMovimiento: null,  // Agrupación de origen al mover registros
+    // Estado de paginación para Deudores/Proveedores
+    dpPaginaActual: 0,             // Página actual de agrupaciones
+    dpAgrupacionesPorPagina: 50,   // Agrupaciones a mostrar por página
+    dpRegistrosPorAgrupacion: 100, // Registros máximos a mostrar por agrupación expandida
+    dpTotalesCache: null,          // Cache de totales calculados
+    dpFiltroDebounceTimer: null    // Timer para debounce del filtro
 };
 
 // Variables para gestión de conciliaciones
@@ -11171,174 +11178,403 @@ function generarIdAgrupacion(razonSocial) {
 }
 
 /**
- * Procesar registros del mayor y agrupar por razón social
+ * Procesar registros del mayor y agrupar por razón social (versión asíncrona optimizada)
+ * Procesa en lotes para no bloquear el hilo principal
  */
-function procesarAgrupacionesRazonSocial() {
+async function procesarAgrupacionesRazonSocial() {
     const registros = stateMayores.registrosMayor;
+    const totalRegistros = registros.length;
+
+    // Mostrar progreso si hay muchos registros
+    const mostrarProgreso = totalRegistros > 1000;
+    if (mostrarProgreso) {
+        mostrarProgresoDP('Procesando registros...', 0);
+    }
 
     // Limpiar agrupaciones anteriores
     stateMayores.agrupacionesRazonSocial = {};
     stateMayores.registrosSinAsignar = [];
+    stateMayores.dpTotalesCache = null;
+    stateMayores.agrupacionesOrdenadas = [];
 
-    // Agrupar registros por razón social
-    registros.forEach(registro => {
-        // Si el registro ya tiene una razón social asignada manualmente, usarla
-        let razonSocial = registro.razonSocialAsignada ||
-                          extraerRazonSocialDeLeyenda(registro.descripcion);
+    // Procesar en lotes para no bloquear UI
+    const TAMANO_LOTE = 500;
+    let procesados = 0;
 
-        // Guardar la razón social en el registro
-        registro.razonSocialExtraida = razonSocial;
+    for (let i = 0; i < totalRegistros; i += TAMANO_LOTE) {
+        const lote = registros.slice(i, Math.min(i + TAMANO_LOTE, totalRegistros));
 
-        if (razonSocial === 'Sin Asignar') {
-            stateMayores.registrosSinAsignar.push(registro);
-        } else {
-            if (!stateMayores.agrupacionesRazonSocial[razonSocial]) {
-                stateMayores.agrupacionesRazonSocial[razonSocial] = {
-                    id: generarIdAgrupacion(razonSocial),
-                    razonSocial: razonSocial,
-                    registros: [],
-                    saldoDebe: 0,
-                    saldoHaber: 0,
-                    saldo: 0
-                };
+        // Procesar lote
+        for (const registro of lote) {
+            // Si el registro ya tiene una razón social asignada manualmente, usarla
+            let razonSocial = registro.razonSocialAsignada ||
+                              extraerRazonSocialDeLeyenda(registro.descripcion);
+
+            // Guardar la razón social en el registro
+            registro.razonSocialExtraida = razonSocial;
+
+            if (razonSocial === 'Sin Asignar') {
+                stateMayores.registrosSinAsignar.push(registro);
+            } else {
+                if (!stateMayores.agrupacionesRazonSocial[razonSocial]) {
+                    stateMayores.agrupacionesRazonSocial[razonSocial] = {
+                        id: generarIdAgrupacion(razonSocial),
+                        razonSocial: razonSocial,
+                        registros: [],
+                        saldoDebe: 0,
+                        saldoHaber: 0,
+                        saldo: 0
+                    };
+                }
+                stateMayores.agrupacionesRazonSocial[razonSocial].registros.push(registro);
             }
-            stateMayores.agrupacionesRazonSocial[razonSocial].registros.push(registro);
         }
-    });
 
-    // Calcular saldos por agrupación
-    Object.values(stateMayores.agrupacionesRazonSocial).forEach(agrupacion => {
-        agrupacion.saldoDebe = agrupacion.registros.reduce((sum, r) => sum + (r.debe || 0), 0);
-        agrupacion.saldoHaber = agrupacion.registros.reduce((sum, r) => sum + (r.haber || 0), 0);
-        agrupacion.saldo = agrupacion.saldoDebe - agrupacion.saldoHaber;
-    });
+        procesados += lote.length;
 
-    // Calcular saldo de sin asignar
-    const saldoSinAsignarDebe = stateMayores.registrosSinAsignar.reduce((sum, r) => sum + (r.debe || 0), 0);
-    const saldoSinAsignarHaber = stateMayores.registrosSinAsignar.reduce((sum, r) => sum + (r.haber || 0), 0);
+        // Actualizar progreso y permitir que la UI respire
+        if (mostrarProgreso) {
+            const porcentaje = Math.round((procesados / totalRegistros) * 50); // 50% para agrupación
+            mostrarProgresoDP('Agrupando por razón social...', porcentaje);
+            await permitirActualizacionUI();
+        }
+    }
 
-    console.log(`📊 Agrupaciones por razón social: ${Object.keys(stateMayores.agrupacionesRazonSocial).length}`);
+    // Calcular saldos por agrupación (también en lotes)
+    const agrupaciones = Object.values(stateMayores.agrupacionesRazonSocial);
+    const totalAgrupaciones = agrupaciones.length;
+    procesados = 0;
+
+    for (let i = 0; i < totalAgrupaciones; i += TAMANO_LOTE) {
+        const lote = agrupaciones.slice(i, Math.min(i + TAMANO_LOTE, totalAgrupaciones));
+
+        for (const agrupacion of lote) {
+            let saldoDebe = 0;
+            let saldoHaber = 0;
+            for (const r of agrupacion.registros) {
+                saldoDebe += r.debe || 0;
+                saldoHaber += r.haber || 0;
+            }
+            agrupacion.saldoDebe = saldoDebe;
+            agrupacion.saldoHaber = saldoHaber;
+            agrupacion.saldo = saldoDebe - saldoHaber;
+        }
+
+        procesados += lote.length;
+
+        if (mostrarProgreso && totalAgrupaciones > 100) {
+            const porcentaje = 50 + Math.round((procesados / totalAgrupaciones) * 40); // 40% para saldos
+            mostrarProgresoDP('Calculando saldos...', porcentaje);
+            await permitirActualizacionUI();
+        }
+    }
+
+    // Calcular y cachear totales
+    calcularTotalesDPCache();
+
+    // Ordenar agrupaciones y cachear
+    stateMayores.agrupacionesOrdenadas = agrupaciones.sort((a, b) => Math.abs(b.saldo) - Math.abs(a.saldo));
+
+    if (mostrarProgreso) {
+        mostrarProgresoDP('Finalizando...', 100);
+        await permitirActualizacionUI();
+        ocultarProgresoDP();
+    }
+
+    console.log(`📊 Agrupaciones por razón social: ${totalAgrupaciones}`);
     console.log(`📋 Registros sin asignar: ${stateMayores.registrosSinAsignar.length}`);
 
     return {
-        agrupaciones: Object.keys(stateMayores.agrupacionesRazonSocial).length,
-        sinAsignar: stateMayores.registrosSinAsignar.length,
-        saldoSinAsignarDebe,
-        saldoSinAsignarHaber
+        agrupaciones: totalAgrupaciones,
+        sinAsignar: stateMayores.registrosSinAsignar.length
     };
 }
 
 /**
- * Renderizar panel de agrupaciones por razón social
+ * Calcular y cachear totales de Deudores/Proveedores
+ */
+function calcularTotalesDPCache() {
+    const agrupaciones = Object.values(stateMayores.agrupacionesRazonSocial);
+    const sinAsignar = stateMayores.registrosSinAsignar;
+
+    let totalDebe = 0;
+    let totalHaber = 0;
+
+    for (const a of agrupaciones) {
+        totalDebe += a.saldoDebe;
+        totalHaber += a.saldoHaber;
+    }
+
+    let saldoSinAsignarDebe = 0;
+    let saldoSinAsignarHaber = 0;
+    for (const r of sinAsignar) {
+        saldoSinAsignarDebe += r.debe || 0;
+        saldoSinAsignarHaber += r.haber || 0;
+    }
+
+    totalDebe += saldoSinAsignarDebe;
+    totalHaber += saldoSinAsignarHaber;
+
+    stateMayores.dpTotalesCache = {
+        totalDebe,
+        totalHaber,
+        saldoTotal: totalDebe - totalHaber,
+        saldoSinAsignarDebe,
+        saldoSinAsignarHaber,
+        saldoSinAsignar: saldoSinAsignarDebe - saldoSinAsignarHaber,
+        cantidadAgrupaciones: agrupaciones.length,
+        cantidadSinAsignar: sinAsignar.length
+    };
+}
+
+/**
+ * Mostrar indicador de progreso para Deudores/Proveedores
+ */
+function mostrarProgresoDP(mensaje, porcentaje) {
+    let progreso = document.getElementById('progresoDP');
+    if (!progreso) {
+        progreso = document.createElement('div');
+        progreso.id = 'progresoDP';
+        progreso.className = 'progreso-dp-overlay';
+        progreso.innerHTML = `
+            <div class="progreso-dp-contenido">
+                <div class="progreso-dp-spinner"></div>
+                <div class="progreso-dp-mensaje"></div>
+                <div class="progreso-dp-barra-container">
+                    <div class="progreso-dp-barra"></div>
+                </div>
+                <div class="progreso-dp-porcentaje"></div>
+            </div>
+        `;
+        document.body.appendChild(progreso);
+    }
+
+    progreso.querySelector('.progreso-dp-mensaje').textContent = mensaje;
+    progreso.querySelector('.progreso-dp-barra').style.width = `${porcentaje}%`;
+    progreso.querySelector('.progreso-dp-porcentaje').textContent = `${porcentaje}%`;
+    progreso.style.display = 'flex';
+}
+
+/**
+ * Ocultar indicador de progreso para Deudores/Proveedores
+ */
+function ocultarProgresoDP() {
+    const progreso = document.getElementById('progresoDP');
+    if (progreso) {
+        progreso.style.display = 'none';
+    }
+}
+
+/**
+ * Renderizar panel de agrupaciones por razón social (versión optimizada con paginación)
  */
 function renderizarPanelDeudoresProveedores() {
     const container = document.getElementById('panelDeudoresProveedores');
     if (!container) return;
 
-    const agrupaciones = Object.values(stateMayores.agrupacionesRazonSocial);
-    const sinAsignar = stateMayores.registrosSinAsignar;
+    // Usar cache de totales si existe
+    if (!stateMayores.dpTotalesCache) {
+        calcularTotalesDPCache();
+    }
+    const totales = stateMayores.dpTotalesCache;
 
-    // Ordenar agrupaciones por saldo (mayor saldo primero)
-    agrupaciones.sort((a, b) => Math.abs(b.saldo) - Math.abs(a.saldo));
-
-    // Calcular totales generales
-    const totalDebe = agrupaciones.reduce((sum, a) => sum + a.saldoDebe, 0) +
-                      sinAsignar.reduce((sum, r) => sum + (r.debe || 0), 0);
-    const totalHaber = agrupaciones.reduce((sum, a) => sum + a.saldoHaber, 0) +
-                       sinAsignar.reduce((sum, r) => sum + (r.haber || 0), 0);
-    const saldoTotal = totalDebe - totalHaber;
-
-    // Actualizar estadísticas
-    document.getElementById('dpTotalAgrupaciones').textContent = agrupaciones.length;
-    document.getElementById('dpTotalDebe').textContent = formatearMoneda(totalDebe);
-    document.getElementById('dpTotalHaber').textContent = formatearMoneda(totalHaber);
+    // Actualizar estadísticas desde cache
+    document.getElementById('dpTotalAgrupaciones').textContent = totales.cantidadAgrupaciones;
+    document.getElementById('dpTotalDebe').textContent = formatearMoneda(totales.totalDebe);
+    document.getElementById('dpTotalHaber').textContent = formatearMoneda(totales.totalHaber);
     const saldoEl = document.getElementById('dpSaldoTotal');
-    saldoEl.textContent = formatearMoneda(Math.abs(saldoTotal)) + (saldoTotal >= 0 ? ' (D)' : ' (H)');
-    saldoEl.className = 'stat-value ' + (saldoTotal >= 0 ? 'debe' : 'haber');
-    document.getElementById('dpSinAsignar').textContent = sinAsignar.length;
+    saldoEl.textContent = formatearMoneda(Math.abs(totales.saldoTotal)) + (totales.saldoTotal >= 0 ? ' (D)' : ' (H)');
+    saldoEl.className = 'stat-value ' + (totales.saldoTotal >= 0 ? 'debe' : 'haber');
+    document.getElementById('dpSinAsignar').textContent = totales.cantidadSinAsignar;
 
-    // Renderizar lista de agrupaciones
-    const listaContainer = document.getElementById('listaAgrupacionesDP');
+    // Usar agrupaciones ordenadas del cache
+    const agrupaciones = stateMayores.agrupacionesOrdenadas.length > 0
+        ? stateMayores.agrupacionesOrdenadas
+        : Object.values(stateMayores.agrupacionesRazonSocial);
 
-    let html = '';
+    const sinAsignar = stateMayores.registrosSinAsignar;
 
     // Filtro de búsqueda
     const filtro = document.getElementById('filtroRazonSocialDP')?.value?.toLowerCase() || '';
 
     // Filtrar agrupaciones
-    const agrupacionesFiltradas = agrupaciones.filter(a =>
-        a.razonSocial.toLowerCase().includes(filtro)
-    );
+    const agrupacionesFiltradas = filtro
+        ? agrupaciones.filter(a => a.razonSocial.toLowerCase().includes(filtro))
+        : agrupaciones;
 
-    // Renderizar cada agrupación
-    agrupacionesFiltradas.forEach(agrupacion => {
-        const expandida = stateMayores.agrupacionesExpandidas.has(agrupacion.id);
-        const claseExpansion = expandida ? 'expandida' : '';
-        const iconoExpansion = expandida ? '▼' : '▶';
-        const claseSaldo = agrupacion.saldo >= 0 ? 'debe' : 'haber';
+    // Paginación
+    const porPagina = stateMayores.dpAgrupacionesPorPagina;
+    const totalPaginas = Math.ceil(agrupacionesFiltradas.length / porPagina);
+    const paginaActual = Math.min(stateMayores.dpPaginaActual, totalPaginas - 1);
+    const inicio = 0; // Siempre desde el inicio para "cargar más"
+    const fin = (paginaActual + 1) * porPagina;
+    const agrupacionesPaginadas = agrupacionesFiltradas.slice(inicio, fin);
 
-        html += `
-            <div class="agrupacion-item ${claseExpansion}" data-id="${agrupacion.id}">
-                <div class="agrupacion-header" onclick="toggleAgrupacionDP('${agrupacion.id}')">
-                    <span class="expansion-icon">${iconoExpansion}</span>
-                    <span class="razon-social">${agrupacion.razonSocial}</span>
-                    <span class="cant-registros">(${agrupacion.registros.length} mov.)</span>
-                    <span class="saldo-debe">${formatearMoneda(agrupacion.saldoDebe)}</span>
-                    <span class="saldo-haber">${formatearMoneda(agrupacion.saldoHaber)}</span>
-                    <span class="saldo-neto ${claseSaldo}">${formatearMoneda(Math.abs(agrupacion.saldo))} ${agrupacion.saldo >= 0 ? '(D)' : '(H)'}</span>
-                </div>
-                ${expandida ? renderizarDetalleAgrupacion(agrupacion) : ''}
-            </div>
-        `;
+    // Renderizar lista de agrupaciones
+    const listaContainer = document.getElementById('listaAgrupacionesDP');
+
+    // Usar DocumentFragment para mejor rendimiento
+    const fragment = document.createDocumentFragment();
+
+    // Renderizar cada agrupación paginada
+    agrupacionesPaginadas.forEach(agrupacion => {
+        const div = crearElementoAgrupacion(agrupacion);
+        fragment.appendChild(div);
     });
 
-    // Agregar sección de sin asignar si hay registros
-    if (sinAsignar.length > 0) {
-        const expandidaSinAsignar = stateMayores.agrupacionesExpandidas.has('sin_asignar');
-        const iconoSinAsignar = expandidaSinAsignar ? '▼' : '▶';
-        const saldoSinAsignarDebe = sinAsignar.reduce((sum, r) => sum + (r.debe || 0), 0);
-        const saldoSinAsignarHaber = sinAsignar.reduce((sum, r) => sum + (r.haber || 0), 0);
-        const saldoSinAsignar = saldoSinAsignarDebe - saldoSinAsignarHaber;
-        const claseSaldoSA = saldoSinAsignar >= 0 ? 'debe' : 'haber';
+    // Agregar sección de sin asignar si hay registros (solo en última página o sin filtro)
+    if (sinAsignar.length > 0 && (fin >= agrupacionesFiltradas.length || !filtro)) {
+        const divSinAsignar = crearElementoSinAsignar(sinAsignar, totales);
+        fragment.appendChild(divSinAsignar);
+    }
 
-        html += `
-            <div class="agrupacion-item sin-asignar ${expandidaSinAsignar ? 'expandida' : ''}" data-id="sin_asignar">
-                <div class="agrupacion-header" onclick="toggleAgrupacionDP('sin_asignar')">
-                    <span class="expansion-icon">${iconoSinAsignar}</span>
-                    <span class="razon-social">⚠️ Sin Asignar</span>
-                    <span class="cant-registros">(${sinAsignar.length} mov.)</span>
-                    <span class="saldo-debe">${formatearMoneda(saldoSinAsignarDebe)}</span>
-                    <span class="saldo-haber">${formatearMoneda(saldoSinAsignarHaber)}</span>
-                    <span class="saldo-neto ${claseSaldoSA}">${formatearMoneda(Math.abs(saldoSinAsignar))} ${saldoSinAsignar >= 0 ? '(D)' : '(H)'}</span>
-                </div>
-                ${expandidaSinAsignar ? renderizarDetalleAgrupacionSinAsignar() : ''}
-            </div>
+    // Agregar botón "Cargar más" si hay más páginas
+    if (fin < agrupacionesFiltradas.length) {
+        const btnCargarMas = document.createElement('div');
+        btnCargarMas.className = 'cargar-mas-container';
+        btnCargarMas.innerHTML = `
+            <button onclick="cargarMasAgrupacionesDP()" class="btn-cargar-mas">
+                📋 Cargar más (${agrupacionesFiltradas.length - fin} restantes)
+            </button>
+            <span class="info-paginacion">Mostrando ${fin} de ${agrupacionesFiltradas.length} razones sociales</span>
         `;
+        fragment.appendChild(btnCargarMas);
     }
 
-    if (html === '') {
-        html = '<div class="empty-state">No hay registros para mostrar. Cargue un mayor contable.</div>';
-    }
+    // Limpiar y agregar contenido
+    listaContainer.innerHTML = '';
 
-    listaContainer.innerHTML = html;
+    if (fragment.childNodes.length === 0) {
+        listaContainer.innerHTML = '<div class="empty-state">No hay registros para mostrar. Cargue un mayor contable.</div>';
+    } else {
+        listaContainer.appendChild(fragment);
+    }
 }
 
 /**
- * Renderizar detalle de una agrupación (registros incluidos)
+ * Crear elemento DOM para una agrupación
+ */
+function crearElementoAgrupacion(agrupacion) {
+    const expandida = stateMayores.agrupacionesExpandidas.has(agrupacion.id);
+    const div = document.createElement('div');
+    div.className = `agrupacion-item ${expandida ? 'expandida' : ''}`;
+    div.dataset.id = agrupacion.id;
+
+    const claseSaldo = agrupacion.saldo >= 0 ? 'debe' : 'haber';
+    const iconoExpansion = expandida ? '▼' : '▶';
+
+    div.innerHTML = `
+        <div class="agrupacion-header" onclick="toggleAgrupacionDP('${agrupacion.id}')">
+            <span class="expansion-icon">${iconoExpansion}</span>
+            <span class="razon-social">${escapeHtml(agrupacion.razonSocial)}</span>
+            <span class="cant-registros">(${agrupacion.registros.length} mov.)</span>
+            <span class="saldo-debe">${formatearMoneda(agrupacion.saldoDebe)}</span>
+            <span class="saldo-haber">${formatearMoneda(agrupacion.saldoHaber)}</span>
+            <span class="saldo-neto ${claseSaldo}">${formatearMoneda(Math.abs(agrupacion.saldo))} ${agrupacion.saldo >= 0 ? '(D)' : '(H)'}</span>
+        </div>
+    `;
+
+    if (expandida) {
+        const detalle = document.createElement('div');
+        detalle.innerHTML = renderizarDetalleAgrupacionOptimizado(agrupacion);
+        div.appendChild(detalle.firstElementChild);
+    }
+
+    return div;
+}
+
+/**
+ * Crear elemento DOM para sección sin asignar
+ */
+function crearElementoSinAsignar(sinAsignar, totales) {
+    const expandida = stateMayores.agrupacionesExpandidas.has('sin_asignar');
+    const div = document.createElement('div');
+    div.className = `agrupacion-item sin-asignar ${expandida ? 'expandida' : ''}`;
+    div.dataset.id = 'sin_asignar';
+
+    const claseSaldo = totales.saldoSinAsignar >= 0 ? 'debe' : 'haber';
+    const iconoExpansion = expandida ? '▼' : '▶';
+
+    div.innerHTML = `
+        <div class="agrupacion-header" onclick="toggleAgrupacionDP('sin_asignar')">
+            <span class="expansion-icon">${iconoExpansion}</span>
+            <span class="razon-social">⚠️ Sin Asignar</span>
+            <span class="cant-registros">(${sinAsignar.length} mov.)</span>
+            <span class="saldo-debe">${formatearMoneda(totales.saldoSinAsignarDebe)}</span>
+            <span class="saldo-haber">${formatearMoneda(totales.saldoSinAsignarHaber)}</span>
+            <span class="saldo-neto ${claseSaldo}">${formatearMoneda(Math.abs(totales.saldoSinAsignar))} ${totales.saldoSinAsignar >= 0 ? '(D)' : '(H)'}</span>
+        </div>
+    `;
+
+    if (expandida) {
+        const detalle = document.createElement('div');
+        detalle.innerHTML = renderizarDetalleAgrupacionSinAsignarOptimizado();
+        div.appendChild(detalle.firstElementChild);
+    }
+
+    return div;
+}
+
+/**
+ * Escapar HTML para prevenir XSS
+ */
+function escapeHtml(texto) {
+    if (!texto) return '';
+    const div = document.createElement('div');
+    div.textContent = texto;
+    return div.innerHTML;
+}
+
+/**
+ * Cargar más agrupaciones (paginación)
+ */
+function cargarMasAgrupacionesDP() {
+    stateMayores.dpPaginaActual++;
+    renderizarPanelDeudoresProveedores();
+}
+
+/**
+ * Renderizar detalle de una agrupación (registros incluidos) - Versión optimizada con paginación
  * @param {Object} agrupacion - Objeto de agrupación
  * @returns {string} HTML del detalle
  */
 function renderizarDetalleAgrupacion(agrupacion) {
-    const registros = agrupacion.registros;
+    return renderizarDetalleAgrupacionOptimizado(agrupacion);
+}
 
-    // Ordenar por fecha
-    registros.sort((a, b) => {
-        if (!a.fecha) return 1;
-        if (!b.fecha) return -1;
-        return a.fecha - b.fecha;
-    });
+/**
+ * Renderizar detalle de una agrupación optimizado con límite de registros
+ * @param {Object} agrupacion - Objeto de agrupación
+ * @returns {string} HTML del detalle
+ */
+function renderizarDetalleAgrupacionOptimizado(agrupacion) {
+    const registros = agrupacion.registros;
+    const totalRegistros = registros.length;
+    const limite = stateMayores.dpRegistrosPorAgrupacion;
+
+    // Ordenar solo si no está ordenado (evitar re-ordenar)
+    if (!agrupacion._ordenado) {
+        registros.sort((a, b) => {
+            if (!a.fecha) return 1;
+            if (!b.fecha) return -1;
+            return a.fecha - b.fecha;
+        });
+        agrupacion._ordenado = true;
+    }
+
+    // Limitar registros mostrados
+    const registrosMostrar = registros.slice(0, limite);
+    const hayMas = totalRegistros > limite;
 
     let html = '<div class="agrupacion-detalle">';
+
+    // Info de cantidad si hay muchos
+    if (totalRegistros > 50) {
+        html += `<div class="info-registros-agrupacion">
+            ${hayMas ? `Mostrando ${limite} de ${totalRegistros} registros` : `${totalRegistros} registros`}
+        </div>`;
+    }
+
     html += '<table class="tabla-registros-dp">';
     html += `
         <thead>
@@ -11357,24 +11593,41 @@ function renderizarDetalleAgrupacion(agrupacion) {
         <tbody>
     `;
 
-    registros.forEach(registro => {
+    // Usar concatenación de strings optimizada
+    const filas = [];
+    const razonSocialEscapada = escapeHtml(agrupacion.razonSocial).replace(/'/g, "\\'");
+
+    for (const registro of registrosMostrar) {
         const seleccionado = stateMayores.registrosSeleccionadosDP.includes(registro.id);
-        html += `
+        filas.push(`
             <tr class="${seleccionado ? 'seleccionado' : ''}" data-id="${registro.id}">
                 <td class="col-check">
                     <input type="checkbox" ${seleccionado ? 'checked' : ''}
-                           onchange="toggleSeleccionRegistroDP('${registro.id}', '${agrupacion.razonSocial}')">
+                           onchange="toggleSeleccionRegistroDP('${registro.id}', '${razonSocialEscapada}')">
                 </td>
                 <td class="col-fecha">${formatearFecha(registro.fecha)}</td>
                 <td class="col-asiento">${registro.asiento || '-'}</td>
-                <td class="col-descripcion" title="${registro.descripcion}">${truncarTexto(registro.descripcion, 60)}</td>
+                <td class="col-descripcion" title="${escapeHtml(registro.descripcion)}">${escapeHtml(truncarTexto(registro.descripcion, 60))}</td>
                 <td class="col-debe">${registro.debe > 0 ? formatearMoneda(registro.debe) : ''}</td>
                 <td class="col-haber">${registro.haber > 0 ? formatearMoneda(registro.haber) : ''}</td>
             </tr>
-        `;
-    });
+        `);
+    }
 
+    html += filas.join('');
     html += '</tbody></table>';
+
+    // Botón para ver todos si hay más registros
+    if (hayMas) {
+        html += `
+            <div class="ver-todos-container">
+                <button onclick="verTodosRegistrosAgrupacion('${agrupacion.id}')" class="btn-ver-todos">
+                    Ver todos los ${totalRegistros} registros
+                </button>
+            </div>
+        `;
+    }
+
     html += '</div>';
 
     return html;
@@ -11385,16 +11638,41 @@ function renderizarDetalleAgrupacion(agrupacion) {
  * @returns {string} HTML del detalle
  */
 function renderizarDetalleAgrupacionSinAsignar() {
-    const registros = stateMayores.registrosSinAsignar;
+    return renderizarDetalleAgrupacionSinAsignarOptimizado();
+}
 
-    // Ordenar por fecha
-    registros.sort((a, b) => {
-        if (!a.fecha) return 1;
-        if (!b.fecha) return -1;
-        return a.fecha - b.fecha;
-    });
+/**
+ * Renderizar detalle de registros sin asignar - Versión optimizada
+ * @returns {string} HTML del detalle
+ */
+function renderizarDetalleAgrupacionSinAsignarOptimizado() {
+    const registros = stateMayores.registrosSinAsignar;
+    const totalRegistros = registros.length;
+    const limite = stateMayores.dpRegistrosPorAgrupacion;
+
+    // Ordenar solo una vez
+    if (!stateMayores._sinAsignarOrdenado) {
+        registros.sort((a, b) => {
+            if (!a.fecha) return 1;
+            if (!b.fecha) return -1;
+            return a.fecha - b.fecha;
+        });
+        stateMayores._sinAsignarOrdenado = true;
+    }
+
+    // Limitar registros mostrados
+    const registrosMostrar = registros.slice(0, limite);
+    const hayMas = totalRegistros > limite;
 
     let html = '<div class="agrupacion-detalle">';
+
+    // Info de cantidad si hay muchos
+    if (totalRegistros > 50) {
+        html += `<div class="info-registros-agrupacion">
+            ${hayMas ? `Mostrando ${limite} de ${totalRegistros} registros` : `${totalRegistros} registros`}
+        </div>`;
+    }
+
     html += '<table class="tabla-registros-dp">';
     html += `
         <thead>
@@ -11413,9 +11691,10 @@ function renderizarDetalleAgrupacionSinAsignar() {
         <tbody>
     `;
 
-    registros.forEach(registro => {
+    const filas = [];
+    for (const registro of registrosMostrar) {
         const seleccionado = stateMayores.registrosSeleccionadosDP.includes(registro.id);
-        html += `
+        filas.push(`
             <tr class="${seleccionado ? 'seleccionado' : ''}" data-id="${registro.id}">
                 <td class="col-check">
                     <input type="checkbox" ${seleccionado ? 'checked' : ''}
@@ -11423,17 +11702,47 @@ function renderizarDetalleAgrupacionSinAsignar() {
                 </td>
                 <td class="col-fecha">${formatearFecha(registro.fecha)}</td>
                 <td class="col-asiento">${registro.asiento || '-'}</td>
-                <td class="col-descripcion" title="${registro.descripcion}">${truncarTexto(registro.descripcion, 60)}</td>
+                <td class="col-descripcion" title="${escapeHtml(registro.descripcion)}">${escapeHtml(truncarTexto(registro.descripcion, 60))}</td>
                 <td class="col-debe">${registro.debe > 0 ? formatearMoneda(registro.debe) : ''}</td>
                 <td class="col-haber">${registro.haber > 0 ? formatearMoneda(registro.haber) : ''}</td>
             </tr>
-        `;
-    });
+        `);
+    }
 
+    html += filas.join('');
     html += '</tbody></table>';
+
+    // Botón para ver todos si hay más registros
+    if (hayMas) {
+        html += `
+            <div class="ver-todos-container">
+                <button onclick="verTodosRegistrosAgrupacion('sin_asignar')" class="btn-ver-todos">
+                    Ver todos los ${totalRegistros} registros
+                </button>
+            </div>
+        `;
+    }
+
     html += '</div>';
 
     return html;
+}
+
+/**
+ * Ver todos los registros de una agrupación (quitar límite temporalmente)
+ */
+function verTodosRegistrosAgrupacion(agrupacionId) {
+    // Guardar límite actual
+    const limiteAnterior = stateMayores.dpRegistrosPorAgrupacion;
+
+    // Quitar límite temporalmente
+    stateMayores.dpRegistrosPorAgrupacion = 999999;
+
+    // Re-renderizar
+    renderizarPanelDeudoresProveedores();
+
+    // Restaurar límite (para otras agrupaciones)
+    stateMayores.dpRegistrosPorAgrupacion = limiteAnterior;
 }
 
 /**
@@ -11622,26 +11931,30 @@ function moverRegistrosSeleccionadosDP() {
  * Mover registros a un destino específico
  * @param {string} destino - Razón social de destino
  */
-function moverRegistrosADestino(destino) {
+async function moverRegistrosADestino(destino) {
     const registrosIds = [...stateMayores.registrosSeleccionadosDP];
 
     if (registrosIds.length === 0) return;
 
+    // Crear mapa de IDs para búsqueda rápida
+    const registrosMap = new Map(stateMayores.registrosMayor.map(r => [r.id, r]));
+
     // Actualizar cada registro
-    registrosIds.forEach(id => {
-        const registro = stateMayores.registrosMayor.find(r => r.id === id);
+    for (const id of registrosIds) {
+        const registro = registrosMap.get(id);
         if (registro) {
             // Asignar la nueva razón social manualmente
             registro.razonSocialAsignada = destino === 'Sin Asignar' ? null : destino;
         }
-    });
+    }
 
     // Limpiar selección
     stateMayores.registrosSeleccionadosDP = [];
     stateMayores.agrupacionOrigenMovimiento = null;
+    stateMayores._sinAsignarOrdenado = false;
 
-    // Reprocesar agrupaciones
-    procesarAgrupacionesRazonSocial();
+    // Reprocesar agrupaciones (asíncrono)
+    await procesarAgrupacionesRazonSocial();
 
     // Actualizar UI
     renderizarPanelDeudoresProveedores();
@@ -11661,22 +11974,54 @@ function limpiarSeleccionDP() {
 }
 
 /**
- * Filtrar agrupaciones por texto
+ * Filtrar agrupaciones por texto (con debounce para evitar re-renderizados excesivos)
  */
 function filtrarAgrupacionesDP() {
-    renderizarPanelDeudoresProveedores();
+    // Cancelar timer anterior si existe
+    if (stateMayores.dpFiltroDebounceTimer) {
+        clearTimeout(stateMayores.dpFiltroDebounceTimer);
+    }
+
+    // Crear nuevo timer con debounce de 300ms
+    stateMayores.dpFiltroDebounceTimer = setTimeout(() => {
+        // Resetear paginación al filtrar
+        stateMayores.dpPaginaActual = 0;
+        renderizarPanelDeudoresProveedores();
+    }, 300);
+}
+
+/**
+ * Permitir que la UI se actualice (para procesamiento asíncrono)
+ * @returns {Promise} Promesa que se resuelve después de un frame
+ */
+function permitirActualizacionUI() {
+    return new Promise(resolve => {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(resolve);
+        });
+    });
 }
 
 /**
  * Expandir todas las agrupaciones
  */
 function expandirTodasAgrupacionesDP() {
-    Object.values(stateMayores.agrupacionesRazonSocial).forEach(a => {
+    // Limitar a las primeras agrupaciones visibles para evitar problemas de rendimiento
+    const limite = Math.min(stateMayores.agrupacionesOrdenadas.length, 20);
+    const agrupaciones = stateMayores.agrupacionesOrdenadas.slice(0, limite);
+
+    agrupaciones.forEach(a => {
         stateMayores.agrupacionesExpandidas.add(a.id);
     });
-    if (stateMayores.registrosSinAsignar.length > 0) {
+
+    if (stateMayores.registrosSinAsignar.length > 0 && limite < 20) {
         stateMayores.agrupacionesExpandidas.add('sin_asignar');
     }
+
+    if (stateMayores.agrupacionesOrdenadas.length > 20) {
+        mostrarNotificacion(`Se expandieron las primeras 20 agrupaciones. Hay ${stateMayores.agrupacionesOrdenadas.length} en total.`, 'info');
+    }
+
     renderizarPanelDeudoresProveedores();
 }
 
@@ -11784,14 +12129,17 @@ function exportarAnalisisDeudoresProveedores() {
 /**
  * Inicializar panel de deudores/proveedores cuando se selecciona este tipo
  */
-function inicializarPanelDeudoresProveedores() {
-    // Procesar agrupaciones
-    procesarAgrupacionesRazonSocial();
-
-    // Limpiar estado de selección
+async function inicializarPanelDeudoresProveedores() {
+    // Limpiar estado de selección y paginación
     stateMayores.registrosSeleccionadosDP = [];
     stateMayores.agrupacionOrigenMovimiento = null;
     stateMayores.agrupacionesExpandidas.clear();
+    stateMayores.dpPaginaActual = 0;
+    stateMayores.dpTotalesCache = null;
+    stateMayores._sinAsignarOrdenado = false;
+
+    // Procesar agrupaciones (asíncrono para no bloquear UI)
+    await procesarAgrupacionesRazonSocial();
 
     // Renderizar
     renderizarPanelDeudoresProveedores();
