@@ -795,12 +795,69 @@
                         <!-- Lista de agrupaciones por razón social -->
                         <div class="dp-lista-container">
                             <div class="dp-lista-header">
+                                <span class="col-drag"></span>
                                 <span class="col-expansion"></span>
-                                <span class="col-razon-social">Razón Social</span>
-                                <span class="col-cantidad">Cant.</span>
-                                <span class="col-debe">Total Debe</span>
-                                <span class="col-haber">Total Haber</span>
-                                <span class="col-saldo">Saldo</span>
+                                <span class="col-razon-social sortable-header" data-col="razonSocial" onclick="ordenarAgrupacionesDP('razonSocial')">
+                                    Razón Social <span class="sort-icon-dp">⇅</span>
+                                </span>
+                                <span class="col-variantes"></span>
+                                <span class="col-cantidad sortable-header" data-col="cantRegistros" onclick="ordenarAgrupacionesDP('cantRegistros')">
+                                    Cant. <span class="sort-icon-dp">⇅</span>
+                                </span>
+                                <span class="col-debe sortable-header" data-col="saldoDebe" onclick="ordenarAgrupacionesDP('saldoDebe')">
+                                    Total Debe <span class="sort-icon-dp">⇅</span>
+                                </span>
+                                <span class="col-haber sortable-header" data-col="saldoHaber" onclick="ordenarAgrupacionesDP('saldoHaber')">
+                                    Total Haber <span class="sort-icon-dp">⇅</span>
+                                </span>
+                                <span class="col-saldo sortable-header" data-col="saldo" onclick="ordenarAgrupacionesDP('saldo')">
+                                    Saldo <span class="sort-icon-dp">⇅</span>
+                                </span>
+                            </div>
+                            <div class="dp-lista-filtros">
+                                <span class="col-drag"></span>
+                                <span class="col-expansion"></span>
+                                <span class="col-razon-social">
+                                    <input type="text" class="filtro-agrupaciones" id="filtroAgrupRazon"
+                                           placeholder="🔍 Filtrar..." oninput="filtrarAgrupacionesDPAvanzado()">
+                                </span>
+                                <span class="col-variantes">
+                                    <select class="filtro-agrupaciones filtro-select" id="filtroAgrupVariantes" onchange="filtrarAgrupacionesDPAvanzado()">
+                                        <option value="">Todos</option>
+                                        <option value="convar">Con variantes</option>
+                                        <option value="sinvar">Sin variantes</option>
+                                    </select>
+                                </span>
+                                <span class="col-cantidad">
+                                    <select class="filtro-agrupaciones filtro-select" id="filtroAgrupCant" onchange="filtrarAgrupacionesDPAvanzado()">
+                                        <option value="">Todos</option>
+                                        <option value="1">1 mov.</option>
+                                        <option value="2-10">2-10 mov.</option>
+                                        <option value="10+">10+ mov.</option>
+                                    </select>
+                                </span>
+                                <span class="col-debe">
+                                    <select class="filtro-agrupaciones filtro-select" id="filtroAgrupDebe" onchange="filtrarAgrupacionesDPAvanzado()">
+                                        <option value="">Todos</option>
+                                        <option value="convalor">Con valor</option>
+                                        <option value="cero">Sin valor</option>
+                                    </select>
+                                </span>
+                                <span class="col-haber">
+                                    <select class="filtro-agrupaciones filtro-select" id="filtroAgrupHaber" onchange="filtrarAgrupacionesDPAvanzado()">
+                                        <option value="">Todos</option>
+                                        <option value="convalor">Con valor</option>
+                                        <option value="cero">Sin valor</option>
+                                    </select>
+                                </span>
+                                <span class="col-saldo">
+                                    <select class="filtro-agrupaciones filtro-select" id="filtroAgrupSaldo" onchange="filtrarAgrupacionesDPAvanzado()">
+                                        <option value="">Todos</option>
+                                        <option value="deudor">Deudor (D)</option>
+                                        <option value="acreedor">Acreedor (H)</option>
+                                        <option value="cero">Cero</option>
+                                    </select>
+                                </span>
                             </div>
                             <div id="listaAgrupacionesDP" class="dp-lista-body">
                                 <!-- Se llena dinámicamente -->

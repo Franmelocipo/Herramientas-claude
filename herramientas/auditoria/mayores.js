@@ -77,7 +77,11 @@ const stateMayores = {
     // Estado para ordenamiento y filtros del cuadro comparativo
     comparativoOrdenColumna: 'razonSocial',
     comparativoOrdenAsc: true,
-    comparativoEntidadesCache: []  // Cache de entidades para ordenar/filtrar
+    comparativoEntidadesCache: [], // Cache de entidades para ordenar/filtrar
+    // Estado para ordenamiento y filtros de agrupaciones
+    agrupacionesOrdenColumna: 'razonSocial',
+    agrupacionesOrdenAsc: true,
+    agrupacionesFiltradas: []      // Cache de agrupaciones filtradas
 };
 
 // Variables para gestión de conciliaciones
@@ -11350,6 +11354,8 @@ function generarClaveAgrupacion(razonSocial) {
 
 /**
  * Calcular similitud entre dos strings (0 a 1)
+ * Versión estricta: requiere al menos 2 palabras significativas coincidentes,
+ * excepto para nombres de una sola palabra + sufijo empresarial (SA, SRL, etc.)
  * @param {string} str1 - Primera cadena
  * @param {string} str2 - Segunda cadena
  * @returns {number} Similitud entre 0 y 1
@@ -11361,23 +11367,68 @@ function calcularSimilitud(str1, str2) {
     const s1 = str1.toUpperCase();
     const s2 = str2.toUpperCase();
 
-    // Si uno contiene al otro, alta similitud
-    if (s1.includes(s2) || s2.includes(s1)) {
+    // Si uno contiene al otro completamente (y es sustancial), alta similitud
+    if (s1.includes(s2) && s2.length >= 5 || s2.includes(s1) && s1.length >= 5) {
         return 0.9;
     }
 
-    // Comparar palabras en común
-    const palabras1 = new Set(s1.split(/\s+/).filter(p => p.length >= 2));
-    const palabras2 = new Set(s2.split(/\s+/).filter(p => p.length >= 2));
+    // Sufijos empresariales que no cuentan como palabras significativas
+    const sufijosEmpresariales = new Set([
+        'SA', 'SRL', 'SAS', 'SACIF', 'SACI', 'SACIFIA', 'SACIFI', 'SAIC',
+        'LTDA', 'CIA', 'HNOS', 'HERMANOS', 'HIJOS', 'EHIJOS', 'EHIJO',
+        'SOCIEDAD', 'ANONIMA', 'LIMITADA', 'ARGENTINA', 'ARG'
+    ]);
 
-    if (palabras1.size === 0 || palabras2.size === 0) return 0;
+    // Palabras genéricas que no deben contar como coincidencia significativa
+    const palabrasGenericas = new Set([
+        'COMERCIAL', 'COMERCIO', 'DISTRIBUIDORA', 'DISTRIBUIDOR',
+        'SERVICIOS', 'SERVICIO', 'EMPRESA', 'EMPRESAS', 'CIA',
+        'NORTE', 'SUR', 'ESTE', 'OESTE', 'CENTRO', 'CENTRAL',
+        'ARGENTINA', 'ARG', 'NACIONAL', 'INTERNACIONAL',
+        'DEL', 'DE', 'LA', 'LOS', 'LAS', 'EL', 'Y', 'E'
+    ]);
+
+    // Separar palabras y filtrar sufijos/palabras genéricas
+    const extraerPalabrasSignificativas = (texto) => {
+        const todas = texto.split(/\s+/).filter(p => p.length >= 2);
+        const significativas = todas.filter(p =>
+            !sufijosEmpresariales.has(p) && !palabrasGenericas.has(p)
+        );
+        return { todas, significativas };
+    };
+
+    const { todas: todas1, significativas: sig1 } = extraerPalabrasSignificativas(s1);
+    const { todas: todas2, significativas: sig2 } = extraerPalabrasSignificativas(s2);
+
+    if (sig1.length === 0 || sig2.length === 0) return 0;
+
+    // Determinar si es un "nombre simple" (una sola palabra significativa + sufijo)
+    const esNombreSimple1 = sig1.length === 1 && todas1.length <= 3;
+    const esNombreSimple2 = sig2.length === 1 && todas2.length <= 3;
+    const ambosNombresSimples = esNombreSimple1 && esNombreSimple2;
+
+    // Contar coincidencias de palabras significativas
+    const set1 = new Set(sig1);
+    const set2 = new Set(sig2);
 
     let coincidencias = 0;
-    for (const p of palabras1) {
-        if (palabras2.has(p)) coincidencias++;
+    for (const p of set1) {
+        if (set2.has(p)) {
+            coincidencias++;
+        }
     }
 
-    const totalPalabras = Math.max(palabras1.size, palabras2.size);
+    // REGLA ESTRICTA:
+    // - Si ambos son nombres simples (ej: "TISONE SA" vs "TISONE SRL"), 1 coincidencia basta
+    // - Si no son nombres simples, requiere al menos 2 coincidencias significativas
+    const minimoRequerido = ambosNombresSimples ? 1 : 2;
+
+    if (coincidencias < minimoRequerido) {
+        return 0; // No cumple el mínimo de coincidencias
+    }
+
+    // Calcular similitud como proporción de palabras coincidentes
+    const totalPalabras = Math.max(set1.size, set2.size);
     return coincidencias / totalPalabras;
 }
 
@@ -11642,20 +11693,18 @@ function renderizarPanelDeudoresProveedores() {
     saldoEl.className = 'stat-value ' + (totales.saldoTotal >= 0 ? 'debe' : 'haber');
     document.getElementById('dpSinAsignar').textContent = totales.cantidadSinAsignar;
 
-    // Usar agrupaciones ordenadas del cache
-    const agrupaciones = stateMayores.agrupacionesOrdenadas.length > 0
-        ? stateMayores.agrupacionesOrdenadas
-        : Object.values(stateMayores.agrupacionesRazonSocial);
-
+    // Obtener agrupaciones
+    let agrupaciones = Object.values(stateMayores.agrupacionesRazonSocial);
     const sinAsignar = stateMayores.registrosSinAsignar;
 
-    // Filtro de búsqueda
-    const filtro = document.getElementById('filtroRazonSocialDP')?.value?.toLowerCase() || '';
+    // Aplicar filtros avanzados
+    let agrupacionesFiltradas = aplicarFiltrosAgrupaciones(agrupaciones);
 
-    // Filtrar agrupaciones
-    const agrupacionesFiltradas = filtro
-        ? agrupaciones.filter(a => a.razonSocial.toLowerCase().includes(filtro))
-        : agrupaciones;
+    // Aplicar ordenamiento
+    agrupacionesFiltradas = ordenarAgrupacionesArray(agrupacionesFiltradas);
+
+    // Actualizar iconos de ordenamiento
+    actualizarIconosOrdenAgrupaciones();
 
     // Paginación
     const porPagina = stateMayores.dpAgrupacionesPorPagina;
@@ -11901,6 +11950,174 @@ function fusionarAgrupaciones(origenId, destinoId) {
 
     // Mostrar notificación
     mostrarNotificacion(`Grupos fusionados: "${agrupacionOrigen.razonSocial}" → "${agrupacionDestino.razonSocial}"`, 'success');
+}
+
+// ============================================
+// FUNCIONES DE ORDENAMIENTO Y FILTRADO DE AGRUPACIONES
+// ============================================
+
+/**
+ * Ordenar agrupaciones por columna
+ * @param {string} columna - Nombre de la columna
+ */
+function ordenarAgrupacionesDP(columna) {
+    if (stateMayores.agrupacionesOrdenColumna === columna) {
+        stateMayores.agrupacionesOrdenAsc = !stateMayores.agrupacionesOrdenAsc;
+    } else {
+        stateMayores.agrupacionesOrdenColumna = columna;
+        stateMayores.agrupacionesOrdenAsc = true;
+    }
+
+    // Invalidar cache de ordenadas para forzar re-ordenamiento
+    stateMayores.agrupacionesOrdenadas = [];
+
+    // Actualizar iconos
+    actualizarIconosOrdenAgrupaciones();
+
+    // Re-renderizar
+    renderizarPanelDeudoresProveedores();
+}
+
+/**
+ * Actualizar iconos de ordenamiento en agrupaciones
+ */
+function actualizarIconosOrdenAgrupaciones() {
+    const columna = stateMayores.agrupacionesOrdenColumna;
+    const asc = stateMayores.agrupacionesOrdenAsc;
+
+    document.querySelectorAll('.dp-lista-header .sortable-header').forEach(span => {
+        const col = span.dataset.col;
+        const icon = span.querySelector('.sort-icon-dp');
+        if (icon) {
+            if (col === columna) {
+                icon.textContent = asc ? '↑' : '↓';
+                span.classList.add('sorted');
+            } else {
+                icon.textContent = '⇅';
+                span.classList.remove('sorted');
+            }
+        }
+    });
+}
+
+/**
+ * Aplicar filtros avanzados a las agrupaciones
+ * @param {Array} agrupaciones - Lista de agrupaciones
+ * @returns {Array} Agrupaciones filtradas
+ */
+function aplicarFiltrosAgrupaciones(agrupaciones) {
+    const filtroRazon = (document.getElementById('filtroAgrupRazon')?.value || '').toLowerCase().trim();
+    const filtroVariantes = document.getElementById('filtroAgrupVariantes')?.value || '';
+    const filtroCant = document.getElementById('filtroAgrupCant')?.value || '';
+    const filtroDebe = document.getElementById('filtroAgrupDebe')?.value || '';
+    const filtroHaber = document.getElementById('filtroAgrupHaber')?.value || '';
+    const filtroSaldo = document.getElementById('filtroAgrupSaldo')?.value || '';
+
+    // También considerar el filtro de la toolbar
+    const filtroToolbar = (document.getElementById('filtroRazonSocialDP')?.value || '').toLowerCase().trim();
+
+    return agrupaciones.filter(a => {
+        // Filtro razón social (ambos filtros)
+        if (filtroRazon && !a.razonSocial.toLowerCase().includes(filtroRazon)) {
+            return false;
+        }
+        if (filtroToolbar && !a.razonSocial.toLowerCase().includes(filtroToolbar)) {
+            return false;
+        }
+
+        // Filtro variantes
+        if (filtroVariantes) {
+            const tieneVariantes = a.variantes && a.variantes.size > 1;
+            if (filtroVariantes === 'convar' && !tieneVariantes) return false;
+            if (filtroVariantes === 'sinvar' && tieneVariantes) return false;
+        }
+
+        // Filtro cantidad
+        if (filtroCant) {
+            const cant = a.registros.length;
+            if (filtroCant === '1' && cant !== 1) return false;
+            if (filtroCant === '2-10' && (cant < 2 || cant > 10)) return false;
+            if (filtroCant === '10+' && cant <= 10) return false;
+        }
+
+        // Filtro debe
+        if (filtroDebe) {
+            if (filtroDebe === 'convalor' && a.saldoDebe < 0.01) return false;
+            if (filtroDebe === 'cero' && a.saldoDebe >= 0.01) return false;
+        }
+
+        // Filtro haber
+        if (filtroHaber) {
+            if (filtroHaber === 'convalor' && a.saldoHaber < 0.01) return false;
+            if (filtroHaber === 'cero' && a.saldoHaber >= 0.01) return false;
+        }
+
+        // Filtro saldo
+        if (filtroSaldo) {
+            if (filtroSaldo === 'deudor' && a.saldo <= 0) return false;
+            if (filtroSaldo === 'acreedor' && a.saldo >= 0) return false;
+            if (filtroSaldo === 'cero' && Math.abs(a.saldo) >= 0.01) return false;
+        }
+
+        return true;
+    });
+}
+
+/**
+ * Ordenar agrupaciones según columna actual
+ * @param {Array} agrupaciones - Lista de agrupaciones
+ * @returns {Array} Agrupaciones ordenadas
+ */
+function ordenarAgrupacionesArray(agrupaciones) {
+    const columna = stateMayores.agrupacionesOrdenColumna;
+    const asc = stateMayores.agrupacionesOrdenAsc;
+
+    return [...agrupaciones].sort((a, b) => {
+        let valA, valB;
+
+        switch (columna) {
+            case 'razonSocial':
+                valA = a.razonSocial;
+                valB = b.razonSocial;
+                break;
+            case 'cantRegistros':
+                valA = a.registros.length;
+                valB = b.registros.length;
+                break;
+            case 'saldoDebe':
+                valA = a.saldoDebe;
+                valB = b.saldoDebe;
+                break;
+            case 'saldoHaber':
+                valA = a.saldoHaber;
+                valB = b.saldoHaber;
+                break;
+            case 'saldo':
+                valA = a.saldo;
+                valB = b.saldo;
+                break;
+            default:
+                valA = a.razonSocial;
+                valB = b.razonSocial;
+        }
+
+        let resultado;
+        if (typeof valA === 'string') {
+            resultado = valA.localeCompare(valB);
+        } else {
+            resultado = valA - valB;
+        }
+
+        return asc ? resultado : -resultado;
+    });
+}
+
+/**
+ * Filtrar agrupaciones con filtros avanzados (llamado desde inputs)
+ */
+function filtrarAgrupacionesDPAvanzado() {
+    stateMayores.dpPaginaActual = 0; // Reset paginación
+    renderizarPanelDeudoresProveedores();
 }
 
 /**
