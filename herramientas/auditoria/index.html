@@ -850,17 +850,117 @@
 
                             <!-- Tabla comparativa -->
                             <div class="comparativo-tabla-container">
-                                <table class="comparativo-tabla">
+                                <table class="comparativo-tabla" id="tablaComparativo">
                                     <thead>
-                                        <tr>
-                                            <th class="col-razon">Razón Social</th>
-                                            <th class="col-numero">Saldo Inicio</th>
-                                            <th class="col-numero">Debe</th>
-                                            <th class="col-numero">Haber</th>
-                                            <th class="col-numero">Saldo Calculado</th>
-                                            <th class="col-numero">Saldo Reportado</th>
-                                            <th class="col-numero">Diferencia</th>
-                                            <th class="col-estado">Estado</th>
+                                        <tr class="comparativo-headers">
+                                            <th class="col-razon sortable" data-col="razonSocial" onclick="ordenarComparativo('razonSocial')">
+                                                <div class="th-content">
+                                                    <span>Razón Social</span>
+                                                    <span class="sort-icon">⇅</span>
+                                                </div>
+                                            </th>
+                                            <th class="col-numero sortable" data-col="saldoInicio" onclick="ordenarComparativo('saldoInicio')">
+                                                <div class="th-content">
+                                                    <span>Saldo Inicio</span>
+                                                    <span class="sort-icon">⇅</span>
+                                                </div>
+                                            </th>
+                                            <th class="col-numero sortable" data-col="debe" onclick="ordenarComparativo('debe')">
+                                                <div class="th-content">
+                                                    <span>Debe</span>
+                                                    <span class="sort-icon">⇅</span>
+                                                </div>
+                                            </th>
+                                            <th class="col-numero sortable" data-col="haber" onclick="ordenarComparativo('haber')">
+                                                <div class="th-content">
+                                                    <span>Haber</span>
+                                                    <span class="sort-icon">⇅</span>
+                                                </div>
+                                            </th>
+                                            <th class="col-numero sortable" data-col="saldoCalculado" onclick="ordenarComparativo('saldoCalculado')">
+                                                <div class="th-content">
+                                                    <span>Saldo Calculado</span>
+                                                    <span class="sort-icon">⇅</span>
+                                                </div>
+                                            </th>
+                                            <th class="col-numero sortable" data-col="saldoCierre" onclick="ordenarComparativo('saldoCierre')">
+                                                <div class="th-content">
+                                                    <span>Saldo Reportado</span>
+                                                    <span class="sort-icon">⇅</span>
+                                                </div>
+                                            </th>
+                                            <th class="col-numero sortable" data-col="diferencia" onclick="ordenarComparativo('diferencia')">
+                                                <div class="th-content">
+                                                    <span>Diferencia</span>
+                                                    <span class="sort-icon">⇅</span>
+                                                </div>
+                                            </th>
+                                            <th class="col-estado sortable" data-col="estado" onclick="ordenarComparativo('estado')">
+                                                <div class="th-content">
+                                                    <span>Estado</span>
+                                                    <span class="sort-icon">⇅</span>
+                                                </div>
+                                            </th>
+                                        </tr>
+                                        <tr class="comparativo-filtros">
+                                            <th class="col-razon">
+                                                <input type="text" class="filtro-comparativo" id="filtroCompRazon"
+                                                       placeholder="🔍 Filtrar..." oninput="filtrarComparativo()">
+                                            </th>
+                                            <th class="col-numero">
+                                                <select class="filtro-comparativo filtro-numero" id="filtroCompSaldoInicio" onchange="filtrarComparativo()">
+                                                    <option value="">Todos</option>
+                                                    <option value="positivo">Positivo</option>
+                                                    <option value="negativo">Negativo</option>
+                                                    <option value="cero">Cero</option>
+                                                </select>
+                                            </th>
+                                            <th class="col-numero">
+                                                <select class="filtro-comparativo filtro-numero" id="filtroCompDebe" onchange="filtrarComparativo()">
+                                                    <option value="">Todos</option>
+                                                    <option value="convalor">Con valor</option>
+                                                    <option value="cero">Sin valor</option>
+                                                </select>
+                                            </th>
+                                            <th class="col-numero">
+                                                <select class="filtro-comparativo filtro-numero" id="filtroCompHaber" onchange="filtrarComparativo()">
+                                                    <option value="">Todos</option>
+                                                    <option value="convalor">Con valor</option>
+                                                    <option value="cero">Sin valor</option>
+                                                </select>
+                                            </th>
+                                            <th class="col-numero">
+                                                <select class="filtro-comparativo filtro-numero" id="filtroCompCalculado" onchange="filtrarComparativo()">
+                                                    <option value="">Todos</option>
+                                                    <option value="positivo">Positivo</option>
+                                                    <option value="negativo">Negativo</option>
+                                                    <option value="cero">Cero</option>
+                                                </select>
+                                            </th>
+                                            <th class="col-numero">
+                                                <select class="filtro-comparativo filtro-numero" id="filtroCompReportado" onchange="filtrarComparativo()">
+                                                    <option value="">Todos</option>
+                                                    <option value="convalor">Con valor</option>
+                                                    <option value="sinvalor">Sin valor</option>
+                                                </select>
+                                            </th>
+                                            <th class="col-numero">
+                                                <select class="filtro-comparativo filtro-numero" id="filtroCompDiferencia" onchange="filtrarComparativo()">
+                                                    <option value="">Todos</option>
+                                                    <option value="condif">Con diferencia</option>
+                                                    <option value="sindif">Sin diferencia</option>
+                                                </select>
+                                            </th>
+                                            <th class="col-estado">
+                                                <select class="filtro-comparativo" id="filtroCompEstado" onchange="filtrarComparativo()">
+                                                    <option value="">Todos</option>
+                                                    <option value="ok">OK</option>
+                                                    <option value="diferencia">Diferencia</option>
+                                                    <option value="sincierre">Sin saldo cierre</option>
+                                                    <option value="sinmov">Sin movimientos</option>
+                                                    <option value="solocierre">Solo en cierre</option>
+                                                </select>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody id="tablaComparativoBody">

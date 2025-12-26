@@ -6462,3 +6462,112 @@ th.acciones-col {
         max-width: 120px;
     }
 }
+
+/* ============================================ */
+/* ESTILOS: Ordenamiento y Filtros Comparativo */
+/* ============================================ */
+
+.comparativo-tabla thead tr.comparativo-headers th {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+.comparativo-tabla thead tr.comparativo-headers th:hover {
+    background: #334155;
+}
+
+.comparativo-tabla thead tr.comparativo-headers th.sorted {
+    background: #334155;
+}
+
+.comparativo-tabla .th-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.comparativo-tabla .th-content .sort-icon {
+    font-size: 0.85rem;
+    color: #64748b;
+    transition: color 0.2s;
+}
+
+.comparativo-tabla th.sorted .th-content .sort-icon {
+    color: #60a5fa;
+}
+
+/* Fila de filtros */
+.comparativo-tabla thead tr.comparativo-filtros th {
+    padding: 8px 10px;
+    background: #0f172a;
+    border-bottom: 2px solid #334155;
+}
+
+.filtro-comparativo {
+    width: 100%;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    color: #f8fafc;
+    transition: border-color 0.2s, background-color 0.2s;
+}
+
+.filtro-comparativo:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background: #0f172a;
+}
+
+.filtro-comparativo::placeholder {
+    color: #64748b;
+}
+
+.filtro-comparativo.filtro-numero {
+    padding: 6px 6px;
+    font-size: 0.75rem;
+}
+
+/* Select de filtros */
+.filtro-comparativo option {
+    background: #1e293b;
+    color: #f8fafc;
+}
+
+/* Ajustes específicos para columnas */
+.comparativo-tabla th.col-razon .filtro-comparativo {
+    min-width: 150px;
+}
+
+.comparativo-tabla th.col-numero .filtro-comparativo {
+    min-width: 80px;
+}
+
+.comparativo-tabla th.col-estado .filtro-comparativo {
+    min-width: 100px;
+}
+
+/* Indicador de filtros activos */
+.filtro-comparativo:not([value=""]):not(:placeholder-shown) {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+select.filtro-comparativo:not([value=""]) {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .comparativo-tabla thead tr.comparativo-filtros {
+        display: none;
+    }
+    
+    .comparativo-tabla .th-content .sort-icon {
+        font-size: 0.75rem;
+    }
+}
