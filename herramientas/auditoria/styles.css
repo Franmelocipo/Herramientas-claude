@@ -5664,7 +5664,7 @@ th.acciones-col {
 
 .agrupacion-header {
     display: grid;
-    grid-template-columns: 30px 1fr auto 80px 120px 120px 120px;
+    grid-template-columns: 24px 30px 1fr auto 80px 120px 120px 120px;
     gap: 8px;
     padding: 12px 16px;
     background: #1e293b;
@@ -5680,6 +5680,55 @@ th.acciones-col {
 .agrupacion-item.expandida .agrupacion-header {
     background: #334155;
     border-bottom: 1px solid #475569;
+}
+
+/* Drag handle */
+.drag-handle {
+    color: #475569;
+    cursor: grab;
+    font-size: 1.1rem;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.drag-handle:hover {
+    color: #94a3b8;
+    background: rgba(100, 116, 139, 0.2);
+}
+
+.agrupacion-item.dragging .drag-handle {
+    cursor: grabbing;
+}
+
+/* Estados de Drag & Drop */
+.agrupacion-item {
+    transition: all 0.2s;
+}
+
+.agrupacion-item.dragging {
+    opacity: 0.5;
+    transform: scale(0.98);
+}
+
+.agrupacion-item.drag-over {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+.agrupacion-item.drag-over .agrupacion-header {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+/* Indicador de modo arrastre */
+.dp-lista-body.drag-mode .agrupacion-item:not(.dragging) {
+    border-left: 3px solid transparent;
+}
+
+.dp-lista-body.drag-mode .agrupacion-item:not(.dragging):hover {
+    border-left: 3px solid #3b82f6;
 }
 
 .expansion-icon {
@@ -5907,6 +5956,10 @@ th.acciones-col {
     .agrupacion-header {
         grid-template-columns: 30px 1fr;
         grid-template-rows: auto auto;
+    }
+
+    .agrupacion-header .drag-handle {
+        display: none;
     }
 
     .agrupacion-header .variantes-badge,

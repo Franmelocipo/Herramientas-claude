@@ -11714,6 +11714,15 @@ function crearElementoAgrupacion(agrupacion) {
     const div = document.createElement('div');
     div.className = `agrupacion-item ${expandida ? 'expandida' : ''}`;
     div.dataset.id = agrupacion.id;
+    div.dataset.razonSocial = agrupacion.razonSocial;
+
+    // Hacer el elemento arrastrable
+    div.draggable = true;
+    div.addEventListener('dragstart', handleDragStartAgrupacion);
+    div.addEventListener('dragend', handleDragEndAgrupacion);
+    div.addEventListener('dragover', handleDragOverAgrupacion);
+    div.addEventListener('dragleave', handleDragLeaveAgrupacion);
+    div.addEventListener('drop', handleDropAgrupacion);
 
     const claseSaldo = agrupacion.saldo >= 0 ? 'debe' : 'haber';
     const iconoExpansion = expandida ? '▼' : '▶';
@@ -11726,6 +11735,7 @@ function crearElementoAgrupacion(agrupacion) {
 
     div.innerHTML = `
         <div class="agrupacion-header" onclick="toggleAgrupacionDP('${agrupacion.id}')">
+            <span class="drag-handle" title="Arrastrar para fusionar con otro grupo">⠿</span>
             <span class="expansion-icon">${iconoExpansion}</span>
             <span class="razon-social">${escapeHtml(agrupacion.razonSocial)}</span>
             ${variantesHtml}
@@ -11743,6 +11753,154 @@ function crearElementoAgrupacion(agrupacion) {
     }
 
     return div;
+}
+
+// ============================================
+// FUNCIONES DE DRAG & DROP PARA FUSIONAR GRUPOS
+// ============================================
+
+let draggedAgrupacionId = null;
+
+/**
+ * Manejar inicio de arrastre de agrupación
+ */
+function handleDragStartAgrupacion(e) {
+    draggedAgrupacionId = this.dataset.id;
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', this.dataset.id);
+
+    // Añadir clase al contenedor para indicar modo de arrastre
+    document.getElementById('listaAgrupacionesDP')?.classList.add('drag-mode');
+}
+
+/**
+ * Manejar fin de arrastre de agrupación
+ */
+function handleDragEndAgrupacion(e) {
+    this.classList.remove('dragging');
+    draggedAgrupacionId = null;
+
+    // Quitar clase de modo arrastre
+    document.getElementById('listaAgrupacionesDP')?.classList.remove('drag-mode');
+
+    // Limpiar todos los indicadores de drop
+    document.querySelectorAll('.agrupacion-item.drag-over').forEach(el => {
+        el.classList.remove('drag-over');
+    });
+}
+
+/**
+ * Manejar arrastre sobre una agrupación
+ */
+function handleDragOverAgrupacion(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    // No permitir soltar sobre sí mismo
+    if (this.dataset.id === draggedAgrupacionId) {
+        return;
+    }
+
+    this.classList.add('drag-over');
+}
+
+/**
+ * Manejar salida del arrastre de una agrupación
+ */
+function handleDragLeaveAgrupacion(e) {
+    this.classList.remove('drag-over');
+}
+
+/**
+ * Manejar soltar sobre una agrupación (fusionar)
+ */
+function handleDropAgrupacion(e) {
+    e.preventDefault();
+    this.classList.remove('drag-over');
+
+    const origenId = e.dataTransfer.getData('text/plain');
+    const destinoId = this.dataset.id;
+
+    // No fusionar consigo mismo
+    if (origenId === destinoId) {
+        return;
+    }
+
+    // Confirmar fusión
+    const origenRazonSocial = document.querySelector(`.agrupacion-item[data-id="${origenId}"]`)?.dataset.razonSocial || 'Origen';
+    const destinoRazonSocial = this.dataset.razonSocial || 'Destino';
+
+    if (confirm(`¿Fusionar "${origenRazonSocial}" con "${destinoRazonSocial}"?\n\nTodos los registros de "${origenRazonSocial}" se moverán a "${destinoRazonSocial}".`)) {
+        fusionarAgrupaciones(origenId, destinoId);
+    }
+}
+
+/**
+ * Fusionar dos agrupaciones
+ * @param {string} origenId - ID de la agrupación origen (será eliminada)
+ * @param {string} destinoId - ID de la agrupación destino (recibirá los registros)
+ */
+function fusionarAgrupaciones(origenId, destinoId) {
+    // Buscar las agrupaciones
+    let agrupacionOrigen = null;
+    let agrupacionDestino = null;
+    let claveOrigen = null;
+    let claveDestino = null;
+
+    for (const [clave, agrup] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
+        if (agrup.id === origenId) {
+            agrupacionOrigen = agrup;
+            claveOrigen = clave;
+        }
+        if (agrup.id === destinoId) {
+            agrupacionDestino = agrup;
+            claveDestino = clave;
+        }
+    }
+
+    if (!agrupacionOrigen || !agrupacionDestino) {
+        mostrarNotificacion('Error: No se encontraron las agrupaciones', 'error');
+        return;
+    }
+
+    // Mover todos los registros del origen al destino
+    for (const registro of agrupacionOrigen.registros) {
+        agrupacionDestino.registros.push(registro);
+    }
+
+    // Agregar variantes del origen al destino
+    if (agrupacionOrigen.variantes) {
+        for (const variante of agrupacionOrigen.variantes) {
+            agrupacionDestino.variantes.add(variante);
+        }
+    }
+    // Agregar la razón social del origen como variante
+    agrupacionDestino.variantes.add(agrupacionOrigen.razonSocial);
+
+    // Recalcular saldos del destino
+    agrupacionDestino.saldoDebe = agrupacionDestino.registros.reduce((sum, r) => sum + (r.debe || 0), 0);
+    agrupacionDestino.saldoHaber = agrupacionDestino.registros.reduce((sum, r) => sum + (r.haber || 0), 0);
+    agrupacionDestino.saldo = agrupacionDestino.saldoDebe - agrupacionDestino.saldoHaber;
+
+    // Recalcular saldo calculado si hay saldo de inicio
+    if (agrupacionOrigen.saldoInicio) {
+        agrupacionDestino.saldoInicio = (agrupacionDestino.saldoInicio || 0) + agrupacionOrigen.saldoInicio;
+    }
+    agrupacionDestino.saldoCalculado = (agrupacionDestino.saldoInicio || 0) + agrupacionDestino.saldo;
+
+    // Eliminar la agrupación origen
+    delete stateMayores.agrupacionesRazonSocial[claveOrigen];
+
+    // Invalidar cache
+    stateMayores.dpTotalesCache = null;
+    stateMayores.agrupacionesOrdenadas = [];
+
+    // Re-renderizar
+    renderizarPanelDeudoresProveedores();
+
+    // Mostrar notificación
+    mostrarNotificacion(`Grupos fusionados: "${agrupacionOrigen.razonSocial}" → "${agrupacionDestino.razonSocial}"`, 'success');
 }
 
 /**
