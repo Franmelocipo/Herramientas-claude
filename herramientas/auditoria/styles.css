@@ -5539,3 +5539,383 @@ th.acciones-col {
         padding: 6px 4px;
     }
 }
+
+/* ============================================ */
+/* ESTILOS: Panel Deudores por Ventas / Proveedores */
+/* ============================================ */
+
+.panel-deudores-proveedores {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid #334155;
+}
+
+.dp-header h4 {
+    color: #f8fafc;
+    margin: 0 0 8px 0;
+    font-size: 1.2rem;
+}
+
+.dp-descripcion p {
+    color: #94a3b8;
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.dp-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin: 20px 0;
+    padding: 16px;
+    background: #0f172a;
+    border-radius: 8px;
+}
+
+.dp-stats .stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dp-stats .stat-label {
+    color: #94a3b8;
+    font-size: 0.8rem;
+}
+
+.dp-stats .stat-value {
+    color: #f8fafc;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.dp-stats .stat-value.debe {
+    color: #60a5fa;
+}
+
+.dp-stats .stat-value.haber {
+    color: #f87171;
+}
+
+.dp-stats .stat-item.warning .stat-value {
+    color: #fbbf24;
+}
+
+.dp-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.dp-filtro {
+    flex: 1;
+    min-width: 250px;
+}
+
+.dp-filtro input {
+    width: 100%;
+    max-width: 400px;
+}
+
+.dp-acciones {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Lista de agrupaciones */
+.dp-lista-container {
+    border: 1px solid #334155;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.dp-lista-header {
+    display: grid;
+    grid-template-columns: 30px 1fr 80px 120px 120px 120px;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #0f172a;
+    border-bottom: 1px solid #334155;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #94a3b8;
+}
+
+.dp-lista-body {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+/* Item de agrupación */
+.agrupacion-item {
+    border-bottom: 1px solid #334155;
+}
+
+.agrupacion-item:last-child {
+    border-bottom: none;
+}
+
+.agrupacion-header {
+    display: grid;
+    grid-template-columns: 30px 1fr 80px 120px 120px 120px;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #1e293b;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    align-items: center;
+}
+
+.agrupacion-header:hover {
+    background: #334155;
+}
+
+.agrupacion-item.expandida .agrupacion-header {
+    background: #334155;
+    border-bottom: 1px solid #475569;
+}
+
+.expansion-icon {
+    color: #64748b;
+    font-size: 0.8rem;
+    transition: transform 0.2s;
+}
+
+.agrupacion-item.expandida .expansion-icon {
+    color: #3b82f6;
+}
+
+.razon-social {
+    color: #f8fafc;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cant-registros {
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.saldo-debe {
+    color: #60a5fa;
+    text-align: right;
+    font-family: 'Consolas', monospace;
+}
+
+.saldo-haber {
+    color: #f87171;
+    text-align: right;
+    font-family: 'Consolas', monospace;
+}
+
+.saldo-neto {
+    font-weight: 600;
+    text-align: right;
+    font-family: 'Consolas', monospace;
+}
+
+.saldo-neto.debe {
+    color: #60a5fa;
+}
+
+.saldo-neto.haber {
+    color: #f87171;
+}
+
+/* Agrupación sin asignar */
+.agrupacion-item.sin-asignar .agrupacion-header {
+    background: linear-gradient(135deg, #1e293b 0%, #2d1f1f 100%);
+}
+
+.agrupacion-item.sin-asignar .razon-social {
+    color: #fbbf24;
+}
+
+/* Detalle de agrupación */
+.agrupacion-detalle {
+    padding: 16px;
+    background: #0f172a;
+    border-top: 1px solid #334155;
+}
+
+.tabla-registros-dp {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.tabla-registros-dp thead {
+    background: #1e293b;
+}
+
+.tabla-registros-dp th {
+    padding: 8px 12px;
+    text-align: left;
+    color: #94a3b8;
+    font-weight: 600;
+    border-bottom: 1px solid #334155;
+}
+
+.tabla-registros-dp td {
+    padding: 8px 12px;
+    color: #e2e8f0;
+    border-bottom: 1px solid #1e293b;
+}
+
+.tabla-registros-dp tbody tr:hover {
+    background: #1e293b;
+}
+
+.tabla-registros-dp tbody tr.seleccionado {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+.tabla-registros-dp .col-check {
+    width: 40px;
+    text-align: center;
+}
+
+.tabla-registros-dp .col-fecha {
+    width: 100px;
+}
+
+.tabla-registros-dp .col-asiento {
+    width: 80px;
+}
+
+.tabla-registros-dp .col-descripcion {
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tabla-registros-dp .col-debe,
+.tabla-registros-dp .col-haber {
+    width: 100px;
+    text-align: right;
+    font-family: 'Consolas', monospace;
+}
+
+.tabla-registros-dp .col-debe {
+    color: #60a5fa;
+}
+
+.tabla-registros-dp .col-haber {
+    color: #f87171;
+}
+
+/* Barra de selección flotante para Deudores/Proveedores */
+.barra-seleccion-dp {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+    border-radius: 12px;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    animation: slideUp 0.3s ease;
+}
+
+.barra-seleccion-dp.hidden {
+    display: none;
+}
+
+.seleccion-info-dp {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: white;
+}
+
+.seleccion-info-dp .seleccion-icono {
+    font-size: 1.2rem;
+}
+
+.seleccion-totales {
+    color: #93c5fd;
+    font-size: 0.9rem;
+}
+
+.seleccion-acciones-dp {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.seleccion-acciones-dp label {
+    color: #93c5fd;
+    font-size: 0.9rem;
+}
+
+.seleccion-acciones-dp select {
+    min-width: 200px;
+}
+
+.input-sm {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+}
+
+/* Animación de entrada */
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* Responsive para panel deudores/proveedores */
+@media (max-width: 768px) {
+    .dp-lista-header {
+        display: none;
+    }
+
+    .agrupacion-header {
+        grid-template-columns: 30px 1fr;
+        grid-template-rows: auto auto;
+    }
+
+    .agrupacion-header .cant-registros,
+    .agrupacion-header .saldo-debe,
+    .agrupacion-header .saldo-haber,
+    .agrupacion-header .saldo-neto {
+        grid-column: 2;
+        font-size: 0.8rem;
+    }
+
+    .barra-seleccion-dp {
+        flex-direction: column;
+        left: 10px;
+        right: 10px;
+        transform: none;
+        width: auto;
+    }
+
+    .seleccion-acciones-dp {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .seleccion-acciones-dp select {
+        min-width: 150px;
+    }
+}
