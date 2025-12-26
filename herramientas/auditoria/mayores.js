@@ -73,7 +73,11 @@ const stateMayores = {
     archivoSaldosCierre: null,     // Nombre del archivo cargado
     totalSaldosInicio: 0,          // Total de saldos de inicio
     totalSaldosCierre: 0,          // Total de saldos de cierre
-    vistaActualDP: 'agrupaciones'  // 'agrupaciones' o 'comparativo'
+    vistaActualDP: 'agrupaciones', // 'agrupaciones' o 'comparativo'
+    // Estado para ordenamiento y filtros del cuadro comparativo
+    comparativoOrdenColumna: 'razonSocial',
+    comparativoOrdenAsc: true,
+    comparativoEntidadesCache: []  // Cache de entidades para ordenar/filtrar
 };
 
 // Variables para gestión de conciliaciones
@@ -12719,36 +12723,34 @@ function vincularSaldosConAgrupaciones() {
 }
 
 /**
- * Renderizar cuadro comparativo de saldos
+ * Construir lista de entidades para el cuadro comparativo
+ * @returns {Array} Lista de entidades con estado calculado
  */
-function renderizarCuadroComparativo() {
-    const tbody = document.getElementById('tablaComparativoBody');
-    const tfoot = document.getElementById('tablaComparativoFoot');
-    if (!tbody || !tfoot) return;
-
-    const mostrarSoloDiferencias = document.getElementById('filtroSoloDiferencias')?.checked || false;
-
-    // Obtener todas las entidades (agrupaciones + saldos no vinculados)
+function construirEntidadesComparativo() {
     const entidades = [];
 
     // Agregar agrupaciones
     for (const agrupacion of Object.values(stateMayores.agrupacionesRazonSocial)) {
         const tieneDiferencia = agrupacion.diferencia !== null && Math.abs(agrupacion.diferencia) >= 0.01;
 
-        if (!mostrarSoloDiferencias || tieneDiferencia) {
-            entidades.push({
-                tipo: 'agrupacion',
-                razonSocial: agrupacion.razonSocial,
-                saldoInicio: agrupacion.saldoInicio || 0,
-                debe: agrupacion.saldoDebe,
-                haber: agrupacion.saldoHaber,
-                saldoCalculado: agrupacion.saldoCalculado || agrupacion.saldo,
-                saldoCierre: agrupacion.saldoCierre,
-                diferencia: agrupacion.diferencia,
-                razonSocialSaldoInicio: agrupacion.razonSocialSaldoInicio,
-                razonSocialSaldoCierre: agrupacion.razonSocialSaldoCierre
-            });
+        let estado = 'ok';
+        if (agrupacion.saldoCierre === null) {
+            estado = 'sincierre';
+        } else if (tieneDiferencia) {
+            estado = 'diferencia';
         }
+
+        entidades.push({
+            tipo: 'agrupacion',
+            razonSocial: agrupacion.razonSocial,
+            saldoInicio: agrupacion.saldoInicio || 0,
+            debe: agrupacion.saldoDebe,
+            haber: agrupacion.saldoHaber,
+            saldoCalculado: agrupacion.saldoCalculado || agrupacion.saldo,
+            saldoCierre: agrupacion.saldoCierre,
+            diferencia: agrupacion.diferencia,
+            estado: estado
+        });
     }
 
     // Agregar saldos de inicio no vinculados
@@ -12763,7 +12765,7 @@ function renderizarCuadroComparativo() {
                 saldoCalculado: saldoInicio.saldo,
                 saldoCierre: null,
                 diferencia: null,
-                estado: 'sin_movimientos'
+                estado: 'sinmov'
             });
         }
     }
@@ -12780,15 +12782,207 @@ function renderizarCuadroComparativo() {
                 saldoCalculado: 0,
                 saldoCierre: saldoCierre.saldo,
                 diferencia: -saldoCierre.saldo,
-                estado: 'solo_en_cierre'
+                estado: 'solocierre'
             });
         }
     }
 
-    // Ordenar por razón social
-    entidades.sort((a, b) => a.razonSocial.localeCompare(b.razonSocial));
+    return entidades;
+}
 
-    // Calcular totales
+/**
+ * Aplicar filtros a las entidades del comparativo
+ * @param {Array} entidades - Lista de entidades
+ * @returns {Array} Entidades filtradas
+ */
+function aplicarFiltrosComparativo(entidades) {
+    const filtroRazon = (document.getElementById('filtroCompRazon')?.value || '').toLowerCase().trim();
+    const filtroSaldoInicio = document.getElementById('filtroCompSaldoInicio')?.value || '';
+    const filtroDebe = document.getElementById('filtroCompDebe')?.value || '';
+    const filtroHaber = document.getElementById('filtroCompHaber')?.value || '';
+    const filtroCalculado = document.getElementById('filtroCompCalculado')?.value || '';
+    const filtroReportado = document.getElementById('filtroCompReportado')?.value || '';
+    const filtroDiferencia = document.getElementById('filtroCompDiferencia')?.value || '';
+    const filtroEstado = document.getElementById('filtroCompEstado')?.value || '';
+    const mostrarSoloDiferencias = document.getElementById('filtroSoloDiferencias')?.checked || false;
+
+    return entidades.filter(e => {
+        // Filtro checkbox solo diferencias
+        if (mostrarSoloDiferencias && (e.diferencia === null || Math.abs(e.diferencia) < 0.01)) {
+            return false;
+        }
+
+        // Filtro razón social (texto)
+        if (filtroRazon && !e.razonSocial.toLowerCase().includes(filtroRazon)) {
+            return false;
+        }
+
+        // Filtro saldo inicio
+        if (filtroSaldoInicio) {
+            if (filtroSaldoInicio === 'positivo' && e.saldoInicio <= 0) return false;
+            if (filtroSaldoInicio === 'negativo' && e.saldoInicio >= 0) return false;
+            if (filtroSaldoInicio === 'cero' && Math.abs(e.saldoInicio) >= 0.01) return false;
+        }
+
+        // Filtro debe
+        if (filtroDebe) {
+            if (filtroDebe === 'convalor' && e.debe < 0.01) return false;
+            if (filtroDebe === 'cero' && e.debe >= 0.01) return false;
+        }
+
+        // Filtro haber
+        if (filtroHaber) {
+            if (filtroHaber === 'convalor' && e.haber < 0.01) return false;
+            if (filtroHaber === 'cero' && e.haber >= 0.01) return false;
+        }
+
+        // Filtro saldo calculado
+        if (filtroCalculado) {
+            if (filtroCalculado === 'positivo' && e.saldoCalculado <= 0) return false;
+            if (filtroCalculado === 'negativo' && e.saldoCalculado >= 0) return false;
+            if (filtroCalculado === 'cero' && Math.abs(e.saldoCalculado) >= 0.01) return false;
+        }
+
+        // Filtro saldo reportado
+        if (filtroReportado) {
+            if (filtroReportado === 'convalor' && e.saldoCierre === null) return false;
+            if (filtroReportado === 'sinvalor' && e.saldoCierre !== null) return false;
+        }
+
+        // Filtro diferencia
+        if (filtroDiferencia) {
+            const tieneDif = e.diferencia !== null && Math.abs(e.diferencia) >= 0.01;
+            if (filtroDiferencia === 'condif' && !tieneDif) return false;
+            if (filtroDiferencia === 'sindif' && tieneDif) return false;
+        }
+
+        // Filtro estado
+        if (filtroEstado && e.estado !== filtroEstado) {
+            return false;
+        }
+
+        return true;
+    });
+}
+
+/**
+ * Ordenar entidades del comparativo
+ * @param {Array} entidades - Lista de entidades
+ * @returns {Array} Entidades ordenadas
+ */
+function ordenarEntidadesComparativo(entidades) {
+    const columna = stateMayores.comparativoOrdenColumna;
+    const asc = stateMayores.comparativoOrdenAsc;
+
+    return [...entidades].sort((a, b) => {
+        let valA = a[columna];
+        let valB = b[columna];
+
+        // Manejar nulls
+        if (valA === null) valA = asc ? Infinity : -Infinity;
+        if (valB === null) valB = asc ? Infinity : -Infinity;
+
+        let resultado;
+        if (typeof valA === 'string') {
+            resultado = valA.localeCompare(valB);
+        } else {
+            resultado = valA - valB;
+        }
+
+        return asc ? resultado : -resultado;
+    });
+}
+
+/**
+ * Cambiar ordenamiento del comparativo
+ * @param {string} columna - Nombre de la columna
+ */
+function ordenarComparativo(columna) {
+    if (stateMayores.comparativoOrdenColumna === columna) {
+        // Toggle dirección
+        stateMayores.comparativoOrdenAsc = !stateMayores.comparativoOrdenAsc;
+    } else {
+        stateMayores.comparativoOrdenColumna = columna;
+        stateMayores.comparativoOrdenAsc = true;
+    }
+
+    // Actualizar iconos de ordenamiento
+    actualizarIconosOrdenComparativo();
+
+    // Re-renderizar
+    renderizarCuadroComparativo();
+}
+
+/**
+ * Actualizar iconos de ordenamiento en la tabla
+ */
+function actualizarIconosOrdenComparativo() {
+    const columna = stateMayores.comparativoOrdenColumna;
+    const asc = stateMayores.comparativoOrdenAsc;
+
+    document.querySelectorAll('.comparativo-tabla th.sortable').forEach(th => {
+        const col = th.dataset.col;
+        const icon = th.querySelector('.sort-icon');
+        if (icon) {
+            if (col === columna) {
+                icon.textContent = asc ? '↑' : '↓';
+                th.classList.add('sorted');
+            } else {
+                icon.textContent = '⇅';
+                th.classList.remove('sorted');
+            }
+        }
+    });
+}
+
+/**
+ * Filtrar cuadro comparativo (llamado desde inputs)
+ */
+function filtrarComparativo() {
+    renderizarCuadroComparativo();
+}
+
+/**
+ * Limpiar filtros del comparativo
+ */
+function limpiarFiltrosComparativo() {
+    document.getElementById('filtroCompRazon').value = '';
+    document.getElementById('filtroCompSaldoInicio').value = '';
+    document.getElementById('filtroCompDebe').value = '';
+    document.getElementById('filtroCompHaber').value = '';
+    document.getElementById('filtroCompCalculado').value = '';
+    document.getElementById('filtroCompReportado').value = '';
+    document.getElementById('filtroCompDiferencia').value = '';
+    document.getElementById('filtroCompEstado').value = '';
+    document.getElementById('filtroSoloDiferencias').checked = false;
+
+    renderizarCuadroComparativo();
+}
+
+/**
+ * Renderizar cuadro comparativo de saldos
+ */
+function renderizarCuadroComparativo() {
+    const tbody = document.getElementById('tablaComparativoBody');
+    const tfoot = document.getElementById('tablaComparativoFoot');
+    if (!tbody || !tfoot) return;
+
+    // Construir entidades
+    let entidades = construirEntidadesComparativo();
+
+    // Guardar en cache
+    stateMayores.comparativoEntidadesCache = entidades;
+
+    // Aplicar filtros
+    entidades = aplicarFiltrosComparativo(entidades);
+
+    // Aplicar ordenamiento
+    entidades = ordenarEntidadesComparativo(entidades);
+
+    // Actualizar iconos de ordenamiento
+    actualizarIconosOrdenComparativo();
+
+    // Calcular totales (de los filtrados)
     let totalSaldoInicio = 0;
     let totalDebe = 0;
     let totalHaber = 0;
@@ -12803,18 +12997,22 @@ function renderizarCuadroComparativo() {
         const claseTipo = e.tipo !== 'agrupacion' ? 'fila-' + e.tipo : '';
 
         let estadoHtml = '';
-        if (e.diferencia === null && e.saldoCierre === null) {
-            estadoHtml = '<span class="estado-badge warning">Sin saldo cierre</span>';
-        } else if (tieneDiferencia) {
-            estadoHtml = '<span class="estado-badge error">Diferencia</span>';
-        } else {
-            estadoHtml = '<span class="estado-badge success">OK</span>';
-        }
-
-        if (e.tipo === 'solo_inicio') {
-            estadoHtml = '<span class="estado-badge warning">Sin movimientos</span>';
-        } else if (e.tipo === 'solo_cierre') {
-            estadoHtml = '<span class="estado-badge error">Solo en cierre</span>';
+        switch (e.estado) {
+            case 'ok':
+                estadoHtml = '<span class="estado-badge success">OK</span>';
+                break;
+            case 'diferencia':
+                estadoHtml = '<span class="estado-badge error">Diferencia</span>';
+                break;
+            case 'sincierre':
+                estadoHtml = '<span class="estado-badge warning">Sin saldo cierre</span>';
+                break;
+            case 'sinmov':
+                estadoHtml = '<span class="estado-badge warning">Sin movimientos</span>';
+                break;
+            case 'solocierre':
+                estadoHtml = '<span class="estado-badge error">Solo en cierre</span>';
+                break;
         }
 
         html += `
@@ -12825,7 +13023,7 @@ function renderizarCuadroComparativo() {
                 <td class="col-numero haber">${formatearMoneda(e.haber)}</td>
                 <td class="col-numero ${e.saldoCalculado >= 0 ? 'debe' : 'haber'}">${formatearMoneda(e.saldoCalculado)}</td>
                 <td class="col-numero ${e.saldoCierre !== null ? (e.saldoCierre >= 0 ? 'debe' : 'haber') : 'sin-dato'}">${e.saldoCierre !== null ? formatearMoneda(e.saldoCierre) : '-'}</td>
-                <td class="col-numero ${e.diferencia !== null && Math.abs(e.diferencia) >= 0.01 ? 'diferencia' : ''}">${e.diferencia !== null ? formatearMoneda(e.diferencia) : '-'}</td>
+                <td class="col-numero ${tieneDiferencia ? 'diferencia' : ''}">${e.diferencia !== null ? formatearMoneda(e.diferencia) : '-'}</td>
                 <td class="col-estado">${estadoHtml}</td>
             </tr>
         `;
@@ -12837,13 +13035,17 @@ function renderizarCuadroComparativo() {
         if (e.saldoCierre !== null) totalSaldoCierre += e.saldoCierre;
     }
 
-    tbody.innerHTML = html || '<tr><td colspan="8" class="empty-state">No hay datos para mostrar</td></tr>';
+    const cantMostradas = entidades.length;
+    const cantTotal = stateMayores.comparativoEntidadesCache.length;
+    const infoFiltro = cantMostradas < cantTotal ? ` (${cantMostradas} de ${cantTotal})` : '';
+
+    tbody.innerHTML = html || `<tr><td colspan="8" class="empty-state">No hay datos para mostrar${infoFiltro}</td></tr>`;
 
     // Renderizar totales en footer
     const totalDiferencia = totalSaldoCalculado - totalSaldoCierre;
     tfoot.innerHTML = `
         <tr class="fila-totales">
-            <td class="col-razon"><strong>TOTALES</strong></td>
+            <td class="col-razon"><strong>TOTALES${infoFiltro}</strong></td>
             <td class="col-numero"><strong>${formatearMoneda(totalSaldoInicio)}</strong></td>
             <td class="col-numero"><strong>${formatearMoneda(totalDebe)}</strong></td>
             <td class="col-numero"><strong>${formatearMoneda(totalHaber)}</strong></td>
