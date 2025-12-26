@@ -6069,3 +6069,396 @@ th.acciones-col {
 .btn-ver-todos:hover {
     background: rgba(59, 130, 246, 0.1);
 }
+
+/* ============================================ */
+/* ESTILOS: Panel de Saldos Inicio/Cierre */
+/* ============================================ */
+
+.dp-saldos-panel {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.dp-saldos-header h5 {
+    color: #f8fafc;
+    margin: 0 0 8px 0;
+    font-size: 1rem;
+}
+
+.dp-saldos-descripcion {
+    color: #94a3b8;
+    font-size: 0.85rem;
+    margin: 0 0 16px 0;
+}
+
+.dp-saldos-archivos {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.dp-saldo-archivo {
+    flex: 1;
+    min-width: 280px;
+}
+
+.dp-saldo-label {
+    display: block;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+}
+
+.dp-saldo-input-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.dp-saldo-archivo-nombre {
+    color: #64748b;
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+.dp-saldo-total {
+    font-family: 'Consolas', monospace;
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(100, 116, 139, 0.2);
+}
+
+.dp-saldo-total.debe {
+    color: #60a5fa;
+}
+
+.dp-saldo-total.haber {
+    color: #f87171;
+}
+
+.dp-validacion-apertura {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.9rem;
+}
+
+.dp-validacion-apertura.success {
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: #4ade80;
+}
+
+.dp-validacion-apertura.warning {
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    color: #fbbf24;
+}
+
+.dp-validacion-apertura.error {
+    background: rgba(248, 113, 113, 0.15);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: #f87171;
+}
+
+.validacion-icon {
+    font-size: 1.2rem;
+}
+
+/* ============================================ */
+/* ESTILOS: Tabs de Vista */
+/* ============================================ */
+
+.dp-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    background: #0f172a;
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+}
+
+.dp-tab {
+    flex: 1;
+    padding: 10px 20px;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.dp-tab:hover {
+    background: rgba(100, 116, 139, 0.2);
+    color: #f8fafc;
+}
+
+.dp-tab.active {
+    background: #3b82f6;
+    color: #fff;
+}
+
+.dp-vista {
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================ */
+/* ESTILOS: Cuadro Comparativo */
+/* ============================================ */
+
+.comparativo-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.comparativo-header h5 {
+    color: #f8fafc;
+    margin: 0;
+}
+
+.comparativo-acciones {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.comparativo-filtro {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #94a3b8;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.comparativo-filtro input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.comparativo-resumen {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 16px;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border: 1px solid #334155;
+    border-radius: 8px;
+}
+
+.comparativo-resumen-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.comparativo-resumen-item .resumen-label {
+    color: #94a3b8;
+    font-size: 0.8rem;
+}
+
+.comparativo-resumen-item .resumen-value {
+    color: #f8fafc;
+    font-size: 1.1rem;
+    font-weight: 600;
+    font-family: 'Consolas', monospace;
+}
+
+.comparativo-resumen-item.resultado .resumen-value {
+    color: #60a5fa;
+}
+
+.comparativo-resumen-item.diferencia .resumen-value {
+    color: #fbbf24;
+}
+
+.comparativo-resumen-item.diferencia .resumen-value.ok {
+    color: #4ade80;
+}
+
+.comparativo-resumen-item.diferencia .resumen-value.diferencia {
+    color: #f87171;
+}
+
+.comparativo-tabla-container {
+    overflow-x: auto;
+    border: 1px solid #334155;
+    border-radius: 8px;
+}
+
+.comparativo-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.comparativo-tabla thead {
+    background: #1e293b;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.comparativo-tabla th {
+    padding: 12px 16px;
+    text-align: left;
+    color: #94a3b8;
+    font-weight: 500;
+    border-bottom: 2px solid #334155;
+}
+
+.comparativo-tabla th.col-numero {
+    text-align: right;
+}
+
+.comparativo-tabla tbody tr {
+    border-bottom: 1px solid #1e293b;
+    transition: background-color 0.15s;
+}
+
+.comparativo-tabla tbody tr:hover {
+    background: rgba(100, 116, 139, 0.1);
+}
+
+.comparativo-tabla tbody tr.fila-diferencia {
+    background: rgba(248, 113, 113, 0.1);
+}
+
+.comparativo-tabla tbody tr.fila-diferencia:hover {
+    background: rgba(248, 113, 113, 0.15);
+}
+
+.comparativo-tabla tbody tr.fila-solo_inicio,
+.comparativo-tabla tbody tr.fila-solo_cierre {
+    background: rgba(251, 191, 36, 0.1);
+    font-style: italic;
+}
+
+.comparativo-tabla td {
+    padding: 10px 16px;
+    color: #f8fafc;
+}
+
+.comparativo-tabla td.col-razon {
+    max-width: 250px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.comparativo-tabla td.col-numero {
+    text-align: right;
+    font-family: 'Consolas', monospace;
+}
+
+.comparativo-tabla td.col-numero.debe {
+    color: #60a5fa;
+}
+
+.comparativo-tabla td.col-numero.haber {
+    color: #f87171;
+}
+
+.comparativo-tabla td.col-numero.diferencia {
+    color: #f87171;
+    font-weight: 600;
+}
+
+.comparativo-tabla td.col-numero.sin-dato {
+    color: #64748b;
+}
+
+.comparativo-tabla td.col-estado {
+    text-align: center;
+}
+
+.estado-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.estado-badge.success {
+    background: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+}
+
+.estado-badge.warning {
+    background: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+}
+
+.estado-badge.error {
+    background: rgba(248, 113, 113, 0.2);
+    color: #f87171;
+}
+
+.comparativo-tabla tfoot {
+    background: #1e293b;
+}
+
+.comparativo-tabla tfoot tr.fila-totales td {
+    padding: 14px 16px;
+    border-top: 2px solid #334155;
+    color: #f8fafc;
+}
+
+.comparativo-tabla .empty-state {
+    padding: 40px;
+    text-align: center;
+    color: #64748b;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .dp-saldos-archivos {
+        flex-direction: column;
+    }
+    
+    .dp-saldo-input-group {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .comparativo-resumen {
+        grid-template-columns: 1fr 1fr;
+    }
+    
+    .comparativo-tabla {
+        font-size: 0.75rem;
+    }
+    
+    .comparativo-tabla th,
+    .comparativo-tabla td {
+        padding: 8px 10px;
+    }
+    
+    .comparativo-tabla td.col-razon {
+        max-width: 120px;
+    }
+}

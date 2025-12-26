@@ -65,7 +65,15 @@ const stateMayores = {
     dpAgrupacionesPorPagina: 50,   // Agrupaciones a mostrar por página
     dpRegistrosPorAgrupacion: 100, // Registros máximos a mostrar por agrupación expandida
     dpTotalesCache: null,          // Cache de totales calculados
-    dpFiltroDebounceTimer: null    // Timer para debounce del filtro
+    dpFiltroDebounceTimer: null,   // Timer para debounce del filtro
+    // Estado para saldos de inicio y cierre
+    saldosInicio: {},              // { razonSocialNormalizada: { razonSocial, saldo, vinculado: false } }
+    saldosCierre: {},              // { razonSocialNormalizada: { razonSocial, saldo, vinculado: false } }
+    archivoSaldosInicio: null,     // Nombre del archivo cargado
+    archivoSaldosCierre: null,     // Nombre del archivo cargado
+    totalSaldosInicio: 0,          // Total de saldos de inicio
+    totalSaldosCierre: 0,          // Total de saldos de cierre
+    vistaActualDP: 'agrupaciones'  // 'agrupaciones' o 'comparativo'
 };
 
 // Variables para gestión de conciliaciones
@@ -12371,6 +12379,586 @@ async function inicializarPanelDeudoresProveedores() {
     // Renderizar
     renderizarPanelDeudoresProveedores();
     actualizarBarraSeleccionDP();
+
+    // Vincular saldos si existen
+    if (Object.keys(stateMayores.saldosInicio).length > 0 || Object.keys(stateMayores.saldosCierre).length > 0) {
+        vincularSaldosConAgrupaciones();
+    }
+}
+
+// ============================================
+// FUNCIONES PARA SALDOS DE INICIO Y CIERRE
+// ============================================
+
+/**
+ * Cambiar vista entre agrupaciones y cuadro comparativo
+ * @param {string} vista - 'agrupaciones' o 'comparativo'
+ */
+function cambiarVistaDP(vista) {
+    stateMayores.vistaActualDP = vista;
+
+    // Actualizar tabs
+    document.getElementById('tabAgrupaciones').classList.toggle('active', vista === 'agrupaciones');
+    document.getElementById('tabComparativo').classList.toggle('active', vista === 'comparativo');
+
+    // Mostrar/ocultar vistas
+    document.getElementById('vistaAgrupacionesDP').style.display = vista === 'agrupaciones' ? 'block' : 'none';
+    document.getElementById('vistaComparativoDP').style.display = vista === 'comparativo' ? 'block' : 'none';
+
+    // Renderizar cuadro comparativo si es necesario
+    if (vista === 'comparativo') {
+        renderizarCuadroComparativo();
+    }
+}
+
+/**
+ * Cargar archivo de saldos de inicio
+ * @param {HTMLInputElement} input - Input de archivo
+ */
+async function cargarArchivoSaldosInicio(input) {
+    if (!input.files || input.files.length === 0) return;
+
+    const archivo = input.files[0];
+    document.getElementById('nombreArchivoSaldosInicio').textContent = archivo.name;
+
+    try {
+        const saldos = await procesarArchivoSaldos(archivo);
+        stateMayores.saldosInicio = saldos.datos;
+        stateMayores.archivoSaldosInicio = archivo.name;
+        stateMayores.totalSaldosInicio = saldos.total;
+
+        // Mostrar total
+        document.getElementById('totalSaldosInicioDisplay').textContent =
+            `Total: ${formatearMoneda(saldos.total)}`;
+        document.getElementById('totalSaldosInicioDisplay').className =
+            `dp-saldo-total ${saldos.total >= 0 ? 'debe' : 'haber'}`;
+
+        // Validar contra apertura de cuentas patrimoniales
+        validarContraApertura();
+
+        // Vincular con agrupaciones existentes
+        vincularSaldosConAgrupaciones();
+
+        mostrarNotificacion(`Saldos de inicio cargados: ${Object.keys(saldos.datos).length} razones sociales`, 'success');
+    } catch (error) {
+        console.error('Error al cargar saldos de inicio:', error);
+        mostrarNotificacion('Error al procesar archivo de saldos de inicio: ' + error.message, 'error');
+    }
+
+    // Reset input para permitir recargar el mismo archivo
+    input.value = '';
+}
+
+/**
+ * Cargar archivo de saldos de cierre
+ * @param {HTMLInputElement} input - Input de archivo
+ */
+async function cargarArchivoSaldosCierre(input) {
+    if (!input.files || input.files.length === 0) return;
+
+    const archivo = input.files[0];
+    document.getElementById('nombreArchivoSaldosCierre').textContent = archivo.name;
+
+    try {
+        const saldos = await procesarArchivoSaldos(archivo);
+        stateMayores.saldosCierre = saldos.datos;
+        stateMayores.archivoSaldosCierre = archivo.name;
+        stateMayores.totalSaldosCierre = saldos.total;
+
+        // Mostrar total
+        document.getElementById('totalSaldosCierreDisplay').textContent =
+            `Total: ${formatearMoneda(saldos.total)}`;
+        document.getElementById('totalSaldosCierreDisplay').className =
+            `dp-saldo-total ${saldos.total >= 0 ? 'debe' : 'haber'}`;
+
+        // Vincular con agrupaciones existentes
+        vincularSaldosConAgrupaciones();
+
+        mostrarNotificacion(`Saldos de cierre cargados: ${Object.keys(saldos.datos).length} razones sociales`, 'success');
+    } catch (error) {
+        console.error('Error al cargar saldos de cierre:', error);
+        mostrarNotificacion('Error al procesar archivo de saldos de cierre: ' + error.message, 'error');
+    }
+
+    // Reset input para permitir recargar el mismo archivo
+    input.value = '';
+}
+
+/**
+ * Procesar archivo de saldos (Excel o CSV)
+ * @param {File} archivo - Archivo a procesar
+ * @returns {Object} - { datos: {}, total: number }
+ */
+async function procesarArchivoSaldos(archivo) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const primeraHoja = workbook.Sheets[workbook.SheetNames[0]];
+                const datos = XLSX.utils.sheet_to_json(primeraHoja, { header: 1 });
+
+                if (datos.length < 2) {
+                    reject(new Error('El archivo no contiene datos suficientes'));
+                    return;
+                }
+
+                // Detectar columnas
+                const encabezados = datos[0].map(h => String(h || '').toLowerCase().trim());
+                let colRazonSocial = -1;
+                let colSaldo = -1;
+
+                // Buscar columna de razón social
+                const posiblesRazonSocial = ['razon social', 'razón social', 'razon_social', 'nombre', 'cliente', 'proveedor', 'denominacion', 'denominación'];
+                for (let i = 0; i < encabezados.length; i++) {
+                    if (posiblesRazonSocial.some(p => encabezados[i].includes(p))) {
+                        colRazonSocial = i;
+                        break;
+                    }
+                }
+
+                // Buscar columna de saldo
+                const posiblesSaldo = ['saldo', 'importe', 'monto', 'total', 'debe', 'haber'];
+                for (let i = 0; i < encabezados.length; i++) {
+                    if (posiblesSaldo.some(p => encabezados[i].includes(p))) {
+                        colSaldo = i;
+                        break;
+                    }
+                }
+
+                // Si no encontró por nombre, usar columnas por defecto
+                if (colRazonSocial === -1) colRazonSocial = 0;
+                if (colSaldo === -1) colSaldo = datos[0].length - 1;
+
+                const resultado = {};
+                let total = 0;
+
+                for (let i = 1; i < datos.length; i++) {
+                    const fila = datos[i];
+                    if (!fila || fila.length === 0) continue;
+
+                    const razonSocial = String(fila[colRazonSocial] || '').trim();
+                    if (!razonSocial) continue;
+
+                    let saldo = parseFloat(fila[colSaldo]) || 0;
+
+                    // Normalizar razón social para matching
+                    const clave = generarClaveAgrupacion(razonSocial);
+
+                    resultado[clave] = {
+                        razonSocial: razonSocial,
+                        saldo: saldo,
+                        vinculado: false
+                    };
+
+                    total += saldo;
+                }
+
+                resolve({ datos: resultado, total: total });
+            } catch (error) {
+                reject(error);
+            }
+        };
+
+        reader.onerror = function() {
+            reject(new Error('Error al leer el archivo'));
+        };
+
+        reader.readAsArrayBuffer(archivo);
+    });
+}
+
+/**
+ * Validar total de saldos de inicio contra registro de Apertura de Cuentas Patrimoniales
+ */
+function validarContraApertura() {
+    const divValidacion = document.getElementById('validacionApertura');
+    if (!divValidacion) return;
+
+    // Buscar registro de apertura en el mayor
+    const registros = stateMayores.registrosMayor || [];
+    let totalApertura = 0;
+    let registrosApertura = [];
+
+    for (const reg of registros) {
+        const desc = (reg.descripcion || '').toLowerCase();
+        if (desc.includes('apertura') && (desc.includes('patrimonial') || desc.includes('cuenta'))) {
+            const importeApertura = (reg.debe || 0) - (reg.haber || 0);
+            totalApertura += importeApertura;
+            registrosApertura.push(reg);
+        }
+    }
+
+    if (registrosApertura.length === 0) {
+        divValidacion.style.display = 'block';
+        divValidacion.className = 'dp-validacion-apertura warning';
+        divValidacion.innerHTML = `
+            <span class="validacion-icon">⚠️</span>
+            <span>No se encontró registro de "Apertura de cuentas patrimoniales" en el mayor.</span>
+        `;
+        return;
+    }
+
+    const diferencia = Math.abs(stateMayores.totalSaldosInicio - totalApertura);
+    const coincide = diferencia < 0.01;
+
+    divValidacion.style.display = 'block';
+    if (coincide) {
+        divValidacion.className = 'dp-validacion-apertura success';
+        divValidacion.innerHTML = `
+            <span class="validacion-icon">✅</span>
+            <span>El total de saldos de inicio (${formatearMoneda(stateMayores.totalSaldosInicio)}) coincide con el registro de Apertura de cuentas patrimoniales.</span>
+        `;
+    } else {
+        divValidacion.className = 'dp-validacion-apertura error';
+        divValidacion.innerHTML = `
+            <span class="validacion-icon">❌</span>
+            <span>Diferencia detectada: Saldos inicio (${formatearMoneda(stateMayores.totalSaldosInicio)}) vs Apertura (${formatearMoneda(totalApertura)}). Diferencia: ${formatearMoneda(diferencia)}</span>
+        `;
+    }
+}
+
+/**
+ * Vincular saldos de inicio y cierre con las agrupaciones existentes
+ */
+function vincularSaldosConAgrupaciones() {
+    // Reset estado de vinculación
+    Object.values(stateMayores.saldosInicio).forEach(s => s.vinculado = false);
+    Object.values(stateMayores.saldosCierre).forEach(s => s.vinculado = false);
+
+    // Para cada agrupación, buscar saldo correspondiente
+    for (const [razonSocial, agrupacion] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
+        const clave = generarClaveAgrupacion(razonSocial);
+
+        // Buscar saldo de inicio
+        agrupacion.saldoInicio = 0;
+        agrupacion.razonSocialSaldoInicio = null;
+
+        // Búsqueda exacta primero
+        if (stateMayores.saldosInicio[clave]) {
+            agrupacion.saldoInicio = stateMayores.saldosInicio[clave].saldo;
+            agrupacion.razonSocialSaldoInicio = stateMayores.saldosInicio[clave].razonSocial;
+            stateMayores.saldosInicio[clave].vinculado = true;
+        } else {
+            // Búsqueda por similitud
+            for (const [claveInicio, saldoInicio] of Object.entries(stateMayores.saldosInicio)) {
+                if (!saldoInicio.vinculado) {
+                    const similitud = calcularSimilitud(clave, claveInicio);
+                    if (similitud >= 0.75) {
+                        agrupacion.saldoInicio = saldoInicio.saldo;
+                        agrupacion.razonSocialSaldoInicio = saldoInicio.razonSocial;
+                        saldoInicio.vinculado = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Buscar saldo de cierre
+        agrupacion.saldoCierre = null;
+        agrupacion.razonSocialSaldoCierre = null;
+
+        // Búsqueda exacta primero
+        if (stateMayores.saldosCierre[clave]) {
+            agrupacion.saldoCierre = stateMayores.saldosCierre[clave].saldo;
+            agrupacion.razonSocialSaldoCierre = stateMayores.saldosCierre[clave].razonSocial;
+            stateMayores.saldosCierre[clave].vinculado = true;
+        } else {
+            // Búsqueda por similitud
+            for (const [claveCierre, saldoCierre] of Object.entries(stateMayores.saldosCierre)) {
+                if (!saldoCierre.vinculado) {
+                    const similitud = calcularSimilitud(clave, claveCierre);
+                    if (similitud >= 0.75) {
+                        agrupacion.saldoCierre = saldoCierre.saldo;
+                        agrupacion.razonSocialSaldoCierre = saldoCierre.razonSocial;
+                        saldoCierre.vinculado = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Calcular saldo calculado (inicio + movimientos)
+        agrupacion.saldoCalculado = agrupacion.saldoInicio + agrupacion.saldo;
+
+        // Calcular diferencia con saldo de cierre
+        if (agrupacion.saldoCierre !== null) {
+            agrupacion.diferencia = agrupacion.saldoCalculado - agrupacion.saldoCierre;
+        } else {
+            agrupacion.diferencia = null;
+        }
+    }
+
+    // Invalidar cache de totales
+    stateMayores.dpTotalesCache = null;
+}
+
+/**
+ * Renderizar cuadro comparativo de saldos
+ */
+function renderizarCuadroComparativo() {
+    const tbody = document.getElementById('tablaComparativoBody');
+    const tfoot = document.getElementById('tablaComparativoFoot');
+    if (!tbody || !tfoot) return;
+
+    const mostrarSoloDiferencias = document.getElementById('filtroSoloDiferencias')?.checked || false;
+
+    // Obtener todas las entidades (agrupaciones + saldos no vinculados)
+    const entidades = [];
+
+    // Agregar agrupaciones
+    for (const agrupacion of Object.values(stateMayores.agrupacionesRazonSocial)) {
+        const tieneDiferencia = agrupacion.diferencia !== null && Math.abs(agrupacion.diferencia) >= 0.01;
+
+        if (!mostrarSoloDiferencias || tieneDiferencia) {
+            entidades.push({
+                tipo: 'agrupacion',
+                razonSocial: agrupacion.razonSocial,
+                saldoInicio: agrupacion.saldoInicio || 0,
+                debe: agrupacion.saldoDebe,
+                haber: agrupacion.saldoHaber,
+                saldoCalculado: agrupacion.saldoCalculado || agrupacion.saldo,
+                saldoCierre: agrupacion.saldoCierre,
+                diferencia: agrupacion.diferencia,
+                razonSocialSaldoInicio: agrupacion.razonSocialSaldoInicio,
+                razonSocialSaldoCierre: agrupacion.razonSocialSaldoCierre
+            });
+        }
+    }
+
+    // Agregar saldos de inicio no vinculados
+    for (const [clave, saldoInicio] of Object.entries(stateMayores.saldosInicio)) {
+        if (!saldoInicio.vinculado) {
+            entidades.push({
+                tipo: 'solo_inicio',
+                razonSocial: saldoInicio.razonSocial,
+                saldoInicio: saldoInicio.saldo,
+                debe: 0,
+                haber: 0,
+                saldoCalculado: saldoInicio.saldo,
+                saldoCierre: null,
+                diferencia: null,
+                estado: 'sin_movimientos'
+            });
+        }
+    }
+
+    // Agregar saldos de cierre no vinculados
+    for (const [clave, saldoCierre] of Object.entries(stateMayores.saldosCierre)) {
+        if (!saldoCierre.vinculado) {
+            entidades.push({
+                tipo: 'solo_cierre',
+                razonSocial: saldoCierre.razonSocial,
+                saldoInicio: 0,
+                debe: 0,
+                haber: 0,
+                saldoCalculado: 0,
+                saldoCierre: saldoCierre.saldo,
+                diferencia: -saldoCierre.saldo,
+                estado: 'solo_en_cierre'
+            });
+        }
+    }
+
+    // Ordenar por razón social
+    entidades.sort((a, b) => a.razonSocial.localeCompare(b.razonSocial));
+
+    // Calcular totales
+    let totalSaldoInicio = 0;
+    let totalDebe = 0;
+    let totalHaber = 0;
+    let totalSaldoCalculado = 0;
+    let totalSaldoCierre = 0;
+
+    // Renderizar filas
+    let html = '';
+    for (const e of entidades) {
+        const tieneDiferencia = e.diferencia !== null && Math.abs(e.diferencia) >= 0.01;
+        const claseFilaDif = tieneDiferencia ? 'fila-diferencia' : '';
+        const claseTipo = e.tipo !== 'agrupacion' ? 'fila-' + e.tipo : '';
+
+        let estadoHtml = '';
+        if (e.diferencia === null && e.saldoCierre === null) {
+            estadoHtml = '<span class="estado-badge warning">Sin saldo cierre</span>';
+        } else if (tieneDiferencia) {
+            estadoHtml = '<span class="estado-badge error">Diferencia</span>';
+        } else {
+            estadoHtml = '<span class="estado-badge success">OK</span>';
+        }
+
+        if (e.tipo === 'solo_inicio') {
+            estadoHtml = '<span class="estado-badge warning">Sin movimientos</span>';
+        } else if (e.tipo === 'solo_cierre') {
+            estadoHtml = '<span class="estado-badge error">Solo en cierre</span>';
+        }
+
+        html += `
+            <tr class="${claseFilaDif} ${claseTipo}">
+                <td class="col-razon" title="${escapeHtml(e.razonSocial)}">${escapeHtml(e.razonSocial)}</td>
+                <td class="col-numero ${e.saldoInicio >= 0 ? 'debe' : 'haber'}">${formatearMoneda(e.saldoInicio)}</td>
+                <td class="col-numero debe">${formatearMoneda(e.debe)}</td>
+                <td class="col-numero haber">${formatearMoneda(e.haber)}</td>
+                <td class="col-numero ${e.saldoCalculado >= 0 ? 'debe' : 'haber'}">${formatearMoneda(e.saldoCalculado)}</td>
+                <td class="col-numero ${e.saldoCierre !== null ? (e.saldoCierre >= 0 ? 'debe' : 'haber') : 'sin-dato'}">${e.saldoCierre !== null ? formatearMoneda(e.saldoCierre) : '-'}</td>
+                <td class="col-numero ${e.diferencia !== null && Math.abs(e.diferencia) >= 0.01 ? 'diferencia' : ''}">${e.diferencia !== null ? formatearMoneda(e.diferencia) : '-'}</td>
+                <td class="col-estado">${estadoHtml}</td>
+            </tr>
+        `;
+
+        totalSaldoInicio += e.saldoInicio || 0;
+        totalDebe += e.debe || 0;
+        totalHaber += e.haber || 0;
+        totalSaldoCalculado += e.saldoCalculado || 0;
+        if (e.saldoCierre !== null) totalSaldoCierre += e.saldoCierre;
+    }
+
+    tbody.innerHTML = html || '<tr><td colspan="8" class="empty-state">No hay datos para mostrar</td></tr>';
+
+    // Renderizar totales en footer
+    const totalDiferencia = totalSaldoCalculado - totalSaldoCierre;
+    tfoot.innerHTML = `
+        <tr class="fila-totales">
+            <td class="col-razon"><strong>TOTALES</strong></td>
+            <td class="col-numero"><strong>${formatearMoneda(totalSaldoInicio)}</strong></td>
+            <td class="col-numero"><strong>${formatearMoneda(totalDebe)}</strong></td>
+            <td class="col-numero"><strong>${formatearMoneda(totalHaber)}</strong></td>
+            <td class="col-numero"><strong>${formatearMoneda(totalSaldoCalculado)}</strong></td>
+            <td class="col-numero"><strong>${formatearMoneda(totalSaldoCierre)}</strong></td>
+            <td class="col-numero ${Math.abs(totalDiferencia) >= 0.01 ? 'diferencia' : ''}"><strong>${formatearMoneda(totalDiferencia)}</strong></td>
+            <td class="col-estado"></td>
+        </tr>
+    `;
+
+    // Actualizar resumen
+    const movimientos = totalDebe - totalHaber;
+    document.getElementById('resumenSaldoInicio').textContent = formatearMoneda(totalSaldoInicio);
+    document.getElementById('resumenMovimientos').textContent = formatearMoneda(movimientos);
+    document.getElementById('resumenSaldoCalculado').textContent = formatearMoneda(totalSaldoCalculado);
+    document.getElementById('resumenSaldoCierre').textContent = formatearMoneda(totalSaldoCierre);
+
+    const difEl = document.getElementById('resumenDiferencia');
+    difEl.textContent = formatearMoneda(totalDiferencia);
+    difEl.className = `resumen-value ${Math.abs(totalDiferencia) >= 0.01 ? 'diferencia' : 'ok'}`;
+}
+
+/**
+ * Exportar cuadro comparativo a Excel
+ */
+function exportarCuadroComparativo() {
+    if (Object.keys(stateMayores.agrupacionesRazonSocial).length === 0) {
+        mostrarNotificacion('No hay datos para exportar', 'warning');
+        return;
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    // Hoja de cuadro comparativo
+    const data = [
+        ['CUADRO COMPARATIVO DE SALDOS'],
+        ['Cliente:', stateMayores.clienteActual?.nombre || '-'],
+        ['Fecha de exportación:', new Date().toLocaleString('es-AR')],
+        [],
+        ['Razón Social', 'Saldo Inicio', 'Debe', 'Haber', 'Saldo Calculado', 'Saldo Reportado', 'Diferencia', 'Estado']
+    ];
+
+    let totalSaldoInicio = 0;
+    let totalDebe = 0;
+    let totalHaber = 0;
+    let totalSaldoCalculado = 0;
+    let totalSaldoCierre = 0;
+
+    // Agregar agrupaciones
+    const agrupaciones = Object.values(stateMayores.agrupacionesRazonSocial)
+        .sort((a, b) => a.razonSocial.localeCompare(b.razonSocial));
+
+    for (const a of agrupaciones) {
+        const saldoCalculado = (a.saldoInicio || 0) + a.saldo;
+        const tieneDiferencia = a.diferencia !== null && Math.abs(a.diferencia) >= 0.01;
+        let estado = 'OK';
+        if (a.saldoCierre === null) {
+            estado = 'Sin saldo cierre';
+        } else if (tieneDiferencia) {
+            estado = 'DIFERENCIA';
+        }
+
+        data.push([
+            a.razonSocial,
+            a.saldoInicio || 0,
+            a.saldoDebe,
+            a.saldoHaber,
+            saldoCalculado,
+            a.saldoCierre !== null ? a.saldoCierre : '',
+            a.diferencia !== null ? a.diferencia : '',
+            estado
+        ]);
+
+        totalSaldoInicio += a.saldoInicio || 0;
+        totalDebe += a.saldoDebe;
+        totalHaber += a.saldoHaber;
+        totalSaldoCalculado += saldoCalculado;
+        if (a.saldoCierre !== null) totalSaldoCierre += a.saldoCierre;
+    }
+
+    // Agregar saldos no vinculados
+    for (const [clave, saldoInicio] of Object.entries(stateMayores.saldosInicio)) {
+        if (!saldoInicio.vinculado) {
+            data.push([
+                saldoInicio.razonSocial,
+                saldoInicio.saldo,
+                0,
+                0,
+                saldoInicio.saldo,
+                '',
+                '',
+                'SIN MOVIMIENTOS'
+            ]);
+            totalSaldoInicio += saldoInicio.saldo;
+            totalSaldoCalculado += saldoInicio.saldo;
+        }
+    }
+
+    for (const [clave, saldoCierre] of Object.entries(stateMayores.saldosCierre)) {
+        if (!saldoCierre.vinculado) {
+            data.push([
+                saldoCierre.razonSocial,
+                0,
+                0,
+                0,
+                0,
+                saldoCierre.saldo,
+                -saldoCierre.saldo,
+                'SOLO EN CIERRE'
+            ]);
+            totalSaldoCierre += saldoCierre.saldo;
+        }
+    }
+
+    // Agregar totales
+    data.push([]);
+    data.push([
+        'TOTALES',
+        totalSaldoInicio,
+        totalDebe,
+        totalHaber,
+        totalSaldoCalculado,
+        totalSaldoCierre,
+        totalSaldoCalculado - totalSaldoCierre,
+        ''
+    ]);
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Cuadro Comparativo');
+
+    // Generar archivo
+    const clienteNombre = (stateMayores.clienteActual?.nombre || 'Cliente')
+        .replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20);
+    const fechaHoy = new Date().toISOString().split('T')[0];
+    const nombreArchivo = `Comparativo_Saldos_${clienteNombre}_${fechaHoy}.xlsx`;
+
+    XLSX.writeFile(wb, nombreArchivo);
+    mostrarNotificacion('Cuadro comparativo exportado correctamente', 'success');
 }
 
 console.log('✅ Módulo de Mayores Contables cargado');

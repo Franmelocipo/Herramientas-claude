@@ -745,6 +745,53 @@
                             </div>
                         </div>
 
+                        <!-- Panel de carga de saldos inicio/cierre -->
+                        <div class="dp-saldos-panel">
+                            <div class="dp-saldos-header">
+                                <h5>📊 Saldos de Inicio y Cierre</h5>
+                                <p class="dp-saldos-descripcion">Cargue los listados de saldos para comparar con los movimientos del mayor.</p>
+                            </div>
+                            <div class="dp-saldos-archivos">
+                                <div class="dp-saldo-archivo">
+                                    <label class="dp-saldo-label">Saldos al Inicio:</label>
+                                    <div class="dp-saldo-input-group">
+                                        <input type="file" id="archivoSaldosInicio" accept=".xlsx,.xls,.csv"
+                                               onchange="cargarArchivoSaldosInicio(this)" style="display: none;">
+                                        <button onclick="document.getElementById('archivoSaldosInicio').click()" class="btn-secondary btn-sm">
+                                            📁 Cargar archivo
+                                        </button>
+                                        <span id="nombreArchivoSaldosInicio" class="dp-saldo-archivo-nombre">No cargado</span>
+                                        <span id="totalSaldosInicioDisplay" class="dp-saldo-total"></span>
+                                    </div>
+                                </div>
+                                <div class="dp-saldo-archivo">
+                                    <label class="dp-saldo-label">Saldos al Cierre:</label>
+                                    <div class="dp-saldo-input-group">
+                                        <input type="file" id="archivoSaldosCierre" accept=".xlsx,.xls,.csv"
+                                               onchange="cargarArchivoSaldosCierre(this)" style="display: none;">
+                                        <button onclick="document.getElementById('archivoSaldosCierre').click()" class="btn-secondary btn-sm">
+                                            📁 Cargar archivo
+                                        </button>
+                                        <span id="nombreArchivoSaldosCierre" class="dp-saldo-archivo-nombre">No cargado</span>
+                                        <span id="totalSaldosCierreDisplay" class="dp-saldo-total"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="validacionApertura" class="dp-validacion-apertura" style="display: none;"></div>
+                        </div>
+
+                        <!-- Tabs para cambiar entre vistas -->
+                        <div class="dp-tabs">
+                            <button id="tabAgrupaciones" class="dp-tab active" onclick="cambiarVistaDP('agrupaciones')">
+                                📋 Agrupaciones
+                            </button>
+                            <button id="tabComparativo" class="dp-tab" onclick="cambiarVistaDP('comparativo')">
+                                📊 Cuadro Comparativo
+                            </button>
+                        </div>
+
+                        <!-- Vista de agrupaciones -->
+                        <div id="vistaAgrupacionesDP" class="dp-vista">
                         <!-- Lista de agrupaciones por razón social -->
                         <div class="dp-lista-container">
                             <div class="dp-lista-header">
@@ -760,6 +807,71 @@
                                 <div class="empty-state">Cargue un mayor contable para ver las agrupaciones por razón social.</div>
                             </div>
                         </div>
+                        </div><!-- Cierre vistaAgrupacionesDP -->
+
+                        <!-- Vista de cuadro comparativo -->
+                        <div id="vistaComparativoDP" class="dp-vista" style="display: none;">
+                            <div class="comparativo-header">
+                                <h5>📊 Cuadro Comparativo de Saldos</h5>
+                                <div class="comparativo-acciones">
+                                    <label class="comparativo-filtro">
+                                        <input type="checkbox" id="filtroSoloDiferencias" onchange="renderizarCuadroComparativo()">
+                                        Mostrar solo diferencias
+                                    </label>
+                                    <button onclick="exportarCuadroComparativo()" class="btn-template btn-sm">
+                                        📥 Exportar Excel
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Resumen de totales -->
+                            <div class="comparativo-resumen">
+                                <div class="comparativo-resumen-item">
+                                    <span class="resumen-label">Total Saldos Inicio:</span>
+                                    <span class="resumen-value" id="resumenSaldoInicio">$0,00</span>
+                                </div>
+                                <div class="comparativo-resumen-item">
+                                    <span class="resumen-label">+ Movimientos (Debe - Haber):</span>
+                                    <span class="resumen-value" id="resumenMovimientos">$0,00</span>
+                                </div>
+                                <div class="comparativo-resumen-item resultado">
+                                    <span class="resumen-label">= Saldo Calculado:</span>
+                                    <span class="resumen-value" id="resumenSaldoCalculado">$0,00</span>
+                                </div>
+                                <div class="comparativo-resumen-item">
+                                    <span class="resumen-label">Saldo Reportado (Cierre):</span>
+                                    <span class="resumen-value" id="resumenSaldoCierre">$0,00</span>
+                                </div>
+                                <div class="comparativo-resumen-item diferencia">
+                                    <span class="resumen-label">Diferencia:</span>
+                                    <span class="resumen-value" id="resumenDiferencia">$0,00</span>
+                                </div>
+                            </div>
+
+                            <!-- Tabla comparativa -->
+                            <div class="comparativo-tabla-container">
+                                <table class="comparativo-tabla">
+                                    <thead>
+                                        <tr>
+                                            <th class="col-razon">Razón Social</th>
+                                            <th class="col-numero">Saldo Inicio</th>
+                                            <th class="col-numero">Debe</th>
+                                            <th class="col-numero">Haber</th>
+                                            <th class="col-numero">Saldo Calculado</th>
+                                            <th class="col-numero">Saldo Reportado</th>
+                                            <th class="col-numero">Diferencia</th>
+                                            <th class="col-estado">Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tablaComparativoBody">
+                                        <!-- Se llena dinámicamente -->
+                                    </tbody>
+                                    <tfoot id="tablaComparativoFoot">
+                                        <!-- Se llena dinámicamente -->
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div><!-- Cierre vistaComparativoDP -->
                     </div>
 
                     <!-- Barra de selección flotante para Deudores/Proveedores -->
