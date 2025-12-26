@@ -11945,6 +11945,9 @@ function fusionarAgrupaciones(origenId, destinoId) {
     stateMayores.dpTotalesCache = null;
     stateMayores.agrupacionesOrdenadas = [];
 
+    // Re-vincular saldos de inicio y cierre con las agrupaciones actualizadas
+    vincularSaldosConAgrupaciones();
+
     // Re-renderizar
     renderizarPanelDeudoresProveedores();
 
@@ -13032,23 +13035,43 @@ function vincularSaldosConAgrupaciones() {
 
     // Para cada agrupación, buscar saldo correspondiente
     for (const [razonSocial, agrupacion] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
-        const clave = generarClaveAgrupacion(razonSocial);
+        // Generar claves para la razón social principal y todas sus variantes
+        const clavePrincipal = generarClaveAgrupacion(razonSocial);
+        const clavesVariantes = [];
+        if (agrupacion.variantes && agrupacion.variantes.size > 0) {
+            for (const variante of agrupacion.variantes) {
+                clavesVariantes.push(generarClaveAgrupacion(variante));
+            }
+        }
+        const todasLasClaves = [clavePrincipal, ...clavesVariantes];
 
         // Buscar saldo de inicio
         agrupacion.saldoInicio = 0;
         agrupacion.razonSocialSaldoInicio = null;
 
-        // Búsqueda exacta primero
-        if (stateMayores.saldosInicio[clave]) {
-            agrupacion.saldoInicio = stateMayores.saldosInicio[clave].saldo;
-            agrupacion.razonSocialSaldoInicio = stateMayores.saldosInicio[clave].razonSocial;
-            stateMayores.saldosInicio[clave].vinculado = true;
-        } else {
-            // Búsqueda por similitud
+        // Búsqueda exacta primero (en razón social principal y variantes)
+        let encontradoInicio = false;
+        for (const clave of todasLasClaves) {
+            if (stateMayores.saldosInicio[clave] && !stateMayores.saldosInicio[clave].vinculado) {
+                agrupacion.saldoInicio = stateMayores.saldosInicio[clave].saldo;
+                agrupacion.razonSocialSaldoInicio = stateMayores.saldosInicio[clave].razonSocial;
+                stateMayores.saldosInicio[clave].vinculado = true;
+                encontradoInicio = true;
+                break;
+            }
+        }
+
+        // Si no se encontró exacto, búsqueda por similitud
+        if (!encontradoInicio) {
             for (const [claveInicio, saldoInicio] of Object.entries(stateMayores.saldosInicio)) {
                 if (!saldoInicio.vinculado) {
-                    const similitud = calcularSimilitud(clave, claveInicio);
-                    if (similitud >= 0.75) {
+                    // Comparar con todas las claves (principal + variantes)
+                    let mejorSimilitud = 0;
+                    for (const clave of todasLasClaves) {
+                        const similitud = calcularSimilitud(clave, claveInicio);
+                        if (similitud > mejorSimilitud) mejorSimilitud = similitud;
+                    }
+                    if (mejorSimilitud >= 0.75) {
                         agrupacion.saldoInicio = saldoInicio.saldo;
                         agrupacion.razonSocialSaldoInicio = saldoInicio.razonSocial;
                         saldoInicio.vinculado = true;
@@ -13062,17 +13085,29 @@ function vincularSaldosConAgrupaciones() {
         agrupacion.saldoCierre = null;
         agrupacion.razonSocialSaldoCierre = null;
 
-        // Búsqueda exacta primero
-        if (stateMayores.saldosCierre[clave]) {
-            agrupacion.saldoCierre = stateMayores.saldosCierre[clave].saldo;
-            agrupacion.razonSocialSaldoCierre = stateMayores.saldosCierre[clave].razonSocial;
-            stateMayores.saldosCierre[clave].vinculado = true;
-        } else {
-            // Búsqueda por similitud
+        // Búsqueda exacta primero (en razón social principal y variantes)
+        let encontradoCierre = false;
+        for (const clave of todasLasClaves) {
+            if (stateMayores.saldosCierre[clave] && !stateMayores.saldosCierre[clave].vinculado) {
+                agrupacion.saldoCierre = stateMayores.saldosCierre[clave].saldo;
+                agrupacion.razonSocialSaldoCierre = stateMayores.saldosCierre[clave].razonSocial;
+                stateMayores.saldosCierre[clave].vinculado = true;
+                encontradoCierre = true;
+                break;
+            }
+        }
+
+        // Si no se encontró exacto, búsqueda por similitud
+        if (!encontradoCierre) {
             for (const [claveCierre, saldoCierre] of Object.entries(stateMayores.saldosCierre)) {
                 if (!saldoCierre.vinculado) {
-                    const similitud = calcularSimilitud(clave, claveCierre);
-                    if (similitud >= 0.75) {
+                    // Comparar con todas las claves (principal + variantes)
+                    let mejorSimilitud = 0;
+                    for (const clave of todasLasClaves) {
+                        const similitud = calcularSimilitud(clave, claveCierre);
+                        if (similitud > mejorSimilitud) mejorSimilitud = similitud;
+                    }
+                    if (mejorSimilitud >= 0.75) {
                         agrupacion.saldoCierre = saldoCierre.saldo;
                         agrupacion.razonSocialSaldoCierre = saldoCierre.razonSocial;
                         saldoCierre.vinculado = true;
