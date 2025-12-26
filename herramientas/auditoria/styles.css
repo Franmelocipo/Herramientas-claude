@@ -5919,3 +5919,132 @@ th.acciones-col {
         min-width: 150px;
     }
 }
+
+/* ============================================ */
+/* ESTILOS: Indicador de progreso DP */
+/* ============================================ */
+
+.progreso-dp-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.progreso-dp-contenido {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 32px 48px;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    min-width: 300px;
+}
+
+.progreso-dp-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid #334155;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 16px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.progreso-dp-mensaje {
+    color: #f8fafc;
+    font-size: 1.1rem;
+    margin-bottom: 16px;
+}
+
+.progreso-dp-barra-container {
+    background: #334155;
+    border-radius: 8px;
+    height: 8px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progreso-dp-barra {
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+    height: 100%;
+    border-radius: 8px;
+    transition: width 0.2s ease;
+}
+
+.progreso-dp-porcentaje {
+    color: #94a3b8;
+    font-size: 0.9rem;
+}
+
+/* Botón cargar más */
+.cargar-mas-container {
+    padding: 16px;
+    text-align: center;
+    border-top: 1px solid #334155;
+    background: #0f172a;
+}
+
+.btn-cargar-mas {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn-cargar-mas:hover {
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    transform: translateY(-1px);
+}
+
+.info-paginacion {
+    display: block;
+    margin-top: 8px;
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+/* Info de registros en agrupación */
+.info-registros-agrupacion {
+    padding: 8px 12px;
+    background: #1e293b;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    border-bottom: 1px solid #334155;
+}
+
+/* Botón ver todos */
+.ver-todos-container {
+    padding: 12px;
+    text-align: center;
+    border-top: 1px solid #334155;
+}
+
+.btn-ver-todos {
+    background: transparent;
+    color: #60a5fa;
+    border: 1px solid #3b82f6;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.btn-ver-todos:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
