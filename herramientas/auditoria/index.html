@@ -940,6 +940,11 @@
                                                     <span class="sort-icon">⇅</span>
                                                 </div>
                                             </th>
+                                            <th class="col-numero col-ajuste" data-col="ajusteAuditoria">
+                                                <div class="th-content">
+                                                    <span>Ajustes Auditoría</span>
+                                                </div>
+                                            </th>
                                             <th class="col-numero sortable" data-col="saldoCierre" onclick="ordenarComparativo('saldoCierre')">
                                                 <div class="th-content">
                                                     <span>Saldo Reportado</span>
@@ -992,6 +997,13 @@
                                                     <option value="positivo">Positivo</option>
                                                     <option value="negativo">Negativo</option>
                                                     <option value="cero">Cero</option>
+                                                </select>
+                                            </th>
+                                            <th class="col-numero col-ajuste">
+                                                <select class="filtro-comparativo filtro-numero" id="filtroCompAjuste" onchange="filtrarComparativo()">
+                                                    <option value="">Todos</option>
+                                                    <option value="conajuste">Con ajuste</option>
+                                                    <option value="sinajuste">Sin ajuste</option>
                                                 </select>
                                             </th>
                                             <th class="col-numero">
