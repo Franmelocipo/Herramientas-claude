@@ -12726,13 +12726,64 @@ async function moverRegistrosADestino(destino) {
     // Crear mapa de IDs para búsqueda rápida
     const registrosMap = new Map(stateMayores.registrosMayor.map(r => [r.id, r]));
 
-    // Actualizar cada registro
+    // Identificar la agrupación origen
+    const agrupacionOrigen = stateMayores.agrupacionOrigenMovimiento;
+    const claveOrigen = agrupacionOrigen && agrupacionOrigen !== 'Sin Asignar'
+        ? generarClaveAgrupacion(agrupacionOrigen)
+        : null;
+
+    // Generar clave destino
+    const claveDestino = destino === 'Sin Asignar' ? null : generarClaveAgrupacion(destino);
+
+    // Actualizar cada registro y moverlo entre agrupaciones (sin reprocesar todo)
     for (const id of registrosIds) {
         const registro = registrosMap.get(id);
         if (registro) {
             // Asignar la nueva razón social manualmente
             registro.razonSocialAsignada = destino === 'Sin Asignar' ? null : destino;
+
+            // Quitar de la agrupación origen
+            if (claveOrigen && stateMayores.agrupacionesRazonSocial[claveOrigen]) {
+                const agrupOrigen = stateMayores.agrupacionesRazonSocial[claveOrigen];
+                agrupOrigen.registros = agrupOrigen.registros.filter(r => r.id !== id);
+            } else if (agrupacionOrigen === 'Sin Asignar') {
+                stateMayores.registrosSinAsignar = stateMayores.registrosSinAsignar.filter(r => r.id !== id);
+            }
+
+            // Agregar a la agrupación destino
+            if (claveDestino) {
+                // Buscar o crear la agrupación destino
+                if (!stateMayores.agrupacionesRazonSocial[claveDestino]) {
+                    // Crear nueva agrupación
+                    stateMayores.agrupacionesRazonSocial[claveDestino] = {
+                        id: `agrup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        razonSocial: destino,
+                        registros: [],
+                        variantes: new Set([destino]),
+                        saldoDebe: 0,
+                        saldoHaber: 0,
+                        saldo: 0
+                    };
+                }
+                stateMayores.agrupacionesRazonSocial[claveDestino].registros.push(registro);
+            } else {
+                // Mover a sin asignar
+                stateMayores.registrosSinAsignar.push(registro);
+            }
         }
+    }
+
+    // Recalcular totales de agrupaciones afectadas
+    if (claveOrigen && stateMayores.agrupacionesRazonSocial[claveOrigen]) {
+        recalcularTotalesAgrupacion(stateMayores.agrupacionesRazonSocial[claveOrigen]);
+        // Si quedó vacía, eliminarla
+        if (stateMayores.agrupacionesRazonSocial[claveOrigen].registros.length === 0) {
+            delete stateMayores.agrupacionesRazonSocial[claveOrigen];
+        }
+    }
+
+    if (claveDestino && stateMayores.agrupacionesRazonSocial[claveDestino]) {
+        recalcularTotalesAgrupacion(stateMayores.agrupacionesRazonSocial[claveDestino]);
     }
 
     // Limpiar selección
@@ -12740,10 +12791,11 @@ async function moverRegistrosADestino(destino) {
     stateMayores.agrupacionOrigenMovimiento = null;
     stateMayores._sinAsignarOrdenado = false;
 
-    // Reprocesar agrupaciones (asíncrono)
-    await procesarAgrupacionesRazonSocial();
+    // Invalidar cache
+    stateMayores.dpTotalesCache = null;
+    stateMayores.agrupacionesOrdenadas = [];
 
-    // Re-vincular saldos de inicio y cierre con las nuevas agrupaciones
+    // Re-vincular saldos de inicio y cierre con las agrupaciones actualizadas
     vincularSaldosConAgrupaciones();
 
     // Actualizar UI
@@ -12751,6 +12803,22 @@ async function moverRegistrosADestino(destino) {
     actualizarBarraSeleccionDP();
 
     mostrarNotificacion(`${registrosIds.length} registro(s) movido(s) a "${destino}"`, 'success');
+}
+
+/**
+ * Recalcular totales de una agrupación
+ */
+function recalcularTotalesAgrupacion(agrupacion) {
+    agrupacion.saldoDebe = 0;
+    agrupacion.saldoHaber = 0;
+
+    for (const registro of agrupacion.registros) {
+        agrupacion.saldoDebe += registro.debe || 0;
+        agrupacion.saldoHaber += registro.haber || 0;
+    }
+
+    agrupacion.saldo = agrupacion.saldoDebe - agrupacion.saldoHaber;
+    agrupacion._ordenado = false; // Marcar para reordenar
 }
 
 /**
