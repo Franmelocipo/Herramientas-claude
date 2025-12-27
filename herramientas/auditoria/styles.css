@@ -6857,19 +6857,20 @@ select.filtro-comparativo:not([value=""]) {
    ============================================ */
 
 .col-acciones {
-    width: 60px;
-    min-width: 60px;
+    width: 80px;
+    min-width: 80px;
     text-align: center;
 }
 
 .btn-reasignar-saldo {
-    padding: 4px 8px;
+    padding: 4px 6px;
     background: #334155;
     border: 1px solid #475569;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 12px;
     transition: all 0.2s ease;
+    margin: 0 2px;
 }
 
 .btn-reasignar-saldo:hover {
@@ -6880,4 +6881,22 @@ select.filtro-comparativo:not([value=""]) {
 
 .btn-reasignar-saldo:active {
     transform: scale(0.95);
+}
+
+.btn-reasignar-inicio {
+    background: #1e3a5f;
+    border-color: #3b82f6;
+}
+
+.btn-reasignar-inicio:hover {
+    background: #2563eb;
+}
+
+.btn-reasignar-cierre {
+    background: #3f1e5f;
+    border-color: #8b5cf6;
+}
+
+.btn-reasignar-cierre:hover {
+    background: #7c3aed;
 }
