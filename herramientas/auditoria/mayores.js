@@ -11792,6 +11792,7 @@ function crearElementoAgrupacion(agrupacion) {
             <span class="saldo-debe">${formatearMoneda(agrupacion.saldoDebe)}</span>
             <span class="saldo-haber">${formatearMoneda(agrupacion.saldoHaber)}</span>
             <span class="saldo-neto ${claseSaldo}">${formatearMoneda(Math.abs(agrupacion.saldo))} ${agrupacion.saldo >= 0 ? '(D)' : '(H)'}</span>
+            <button class="btn-exportar-agrupacion" onclick="event.stopPropagation(); exportarAgrupacionExcel('${agrupacion.id}')" title="Exportar a Excel">📥</button>
         </div>
     `;
 
@@ -12674,6 +12675,107 @@ function expandirTodasAgrupacionesDP() {
 function colapsarTodasAgrupacionesDP() {
     stateMayores.agrupacionesExpandidas.clear();
     renderizarPanelDeudoresProveedores();
+}
+
+/**
+ * Exportar una agrupación individual a Excel
+ * @param {string} agrupacionId - ID de la agrupación a exportar
+ */
+function exportarAgrupacionExcel(agrupacionId) {
+    // Buscar la agrupación
+    let agrupacion = null;
+    for (const a of Object.values(stateMayores.agrupacionesRazonSocial)) {
+        if (a.id === agrupacionId) {
+            agrupacion = a;
+            break;
+        }
+    }
+
+    if (!agrupacion) {
+        mostrarNotificacion('No se encontró la agrupación', 'error');
+        return;
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    // Datos del encabezado
+    const data = [
+        ['ANÁLISIS DE CUENTA CORRIENTE'],
+        ['Razón Social:', agrupacion.razonSocial],
+        ['Cliente:', stateMayores.clienteActual?.nombre || '-'],
+        ['Fecha de exportación:', new Date().toLocaleString('es-AR')],
+        [],
+        ['RESUMEN'],
+        ['Cantidad de movimientos:', agrupacion.registros.length],
+        ['Total Debe:', agrupacion.saldoDebe],
+        ['Total Haber:', agrupacion.saldoHaber],
+        ['Saldo:', agrupacion.saldo],
+        []
+    ];
+
+    // Si hay variantes, mostrarlas
+    if (agrupacion.variantes && agrupacion.variantes.size > 1) {
+        data.push(['VARIANTES INCLUIDAS:']);
+        for (const variante of agrupacion.variantes) {
+            data.push(['  - ' + variante]);
+        }
+        data.push([]);
+    }
+
+    // Encabezados de detalle
+    data.push(['DETALLE DE MOVIMIENTOS']);
+    data.push(['Fecha', 'Asiento', 'Leyenda', 'Debe', 'Haber', 'Saldo Acumulado']);
+
+    // Ordenar registros por fecha
+    const registrosOrdenados = [...agrupacion.registros].sort((a, b) => {
+        const fechaA = a.fecha ? new Date(a.fecha) : new Date(0);
+        const fechaB = b.fecha ? new Date(b.fecha) : new Date(0);
+        return fechaA - fechaB;
+    });
+
+    // Calcular saldo acumulado
+    let saldoAcumulado = 0;
+    registrosOrdenados.forEach(r => {
+        saldoAcumulado += (r.debe || 0) - (r.haber || 0);
+        data.push([
+            r.fecha ? formatearFecha(r.fecha) : '',
+            r.asiento || '',
+            r.descripcion || '',
+            r.debe || 0,
+            r.haber || 0,
+            saldoAcumulado
+        ]);
+    });
+
+    // Agregar totales al final
+    data.push([]);
+    data.push(['', '', 'TOTALES:', agrupacion.saldoDebe, agrupacion.saldoHaber, agrupacion.saldo]);
+
+    // Crear hoja
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Ajustar anchos de columna
+    ws['!cols'] = [
+        { wch: 12 },  // Fecha
+        { wch: 10 },  // Asiento
+        { wch: 50 },  // Leyenda
+        { wch: 15 },  // Debe
+        { wch: 15 },  // Haber
+        { wch: 15 }   // Saldo Acumulado
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Cuenta Corriente');
+
+    // Generar nombre de archivo
+    const razonSocialLimpia = agrupacion.razonSocial
+        .replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s]/g, '')
+        .replace(/\s+/g, '_')
+        .substring(0, 30);
+    const fechaHoy = new Date().toISOString().split('T')[0];
+    const nombreArchivo = `CC_${razonSocialLimpia}_${fechaHoy}.xlsx`;
+
+    XLSX.writeFile(wb, nombreArchivo);
+    mostrarNotificacion(`Exportado: ${agrupacion.razonSocial}`, 'success');
 }
 
 /**

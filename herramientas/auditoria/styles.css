@@ -5638,7 +5638,7 @@ th.acciones-col {
 
 .dp-lista-header {
     display: grid;
-    grid-template-columns: 24px 30px 1fr auto 80px 120px 120px 120px;
+    grid-template-columns: 24px 30px 1fr auto 80px 120px 120px 120px 36px;
     gap: 8px;
     padding: 12px 16px;
     background: #0f172a;
@@ -5680,7 +5680,7 @@ th.acciones-col {
 /* Fila de filtros para agrupaciones */
 .dp-lista-filtros {
     display: grid;
-    grid-template-columns: 24px 30px 1fr auto 80px 120px 120px 120px;
+    grid-template-columns: 24px 30px 1fr auto 80px 120px 120px 120px 36px;
     gap: 8px;
     padding: 8px 16px;
     background: #1e293b;
@@ -5744,7 +5744,7 @@ th.acciones-col {
 
 .agrupacion-header {
     display: grid;
-    grid-template-columns: 24px 30px 1fr auto 80px 120px 120px 120px;
+    grid-template-columns: 24px 30px 1fr auto 80px 120px 120px 120px 36px;
     gap: 8px;
     padding: 12px 16px;
     background: #1e293b;
@@ -5755,6 +5755,28 @@ th.acciones-col {
 
 .agrupacion-header:hover {
     background: #334155;
+}
+
+/* Botón exportar agrupación individual */
+.btn-exportar-agrupacion {
+    background: transparent;
+    border: 1px solid #475569;
+    color: #94a3b8;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-exportar-agrupacion:hover {
+    background: #059669;
+    border-color: #059669;
+    color: white;
+    transform: scale(1.1);
 }
 
 .agrupacion-item.expandida .agrupacion-header {
