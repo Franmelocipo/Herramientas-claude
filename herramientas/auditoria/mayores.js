@@ -5082,23 +5082,8 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
 
     // Procesar agrupaciones para deudores/proveedores
     if (stateMayores.tipoMayorActual?.id === 'deudores_proveedores') {
-        // Intentar cargar datos de D/P desde localStorage (fallback)
-        let datosDP = null;
-        try {
-            const keyDP = `dp_data_${conciliacion.id}`;
-            const datosLocalStorage = localStorage.getItem(keyDP);
-            if (datosLocalStorage) {
-                datosDP = JSON.parse(datosLocalStorage);
-                console.log('📂 Datos de D/P encontrados en localStorage');
-            }
-        } catch (e) {
-            console.warn('⚠️ Error leyendo datos de D/P desde localStorage:', e);
-        }
-
-        // Restaurar agrupaciones si están guardadas en la conciliación o localStorage
-        const agrupacionesGuardadas = conciliacion.agrupaciones_razon_social ||
-                                       conciliacion.agrupacionesRazonSocial ||
-                                       datosDP?.agrupaciones_razon_social;
+        // Restaurar agrupaciones si están guardadas en la conciliación (desde Supabase)
+        const agrupacionesGuardadas = conciliacion.agrupaciones_razon_social || conciliacion.agrupacionesRazonSocial;
 
         if (agrupacionesGuardadas && Object.keys(agrupacionesGuardadas).length > 0) {
             stateMayores.agrupacionesRazonSocial = agrupacionesGuardadas;
@@ -5108,21 +5093,19 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
                     agrupacion.variantes = new Set(agrupacion.variantes);
                 }
             }
-            stateMayores.registrosSinAsignar = conciliacion.registros_sin_asignar ||
-                                               conciliacion.registrosSinAsignar ||
-                                               datosDP?.registros_sin_asignar || [];
-            console.log(`📂 Agrupaciones restauradas: ${Object.keys(stateMayores.agrupacionesRazonSocial).length}`);
+            stateMayores.registrosSinAsignar = conciliacion.registros_sin_asignar || conciliacion.registrosSinAsignar || [];
+            console.log(`📂 Agrupaciones restauradas desde Supabase: ${Object.keys(stateMayores.agrupacionesRazonSocial).length}`);
         } else {
-            // Si no hay agrupaciones guardadas, procesarlas desde cero
-            console.log('📂 No hay agrupaciones guardadas, procesando desde registros...');
+            // Si no hay agrupaciones guardadas, procesarlas desde los registros
+            console.log('📂 No hay agrupaciones en Supabase, procesando desde registros...');
             await procesarAgrupacionesRazonSocial();
         }
 
-        // Restaurar saldos de inicio y cierre si están guardados (soportar conciliación, localStorage, y ambos formatos)
-        const saldosInicio = conciliacion.saldos_inicio || conciliacion.saldosInicio || datosDP?.saldos_inicio;
-        const saldosCierre = conciliacion.saldos_cierre || conciliacion.saldosCierre || datosDP?.saldos_cierre;
-        const archivoSaldosInicio = conciliacion.archivo_saldos_inicio || conciliacion.archivoSaldosInicio || datosDP?.archivo_saldos_inicio;
-        const archivoSaldosCierre = conciliacion.archivo_saldos_cierre || conciliacion.archivoSaldosCierre || datosDP?.archivo_saldos_cierre;
+        // Restaurar saldos de inicio y cierre si están guardados en Supabase
+        const saldosInicio = conciliacion.saldos_inicio || conciliacion.saldosInicio;
+        const saldosCierre = conciliacion.saldos_cierre || conciliacion.saldosCierre;
+        const archivoSaldosInicio = conciliacion.archivo_saldos_inicio || conciliacion.archivoSaldosInicio;
+        const archivoSaldosCierre = conciliacion.archivo_saldos_cierre || conciliacion.archivoSaldosCierre;
 
         if (saldosInicio && Object.keys(saldosInicio).length > 0) {
             stateMayores.saldosInicio = saldosInicio;
@@ -5752,10 +5735,26 @@ async function ejecutarGuardarConciliacionMayor() {
                 .from('conciliaciones_mayor')
                 .upsert(registro, { onConflict: 'id' });
 
-            // Si falla por columnas faltantes, intentar sin las nuevas columnas
-            if (error && error.message && error.message.includes('Could not find')) {
-                console.warn('⚠️ Columnas nuevas no existen en Supabase, guardando sin ellas...');
-                // Crear registro sin las columnas nuevas
+            // Si falla por columnas faltantes de D/P, mostrar mensaje y guardar sin ellas
+            if (error && error.message && (error.message.includes('Could not find') || error.code === '42703')) {
+                console.warn('⚠️ Columnas de D/P no existen en Supabase, guardando sin ellas...');
+
+                // Mostrar advertencia al usuario si es tipo D/P
+                if (tipoMayorId === 'deudores_proveedores') {
+                    mostrarNotificacion('⚠️ Para guardar saldos de D/P, ejecute el SQL de actualización en Supabase', 'warning');
+                    console.warn('❗ Ejecute este SQL en Supabase para habilitar guardado de D/P:');
+                    console.warn(`
+ALTER TABLE conciliaciones_mayor
+ADD COLUMN IF NOT EXISTS agrupaciones_razon_social JSONB,
+ADD COLUMN IF NOT EXISTS registros_sin_asignar JSONB,
+ADD COLUMN IF NOT EXISTS saldos_inicio JSONB,
+ADD COLUMN IF NOT EXISTS saldos_cierre JSONB,
+ADD COLUMN IF NOT EXISTS archivo_saldos_inicio TEXT,
+ADD COLUMN IF NOT EXISTS archivo_saldos_cierre TEXT;
+                    `);
+                }
+
+                // Crear registro sin las columnas nuevas de D/P
                 const registroBasico = {
                     id: registro.id,
                     cliente_id: registro.cliente_id,
@@ -5776,24 +5775,6 @@ async function ejecutarGuardarConciliacionMayor() {
                     .from('conciliaciones_mayor')
                     .upsert(registroBasico, { onConflict: 'id' });
                 error = resultado.error;
-
-                // Si el guardado básico fue exitoso, guardar datos de D/P en localStorage
-                // Solo guardamos saldos (son pequeños), las agrupaciones se reconstruyen desde registros
-                if (!error && tipoMayorId === 'deudores_proveedores') {
-                    try {
-                        const keyDP = `dp_data_${registro.id}`;
-                        // Guardar solo saldos y nombres de archivos (las agrupaciones se reconstruyen)
-                        localStorage.setItem(keyDP, JSON.stringify({
-                            saldos_inicio: saldosInicioParaGuardar,
-                            saldos_cierre: saldosCierreParaGuardar,
-                            archivo_saldos_inicio: stateMayores.archivoSaldosInicio,
-                            archivo_saldos_cierre: stateMayores.archivoSaldosCierre
-                        }));
-                        console.log('📋 Datos de D/P (saldos) guardados en localStorage como fallback');
-                    } catch (dpError) {
-                        console.warn('⚠️ No se pudieron guardar datos de D/P en localStorage:', dpError);
-                    }
-                }
 
                 if (!error) {
                     // Guardar cheques en localStorage como fallback SOLO si no hay listadoChequesGuardadoId
