@@ -5108,11 +5108,40 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
         if (saldosInicio && Object.keys(saldosInicio).length > 0) {
             stateMayores.saldosInicio = saldosInicio;
             stateMayores.archivoSaldosInicio = conciliacion.archivo_saldos_inicio || conciliacion.archivoSaldosInicio || 'Cargado';
+
+            // Calcular total de saldos de inicio
+            const totalInicio = Object.values(saldosInicio).reduce((sum, s) => sum + (s.saldo || 0), 0);
+            stateMayores.totalSaldosInicio = totalInicio;
+
+            // Actualizar UI
+            const nombreArchivoInicio = document.getElementById('nombreArchivoSaldosInicio');
+            const totalInicioDisplay = document.getElementById('totalSaldosInicioDisplay');
+            if (nombreArchivoInicio) nombreArchivoInicio.textContent = stateMayores.archivoSaldosInicio;
+            if (totalInicioDisplay) {
+                totalInicioDisplay.textContent = `Total: ${formatearMoneda(totalInicio)}`;
+                totalInicioDisplay.className = `dp-saldo-total ${totalInicio >= 0 ? 'debe' : 'haber'}`;
+            }
+
             console.log(`📂 Saldos de inicio restaurados: ${Object.keys(saldosInicio).length}`);
         }
+
         if (saldosCierre && Object.keys(saldosCierre).length > 0) {
             stateMayores.saldosCierre = saldosCierre;
             stateMayores.archivoSaldosCierre = conciliacion.archivo_saldos_cierre || conciliacion.archivoSaldosCierre || 'Cargado';
+
+            // Calcular total de saldos de cierre
+            const totalCierre = Object.values(saldosCierre).reduce((sum, s) => sum + (s.saldo || 0), 0);
+            stateMayores.totalSaldosCierre = totalCierre;
+
+            // Actualizar UI
+            const nombreArchivoCierre = document.getElementById('nombreArchivoSaldosCierre');
+            const totalCierreDisplay = document.getElementById('totalSaldosCierreDisplay');
+            if (nombreArchivoCierre) nombreArchivoCierre.textContent = stateMayores.archivoSaldosCierre;
+            if (totalCierreDisplay) {
+                totalCierreDisplay.textContent = `Total: ${formatearMoneda(totalCierre)}`;
+                totalCierreDisplay.className = `dp-saldo-total ${totalCierre >= 0 ? 'debe' : 'haber'}`;
+            }
+
             console.log(`📂 Saldos de cierre restaurados: ${Object.keys(saldosCierre).length}`);
         }
 
