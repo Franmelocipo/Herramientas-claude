@@ -14434,19 +14434,24 @@ function renderizarCuadroComparativo() {
         const claveAjuste = normalizarRazonSocial(e.razonSocial);
         const ajuste = stateMayores.ajustesAuditoria[claveAjuste] || 0;
 
-        // Calcular diferencia considerando el ajuste: (saldoCalculado + ajuste) - saldoCierre
-        const diferenciaConAjuste = e.saldoCierre !== null
-            ? (e.saldoCalculado + ajuste) - e.saldoCierre
-            : null;
+        // Si no hay saldo cierre, tratarlo como 0
+        const saldoCierreEfectivo = e.saldoCierre !== null ? e.saldoCierre : 0;
 
-        const tieneDiferencia = diferenciaConAjuste !== null && Math.abs(diferenciaConAjuste) >= 0.01;
+        // Calcular diferencia considerando el ajuste: (saldoCalculado + ajuste) - saldoCierre
+        const diferenciaConAjuste = (e.saldoCalculado + ajuste) - saldoCierreEfectivo;
+
+        const tieneDiferencia = Math.abs(diferenciaConAjuste) >= 0.01;
         const claseFilaDif = tieneDiferencia ? 'fila-diferencia' : '';
         const claseTipo = e.tipo !== 'agrupacion' ? 'fila-' + e.tipo : '';
 
         // Determinar estado basado en la diferencia con ajuste
-        let estado = e.estado;
-        if (e.saldoCierre !== null) {
+        let estado = tieneDiferencia ? 'diferencia' : 'ok';
+
+        // Casos especiales de estado
+        if (e.tipo === 'solo_inicio') {
             estado = tieneDiferencia ? 'diferencia' : 'ok';
+        } else if (e.tipo === 'solo_cierre') {
+            estado = 'solocierre';
         }
 
         let estadoHtml = '';
@@ -14456,9 +14461,6 @@ function renderizarCuadroComparativo() {
                 break;
             case 'diferencia':
                 estadoHtml = '<span class="estado-badge error">Diferencia</span>';
-                break;
-            case 'sincierre':
-                estadoHtml = '<span class="estado-badge warning">Sin saldo cierre</span>';
                 break;
             case 'sinmov':
                 estadoHtml = '<span class="estado-badge warning">Sin movimientos</span>';
@@ -14510,8 +14512,8 @@ function renderizarCuadroComparativo() {
                            onchange="actualizarAjusteAuditoria(this)"
                            onkeypress="return validarInputNumerico(event)">
                 </td>
-                <td class="col-numero ${e.saldoCierre !== null ? (e.saldoCierre >= 0 ? 'debe' : 'haber') : 'sin-dato'}">${e.saldoCierre !== null ? formatearMoneda(e.saldoCierre) : '-'}</td>
-                <td class="col-numero ${tieneDiferencia ? 'diferencia' : ''}">${diferenciaConAjuste !== null ? formatearMoneda(diferenciaConAjuste) : '-'}</td>
+                <td class="col-numero ${saldoCierreEfectivo >= 0 ? 'debe' : 'haber'}">${formatearMoneda(saldoCierreEfectivo)}</td>
+                <td class="col-numero ${tieneDiferencia ? 'diferencia' : ''}">${formatearMoneda(diferenciaConAjuste)}</td>
                 <td class="col-estado">${estadoHtml}</td>
                 <td class="col-acciones">${botonesAccion}</td>
             </tr>
@@ -14522,7 +14524,7 @@ function renderizarCuadroComparativo() {
         totalHaber += e.haber || 0;
         totalSaldoCalculado += e.saldoCalculado || 0;
         totalAjustes += ajuste;
-        if (e.saldoCierre !== null) totalSaldoCierre += e.saldoCierre;
+        totalSaldoCierre += saldoCierreEfectivo;
     }
 
     const cantMostradas = entidades.length;
