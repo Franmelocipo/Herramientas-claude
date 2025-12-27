@@ -4570,7 +4570,14 @@ async function cargarConciliacionesMayorGuardadas() {
                     mesesProcesados: c.meses_procesados || {},
                     mesesProcesadosResumen: c.meses_procesados_resumen || {},
                     fechaGuardado: c.fecha_guardado,
-                    fechaModificado: c.fecha_modificado
+                    fechaModificado: c.fecha_modificado,
+                    // Campos de Deudores/Proveedores
+                    agrupaciones_razon_social: c.agrupaciones_razon_social || null,
+                    registros_sin_asignar: c.registros_sin_asignar || [],
+                    saldos_inicio: c.saldos_inicio || null,
+                    saldos_cierre: c.saldos_cierre || null,
+                    archivo_saldos_inicio: c.archivo_saldos_inicio || null,
+                    archivo_saldos_cierre: c.archivo_saldos_cierre || null
                 }));
             } else {
                 console.log('📊 No hay conciliaciones en Supabase para este cliente/tipo');
@@ -4598,7 +4605,14 @@ async function cargarConciliacionesMayorGuardadas() {
                         mesesProcesados: c.meses_procesados || {},
                         mesesProcesadosResumen: c.meses_procesados_resumen || {},
                         fechaGuardado: c.fecha_guardado,
-                        fechaModificado: c.fecha_modificado
+                        fechaModificado: c.fecha_modificado,
+                        // Campos de Deudores/Proveedores
+                        agrupaciones_razon_social: c.agrupaciones_razon_social || null,
+                        registros_sin_asignar: c.registros_sin_asignar || [],
+                        saldos_inicio: c.saldos_inicio || null,
+                        saldos_cierre: c.saldos_cierre || null,
+                        archivo_saldos_inicio: c.archivo_saldos_inicio || null,
+                        archivo_saldos_cierre: c.archivo_saldos_cierre || null
                     }));
                 }
                 return [];
@@ -4863,6 +4877,15 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
     }
 
     console.log('📂 Cargando conciliación:', conciliacion.nombre);
+
+    // Debug: ver qué campos de D/P tiene la conciliación
+    console.log('📂 Campos D/P en conciliación:', {
+        agrupaciones_razon_social: conciliacion.agrupaciones_razon_social ? Object.keys(conciliacion.agrupaciones_razon_social).length : 'NO',
+        saldos_inicio: conciliacion.saldos_inicio ? Object.keys(conciliacion.saldos_inicio).length : 'NO',
+        saldos_cierre: conciliacion.saldos_cierre ? Object.keys(conciliacion.saldos_cierre).length : 'NO',
+        archivo_saldos_inicio: conciliacion.archivo_saldos_inicio || 'NO',
+        archivo_saldos_cierre: conciliacion.archivo_saldos_cierre || 'NO'
+    });
 
     // Restaurar fechas como objetos Date
     const registros = conciliacion.registros || [];
