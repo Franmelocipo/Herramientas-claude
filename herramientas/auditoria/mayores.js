@@ -13198,6 +13198,208 @@ function colapsarTodasAgrupacionesDP() {
     renderizarPanelDeudoresProveedores();
 }
 
+// ============================================
+// FUNCIONES PARA CREAR NUEVOS GRUPOS
+// ============================================
+
+/**
+ * Mostrar modal para crear nuevo grupo
+ */
+function mostrarModalNuevoGrupo() {
+    document.getElementById('inputNuevoGrupoNombre').value = '';
+    document.getElementById('modalNuevoGrupo').classList.remove('hidden');
+    document.getElementById('inputNuevoGrupoNombre').focus();
+}
+
+/**
+ * Cerrar modal de crear nuevo grupo
+ */
+function cerrarModalNuevoGrupo() {
+    document.getElementById('modalNuevoGrupo').classList.add('hidden');
+}
+
+/**
+ * Crear un nuevo grupo vacío
+ */
+function crearNuevoGrupo() {
+    const nombre = document.getElementById('inputNuevoGrupoNombre').value.trim();
+
+    if (!nombre) {
+        mostrarNotificacion('Debe ingresar un nombre para el grupo', 'warning');
+        return;
+    }
+
+    // Verificar si ya existe
+    const claveNueva = generarClaveAgrupacion(nombre);
+    if (stateMayores.agrupacionesRazonSocial[claveNueva]) {
+        mostrarNotificacion('Ya existe un grupo con ese nombre', 'warning');
+        return;
+    }
+
+    // Crear el nuevo grupo vacío
+    stateMayores.agrupacionesRazonSocial[claveNueva] = {
+        id: `agrup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        razonSocial: nombre,
+        registros: [],
+        variantes: new Set([nombre]),
+        saldoDebe: 0,
+        saldoHaber: 0,
+        saldo: 0,
+        saldoInicio: 0,
+        saldoCierre: null,
+        saldoCalculado: 0,
+        diferencia: null
+    };
+
+    // Invalidar cache de totales
+    stateMayores.dpTotalesCache = null;
+
+    cerrarModalNuevoGrupo();
+    renderizarPanelDeudoresProveedores();
+
+    mostrarNotificacion(`Grupo "${nombre}" creado exitosamente`, 'success');
+}
+
+// ============================================
+// FUNCIONES PARA REASIGNAR SALDOS CIERRE
+// ============================================
+
+// Variable temporal para guardar el saldo que se está reasignando
+let saldoCierreEnReasignacion = null;
+
+/**
+ * Mostrar modal para reasignar saldo de cierre
+ * @param {string} razonSocialActual - Razón social actual del saldo
+ * @param {number} importe - Importe del saldo
+ */
+function mostrarModalReasignarSaldoCierre(razonSocialActual, importe) {
+    saldoCierreEnReasignacion = {
+        razonSocialOriginal: razonSocialActual,
+        importe: importe
+    };
+
+    // Mostrar info actual
+    document.getElementById('reasignarSaldoActualRazon').textContent = razonSocialActual;
+    document.getElementById('reasignarSaldoActualImporte').textContent = formatearMoneda(importe);
+
+    // Llenar select con grupos disponibles
+    const select = document.getElementById('selectDestinoSaldoCierre');
+    select.innerHTML = '<option value="">-- Seleccionar grupo --</option>';
+
+    // Agregar todas las agrupaciones como opciones
+    const agrupaciones = Object.values(stateMayores.agrupacionesRazonSocial)
+        .sort((a, b) => a.razonSocial.localeCompare(b.razonSocial));
+
+    for (const agrup of agrupaciones) {
+        if (agrup.razonSocial !== razonSocialActual) {
+            const option = document.createElement('option');
+            option.value = agrup.razonSocial;
+            option.textContent = agrup.razonSocial;
+            select.appendChild(option);
+        }
+    }
+
+    // También agregar saldos de cierre no vinculados que podrían ser destino
+    for (const [clave, saldoCierre] of Object.entries(stateMayores.saldosCierre)) {
+        if (!saldoCierre.vinculado && saldoCierre.razonSocial !== razonSocialActual) {
+            // Verificar si ya existe como opción
+            const existe = Array.from(select.options).some(opt => opt.value === saldoCierre.razonSocial);
+            if (!existe) {
+                const option = document.createElement('option');
+                option.value = saldoCierre.razonSocial;
+                option.textContent = `${saldoCierre.razonSocial} (solo en cierre)`;
+                select.appendChild(option);
+            }
+        }
+    }
+
+    // Limpiar input
+    document.getElementById('inputNuevoDestinoSaldoCierre').value = '';
+
+    document.getElementById('modalReasignarSaldoCierre').classList.remove('hidden');
+}
+
+/**
+ * Cerrar modal de reasignar saldo cierre
+ */
+function cerrarModalReasignarSaldoCierre() {
+    document.getElementById('modalReasignarSaldoCierre').classList.add('hidden');
+    saldoCierreEnReasignacion = null;
+}
+
+/**
+ * Confirmar reasignación de saldo de cierre
+ */
+function confirmarReasignarSaldoCierre() {
+    if (!saldoCierreEnReasignacion) return;
+
+    const selectDestino = document.getElementById('selectDestinoSaldoCierre').value;
+    const inputDestino = document.getElementById('inputNuevoDestinoSaldoCierre').value.trim();
+
+    const destinoFinal = inputDestino || selectDestino;
+
+    if (!destinoFinal) {
+        mostrarNotificacion('Debe seleccionar o ingresar un grupo destino', 'warning');
+        return;
+    }
+
+    const razonOriginal = saldoCierreEnReasignacion.razonSocialOriginal;
+    const importe = saldoCierreEnReasignacion.importe;
+
+    // Encontrar la clave original en saldosCierre
+    let claveOriginal = null;
+    for (const [clave, saldo] of Object.entries(stateMayores.saldosCierre)) {
+        if (saldo.razonSocial === razonOriginal && saldo.saldo === importe) {
+            claveOriginal = clave;
+            break;
+        }
+    }
+
+    if (!claveOriginal) {
+        // Si no se encuentra exactamente, buscar por razonSocial
+        claveOriginal = normalizarRazonSocial(razonOriginal);
+    }
+
+    // Eliminar el saldo de su ubicación original
+    if (stateMayores.saldosCierre[claveOriginal]) {
+        delete stateMayores.saldosCierre[claveOriginal];
+    }
+
+    // Desvincular de la agrupación original si existía
+    for (const agrup of Object.values(stateMayores.agrupacionesRazonSocial)) {
+        if (agrup.razonSocial === razonOriginal) {
+            agrup.saldoCierre = null;
+            agrup.diferencia = null;
+            break;
+        }
+    }
+
+    // Crear el saldo en la nueva ubicación
+    const claveDestino = normalizarRazonSocial(destinoFinal);
+    stateMayores.saldosCierre[claveDestino] = {
+        razonSocial: destinoFinal,
+        saldo: importe,
+        vinculado: false
+    };
+
+    // Re-vincular todos los saldos
+    vincularSaldosConAgrupaciones();
+
+    // Invalidar cache
+    stateMayores.dpTotalesCache = null;
+
+    cerrarModalReasignarSaldoCierre();
+
+    // Actualizar vista
+    if (stateMayores.vistaActualDP === 'comparativo') {
+        renderizarCuadroComparativo();
+    } else {
+        renderizarPanelDeudoresProveedores();
+    }
+
+    mostrarNotificacion(`Saldo de cierre reasignado a "${destinoFinal}"`, 'success');
+}
+
 /**
  * Exportar una agrupación individual a Excel
  * @param {string} agrupacionId - ID de la agrupación a exportar
@@ -14088,6 +14290,15 @@ function renderizarCuadroComparativo() {
         const ajusteValue = ajuste !== 0 ? ajuste : '';
         const claseAjuste = ajuste > 0 ? 'ajuste-positivo' : (ajuste < 0 ? 'ajuste-negativo' : '');
 
+        // Botón de reasignar solo si tiene saldo cierre
+        const botonReasignar = e.saldoCierre !== null
+            ? `<button class="btn-reasignar-saldo"
+                       onclick="mostrarModalReasignarSaldoCierre('${escapeHtml(e.razonSocial).replace(/'/g, "\\'")}', ${e.saldoCierre})"
+                       title="Reasignar saldo cierre a otro grupo">
+                   🔄
+               </button>`
+            : '';
+
         html += `
             <tr class="${claseFilaDif} ${claseTipo}">
                 <td class="col-razon" title="${escapeHtml(e.razonSocial)}">${escapeHtml(e.razonSocial)}</td>
@@ -14106,6 +14317,7 @@ function renderizarCuadroComparativo() {
                 <td class="col-numero ${e.saldoCierre !== null ? (e.saldoCierre >= 0 ? 'debe' : 'haber') : 'sin-dato'}">${e.saldoCierre !== null ? formatearMoneda(e.saldoCierre) : '-'}</td>
                 <td class="col-numero ${tieneDiferencia ? 'diferencia' : ''}">${diferenciaConAjuste !== null ? formatearMoneda(diferenciaConAjuste) : '-'}</td>
                 <td class="col-estado">${estadoHtml}</td>
+                <td class="col-acciones">${botonReasignar}</td>
             </tr>
         `;
 
@@ -14121,7 +14333,7 @@ function renderizarCuadroComparativo() {
     const cantTotal = stateMayores.comparativoEntidadesCache.length;
     const infoFiltro = cantMostradas < cantTotal ? ` (${cantMostradas} de ${cantTotal})` : '';
 
-    tbody.innerHTML = html || `<tr><td colspan="9" class="empty-state">No hay datos para mostrar${infoFiltro}</td></tr>`;
+    tbody.innerHTML = html || `<tr><td colspan="10" class="empty-state">No hay datos para mostrar${infoFiltro}</td></tr>`;
 
     // Renderizar totales en footer
     const totalDiferencia = (totalSaldoCalculado + totalAjustes) - totalSaldoCierre;
@@ -14137,6 +14349,7 @@ function renderizarCuadroComparativo() {
             <td class="col-numero"><strong>${formatearMoneda(totalSaldoCierre)}</strong></td>
             <td class="col-numero ${Math.abs(totalDiferencia) >= 0.01 ? 'diferencia' : ''}"><strong>${formatearMoneda(totalDiferencia)}</strong></td>
             <td class="col-estado"></td>
+            <td class="col-acciones"></td>
         </tr>
     `;
 

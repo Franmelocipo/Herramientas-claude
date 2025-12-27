@@ -6808,8 +6808,76 @@ select.filtro-comparativo:not([value=""]) {
     .comparativo-tabla thead tr.comparativo-filtros {
         display: none;
     }
-    
+
     .comparativo-tabla .th-content .sort-icon {
         font-size: 0.75rem;
     }
+}
+
+/* ============================================
+   TOOLBAR DE AGRUPACIONES
+   ============================================ */
+
+.dp-agrupaciones-toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #1e293b;
+    border-bottom: 1px solid #334155;
+    border-radius: 8px 8px 0 0;
+    margin-bottom: 0;
+}
+
+.dp-agrupaciones-toolbar .btn-secondary {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    background: #334155;
+    border: 1px solid #475569;
+    color: #e2e8f0;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.dp-agrupaciones-toolbar .btn-secondary:hover {
+    background: #475569;
+    border-color: #64748b;
+}
+
+.dp-agrupaciones-toolbar .btn-sm {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+}
+
+/* ============================================
+   COLUMNA DE ACCIONES EN CUADRO COMPARATIVO
+   ============================================ */
+
+.col-acciones {
+    width: 60px;
+    min-width: 60px;
+    text-align: center;
+}
+
+.btn-reasignar-saldo {
+    padding: 4px 8px;
+    background: #334155;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.btn-reasignar-saldo:hover {
+    background: #475569;
+    border-color: #64748b;
+    transform: scale(1.1);
+}
+
+.btn-reasignar-saldo:active {
+    transform: scale(0.95);
 }
