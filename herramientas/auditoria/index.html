@@ -792,6 +792,18 @@
 
                         <!-- Vista de agrupaciones -->
                         <div id="vistaAgrupacionesDP" class="dp-vista">
+                        <!-- Toolbar de agrupaciones -->
+                        <div class="dp-agrupaciones-toolbar">
+                            <button onclick="mostrarModalNuevoGrupo()" class="btn-secondary btn-sm" title="Crear un nuevo grupo vacío">
+                                ➕ Nuevo Grupo
+                            </button>
+                            <button onclick="expandirTodasAgrupacionesDP()" class="btn-secondary btn-sm" title="Expandir todas las agrupaciones">
+                                📂 Expandir Todo
+                            </button>
+                            <button onclick="colapsarTodasAgrupacionesDP()" class="btn-secondary btn-sm" title="Colapsar todas las agrupaciones">
+                                📁 Colapsar Todo
+                            </button>
+                        </div>
                         <!-- Lista de agrupaciones por razón social -->
                         <div class="dp-lista-container">
                             <div class="dp-lista-header">
@@ -963,6 +975,11 @@
                                                     <span class="sort-icon">⇅</span>
                                                 </div>
                                             </th>
+                                            <th class="col-acciones">
+                                                <div class="th-content">
+                                                    <span>Acciones</span>
+                                                </div>
+                                            </th>
                                         </tr>
                                         <tr class="comparativo-filtros">
                                             <th class="col-razon">
@@ -1029,6 +1046,9 @@
                                                     <option value="sinmov">Sin movimientos</option>
                                                     <option value="solocierre">Solo en cierre</option>
                                                 </select>
+                                            </th>
+                                            <th class="col-acciones">
+                                                <!-- Sin filtro para columna de acciones -->
                                             </th>
                                         </tr>
                                     </thead>
@@ -2016,6 +2036,45 @@
             <button id="btn-confirmar-vincular-multiples" class="btn-confirmar-eliminar" style="background: #3b82f6;" onclick="confirmarVinculacionMultiple()" disabled>
                 🔗 Vincular al Asiento Seleccionado
             </button>
+        </div>
+    </div>
+
+    <!-- Modal Crear Nuevo Grupo -->
+    <div id="modalNuevoGrupo" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>➕ Crear Nuevo Grupo</h3>
+            <div class="info-box mb-4">
+                Ingrese el nombre de la razón social para el nuevo grupo. Este grupo estará vacío inicialmente y podrá mover registros hacia él.
+            </div>
+            <label>Nombre del grupo (Razón Social):</label>
+            <input type="text" id="inputNuevoGrupoNombre" class="input-text mb-4" placeholder="Ej: EMPRESA S.A.">
+            <div class="btn-group">
+                <button onclick="cerrarModalNuevoGrupo()" class="btn-secondary">Cancelar</button>
+                <button onclick="crearNuevoGrupo()" class="btn-primary">Crear Grupo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Reasignar Saldo Cierre -->
+    <div id="modalReasignarSaldoCierre" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>🔄 Reasignar Saldo de Cierre</h3>
+            <div class="info-box mb-4">
+                <strong>Saldo actual:</strong> <span id="reasignarSaldoActualRazon">-</span><br>
+                <strong>Importe:</strong> <span id="reasignarSaldoActualImporte">$0,00</span>
+            </div>
+            <label>Seleccione el grupo destino:</label>
+            <select id="selectDestinoSaldoCierre" class="input-text mb-2">
+                <option value="">-- Seleccionar grupo --</option>
+            </select>
+            <div class="mb-4">
+                <small style="color: #94a3b8;">O escriba un nuevo nombre:</small>
+                <input type="text" id="inputNuevoDestinoSaldoCierre" class="input-text mt-2" placeholder="Nombre de grupo nuevo...">
+            </div>
+            <div class="btn-group">
+                <button onclick="cerrarModalReasignarSaldoCierre()" class="btn-secondary">Cancelar</button>
+                <button onclick="confirmarReasignarSaldoCierre()" class="btn-primary">Reasignar</button>
+            </div>
         </div>
     </div>
 
