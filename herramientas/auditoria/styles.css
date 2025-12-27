@@ -6583,6 +6583,56 @@ th.acciones-col {
     color: #64748b;
 }
 
+/* Columna de ajustes auditoría */
+.comparativo-tabla .col-ajuste {
+    width: 120px;
+    min-width: 100px;
+}
+
+.input-ajuste-auditoria {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 0.8rem;
+    font-family: 'Consolas', monospace;
+    text-align: right;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    color: #e2e8f0;
+    transition: all 0.2s ease;
+}
+
+.input-ajuste-auditoria::placeholder {
+    color: #475569;
+}
+
+.input-ajuste-auditoria:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background: #0f172a;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.input-ajuste-auditoria.ajuste-positivo {
+    color: #4ade80;
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.input-ajuste-auditoria.ajuste-negativo {
+    color: #f87171;
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.comparativo-tabla td.col-ajuste.ajuste-positivo {
+    color: #4ade80;
+}
+
+.comparativo-tabla td.col-ajuste.ajuste-negativo {
+    color: #f87171;
+}
+
 .comparativo-tabla td.col-estado {
     text-align: center;
 }

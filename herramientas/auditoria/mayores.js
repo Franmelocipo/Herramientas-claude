@@ -83,7 +83,9 @@ const stateMayores = {
     agrupacionesOrdenAsc: true,
     agrupacionesFiltradas: [],      // Cache de agrupaciones filtradas
     // Filtros internos por agrupación: { agrupacionId: { fecha: '', asiento: '', descripcion: '', debe: '', haber: '' } }
-    filtrosInternosAgrupacion: {}
+    filtrosInternosAgrupacion: {},
+    // Ajustes de auditoría por razón social: { razonSocialNormalizada: valor }
+    ajustesAuditoria: {}
 };
 
 // Variables para gestión de conciliaciones
@@ -1232,6 +1234,18 @@ async function procesarActualizacionMayor() {
             if (stateMayores.tipoMayorActual?.logica === 'vinculacion') {
                 analizarVencimientos();
                 renderizarVinculacion();
+            }
+
+            // Para Deudores/Proveedores, reprocesar agrupaciones
+            if (stateMayores.tipoMayorActual?.id === 'deudores_proveedores') {
+                // Invalidar cache de totales
+                stateMayores.dpTotalesCache = null;
+                // Reprocesar agrupaciones con los nuevos registros
+                await procesarAgrupacionesRazonSocial();
+                // Revincular saldos si existen
+                vincularSaldosConAgrupaciones();
+                // Renderizar panel
+                renderizarPanelDeudoresProveedores();
             }
 
             cerrarActualizarMayor();
@@ -12841,21 +12855,28 @@ function toggleSeleccionTodosDP(agrupacionId) {
         razonSocial = agrupacion.razonSocial;
     }
 
-    const todosSeleccionados = registros.every(r =>
+    // Aplicar filtros para obtener solo los registros filtrados/visibles
+    const filtros = stateMayores.filtrosInternosAgrupacion[agrupacionId] || {};
+    const registrosFiltrados = aplicarFiltrosInternosAgrupacion(registros, filtros);
+
+    // Usar los registros filtrados, no todos
+    const registrosASeleccionar = registrosFiltrados;
+
+    const todosSeleccionados = registrosASeleccionar.every(r =>
         stateMayores.registrosSeleccionadosDP.includes(r.id)
     );
 
     if (todosSeleccionados) {
-        // Deseleccionar todos
-        registros.forEach(r => {
+        // Deseleccionar solo los filtrados
+        registrosASeleccionar.forEach(r => {
             const idx = stateMayores.registrosSeleccionadosDP.indexOf(r.id);
             if (idx > -1) {
                 stateMayores.registrosSeleccionadosDP.splice(idx, 1);
             }
         });
     } else {
-        // Seleccionar todos
-        registros.forEach(r => {
+        // Seleccionar solo los filtrados
+        registrosASeleccionar.forEach(r => {
             if (!stateMayores.registrosSeleccionadosDP.includes(r.id)) {
                 stateMayores.registrosSeleccionadosDP.push(r.id);
             }
@@ -12864,7 +12885,7 @@ function toggleSeleccionTodosDP(agrupacionId) {
     }
 
     // Actualizar solo las filas afectadas sin re-renderizar todo
-    registros.forEach(r => actualizarFilaSeleccionDP(r.id));
+    registrosASeleccionar.forEach(r => actualizarFilaSeleccionDP(r.id));
     actualizarBarraSeleccionDP();
 }
 
@@ -13799,9 +13820,14 @@ function aplicarFiltrosComparativo(entidades) {
     const mostrarSoloDiferencias = document.getElementById('filtroSoloDiferencias')?.checked || false;
 
     return entidades.filter(e => {
-        // Filtro checkbox solo diferencias
-        if (mostrarSoloDiferencias && (e.diferencia === null || Math.abs(e.diferencia) < 0.01)) {
-            return false;
+        // Filtro checkbox solo diferencias (considera ajustes)
+        if (mostrarSoloDiferencias) {
+            const claveAjuste = normalizarRazonSocial(e.razonSocial);
+            const ajuste = stateMayores.ajustesAuditoria[claveAjuste] || 0;
+            const diferenciaConAjuste = e.saldoCierre !== null ? (e.saldoCalculado + ajuste) - e.saldoCierre : null;
+            if (diferenciaConAjuste === null || Math.abs(diferenciaConAjuste) < 0.01) {
+                return false;
+            }
         }
 
         // Filtro razón social (texto)
@@ -13835,15 +13861,27 @@ function aplicarFiltrosComparativo(entidades) {
             if (filtroCalculado === 'cero' && Math.abs(e.saldoCalculado) >= 0.01) return false;
         }
 
+        // Filtro ajuste auditoría
+        const filtroAjuste = document.getElementById('filtroCompAjuste')?.value || '';
+        if (filtroAjuste) {
+            const claveAjuste = normalizarRazonSocial(e.razonSocial);
+            const tieneAjuste = (stateMayores.ajustesAuditoria[claveAjuste] || 0) !== 0;
+            if (filtroAjuste === 'conajuste' && !tieneAjuste) return false;
+            if (filtroAjuste === 'sinajuste' && tieneAjuste) return false;
+        }
+
         // Filtro saldo reportado
         if (filtroReportado) {
             if (filtroReportado === 'convalor' && e.saldoCierre === null) return false;
             if (filtroReportado === 'sinvalor' && e.saldoCierre !== null) return false;
         }
 
-        // Filtro diferencia
+        // Filtro diferencia (considera ajustes)
         if (filtroDiferencia) {
-            const tieneDif = e.diferencia !== null && Math.abs(e.diferencia) >= 0.01;
+            const claveAjuste = normalizarRazonSocial(e.razonSocial);
+            const ajuste = stateMayores.ajustesAuditoria[claveAjuste] || 0;
+            const diferenciaConAjuste = e.saldoCierre !== null ? (e.saldoCalculado + ajuste) - e.saldoCierre : null;
+            const tieneDif = diferenciaConAjuste !== null && Math.abs(diferenciaConAjuste) >= 0.01;
             if (filtroDiferencia === 'condif' && !tieneDif) return false;
             if (filtroDiferencia === 'sindif' && tieneDif) return false;
         }
@@ -13979,17 +14017,33 @@ function renderizarCuadroComparativo() {
     let totalDebe = 0;
     let totalHaber = 0;
     let totalSaldoCalculado = 0;
+    let totalAjustes = 0;
     let totalSaldoCierre = 0;
 
     // Renderizar filas
     let html = '';
     for (const e of entidades) {
-        const tieneDiferencia = e.diferencia !== null && Math.abs(e.diferencia) >= 0.01;
+        // Obtener ajuste de auditoría para esta entidad
+        const claveAjuste = normalizarRazonSocial(e.razonSocial);
+        const ajuste = stateMayores.ajustesAuditoria[claveAjuste] || 0;
+
+        // Calcular diferencia considerando el ajuste: (saldoCalculado + ajuste) - saldoCierre
+        const diferenciaConAjuste = e.saldoCierre !== null
+            ? (e.saldoCalculado + ajuste) - e.saldoCierre
+            : null;
+
+        const tieneDiferencia = diferenciaConAjuste !== null && Math.abs(diferenciaConAjuste) >= 0.01;
         const claseFilaDif = tieneDiferencia ? 'fila-diferencia' : '';
         const claseTipo = e.tipo !== 'agrupacion' ? 'fila-' + e.tipo : '';
 
+        // Determinar estado basado en la diferencia con ajuste
+        let estado = e.estado;
+        if (e.saldoCierre !== null) {
+            estado = tieneDiferencia ? 'diferencia' : 'ok';
+        }
+
         let estadoHtml = '';
-        switch (e.estado) {
+        switch (estado) {
             case 'ok':
                 estadoHtml = '<span class="estado-badge success">OK</span>';
                 break;
@@ -14007,6 +14061,10 @@ function renderizarCuadroComparativo() {
                 break;
         }
 
+        // Input de ajuste con valor formateado
+        const ajusteValue = ajuste !== 0 ? ajuste : '';
+        const claseAjuste = ajuste > 0 ? 'ajuste-positivo' : (ajuste < 0 ? 'ajuste-negativo' : '');
+
         html += `
             <tr class="${claseFilaDif} ${claseTipo}">
                 <td class="col-razon" title="${escapeHtml(e.razonSocial)}">${escapeHtml(e.razonSocial)}</td>
@@ -14014,8 +14072,16 @@ function renderizarCuadroComparativo() {
                 <td class="col-numero debe">${formatearMoneda(e.debe)}</td>
                 <td class="col-numero haber">${formatearMoneda(e.haber)}</td>
                 <td class="col-numero ${e.saldoCalculado >= 0 ? 'debe' : 'haber'}">${formatearMoneda(e.saldoCalculado)}</td>
+                <td class="col-numero col-ajuste">
+                    <input type="text" class="input-ajuste-auditoria ${claseAjuste}"
+                           value="${ajusteValue}"
+                           data-razon="${escapeHtml(e.razonSocial)}"
+                           placeholder="0"
+                           onchange="actualizarAjusteAuditoria(this)"
+                           onkeypress="return validarInputNumerico(event)">
+                </td>
                 <td class="col-numero ${e.saldoCierre !== null ? (e.saldoCierre >= 0 ? 'debe' : 'haber') : 'sin-dato'}">${e.saldoCierre !== null ? formatearMoneda(e.saldoCierre) : '-'}</td>
-                <td class="col-numero ${tieneDiferencia ? 'diferencia' : ''}">${e.diferencia !== null ? formatearMoneda(e.diferencia) : '-'}</td>
+                <td class="col-numero ${tieneDiferencia ? 'diferencia' : ''}">${diferenciaConAjuste !== null ? formatearMoneda(diferenciaConAjuste) : '-'}</td>
                 <td class="col-estado">${estadoHtml}</td>
             </tr>
         `;
@@ -14024,6 +14090,7 @@ function renderizarCuadroComparativo() {
         totalDebe += e.debe || 0;
         totalHaber += e.haber || 0;
         totalSaldoCalculado += e.saldoCalculado || 0;
+        totalAjustes += ajuste;
         if (e.saldoCierre !== null) totalSaldoCierre += e.saldoCierre;
     }
 
@@ -14031,10 +14098,11 @@ function renderizarCuadroComparativo() {
     const cantTotal = stateMayores.comparativoEntidadesCache.length;
     const infoFiltro = cantMostradas < cantTotal ? ` (${cantMostradas} de ${cantTotal})` : '';
 
-    tbody.innerHTML = html || `<tr><td colspan="8" class="empty-state">No hay datos para mostrar${infoFiltro}</td></tr>`;
+    tbody.innerHTML = html || `<tr><td colspan="9" class="empty-state">No hay datos para mostrar${infoFiltro}</td></tr>`;
 
     // Renderizar totales en footer
-    const totalDiferencia = totalSaldoCalculado - totalSaldoCierre;
+    const totalDiferencia = (totalSaldoCalculado + totalAjustes) - totalSaldoCierre;
+    const claseAjusteTotal = totalAjustes > 0 ? 'ajuste-positivo' : (totalAjustes < 0 ? 'ajuste-negativo' : '');
     tfoot.innerHTML = `
         <tr class="fila-totales">
             <td class="col-razon"><strong>TOTALES${infoFiltro}</strong></td>
@@ -14042,6 +14110,7 @@ function renderizarCuadroComparativo() {
             <td class="col-numero"><strong>${formatearMoneda(totalDebe)}</strong></td>
             <td class="col-numero"><strong>${formatearMoneda(totalHaber)}</strong></td>
             <td class="col-numero"><strong>${formatearMoneda(totalSaldoCalculado)}</strong></td>
+            <td class="col-numero col-ajuste ${claseAjusteTotal}"><strong>${formatearMoneda(totalAjustes)}</strong></td>
             <td class="col-numero"><strong>${formatearMoneda(totalSaldoCierre)}</strong></td>
             <td class="col-numero ${Math.abs(totalDiferencia) >= 0.01 ? 'diferencia' : ''}"><strong>${formatearMoneda(totalDiferencia)}</strong></td>
             <td class="col-estado"></td>
@@ -14061,6 +14130,53 @@ function renderizarCuadroComparativo() {
 }
 
 /**
+ * Actualizar ajuste de auditoría para una razón social
+ * @param {HTMLInputElement} input - Input con el nuevo valor
+ */
+function actualizarAjusteAuditoria(input) {
+    const razonSocial = input.dataset.razon;
+    const clave = normalizarRazonSocial(razonSocial);
+
+    // Parsear el valor (permite números negativos y decimales)
+    let valor = input.value.replace(/[^0-9,.-]/g, '').replace(',', '.');
+    valor = parseFloat(valor) || 0;
+
+    // Guardar en el estado
+    if (valor !== 0) {
+        stateMayores.ajustesAuditoria[clave] = valor;
+    } else {
+        delete stateMayores.ajustesAuditoria[clave];
+    }
+
+    // Re-renderizar para actualizar cálculos
+    renderizarCuadroComparativo();
+
+    // Mantener foco en el input correspondiente después del re-render
+    setTimeout(() => {
+        const nuevoInput = document.querySelector(`.input-ajuste-auditoria[data-razon="${razonSocial}"]`);
+        if (nuevoInput) {
+            nuevoInput.focus();
+            nuevoInput.select();
+        }
+    }, 10);
+}
+
+/**
+ * Validar que solo se ingresen números en el input
+ * @param {KeyboardEvent} event - Evento de teclado
+ * @returns {boolean} - true si es válido
+ */
+function validarInputNumerico(event) {
+    const char = String.fromCharCode(event.which);
+    // Permitir números, punto, coma, signo menos
+    if (/[0-9.,\-]/.test(char)) {
+        return true;
+    }
+    event.preventDefault();
+    return false;
+}
+
+/**
  * Exportar cuadro comparativo a Excel
  */
 function exportarCuadroComparativo() {
@@ -14077,13 +14193,14 @@ function exportarCuadroComparativo() {
         ['Cliente:', stateMayores.clienteActual?.nombre || '-'],
         ['Fecha de exportación:', new Date().toLocaleString('es-AR')],
         [],
-        ['Razón Social', 'Saldo Inicio', 'Debe', 'Haber', 'Saldo Calculado', 'Saldo Reportado', 'Diferencia', 'Estado']
+        ['Razón Social', 'Saldo Inicio', 'Debe', 'Haber', 'Saldo Calculado', 'Ajustes Auditoría', 'Saldo Reportado', 'Diferencia', 'Estado']
     ];
 
     let totalSaldoInicio = 0;
     let totalDebe = 0;
     let totalHaber = 0;
     let totalSaldoCalculado = 0;
+    let totalAjustes = 0;
     let totalSaldoCierre = 0;
 
     // Agregar agrupaciones
@@ -14092,7 +14209,11 @@ function exportarCuadroComparativo() {
 
     for (const a of agrupaciones) {
         const saldoCalculado = (a.saldoInicio || 0) + a.saldo;
-        const tieneDiferencia = a.diferencia !== null && Math.abs(a.diferencia) >= 0.01;
+        const claveAjuste = normalizarRazonSocial(a.razonSocial);
+        const ajuste = stateMayores.ajustesAuditoria[claveAjuste] || 0;
+        const diferenciaConAjuste = a.saldoCierre !== null ? (saldoCalculado + ajuste) - a.saldoCierre : null;
+        const tieneDiferencia = diferenciaConAjuste !== null && Math.abs(diferenciaConAjuste) >= 0.01;
+
         let estado = 'OK';
         if (a.saldoCierre === null) {
             estado = 'Sin saldo cierre';
@@ -14106,8 +14227,9 @@ function exportarCuadroComparativo() {
             a.saldoDebe,
             a.saldoHaber,
             saldoCalculado,
+            ajuste !== 0 ? ajuste : '',
             a.saldoCierre !== null ? a.saldoCierre : '',
-            a.diferencia !== null ? a.diferencia : '',
+            diferenciaConAjuste !== null ? diferenciaConAjuste : '',
             estado
         ]);
 
@@ -14115,40 +14237,50 @@ function exportarCuadroComparativo() {
         totalDebe += a.saldoDebe;
         totalHaber += a.saldoHaber;
         totalSaldoCalculado += saldoCalculado;
+        totalAjustes += ajuste;
         if (a.saldoCierre !== null) totalSaldoCierre += a.saldoCierre;
     }
 
     // Agregar saldos no vinculados
     for (const [clave, saldoInicio] of Object.entries(stateMayores.saldosInicio)) {
         if (!saldoInicio.vinculado) {
+            const claveAjuste = normalizarRazonSocial(saldoInicio.razonSocial);
+            const ajuste = stateMayores.ajustesAuditoria[claveAjuste] || 0;
             data.push([
                 saldoInicio.razonSocial,
                 saldoInicio.saldo,
                 0,
                 0,
                 saldoInicio.saldo,
+                ajuste !== 0 ? ajuste : '',
                 '',
                 '',
                 'SIN MOVIMIENTOS'
             ]);
             totalSaldoInicio += saldoInicio.saldo;
             totalSaldoCalculado += saldoInicio.saldo;
+            totalAjustes += ajuste;
         }
     }
 
     for (const [clave, saldoCierre] of Object.entries(stateMayores.saldosCierre)) {
         if (!saldoCierre.vinculado) {
+            const claveAjuste = normalizarRazonSocial(saldoCierre.razonSocial);
+            const ajuste = stateMayores.ajustesAuditoria[claveAjuste] || 0;
+            const diferenciaConAjuste = (0 + ajuste) - saldoCierre.saldo;
             data.push([
                 saldoCierre.razonSocial,
                 0,
                 0,
                 0,
                 0,
+                ajuste !== 0 ? ajuste : '',
                 saldoCierre.saldo,
-                -saldoCierre.saldo,
+                diferenciaConAjuste,
                 'SOLO EN CIERRE'
             ]);
             totalSaldoCierre += saldoCierre.saldo;
+            totalAjustes += ajuste;
         }
     }
 
@@ -14160,8 +14292,9 @@ function exportarCuadroComparativo() {
         totalDebe,
         totalHaber,
         totalSaldoCalculado,
+        totalAjustes !== 0 ? totalAjustes : '',
         totalSaldoCierre,
-        totalSaldoCalculado - totalSaldoCierre,
+        (totalSaldoCalculado + totalAjustes) - totalSaldoCierre,
         ''
     ]);
 
