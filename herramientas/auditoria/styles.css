@@ -6496,7 +6496,7 @@ th.acciones-col {
 }
 
 .comparativo-tabla-container {
-    overflow-x: auto;
+    overflow-x: visible;
     border: 1px solid #334155;
     border-radius: 8px;
 }
@@ -6504,7 +6504,8 @@ th.acciones-col {
 .comparativo-tabla {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
+    table-layout: fixed;
 }
 
 .comparativo-tabla thead {
@@ -6515,11 +6516,12 @@ th.acciones-col {
 }
 
 .comparativo-tabla th {
-    padding: 12px 16px;
+    padding: 8px 6px;
     text-align: left;
     color: #94a3b8;
     font-weight: 500;
     border-bottom: 2px solid #334155;
+    font-size: 0.7rem;
 }
 
 .comparativo-tabla th.col-numero {
@@ -6550,12 +6552,12 @@ th.acciones-col {
 }
 
 .comparativo-tabla td {
-    padding: 10px 16px;
+    padding: 6px;
     color: #f8fafc;
 }
 
 .comparativo-tabla td.col-razon {
-    max-width: 250px;
+    width: 18%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -6564,6 +6566,8 @@ th.acciones-col {
 .comparativo-tabla td.col-numero {
     text-align: right;
     font-family: 'Consolas', monospace;
+    font-size: 0.7rem;
+    width: 10%;
 }
 
 .comparativo-tabla td.col-numero.debe {
@@ -6585,14 +6589,14 @@ th.acciones-col {
 
 /* Columna de ajustes auditoría */
 .comparativo-tabla .col-ajuste {
-    width: 120px;
-    min-width: 100px;
+    width: 8%;
+    min-width: 70px;
 }
 
 .input-ajuste-auditoria {
     width: 100%;
-    padding: 6px 8px;
-    font-size: 0.8rem;
+    padding: 3px 4px;
+    font-size: 0.7rem;
     font-family: 'Consolas', monospace;
     text-align: right;
     background: #1e293b;
@@ -6635,14 +6639,16 @@ th.acciones-col {
 
 .comparativo-tabla td.col-estado {
     text-align: center;
+    width: 8%;
 }
 
 .estado-badge {
     display: inline-block;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 0.65rem;
     font-weight: 500;
+    white-space: nowrap;
 }
 
 .estado-badge.success {
@@ -6665,9 +6671,10 @@ th.acciones-col {
 }
 
 .comparativo-tabla tfoot tr.fila-totales td {
-    padding: 14px 16px;
+    padding: 8px 6px;
     border-top: 2px solid #334155;
     color: #f8fafc;
+    font-size: 0.7rem;
 }
 
 .comparativo-tabla .empty-state {
@@ -6727,11 +6734,11 @@ th.acciones-col {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
 }
 
 .comparativo-tabla .th-content .sort-icon {
-    font-size: 0.85rem;
+    font-size: 0.7rem;
     color: #64748b;
     transition: color 0.2s;
 }
@@ -6742,18 +6749,18 @@ th.acciones-col {
 
 /* Fila de filtros */
 .comparativo-tabla thead tr.comparativo-filtros th {
-    padding: 8px 10px;
+    padding: 4px 4px;
     background: #0f172a;
     border-bottom: 2px solid #334155;
 }
 
 .filtro-comparativo {
     width: 100%;
-    padding: 6px 10px;
-    font-size: 0.8rem;
+    padding: 3px 4px;
+    font-size: 0.65rem;
     background: #1e293b;
     border: 1px solid #334155;
-    border-radius: 4px;
+    border-radius: 3px;
     color: #f8fafc;
     transition: border-color 0.2s, background-color 0.2s;
 }
@@ -6779,17 +6786,17 @@ th.acciones-col {
     color: #f8fafc;
 }
 
-/* Ajustes específicos para columnas */
+/* Ajustes específicos para columnas - sin min-width para tabla compacta */
 .comparativo-tabla th.col-razon .filtro-comparativo {
-    min-width: 150px;
+    min-width: auto;
 }
 
 .comparativo-tabla th.col-numero .filtro-comparativo {
-    min-width: 80px;
+    min-width: auto;
 }
 
 .comparativo-tabla th.col-estado .filtro-comparativo {
-    min-width: 100px;
+    min-width: auto;
 }
 
 /* Indicador de filtros activos */
@@ -6857,20 +6864,20 @@ select.filtro-comparativo:not([value=""]) {
    ============================================ */
 
 .col-acciones {
-    width: 80px;
-    min-width: 80px;
+    width: 5%;
+    min-width: 50px;
     text-align: center;
 }
 
 .btn-reasignar-saldo {
-    padding: 4px 6px;
+    padding: 2px 4px;
     background: #334155;
     border: 1px solid #475569;
-    border-radius: 4px;
+    border-radius: 3px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 10px;
     transition: all 0.2s ease;
-    margin: 0 2px;
+    margin: 0 1px;
 }
 
 .btn-reasignar-saldo:hover {
