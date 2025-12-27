@@ -11872,8 +11872,19 @@ function renderizarPanelDeudoresProveedores() {
         fragment.appendChild(div);
     });
 
+    // Verificar si hay filtros activos
+    const hayFiltrosActivos = (
+        (document.getElementById('filtroAgrupRazon')?.value || '').trim() ||
+        (document.getElementById('filtroRazonSocialDP')?.value || '').trim() ||
+        document.getElementById('filtroAgrupVariantes')?.value ||
+        document.getElementById('filtroAgrupCant')?.value ||
+        document.getElementById('filtroAgrupDebe')?.value ||
+        document.getElementById('filtroAgrupHaber')?.value ||
+        document.getElementById('filtroAgrupSaldo')?.value
+    );
+
     // Agregar sección de sin asignar si hay registros (solo en última página o sin filtro)
-    if (sinAsignar.length > 0 && (fin >= agrupacionesFiltradas.length || !filtro)) {
+    if (sinAsignar.length > 0 && (fin >= agrupacionesFiltradas.length || !hayFiltrosActivos)) {
         const divSinAsignar = crearElementoSinAsignar(sinAsignar, totales);
         fragment.appendChild(divSinAsignar);
     }
@@ -12726,14 +12737,34 @@ async function moverRegistrosADestino(destino) {
     // Crear mapa de IDs para búsqueda rápida
     const registrosMap = new Map(stateMayores.registrosMayor.map(r => [r.id, r]));
 
-    // Identificar la agrupación origen
+    // Identificar la agrupación origen - buscar por razonSocial, no por clave generada
     const agrupacionOrigen = stateMayores.agrupacionOrigenMovimiento;
-    const claveOrigen = agrupacionOrigen && agrupacionOrigen !== 'Sin Asignar'
-        ? generarClaveAgrupacion(agrupacionOrigen)
-        : null;
+    let claveOrigenReal = null;
 
-    // Generar clave destino
-    const claveDestino = destino === 'Sin Asignar' ? null : generarClaveAgrupacion(destino);
+    if (agrupacionOrigen && agrupacionOrigen !== 'Sin Asignar') {
+        // Buscar la clave real de la agrupación que tiene esta razonSocial
+        for (const [clave, agrup] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
+            if (agrup.razonSocial === agrupacionOrigen) {
+                claveOrigenReal = clave;
+                break;
+            }
+        }
+    }
+
+    // Generar clave destino - buscar si ya existe una agrupación con ese nombre
+    let claveDestinoReal = null;
+    if (destino !== 'Sin Asignar') {
+        for (const [clave, agrup] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
+            if (agrup.razonSocial === destino) {
+                claveDestinoReal = clave;
+                break;
+            }
+        }
+        // Si no existe, crear una nueva clave
+        if (!claveDestinoReal) {
+            claveDestinoReal = generarClaveAgrupacion(destino);
+        }
+    }
 
     // Actualizar cada registro y moverlo entre agrupaciones (sin reprocesar todo)
     for (const id of registrosIds) {
@@ -12743,19 +12774,19 @@ async function moverRegistrosADestino(destino) {
             registro.razonSocialAsignada = destino === 'Sin Asignar' ? null : destino;
 
             // Quitar de la agrupación origen
-            if (claveOrigen && stateMayores.agrupacionesRazonSocial[claveOrigen]) {
-                const agrupOrigen = stateMayores.agrupacionesRazonSocial[claveOrigen];
+            if (claveOrigenReal && stateMayores.agrupacionesRazonSocial[claveOrigenReal]) {
+                const agrupOrigen = stateMayores.agrupacionesRazonSocial[claveOrigenReal];
                 agrupOrigen.registros = agrupOrigen.registros.filter(r => r.id !== id);
             } else if (agrupacionOrigen === 'Sin Asignar') {
                 stateMayores.registrosSinAsignar = stateMayores.registrosSinAsignar.filter(r => r.id !== id);
             }
 
             // Agregar a la agrupación destino
-            if (claveDestino) {
+            if (claveDestinoReal) {
                 // Buscar o crear la agrupación destino
-                if (!stateMayores.agrupacionesRazonSocial[claveDestino]) {
+                if (!stateMayores.agrupacionesRazonSocial[claveDestinoReal]) {
                     // Crear nueva agrupación
-                    stateMayores.agrupacionesRazonSocial[claveDestino] = {
+                    stateMayores.agrupacionesRazonSocial[claveDestinoReal] = {
                         id: `agrup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                         razonSocial: destino,
                         registros: [],
@@ -12765,7 +12796,7 @@ async function moverRegistrosADestino(destino) {
                         saldo: 0
                     };
                 }
-                stateMayores.agrupacionesRazonSocial[claveDestino].registros.push(registro);
+                stateMayores.agrupacionesRazonSocial[claveDestinoReal].registros.push(registro);
             } else {
                 // Mover a sin asignar
                 stateMayores.registrosSinAsignar.push(registro);
@@ -12774,16 +12805,16 @@ async function moverRegistrosADestino(destino) {
     }
 
     // Recalcular totales de agrupaciones afectadas
-    if (claveOrigen && stateMayores.agrupacionesRazonSocial[claveOrigen]) {
-        recalcularTotalesAgrupacion(stateMayores.agrupacionesRazonSocial[claveOrigen]);
+    if (claveOrigenReal && stateMayores.agrupacionesRazonSocial[claveOrigenReal]) {
+        recalcularTotalesAgrupacion(stateMayores.agrupacionesRazonSocial[claveOrigenReal]);
         // Si quedó vacía, eliminarla
-        if (stateMayores.agrupacionesRazonSocial[claveOrigen].registros.length === 0) {
-            delete stateMayores.agrupacionesRazonSocial[claveOrigen];
+        if (stateMayores.agrupacionesRazonSocial[claveOrigenReal].registros.length === 0) {
+            delete stateMayores.agrupacionesRazonSocial[claveOrigenReal];
         }
     }
 
-    if (claveDestino && stateMayores.agrupacionesRazonSocial[claveDestino]) {
-        recalcularTotalesAgrupacion(stateMayores.agrupacionesRazonSocial[claveDestino]);
+    if (claveDestinoReal && stateMayores.agrupacionesRazonSocial[claveDestinoReal]) {
+        recalcularTotalesAgrupacion(stateMayores.agrupacionesRazonSocial[claveDestinoReal]);
     }
 
     // Limpiar selección
