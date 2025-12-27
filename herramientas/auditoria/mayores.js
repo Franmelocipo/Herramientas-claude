@@ -1236,6 +1236,18 @@ async function procesarActualizacionMayor() {
                 renderizarVinculacion();
             }
 
+            // Para Deudores/Proveedores, reprocesar agrupaciones
+            if (stateMayores.tipoMayorActual?.id === 'deudores_proveedores') {
+                // Invalidar cache de totales
+                stateMayores.dpTotalesCache = null;
+                // Reprocesar agrupaciones con los nuevos registros
+                await procesarAgrupacionesRazonSocial();
+                // Revincular saldos si existen
+                vincularSaldosConAgrupaciones();
+                // Renderizar panel
+                renderizarPanelDeudoresProveedores();
+            }
+
             cerrarActualizarMayor();
 
             mostrarNotificacion(
@@ -12843,21 +12855,28 @@ function toggleSeleccionTodosDP(agrupacionId) {
         razonSocial = agrupacion.razonSocial;
     }
 
-    const todosSeleccionados = registros.every(r =>
+    // Aplicar filtros para obtener solo los registros filtrados/visibles
+    const filtros = stateMayores.filtrosInternosAgrupacion[agrupacionId] || {};
+    const registrosFiltrados = aplicarFiltrosInternosAgrupacion(registros, filtros);
+
+    // Usar los registros filtrados, no todos
+    const registrosASeleccionar = registrosFiltrados;
+
+    const todosSeleccionados = registrosASeleccionar.every(r =>
         stateMayores.registrosSeleccionadosDP.includes(r.id)
     );
 
     if (todosSeleccionados) {
-        // Deseleccionar todos
-        registros.forEach(r => {
+        // Deseleccionar solo los filtrados
+        registrosASeleccionar.forEach(r => {
             const idx = stateMayores.registrosSeleccionadosDP.indexOf(r.id);
             if (idx > -1) {
                 stateMayores.registrosSeleccionadosDP.splice(idx, 1);
             }
         });
     } else {
-        // Seleccionar todos
-        registros.forEach(r => {
+        // Seleccionar solo los filtrados
+        registrosASeleccionar.forEach(r => {
             if (!stateMayores.registrosSeleccionadosDP.includes(r.id)) {
                 stateMayores.registrosSeleccionadosDP.push(r.id);
             }
@@ -12866,7 +12885,7 @@ function toggleSeleccionTodosDP(agrupacionId) {
     }
 
     // Actualizar solo las filas afectadas sin re-renderizar todo
-    registros.forEach(r => actualizarFilaSeleccionDP(r.id));
+    registrosASeleccionar.forEach(r => actualizarFilaSeleccionDP(r.id));
     actualizarBarraSeleccionDP();
 }
 
