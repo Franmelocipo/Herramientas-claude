@@ -13257,6 +13257,9 @@ function crearNuevoGrupo() {
     cerrarModalNuevoGrupo();
     renderizarPanelDeudoresProveedores();
 
+    // Actualizar selector de destino si la barra de selección está visible
+    actualizarSelectorDestinoDP();
+
     mostrarNotificacion(`Grupo "${nombre}" creado exitosamente`, 'success');
 }
 
@@ -13398,6 +13401,150 @@ function confirmarReasignarSaldoCierre() {
     }
 
     mostrarNotificacion(`Saldo de cierre reasignado a "${destinoFinal}"`, 'success');
+}
+
+// ============================================
+// FUNCIONES PARA REASIGNAR SALDOS INICIO
+// ============================================
+
+// Variable temporal para guardar el saldo de inicio que se está reasignando
+let saldoInicioEnReasignacion = null;
+
+/**
+ * Mostrar modal para reasignar saldo de inicio
+ * @param {string} razonSocialActual - Razón social actual del saldo
+ * @param {number} importe - Importe del saldo
+ */
+function mostrarModalReasignarSaldoInicio(razonSocialActual, importe) {
+    saldoInicioEnReasignacion = {
+        razonSocialOriginal: razonSocialActual,
+        importe: importe
+    };
+
+    // Mostrar info actual
+    document.getElementById('reasignarSaldoInicioActualRazon').textContent = razonSocialActual;
+    document.getElementById('reasignarSaldoInicioActualImporte').textContent = formatearMoneda(importe);
+
+    // Llenar select con grupos disponibles
+    const select = document.getElementById('selectDestinoSaldoInicio');
+    select.innerHTML = '<option value="">-- Seleccionar grupo --</option>';
+
+    // Agregar todas las agrupaciones como opciones
+    const agrupaciones = Object.values(stateMayores.agrupacionesRazonSocial)
+        .sort((a, b) => a.razonSocial.localeCompare(b.razonSocial));
+
+    for (const agrup of agrupaciones) {
+        if (agrup.razonSocial !== razonSocialActual) {
+            const option = document.createElement('option');
+            option.value = agrup.razonSocial;
+            option.textContent = agrup.razonSocial;
+            select.appendChild(option);
+        }
+    }
+
+    // También agregar saldos de inicio no vinculados que podrían ser destino
+    for (const [clave, saldoInicio] of Object.entries(stateMayores.saldosInicio)) {
+        if (!saldoInicio.vinculado && saldoInicio.razonSocial !== razonSocialActual) {
+            // Verificar si ya existe como opción
+            const existe = Array.from(select.options).some(opt => opt.value === saldoInicio.razonSocial);
+            if (!existe) {
+                const option = document.createElement('option');
+                option.value = saldoInicio.razonSocial;
+                option.textContent = `${saldoInicio.razonSocial} (solo en inicio)`;
+                select.appendChild(option);
+            }
+        }
+    }
+
+    // Limpiar input
+    document.getElementById('inputNuevoDestinoSaldoInicio').value = '';
+
+    document.getElementById('modalReasignarSaldoInicio').classList.remove('hidden');
+}
+
+/**
+ * Cerrar modal de reasignar saldo inicio
+ */
+function cerrarModalReasignarSaldoInicio() {
+    document.getElementById('modalReasignarSaldoInicio').classList.add('hidden');
+    saldoInicioEnReasignacion = null;
+}
+
+/**
+ * Confirmar reasignación de saldo de inicio
+ */
+function confirmarReasignarSaldoInicio() {
+    if (!saldoInicioEnReasignacion) return;
+
+    const selectDestino = document.getElementById('selectDestinoSaldoInicio').value;
+    const inputDestino = document.getElementById('inputNuevoDestinoSaldoInicio').value.trim();
+
+    const destinoFinal = inputDestino || selectDestino;
+
+    if (!destinoFinal) {
+        mostrarNotificacion('Debe seleccionar o ingresar un grupo destino', 'warning');
+        return;
+    }
+
+    const razonOriginal = saldoInicioEnReasignacion.razonSocialOriginal;
+    const importe = saldoInicioEnReasignacion.importe;
+
+    // Encontrar la clave original en saldosInicio
+    let claveOriginal = null;
+    for (const [clave, saldo] of Object.entries(stateMayores.saldosInicio)) {
+        if (saldo.razonSocial === razonOriginal && saldo.saldo === importe) {
+            claveOriginal = clave;
+            break;
+        }
+    }
+
+    if (!claveOriginal) {
+        // Si no se encuentra exactamente, buscar por razonSocial
+        claveOriginal = normalizarRazonSocial(razonOriginal);
+    }
+
+    // Eliminar el saldo de su ubicación original
+    if (stateMayores.saldosInicio[claveOriginal]) {
+        delete stateMayores.saldosInicio[claveOriginal];
+    }
+
+    // Desvincular de la agrupación original si existía
+    for (const agrup of Object.values(stateMayores.agrupacionesRazonSocial)) {
+        if (agrup.razonSocial === razonOriginal) {
+            agrup.saldoInicio = 0;
+            // Recalcular saldo calculado
+            agrup.saldoCalculado = agrup.saldoInicio + agrup.saldoDebe - agrup.saldoHaber;
+            if (agrup.saldoCierre !== null) {
+                agrup.diferencia = agrup.saldoCalculado - agrup.saldoCierre;
+            }
+            break;
+        }
+    }
+
+    // Crear el saldo en la nueva ubicación
+    const claveDestino = normalizarRazonSocial(destinoFinal);
+    stateMayores.saldosInicio[claveDestino] = {
+        razonSocial: destinoFinal,
+        saldo: importe,
+        vinculado: false
+    };
+
+    // Re-vincular todos los saldos
+    vincularSaldosConAgrupaciones();
+
+    // Invalidar cache
+    stateMayores.dpTotalesCache = null;
+
+    cerrarModalReasignarSaldoInicio();
+
+    // Actualizar vista
+    if (stateMayores.vistaActualDP === 'comparativo') {
+        renderizarCuadroComparativo();
+    } else {
+        renderizarPanelDeudoresProveedores();
+    }
+
+    mostrarNotificacion(`Saldo de inicio reasignado a "${destinoFinal}"`, 'success');
 }
 
 /**
@@ -14290,14 +14437,28 @@ function renderizarCuadroComparativo() {
         const ajusteValue = ajuste !== 0 ? ajuste : '';
         const claseAjuste = ajuste > 0 ? 'ajuste-positivo' : (ajuste < 0 ? 'ajuste-negativo' : '');
 
-        // Botón de reasignar solo si tiene saldo cierre
-        const botonReasignar = e.saldoCierre !== null
-            ? `<button class="btn-reasignar-saldo"
-                       onclick="mostrarModalReasignarSaldoCierre('${escapeHtml(e.razonSocial).replace(/'/g, "\\'")}', ${e.saldoCierre})"
-                       title="Reasignar saldo cierre a otro grupo">
-                   🔄
+        // Botones de reasignar saldos
+        const razonEscaped = escapeHtml(e.razonSocial).replace(/'/g, "\\'");
+
+        // Botón para reasignar saldo inicio (si tiene saldo inicio distinto de cero)
+        const botonReasignarInicio = e.saldoInicio !== 0
+            ? `<button class="btn-reasignar-saldo btn-reasignar-inicio"
+                       onclick="mostrarModalReasignarSaldoInicio('${razonEscaped}', ${e.saldoInicio})"
+                       title="Reasignar saldo inicio a otro grupo">
+                   ⬅️
                </button>`
             : '';
+
+        // Botón para reasignar saldo cierre (si tiene saldo cierre)
+        const botonReasignarCierre = e.saldoCierre !== null
+            ? `<button class="btn-reasignar-saldo btn-reasignar-cierre"
+                       onclick="mostrarModalReasignarSaldoCierre('${razonEscaped}', ${e.saldoCierre})"
+                       title="Reasignar saldo cierre a otro grupo">
+                   ➡️
+               </button>`
+            : '';
+
+        const botonesAccion = botonReasignarInicio + botonReasignarCierre;
 
         html += `
             <tr class="${claseFilaDif} ${claseTipo}">
@@ -14317,7 +14478,7 @@ function renderizarCuadroComparativo() {
                 <td class="col-numero ${e.saldoCierre !== null ? (e.saldoCierre >= 0 ? 'debe' : 'haber') : 'sin-dato'}">${e.saldoCierre !== null ? formatearMoneda(e.saldoCierre) : '-'}</td>
                 <td class="col-numero ${tieneDiferencia ? 'diferencia' : ''}">${diferenciaConAjuste !== null ? formatearMoneda(diferenciaConAjuste) : '-'}</td>
                 <td class="col-estado">${estadoHtml}</td>
-                <td class="col-acciones">${botonReasignar}</td>
+                <td class="col-acciones">${botonesAccion}</td>
             </tr>
         `;
 

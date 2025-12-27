@@ -2078,6 +2078,29 @@
         </div>
     </div>
 
+    <!-- Modal Reasignar Saldo de Inicio -->
+    <div id="modalReasignarSaldoInicio" class="modal hidden">
+        <div class="modal-content-sm">
+            <h3>🔄 Reasignar Saldo de Inicio</h3>
+            <div class="info-box mb-4">
+                <strong>Saldo actual:</strong> <span id="reasignarSaldoInicioActualRazon">-</span><br>
+                <strong>Importe:</strong> <span id="reasignarSaldoInicioActualImporte">$0,00</span>
+            </div>
+            <label>Seleccione el grupo destino:</label>
+            <select id="selectDestinoSaldoInicio" class="input-text mb-2">
+                <option value="">-- Seleccionar grupo --</option>
+            </select>
+            <div class="mb-4">
+                <small style="color: #94a3b8;">O escriba un nuevo nombre:</small>
+                <input type="text" id="inputNuevoDestinoSaldoInicio" class="input-text mt-2" placeholder="Nombre de grupo nuevo...">
+            </div>
+            <div class="btn-group">
+                <button onclick="cerrarModalReasignarSaldoInicio()" class="btn-secondary">Cancelar</button>
+                <button onclick="confirmarReasignarSaldoInicio()" class="btn-primary">Reasignar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Navegación global -->
     <script src="../../shared/globalNav.js"></script>
     <!-- Script principal -->
