@@ -12586,8 +12586,25 @@ function toggleSeleccionRegistroDP(registroId, razonSocial) {
         stateMayores.agrupacionOrigenMovimiento = razonSocial;
     }
 
+    // Actualizar solo la fila afectada sin re-renderizar todo
+    actualizarFilaSeleccionDP(registroId);
     actualizarBarraSeleccionDP();
-    renderizarPanelDeudoresProveedores();
+}
+
+/**
+ * Actualizar visualmente solo la fila afectada
+ * @param {string} registroId - ID del registro
+ */
+function actualizarFilaSeleccionDP(registroId) {
+    const fila = document.querySelector(`tr[data-id="${registroId}"]`);
+    if (fila) {
+        const seleccionado = stateMayores.registrosSeleccionadosDP.includes(registroId);
+        if (seleccionado) {
+            fila.classList.add('seleccionado');
+        } else {
+            fila.classList.remove('seleccionado');
+        }
+    }
 }
 
 /**
@@ -12609,7 +12626,6 @@ function toggleSeleccionTodosDP(agrupacionId) {
         razonSocial = agrupacion.razonSocial;
     }
 
-    const checkbox = document.getElementById(`checkAll_${agrupacionId}`);
     const todosSeleccionados = registros.every(r =>
         stateMayores.registrosSeleccionadosDP.includes(r.id)
     );
@@ -12632,8 +12648,9 @@ function toggleSeleccionTodosDP(agrupacionId) {
         stateMayores.agrupacionOrigenMovimiento = razonSocial;
     }
 
+    // Actualizar solo las filas afectadas sin re-renderizar todo
+    registros.forEach(r => actualizarFilaSeleccionDP(r.id));
     actualizarBarraSeleccionDP();
-    renderizarPanelDeudoresProveedores();
 }
 
 /**
