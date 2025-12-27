@@ -81,7 +81,9 @@ const stateMayores = {
     // Estado para ordenamiento y filtros de agrupaciones
     agrupacionesOrdenColumna: 'razonSocial',
     agrupacionesOrdenAsc: true,
-    agrupacionesFiltradas: []      // Cache de agrupaciones filtradas
+    agrupacionesFiltradas: [],      // Cache de agrupaciones filtradas
+    // Filtros internos por agrupación: { agrupacionId: { fecha: '', asiento: '', descripcion: '', debe: '', haber: '' } }
+    filtrosInternosAgrupacion: {}
 };
 
 // Variables para gestión de conciliaciones
@@ -12360,17 +12362,25 @@ function renderizarDetalleAgrupacionOptimizado(agrupacion) {
         agrupacion._ordenado = true;
     }
 
+    // Obtener filtros de esta agrupación
+    const filtros = stateMayores.filtrosInternosAgrupacion[agrupacion.id] || {};
+
+    // Aplicar filtros internos
+    const registrosFiltrados = aplicarFiltrosInternosAgrupacion(registros, filtros);
+    const totalFiltrados = registrosFiltrados.length;
+
     // Limitar registros mostrados
-    const registrosMostrar = registros.slice(0, limite);
-    const hayMas = totalRegistros > limite;
+    const registrosMostrar = registrosFiltrados.slice(0, limite);
+    const hayMas = totalFiltrados > limite;
 
     let html = '<div class="agrupacion-detalle">';
 
-    // Info de cantidad si hay muchos
-    if (totalRegistros > 50) {
-        html += `<div class="info-registros-agrupacion">
-            ${hayMas ? `Mostrando ${limite} de ${totalRegistros} registros` : `${totalRegistros} registros`}
-        </div>`;
+    // Info de cantidad
+    if (totalRegistros > 50 || totalFiltrados !== totalRegistros) {
+        const textoFiltro = totalFiltrados !== totalRegistros
+            ? `Mostrando ${Math.min(limite, totalFiltrados)} de ${totalFiltrados} filtrados (${totalRegistros} total)`
+            : (hayMas ? `Mostrando ${limite} de ${totalRegistros} registros` : `${totalRegistros} registros`);
+        html += `<div class="info-registros-agrupacion">${textoFiltro}</div>`;
     }
 
     html += '<table class="tabla-registros-dp">';
@@ -12386,6 +12396,44 @@ function renderizarDetalleAgrupacionOptimizado(agrupacion) {
                 <th class="col-descripcion">Leyenda</th>
                 <th class="col-debe">Debe</th>
                 <th class="col-haber">Haber</th>
+            </tr>
+            <tr class="fila-filtros-agrupacion">
+                <td class="col-check"></td>
+                <td class="col-fecha">
+                    <input type="text" placeholder="Filtrar..." class="filtro-interno-agrupacion"
+                           data-agrupacion="${agrupacion.id}" data-campo="fecha"
+                           value="${escapeHtml(filtros.fecha || '')}"
+                           onclick="event.stopPropagation()"
+                           oninput="filtrarInternoAgrupacion('${agrupacion.id}', 'fecha', this.value)">
+                </td>
+                <td class="col-asiento">
+                    <input type="text" placeholder="Filtrar..." class="filtro-interno-agrupacion"
+                           data-agrupacion="${agrupacion.id}" data-campo="asiento"
+                           value="${escapeHtml(filtros.asiento || '')}"
+                           onclick="event.stopPropagation()"
+                           oninput="filtrarInternoAgrupacion('${agrupacion.id}', 'asiento', this.value)">
+                </td>
+                <td class="col-descripcion">
+                    <input type="text" placeholder="Filtrar..." class="filtro-interno-agrupacion"
+                           data-agrupacion="${agrupacion.id}" data-campo="descripcion"
+                           value="${escapeHtml(filtros.descripcion || '')}"
+                           onclick="event.stopPropagation()"
+                           oninput="filtrarInternoAgrupacion('${agrupacion.id}', 'descripcion', this.value)">
+                </td>
+                <td class="col-debe">
+                    <input type="text" placeholder="Filtrar..." class="filtro-interno-agrupacion"
+                           data-agrupacion="${agrupacion.id}" data-campo="debe"
+                           value="${escapeHtml(filtros.debe || '')}"
+                           onclick="event.stopPropagation()"
+                           oninput="filtrarInternoAgrupacion('${agrupacion.id}', 'debe', this.value)">
+                </td>
+                <td class="col-haber">
+                    <input type="text" placeholder="Filtrar..." class="filtro-interno-agrupacion"
+                           data-agrupacion="${agrupacion.id}" data-campo="haber"
+                           value="${escapeHtml(filtros.haber || '')}"
+                           onclick="event.stopPropagation()"
+                           oninput="filtrarInternoAgrupacion('${agrupacion.id}', 'haber', this.value)">
+                </td>
             </tr>
         </thead>
         <tbody>
@@ -12420,7 +12468,7 @@ function renderizarDetalleAgrupacionOptimizado(agrupacion) {
         html += `
             <div class="ver-todos-container">
                 <button onclick="verTodosRegistrosAgrupacion('${agrupacion.id}')" class="btn-ver-todos">
-                    Ver todos los ${totalRegistros} registros
+                    Ver todos los ${totalFiltrados} registros
                 </button>
             </div>
         `;
@@ -12429,6 +12477,127 @@ function renderizarDetalleAgrupacionOptimizado(agrupacion) {
     html += '</div>';
 
     return html;
+}
+
+/**
+ * Aplicar filtros internos a los registros de una agrupación
+ * @param {Array} registros - Registros a filtrar
+ * @param {Object} filtros - Objeto con filtros {fecha, asiento, descripcion, debe, haber}
+ * @returns {Array} Registros filtrados
+ */
+function aplicarFiltrosInternosAgrupacion(registros, filtros) {
+    if (!filtros || Object.keys(filtros).length === 0) {
+        return registros;
+    }
+
+    return registros.filter(r => {
+        // Filtro fecha
+        if (filtros.fecha) {
+            const fechaStr = formatearFecha(r.fecha).toLowerCase();
+            if (!fechaStr.includes(filtros.fecha.toLowerCase())) return false;
+        }
+
+        // Filtro asiento
+        if (filtros.asiento) {
+            const asientoStr = (r.asiento || '').toLowerCase();
+            if (!asientoStr.includes(filtros.asiento.toLowerCase())) return false;
+        }
+
+        // Filtro descripcion
+        if (filtros.descripcion) {
+            const descripcionStr = (r.descripcion || '').toLowerCase();
+            if (!descripcionStr.includes(filtros.descripcion.toLowerCase())) return false;
+        }
+
+        // Filtro debe (puede ser número o texto)
+        if (filtros.debe) {
+            const debeStr = r.debe > 0 ? formatearMoneda(r.debe) : '';
+            if (!debeStr.toLowerCase().includes(filtros.debe.toLowerCase())) return false;
+        }
+
+        // Filtro haber (puede ser número o texto)
+        if (filtros.haber) {
+            const haberStr = r.haber > 0 ? formatearMoneda(r.haber) : '';
+            if (!haberStr.toLowerCase().includes(filtros.haber.toLowerCase())) return false;
+        }
+
+        return true;
+    });
+}
+
+/**
+ * Manejar cambio de filtro interno de una agrupación
+ * @param {string} agrupacionId - ID de la agrupación
+ * @param {string} campo - Campo a filtrar (fecha, asiento, descripcion, debe, haber)
+ * @param {string} valor - Valor del filtro
+ */
+function filtrarInternoAgrupacion(agrupacionId, campo, valor) {
+    // Inicializar objeto de filtros si no existe
+    if (!stateMayores.filtrosInternosAgrupacion[agrupacionId]) {
+        stateMayores.filtrosInternosAgrupacion[agrupacionId] = {};
+    }
+
+    // Actualizar el filtro
+    if (valor.trim()) {
+        stateMayores.filtrosInternosAgrupacion[agrupacionId][campo] = valor;
+    } else {
+        delete stateMayores.filtrosInternosAgrupacion[agrupacionId][campo];
+    }
+
+    // Re-renderizar solo el detalle de esta agrupación
+    actualizarDetalleAgrupacion(agrupacionId);
+}
+
+/**
+ * Actualizar solo el detalle de una agrupación específica
+ * @param {string} agrupacionId - ID de la agrupación
+ */
+function actualizarDetalleAgrupacion(agrupacionId) {
+    const agrupacionDiv = document.querySelector(`.agrupacion-item[data-id="${agrupacionId}"]`);
+    if (!agrupacionDiv) return;
+
+    // Buscar la agrupación
+    let agrupacion = null;
+    if (agrupacionId === 'sin_asignar') {
+        // Actualizar sin asignar
+        const detalle = agrupacionDiv.querySelector('.agrupacion-detalle');
+        if (detalle) {
+            const nuevoDetalle = document.createElement('div');
+            nuevoDetalle.innerHTML = renderizarDetalleAgrupacionSinAsignarOptimizado();
+            detalle.replaceWith(nuevoDetalle.firstElementChild);
+        }
+        return;
+    }
+
+    for (const a of Object.values(stateMayores.agrupacionesRazonSocial)) {
+        if (a.id === agrupacionId) {
+            agrupacion = a;
+            break;
+        }
+    }
+
+    if (!agrupacion) return;
+
+    // Actualizar solo el detalle
+    const detalle = agrupacionDiv.querySelector('.agrupacion-detalle');
+    if (detalle) {
+        const nuevoDetalle = document.createElement('div');
+        nuevoDetalle.innerHTML = renderizarDetalleAgrupacionOptimizado(agrupacion);
+        detalle.replaceWith(nuevoDetalle.firstElementChild);
+
+        // Restaurar foco en el input que se estaba editando
+        const campoActivo = document.activeElement?.dataset?.campo;
+        if (campoActivo) {
+            const nuevoInput = agrupacionDiv.querySelector(
+                `.filtro-interno-agrupacion[data-agrupacion="${agrupacionId}"][data-campo="${campoActivo}"]`
+            );
+            if (nuevoInput) {
+                nuevoInput.focus();
+                // Poner cursor al final
+                nuevoInput.selectionStart = nuevoInput.selectionEnd = nuevoInput.value.length;
+            }
+        }
+    }
 }
 
 /**
@@ -12458,17 +12627,25 @@ function renderizarDetalleAgrupacionSinAsignarOptimizado() {
         stateMayores._sinAsignarOrdenado = true;
     }
 
+    // Obtener filtros de sin asignar
+    const filtros = stateMayores.filtrosInternosAgrupacion['sin_asignar'] || {};
+
+    // Aplicar filtros internos
+    const registrosFiltrados = aplicarFiltrosInternosAgrupacion(registros, filtros);
+    const totalFiltrados = registrosFiltrados.length;
+
     // Limitar registros mostrados
-    const registrosMostrar = registros.slice(0, limite);
-    const hayMas = totalRegistros > limite;
+    const registrosMostrar = registrosFiltrados.slice(0, limite);
+    const hayMas = totalFiltrados > limite;
 
     let html = '<div class="agrupacion-detalle">';
 
-    // Info de cantidad si hay muchos
-    if (totalRegistros > 50) {
-        html += `<div class="info-registros-agrupacion">
-            ${hayMas ? `Mostrando ${limite} de ${totalRegistros} registros` : `${totalRegistros} registros`}
-        </div>`;
+    // Info de cantidad
+    if (totalRegistros > 50 || totalFiltrados !== totalRegistros) {
+        const textoFiltro = totalFiltrados !== totalRegistros
+            ? `Mostrando ${Math.min(limite, totalFiltrados)} de ${totalFiltrados} filtrados (${totalRegistros} total)`
+            : (hayMas ? `Mostrando ${limite} de ${totalRegistros} registros` : `${totalRegistros} registros`);
+        html += `<div class="info-registros-agrupacion">${textoFiltro}</div>`;
     }
 
     html += '<table class="tabla-registros-dp">';
@@ -12484,6 +12661,44 @@ function renderizarDetalleAgrupacionSinAsignarOptimizado() {
                 <th class="col-descripcion">Leyenda</th>
                 <th class="col-debe">Debe</th>
                 <th class="col-haber">Haber</th>
+            </tr>
+            <tr class="fila-filtros-agrupacion">
+                <td class="col-check"></td>
+                <td class="col-fecha">
+                    <input type="text" placeholder="Filtrar..." class="filtro-interno-agrupacion"
+                           data-agrupacion="sin_asignar" data-campo="fecha"
+                           value="${escapeHtml(filtros.fecha || '')}"
+                           onclick="event.stopPropagation()"
+                           oninput="filtrarInternoAgrupacion('sin_asignar', 'fecha', this.value)">
+                </td>
+                <td class="col-asiento">
+                    <input type="text" placeholder="Filtrar..." class="filtro-interno-agrupacion"
+                           data-agrupacion="sin_asignar" data-campo="asiento"
+                           value="${escapeHtml(filtros.asiento || '')}"
+                           onclick="event.stopPropagation()"
+                           oninput="filtrarInternoAgrupacion('sin_asignar', 'asiento', this.value)">
+                </td>
+                <td class="col-descripcion">
+                    <input type="text" placeholder="Filtrar..." class="filtro-interno-agrupacion"
+                           data-agrupacion="sin_asignar" data-campo="descripcion"
+                           value="${escapeHtml(filtros.descripcion || '')}"
+                           onclick="event.stopPropagation()"
+                           oninput="filtrarInternoAgrupacion('sin_asignar', 'descripcion', this.value)">
+                </td>
+                <td class="col-debe">
+                    <input type="text" placeholder="Filtrar..." class="filtro-interno-agrupacion"
+                           data-agrupacion="sin_asignar" data-campo="debe"
+                           value="${escapeHtml(filtros.debe || '')}"
+                           onclick="event.stopPropagation()"
+                           oninput="filtrarInternoAgrupacion('sin_asignar', 'debe', this.value)">
+                </td>
+                <td class="col-haber">
+                    <input type="text" placeholder="Filtrar..." class="filtro-interno-agrupacion"
+                           data-agrupacion="sin_asignar" data-campo="haber"
+                           value="${escapeHtml(filtros.haber || '')}"
+                           onclick="event.stopPropagation()"
+                           oninput="filtrarInternoAgrupacion('sin_asignar', 'haber', this.value)">
+                </td>
             </tr>
         </thead>
         <tbody>
@@ -12515,7 +12730,7 @@ function renderizarDetalleAgrupacionSinAsignarOptimizado() {
         html += `
             <div class="ver-todos-container">
                 <button onclick="verTodosRegistrosAgrupacion('sin_asignar')" class="btn-ver-todos">
-                    Ver todos los ${totalRegistros} registros
+                    Ver todos los ${totalFiltrados} registros
                 </button>
             </div>
         `;
