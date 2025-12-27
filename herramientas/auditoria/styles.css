@@ -5980,6 +5980,43 @@ th.acciones-col {
     color: #f87171;
 }
 
+/* Fila de filtros dentro de cada agrupación */
+.fila-filtros-agrupacion {
+    background: #0f172a;
+}
+
+.fila-filtros-agrupacion td {
+    padding: 4px 8px;
+    border-bottom: 2px solid #334155;
+}
+
+.filtro-interno-agrupacion {
+    width: 100%;
+    padding: 4px 6px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    color: #e2e8f0;
+    font-size: 0.75rem;
+    transition: border-color 0.2s ease;
+}
+
+.filtro-interno-agrupacion::placeholder {
+    color: #64748b;
+    font-size: 0.7rem;
+}
+
+.filtro-interno-agrupacion:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background: #1e293b;
+}
+
+.filtro-interno-agrupacion:not(:placeholder-shown) {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+}
+
 /* Barra de selección flotante para Deudores/Proveedores */
 .barra-seleccion-dp {
     position: fixed;
