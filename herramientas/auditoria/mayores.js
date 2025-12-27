@@ -12558,17 +12558,27 @@ function filtrarInternoAgrupacion(agrupacionId, campo, valor) {
         delete stateMayores.filtrosInternosAgrupacion[agrupacionId][campo];
     }
 
-    // Re-renderizar solo el detalle de esta agrupación
-    actualizarDetalleAgrupacion(agrupacionId);
+    // Re-renderizar solo el detalle de esta agrupación, pasando el campo para restaurar foco
+    actualizarDetalleAgrupacion(agrupacionId, campo);
 }
 
 /**
  * Actualizar solo el detalle de una agrupación específica
  * @param {string} agrupacionId - ID de la agrupación
+ * @param {string} campoFoco - Campo donde restaurar el foco (opcional)
  */
-function actualizarDetalleAgrupacion(agrupacionId) {
+function actualizarDetalleAgrupacion(agrupacionId, campoFoco = null) {
     const agrupacionDiv = document.querySelector(`.agrupacion-item[data-id="${agrupacionId}"]`);
     if (!agrupacionDiv) return;
+
+    // Guardar posición del cursor si hay un campo con foco
+    let cursorPos = null;
+    if (campoFoco) {
+        const inputActivo = document.activeElement;
+        if (inputActivo && inputActivo.classList.contains('filtro-interno-agrupacion')) {
+            cursorPos = inputActivo.selectionStart;
+        }
+    }
 
     // Buscar la agrupación
     let agrupacion = null;
@@ -12579,6 +12589,19 @@ function actualizarDetalleAgrupacion(agrupacionId) {
             const nuevoDetalle = document.createElement('div');
             nuevoDetalle.innerHTML = renderizarDetalleAgrupacionSinAsignarOptimizado();
             detalle.replaceWith(nuevoDetalle.firstElementChild);
+
+            // Restaurar foco
+            if (campoFoco) {
+                const nuevoInput = agrupacionDiv.querySelector(
+                    `.filtro-interno-agrupacion[data-agrupacion="sin_asignar"][data-campo="${campoFoco}"]`
+                );
+                if (nuevoInput) {
+                    nuevoInput.focus();
+                    if (cursorPos !== null) {
+                        nuevoInput.selectionStart = nuevoInput.selectionEnd = cursorPos;
+                    }
+                }
+            }
         }
         return;
     }
@@ -12600,15 +12623,15 @@ function actualizarDetalleAgrupacion(agrupacionId) {
         detalle.replaceWith(nuevoDetalle.firstElementChild);
 
         // Restaurar foco en el input que se estaba editando
-        const campoActivo = document.activeElement?.dataset?.campo;
-        if (campoActivo) {
+        if (campoFoco) {
             const nuevoInput = agrupacionDiv.querySelector(
-                `.filtro-interno-agrupacion[data-agrupacion="${agrupacionId}"][data-campo="${campoActivo}"]`
+                `.filtro-interno-agrupacion[data-agrupacion="${agrupacionId}"][data-campo="${campoFoco}"]`
             );
             if (nuevoInput) {
                 nuevoInput.focus();
-                // Poner cursor al final
-                nuevoInput.selectionStart = nuevoInput.selectionEnd = nuevoInput.value.length;
+                if (cursorPos !== null) {
+                    nuevoInput.selectionStart = nuevoInput.selectionEnd = cursorPos;
+                }
             }
         }
     }
