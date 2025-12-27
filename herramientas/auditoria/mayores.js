@@ -5080,6 +5080,49 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
         }
     }
 
+    // Procesar agrupaciones para deudores/proveedores
+    if (stateMayores.tipoMayorActual?.id === 'deudores_proveedores') {
+        // Restaurar agrupaciones si están guardadas en la conciliación (soportar ambos formatos)
+        const agrupacionesGuardadas = conciliacion.agrupaciones_razon_social || conciliacion.agrupacionesRazonSocial;
+
+        if (agrupacionesGuardadas && Object.keys(agrupacionesGuardadas).length > 0) {
+            stateMayores.agrupacionesRazonSocial = agrupacionesGuardadas;
+            // Restaurar variantes como Sets
+            for (const agrupacion of Object.values(stateMayores.agrupacionesRazonSocial)) {
+                if (agrupacion.variantes && !(agrupacion.variantes instanceof Set)) {
+                    agrupacion.variantes = new Set(agrupacion.variantes);
+                }
+            }
+            stateMayores.registrosSinAsignar = conciliacion.registros_sin_asignar || conciliacion.registrosSinAsignar || [];
+            console.log(`📂 Agrupaciones restauradas: ${Object.keys(stateMayores.agrupacionesRazonSocial).length}`);
+        } else {
+            // Si no hay agrupaciones guardadas, procesarlas desde cero
+            console.log('📂 No hay agrupaciones guardadas, procesando desde registros...');
+            await procesarAgrupacionesRazonSocial();
+        }
+
+        // Restaurar saldos de inicio y cierre si están guardados (soportar ambos formatos)
+        const saldosInicio = conciliacion.saldos_inicio || conciliacion.saldosInicio;
+        const saldosCierre = conciliacion.saldos_cierre || conciliacion.saldosCierre;
+
+        if (saldosInicio && Object.keys(saldosInicio).length > 0) {
+            stateMayores.saldosInicio = saldosInicio;
+            stateMayores.archivoSaldosInicio = conciliacion.archivo_saldos_inicio || conciliacion.archivoSaldosInicio || 'Cargado';
+            console.log(`📂 Saldos de inicio restaurados: ${Object.keys(saldosInicio).length}`);
+        }
+        if (saldosCierre && Object.keys(saldosCierre).length > 0) {
+            stateMayores.saldosCierre = saldosCierre;
+            stateMayores.archivoSaldosCierre = conciliacion.archivo_saldos_cierre || conciliacion.archivoSaldosCierre || 'Cargado';
+            console.log(`📂 Saldos de cierre restaurados: ${Object.keys(saldosCierre).length}`);
+        }
+
+        // Vincular saldos con agrupaciones
+        vincularSaldosConAgrupaciones();
+
+        // Renderizar panel
+        renderizarPanelDeudoresProveedores();
+    }
+
     document.getElementById('infoMayorCargado').style.display =
         stateMayores.registrosMayor.length > 0 ? 'block' : 'none';
 
@@ -5596,6 +5639,26 @@ async function ejecutarGuardarConciliacionMayor() {
     const tamanoOptimizado = JSON.stringify(mesesProcesadosOptimizados).length;
     console.log(`📊 Optimización mesesProcesados: ${(tamanoOriginal / 1024).toFixed(1)}KB → ${(tamanoOptimizado / 1024).toFixed(1)}KB (${((1 - tamanoOptimizado / tamanoOriginal) * 100).toFixed(0)}% reducción)`);
 
+    // Preparar agrupaciones de deudores/proveedores si corresponde
+    let agrupacionesParaGuardar = null;
+    let registrosSinAsignarParaGuardar = null;
+    let saldosInicioParaGuardar = null;
+    let saldosCierreParaGuardar = null;
+
+    if (tipoMayorId === 'deudores_proveedores') {
+        // Convertir Sets de variantes a Arrays para poder serializar
+        agrupacionesParaGuardar = {};
+        for (const [key, agrup] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
+            agrupacionesParaGuardar[key] = {
+                ...agrup,
+                variantes: agrup.variantes ? Array.from(agrup.variantes) : []
+            };
+        }
+        registrosSinAsignarParaGuardar = stateMayores.registrosSinAsignar || [];
+        saldosInicioParaGuardar = stateMayores.saldosInicio || {};
+        saldosCierreParaGuardar = stateMayores.saldosCierre || {};
+    }
+
     const registro = {
         id: conciliacionId,
         cliente_id: clienteId,
@@ -5610,6 +5673,13 @@ async function ejecutarGuardarConciliacionMayor() {
         meses_disponibles: stateMayores.mesesDisponibles || [],
         meses_procesados: mesesProcesadosOptimizados,
         meses_procesados_resumen: mesesProcesadosResumen,
+        // Datos específicos de deudores/proveedores
+        agrupaciones_razon_social: agrupacionesParaGuardar,
+        registros_sin_asignar: registrosSinAsignarParaGuardar,
+        saldos_inicio: saldosInicioParaGuardar,
+        saldos_cierre: saldosCierreParaGuardar,
+        archivo_saldos_inicio: stateMayores.archivoSaldosInicio || null,
+        archivo_saldos_cierre: stateMayores.archivoSaldosCierre || null,
         fecha_guardado: esNueva ? ahora : undefined,
         fecha_modificado: ahora
     };
