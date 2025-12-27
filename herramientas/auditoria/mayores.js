@@ -13384,44 +13384,80 @@ function confirmarReasignarSaldoCierre() {
     const razonOriginal = saldoCierreEnReasignacion.razonSocialOriginal;
     const importe = saldoCierreEnReasignacion.importe;
 
+    console.log('🔄 Reasignando saldo de cierre:');
+    console.log(`   - Razón social origen: "${razonOriginal}"`);
+    console.log(`   - Importe: ${importe}`);
+    console.log(`   - Destino: "${destinoFinal}"`);
+    console.log(`   - Claves en saldosCierre:`, Object.keys(stateMayores.saldosCierre));
+
     // Encontrar la clave original en saldosCierre
+    // Primero buscar por coincidencia exacta de razonSocial e importe
     let claveOriginal = null;
     for (const [clave, saldo] of Object.entries(stateMayores.saldosCierre)) {
         if (saldo.razonSocial === razonOriginal && saldo.saldo === importe) {
             claveOriginal = clave;
+            console.log(`   ✓ Encontrado por coincidencia exacta, clave: "${clave}"`);
             break;
         }
     }
 
+    // Si no se encontró exactamente, buscar solo por razonSocial
     if (!claveOriginal) {
-        // Si no se encuentra exactamente, buscar por razonSocial
-        claveOriginal = normalizarRazonSocial(razonOriginal);
+        for (const [clave, saldo] of Object.entries(stateMayores.saldosCierre)) {
+            if (saldo.razonSocial === razonOriginal) {
+                claveOriginal = clave;
+                console.log(`   ✓ Encontrado por razonSocial, clave: "${clave}"`);
+                break;
+            }
+        }
     }
 
-    // Eliminar el saldo de su ubicación original
-    if (stateMayores.saldosCierre[claveOriginal]) {
-        delete stateMayores.saldosCierre[claveOriginal];
+    // Si aún no se encontró, buscar por clave generada
+    if (!claveOriginal) {
+        const claveGenerada = generarClaveAgrupacion(razonOriginal);
+        if (stateMayores.saldosCierre[claveGenerada]) {
+            claveOriginal = claveGenerada;
+            console.log(`   ✓ Encontrado por clave generada: "${claveGenerada}"`);
+        }
     }
+
+    if (!claveOriginal) {
+        console.log('   ❌ No se encontró el saldo de cierre original');
+        mostrarNotificacion('No se encontró el saldo de cierre original', 'error');
+        return;
+    }
+
+    // Guardar el saldo antes de eliminarlo
+    const saldoOriginal = stateMayores.saldosCierre[claveOriginal];
+    console.log(`   - Saldo encontrado:`, saldoOriginal);
+
+    // Eliminar el saldo de su ubicación original
+    delete stateMayores.saldosCierre[claveOriginal];
+    console.log(`   ✓ Eliminado de clave original: "${claveOriginal}"`);
 
     // Desvincular de la agrupación original si existía
     for (const agrup of Object.values(stateMayores.agrupacionesRazonSocial)) {
-        if (agrup.razonSocial === razonOriginal) {
+        if (agrup.razonSocial === razonOriginal || agrup.razonSocialSaldoCierre === razonOriginal) {
+            console.log(`   ✓ Desvinculando de agrupación: "${agrup.razonSocial}"`);
             agrup.saldoCierre = null;
             agrup.diferencia = null;
+            agrup.razonSocialSaldoCierre = null;
             break;
         }
     }
 
     // Crear el saldo en la nueva ubicación
-    const claveDestino = normalizarRazonSocial(destinoFinal);
+    const claveDestino = generarClaveAgrupacion(destinoFinal);
     stateMayores.saldosCierre[claveDestino] = {
         razonSocial: destinoFinal,
-        saldo: importe,
+        saldo: saldoOriginal.saldo,
         vinculado: false
     };
+    console.log(`   ✓ Creado en nueva clave: "${claveDestino}"`);
 
     // Re-vincular todos los saldos
     vincularSaldosConAgrupaciones();
+    console.log('   ✓ Saldos revinculados');
 
     // Invalidar cache
     stateMayores.dpTotalesCache = null;
@@ -13436,6 +13472,7 @@ function confirmarReasignarSaldoCierre() {
     }
 
     mostrarNotificacion(`Saldo de cierre reasignado a "${destinoFinal}"`, 'success');
+    console.log('   ✅ Reasignación completada');
 }
 
 // ============================================
@@ -13524,29 +13561,60 @@ function confirmarReasignarSaldoInicio() {
     const razonOriginal = saldoInicioEnReasignacion.razonSocialOriginal;
     const importe = saldoInicioEnReasignacion.importe;
 
+    console.log('🔄 Reasignando saldo de inicio:');
+    console.log(`   - Razón social origen: "${razonOriginal}"`);
+    console.log(`   - Importe: ${importe}`);
+    console.log(`   - Destino: "${destinoFinal}"`);
+
     // Encontrar la clave original en saldosInicio
     let claveOriginal = null;
     for (const [clave, saldo] of Object.entries(stateMayores.saldosInicio)) {
         if (saldo.razonSocial === razonOriginal && saldo.saldo === importe) {
             claveOriginal = clave;
+            console.log(`   ✓ Encontrado por coincidencia exacta, clave: "${clave}"`);
             break;
         }
     }
 
+    // Si no se encontró exactamente, buscar solo por razonSocial
     if (!claveOriginal) {
-        // Si no se encuentra exactamente, buscar por razonSocial
-        claveOriginal = normalizarRazonSocial(razonOriginal);
+        for (const [clave, saldo] of Object.entries(stateMayores.saldosInicio)) {
+            if (saldo.razonSocial === razonOriginal) {
+                claveOriginal = clave;
+                console.log(`   ✓ Encontrado por razonSocial, clave: "${clave}"`);
+                break;
+            }
+        }
     }
 
-    // Eliminar el saldo de su ubicación original
-    if (stateMayores.saldosInicio[claveOriginal]) {
-        delete stateMayores.saldosInicio[claveOriginal];
+    // Si aún no se encontró, buscar por clave generada
+    if (!claveOriginal) {
+        const claveGenerada = generarClaveAgrupacion(razonOriginal);
+        if (stateMayores.saldosInicio[claveGenerada]) {
+            claveOriginal = claveGenerada;
+            console.log(`   ✓ Encontrado por clave generada: "${claveGenerada}"`);
+        }
     }
+
+    if (!claveOriginal) {
+        console.log('   ❌ No se encontró el saldo de inicio original');
+        mostrarNotificacion('No se encontró el saldo de inicio original', 'error');
+        return;
+    }
+
+    // Guardar el saldo antes de eliminarlo
+    const saldoOriginal = stateMayores.saldosInicio[claveOriginal];
+
+    // Eliminar el saldo de su ubicación original
+    delete stateMayores.saldosInicio[claveOriginal];
+    console.log(`   ✓ Eliminado de clave original: "${claveOriginal}"`);
 
     // Desvincular de la agrupación original si existía
     for (const agrup of Object.values(stateMayores.agrupacionesRazonSocial)) {
-        if (agrup.razonSocial === razonOriginal) {
+        if (agrup.razonSocial === razonOriginal || agrup.razonSocialSaldoInicio === razonOriginal) {
+            console.log(`   ✓ Desvinculando de agrupación: "${agrup.razonSocial}"`);
             agrup.saldoInicio = 0;
+            agrup.razonSocialSaldoInicio = null;
             // Recalcular saldo calculado
             agrup.saldoCalculado = agrup.saldoInicio + agrup.saldoDebe - agrup.saldoHaber;
             if (agrup.saldoCierre !== null) {
@@ -13557,15 +13625,17 @@ function confirmarReasignarSaldoInicio() {
     }
 
     // Crear el saldo en la nueva ubicación
-    const claveDestino = normalizarRazonSocial(destinoFinal);
+    const claveDestino = generarClaveAgrupacion(destinoFinal);
     stateMayores.saldosInicio[claveDestino] = {
         razonSocial: destinoFinal,
-        saldo: importe,
+        saldo: saldoOriginal.saldo,
         vinculado: false
     };
+    console.log(`   ✓ Creado en nueva clave: "${claveDestino}"`);
 
     // Re-vincular todos los saldos
     vincularSaldosConAgrupaciones();
+    console.log('   ✓ Saldos revinculados');
 
     // Invalidar cache
     stateMayores.dpTotalesCache = null;
@@ -13580,6 +13650,7 @@ function confirmarReasignarSaldoInicio() {
     }
 
     mostrarNotificacion(`Saldo de inicio reasignado a "${destinoFinal}"`, 'success');
+    console.log('   ✅ Reasignación completada');
 }
 
 /**
