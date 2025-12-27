@@ -5082,8 +5082,23 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
 
     // Procesar agrupaciones para deudores/proveedores
     if (stateMayores.tipoMayorActual?.id === 'deudores_proveedores') {
-        // Restaurar agrupaciones si están guardadas en la conciliación (soportar ambos formatos)
-        const agrupacionesGuardadas = conciliacion.agrupaciones_razon_social || conciliacion.agrupacionesRazonSocial;
+        // Intentar cargar datos de D/P desde localStorage (fallback)
+        let datosDP = null;
+        try {
+            const keyDP = `dp_data_${conciliacion.id}`;
+            const datosLocalStorage = localStorage.getItem(keyDP);
+            if (datosLocalStorage) {
+                datosDP = JSON.parse(datosLocalStorage);
+                console.log('📂 Datos de D/P encontrados en localStorage');
+            }
+        } catch (e) {
+            console.warn('⚠️ Error leyendo datos de D/P desde localStorage:', e);
+        }
+
+        // Restaurar agrupaciones si están guardadas en la conciliación o localStorage
+        const agrupacionesGuardadas = conciliacion.agrupaciones_razon_social ||
+                                       conciliacion.agrupacionesRazonSocial ||
+                                       datosDP?.agrupaciones_razon_social;
 
         if (agrupacionesGuardadas && Object.keys(agrupacionesGuardadas).length > 0) {
             stateMayores.agrupacionesRazonSocial = agrupacionesGuardadas;
@@ -5093,7 +5108,9 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
                     agrupacion.variantes = new Set(agrupacion.variantes);
                 }
             }
-            stateMayores.registrosSinAsignar = conciliacion.registros_sin_asignar || conciliacion.registrosSinAsignar || [];
+            stateMayores.registrosSinAsignar = conciliacion.registros_sin_asignar ||
+                                               conciliacion.registrosSinAsignar ||
+                                               datosDP?.registros_sin_asignar || [];
             console.log(`📂 Agrupaciones restauradas: ${Object.keys(stateMayores.agrupacionesRazonSocial).length}`);
         } else {
             // Si no hay agrupaciones guardadas, procesarlas desde cero
@@ -5101,13 +5118,15 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
             await procesarAgrupacionesRazonSocial();
         }
 
-        // Restaurar saldos de inicio y cierre si están guardados (soportar ambos formatos)
-        const saldosInicio = conciliacion.saldos_inicio || conciliacion.saldosInicio;
-        const saldosCierre = conciliacion.saldos_cierre || conciliacion.saldosCierre;
+        // Restaurar saldos de inicio y cierre si están guardados (soportar conciliación, localStorage, y ambos formatos)
+        const saldosInicio = conciliacion.saldos_inicio || conciliacion.saldosInicio || datosDP?.saldos_inicio;
+        const saldosCierre = conciliacion.saldos_cierre || conciliacion.saldosCierre || datosDP?.saldos_cierre;
+        const archivoSaldosInicio = conciliacion.archivo_saldos_inicio || conciliacion.archivoSaldosInicio || datosDP?.archivo_saldos_inicio;
+        const archivoSaldosCierre = conciliacion.archivo_saldos_cierre || conciliacion.archivoSaldosCierre || datosDP?.archivo_saldos_cierre;
 
         if (saldosInicio && Object.keys(saldosInicio).length > 0) {
             stateMayores.saldosInicio = saldosInicio;
-            stateMayores.archivoSaldosInicio = conciliacion.archivo_saldos_inicio || conciliacion.archivoSaldosInicio || 'Cargado';
+            stateMayores.archivoSaldosInicio = archivoSaldosInicio || 'Cargado';
 
             // Calcular total de saldos de inicio
             const totalInicio = Object.values(saldosInicio).reduce((sum, s) => sum + (s.saldo || 0), 0);
@@ -5127,7 +5146,7 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
 
         if (saldosCierre && Object.keys(saldosCierre).length > 0) {
             stateMayores.saldosCierre = saldosCierre;
-            stateMayores.archivoSaldosCierre = conciliacion.archivo_saldos_cierre || conciliacion.archivoSaldosCierre || 'Cargado';
+            stateMayores.archivoSaldosCierre = archivoSaldosCierre || 'Cargado';
 
             // Calcular total de saldos de cierre
             const totalCierre = Object.values(saldosCierre).reduce((sum, s) => sum + (s.saldo || 0), 0);
@@ -5686,6 +5705,12 @@ async function ejecutarGuardarConciliacionMayor() {
         registrosSinAsignarParaGuardar = stateMayores.registrosSinAsignar || [];
         saldosInicioParaGuardar = stateMayores.saldosInicio || {};
         saldosCierreParaGuardar = stateMayores.saldosCierre || {};
+
+        // Log para depuración
+        console.log(`📋 Datos de D/P a guardar:`);
+        console.log(`   - Agrupaciones: ${Object.keys(agrupacionesParaGuardar).length}`);
+        console.log(`   - Saldos inicio: ${Object.keys(saldosInicioParaGuardar).length}`);
+        console.log(`   - Saldos cierre: ${Object.keys(saldosCierreParaGuardar).length}`);
     }
 
     const registro = {
@@ -5751,6 +5776,24 @@ async function ejecutarGuardarConciliacionMayor() {
                     .from('conciliaciones_mayor')
                     .upsert(registroBasico, { onConflict: 'id' });
                 error = resultado.error;
+
+                // Si el guardado básico fue exitoso, guardar datos de D/P en localStorage
+                if (!error && tipoMayorId === 'deudores_proveedores') {
+                    try {
+                        const keyDP = `dp_data_${registro.id}`;
+                        localStorage.setItem(keyDP, JSON.stringify({
+                            agrupaciones_razon_social: agrupacionesParaGuardar,
+                            registros_sin_asignar: registrosSinAsignarParaGuardar,
+                            saldos_inicio: saldosInicioParaGuardar,
+                            saldos_cierre: saldosCierreParaGuardar,
+                            archivo_saldos_inicio: stateMayores.archivoSaldosInicio,
+                            archivo_saldos_cierre: stateMayores.archivoSaldosCierre
+                        }));
+                        console.log('📋 Datos de D/P guardados en localStorage como fallback');
+                    } catch (dpError) {
+                        console.warn('⚠️ No se pudieron guardar datos de D/P en localStorage:', dpError);
+                    }
+                }
 
                 if (!error) {
                     // Guardar cheques en localStorage como fallback SOLO si no hay listadoChequesGuardadoId
