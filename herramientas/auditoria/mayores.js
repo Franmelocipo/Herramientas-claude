@@ -1238,10 +1238,45 @@ async function procesarActualizacionMayor() {
 
             // Para Deudores/Proveedores, reprocesar agrupaciones
             if (stateMayores.tipoMayorActual?.id === 'deudores_proveedores') {
+                console.log('🔄 Reprocesando agrupaciones D/P después de actualizar mayor...');
+                console.log(`   - Total registros en mayor: ${stateMayores.registrosMayor.length}`);
+                console.log(`   - Registros nuevos a procesar:`, registrosNuevos.map(r => ({
+                    id: r.id,
+                    descripcion: r.descripcion?.substring(0, 50),
+                    debe: r.debe,
+                    haber: r.haber
+                })));
+
                 // Invalidar cache de totales
                 stateMayores.dpTotalesCache = null;
                 // Reprocesar agrupaciones con los nuevos registros
                 await procesarAgrupacionesRazonSocial();
+
+                // Log de resultados
+                console.log('✅ Agrupaciones reprocesadas:');
+                console.log(`   - Total agrupaciones: ${Object.keys(stateMayores.agrupacionesRazonSocial).length}`);
+                console.log(`   - Registros sin asignar: ${stateMayores.registrosSinAsignar.length}`);
+
+                // Mostrar dónde terminaron los registros nuevos
+                for (const regNuevo of registrosNuevos) {
+                    let encontrado = false;
+                    for (const [clave, agrup] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
+                        if (agrup.registros.some(r => r.id === regNuevo.id)) {
+                            console.log(`   📍 Registro "${regNuevo.descripcion?.substring(0, 30)}..." -> Grupo: "${agrup.razonSocial}"`);
+                            encontrado = true;
+                            break;
+                        }
+                    }
+                    if (!encontrado) {
+                        const enSinAsignar = stateMayores.registrosSinAsignar.some(r => r.id === regNuevo.id);
+                        if (enSinAsignar) {
+                            console.log(`   ⚠️ Registro "${regNuevo.descripcion?.substring(0, 30)}..." -> Sin Asignar`);
+                        } else {
+                            console.log(`   ❌ Registro "${regNuevo.descripcion?.substring(0, 30)}..." -> NO ENCONTRADO!`);
+                        }
+                    }
+                }
+
                 // Revincular saldos si existen
                 vincularSaldosConAgrupaciones();
                 // Renderizar panel
