@@ -12367,7 +12367,7 @@ function renderizarDetalleAgrupacionOptimizado(agrupacion) {
         <thead>
             <tr>
                 <th class="col-check">
-                    <input type="checkbox" onchange="toggleSeleccionTodosDP('${agrupacion.id}')"
+                    <input type="checkbox" onclick="event.stopPropagation()" onchange="toggleSeleccionTodosDP('${agrupacion.id}')"
                            id="checkAll_${agrupacion.id}">
                 </th>
                 <th class="col-fecha">Fecha</th>
@@ -12389,7 +12389,7 @@ function renderizarDetalleAgrupacionOptimizado(agrupacion) {
         filas.push(`
             <tr class="${seleccionado ? 'seleccionado' : ''}" data-id="${registro.id}">
                 <td class="col-check">
-                    <input type="checkbox" ${seleccionado ? 'checked' : ''}
+                    <input type="checkbox" ${seleccionado ? 'checked' : ''} onclick="event.stopPropagation()"
                            onchange="toggleSeleccionRegistroDP('${registro.id}', '${razonSocialEscapada}')">
                 </td>
                 <td class="col-fecha">${formatearFecha(registro.fecha)}</td>
@@ -12465,7 +12465,7 @@ function renderizarDetalleAgrupacionSinAsignarOptimizado() {
         <thead>
             <tr>
                 <th class="col-check">
-                    <input type="checkbox" onchange="toggleSeleccionTodosDP('sin_asignar')"
+                    <input type="checkbox" onclick="event.stopPropagation()" onchange="toggleSeleccionTodosDP('sin_asignar')"
                            id="checkAll_sin_asignar">
                 </th>
                 <th class="col-fecha">Fecha</th>
@@ -12484,7 +12484,7 @@ function renderizarDetalleAgrupacionSinAsignarOptimizado() {
         filas.push(`
             <tr class="${seleccionado ? 'seleccionado' : ''}" data-id="${registro.id}">
                 <td class="col-check">
-                    <input type="checkbox" ${seleccionado ? 'checked' : ''}
+                    <input type="checkbox" ${seleccionado ? 'checked' : ''} onclick="event.stopPropagation()"
                            onchange="toggleSeleccionRegistroDP('${registro.id}', 'Sin Asignar')">
                 </td>
                 <td class="col-fecha">${formatearFecha(registro.fecha)}</td>
