@@ -5778,18 +5778,18 @@ async function ejecutarGuardarConciliacionMayor() {
                 error = resultado.error;
 
                 // Si el guardado básico fue exitoso, guardar datos de D/P en localStorage
+                // Solo guardamos saldos (son pequeños), las agrupaciones se reconstruyen desde registros
                 if (!error && tipoMayorId === 'deudores_proveedores') {
                     try {
                         const keyDP = `dp_data_${registro.id}`;
+                        // Guardar solo saldos y nombres de archivos (las agrupaciones se reconstruyen)
                         localStorage.setItem(keyDP, JSON.stringify({
-                            agrupaciones_razon_social: agrupacionesParaGuardar,
-                            registros_sin_asignar: registrosSinAsignarParaGuardar,
                             saldos_inicio: saldosInicioParaGuardar,
                             saldos_cierre: saldosCierreParaGuardar,
                             archivo_saldos_inicio: stateMayores.archivoSaldosInicio,
                             archivo_saldos_cierre: stateMayores.archivoSaldosCierre
                         }));
-                        console.log('📋 Datos de D/P guardados en localStorage como fallback');
+                        console.log('📋 Datos de D/P (saldos) guardados en localStorage como fallback');
                     } catch (dpError) {
                         console.warn('⚠️ No se pudieron guardar datos de D/P en localStorage:', dpError);
                     }
