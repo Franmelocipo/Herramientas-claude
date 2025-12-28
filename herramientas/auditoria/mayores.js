@@ -1263,6 +1263,9 @@ async function procesarActualizacionMayor() {
                 // Reprocesar agrupaciones con los nuevos registros
                 await procesarAgrupacionesRazonSocial();
 
+                // Verificar y reparar integridad
+                verificarYRepararIntegridad();
+
                 // Log de resultados
                 console.log('✅ Agrupaciones reprocesadas:');
                 console.log(`   - Total agrupaciones: ${Object.keys(stateMayores.agrupacionesRazonSocial).length}`);
@@ -5202,6 +5205,9 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
             console.log('📂 No hay agrupaciones en Supabase, procesando desde registros...');
             await procesarAgrupacionesRazonSocial();
         }
+
+        // Verificar y reparar integridad después de restaurar/procesar agrupaciones
+        verificarYRepararIntegridad();
 
         // Restaurar saldos de inicio y cierre si están guardados en Supabase
         const saldosInicio = conciliacion.saldos_inicio || conciliacion.saldosInicio;
@@ -11843,6 +11849,204 @@ async function procesarAgrupacionesRazonSocial() {
 }
 
 /**
+ * Verificar integridad de datos: los totales del análisis deben coincidir con los del mayor
+ * Esta función detecta y repara duplicados automáticamente
+ * @returns {object} Resultado de la verificación con detalles de discrepancias
+ */
+function verificarIntegridadDatos() {
+    // Calcular totales del mayor original
+    let mayorDebe = 0;
+    let mayorHaber = 0;
+    const registrosMayorIds = new Set();
+
+    for (const r of stateMayores.registrosMayor) {
+        mayorDebe += r.debe || 0;
+        mayorHaber += r.haber || 0;
+        registrosMayorIds.add(r.id);
+    }
+
+    // Calcular totales de las agrupaciones
+    let analisisDebe = 0;
+    let analisisHaber = 0;
+    let registrosEnAnalisis = 0;
+    let duplicadosDetectados = 0;
+    const idsEnAnalisis = new Set();
+
+    // Contar registros en agrupaciones
+    for (const agrupacion of Object.values(stateMayores.agrupacionesRazonSocial)) {
+        for (const r of agrupacion.registros) {
+            if (idsEnAnalisis.has(r.id)) {
+                duplicadosDetectados++;
+            } else {
+                idsEnAnalisis.add(r.id);
+                analisisDebe += r.debe || 0;
+                analisisHaber += r.haber || 0;
+            }
+            registrosEnAnalisis++;
+        }
+    }
+
+    // Contar registros sin asignar
+    for (const r of stateMayores.registrosSinAsignar) {
+        if (idsEnAnalisis.has(r.id)) {
+            duplicadosDetectados++;
+        } else {
+            idsEnAnalisis.add(r.id);
+            analisisDebe += r.debe || 0;
+            analisisHaber += r.haber || 0;
+        }
+        registrosEnAnalisis++;
+    }
+
+    const resultado = {
+        esValido: true,
+        mayorRegistros: stateMayores.registrosMayor.length,
+        analisisRegistros: registrosEnAnalisis,
+        registrosUnicos: idsEnAnalisis.size,
+        duplicadosDetectados,
+        mayorDebe,
+        mayorHaber,
+        analisisDebe,
+        analisisHaber,
+        diferenciaDebe: Math.abs(mayorDebe - analisisDebe),
+        diferenciaHaber: Math.abs(mayorHaber - analisisHaber)
+    };
+
+    // Verificar si hay discrepancias
+    if (resultado.diferenciaDebe > 0.01 || resultado.diferenciaHaber > 0.01 || duplicadosDetectados > 0) {
+        resultado.esValido = false;
+        console.warn('⚠️ ALERTA DE INTEGRIDAD: Discrepancia detectada entre mayor y análisis');
+        console.warn(`   Mayor - Debe: ${formatearMoneda(mayorDebe)}, Haber: ${formatearMoneda(mayorHaber)}`);
+        console.warn(`   Análisis - Debe: ${formatearMoneda(analisisDebe)}, Haber: ${formatearMoneda(analisisHaber)}`);
+        console.warn(`   Diferencia - Debe: ${formatearMoneda(resultado.diferenciaDebe)}, Haber: ${formatearMoneda(resultado.diferenciaHaber)}`);
+        console.warn(`   Duplicados detectados: ${duplicadosDetectados}`);
+    }
+
+    return resultado;
+}
+
+/**
+ * Reparar duplicados en las agrupaciones
+ * Elimina registros duplicados manteniendo solo una instancia de cada uno
+ * @returns {number} Cantidad de duplicados eliminados
+ */
+function repararDuplicadosEnAgrupaciones() {
+    console.log('🔧 Iniciando reparación de duplicados en agrupaciones...');
+
+    const idsVistos = new Set();
+    let duplicadosEliminados = 0;
+
+    // Reparar cada agrupación
+    for (const [clave, agrupacion] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
+        const registrosSinDuplicados = [];
+        const clavesVistas = new Set();
+
+        for (const registro of agrupacion.registros) {
+            // Verificar por ID
+            if (idsVistos.has(registro.id)) {
+                duplicadosEliminados++;
+                console.log(`   ❌ Duplicado eliminado (ID): Asiento ${registro.asiento} en "${clave}"`);
+                continue;
+            }
+
+            // Verificar por combinación única
+            const claveUnica = `${registro.asiento}|${registro.fecha ? registro.fecha.getTime() : ''}|${registro.debe}|${registro.haber}|${registro.descripcion}`;
+            if (clavesVistas.has(claveUnica)) {
+                duplicadosEliminados++;
+                console.log(`   ❌ Duplicado eliminado (clave): Asiento ${registro.asiento} en "${clave}"`);
+                continue;
+            }
+
+            idsVistos.add(registro.id);
+            clavesVistas.add(claveUnica);
+            registrosSinDuplicados.push(registro);
+        }
+
+        // Actualizar registros de la agrupación
+        agrupacion.registros = registrosSinDuplicados;
+
+        // Recalcular saldos de la agrupación
+        let saldoDebe = 0;
+        let saldoHaber = 0;
+        for (const r of registrosSinDuplicados) {
+            saldoDebe += r.debe || 0;
+            saldoHaber += r.haber || 0;
+        }
+        agrupacion.saldoDebe = saldoDebe;
+        agrupacion.saldoHaber = saldoHaber;
+        agrupacion.saldo = saldoDebe - saldoHaber;
+    }
+
+    // Reparar registros sin asignar
+    const sinAsignarLimpio = [];
+    const clavesSinAsignar = new Set();
+
+    for (const registro of stateMayores.registrosSinAsignar) {
+        if (idsVistos.has(registro.id)) {
+            duplicadosEliminados++;
+            continue;
+        }
+
+        const claveUnica = `${registro.asiento}|${registro.fecha ? registro.fecha.getTime() : ''}|${registro.debe}|${registro.haber}|${registro.descripcion}`;
+        if (clavesSinAsignar.has(claveUnica)) {
+            duplicadosEliminados++;
+            continue;
+        }
+
+        idsVistos.add(registro.id);
+        clavesSinAsignar.add(claveUnica);
+        sinAsignarLimpio.push(registro);
+    }
+    stateMayores.registrosSinAsignar = sinAsignarLimpio;
+
+    // Invalidar cache de totales
+    stateMayores.dpTotalesCache = null;
+
+    if (duplicadosEliminados > 0) {
+        console.log(`✅ Reparación completada: ${duplicadosEliminados} duplicados eliminados`);
+        // Recalcular totales
+        calcularTotalesDPCache();
+    } else {
+        console.log('✅ No se encontraron duplicados para reparar');
+    }
+
+    return duplicadosEliminados;
+}
+
+/**
+ * Verificar y reparar integridad automáticamente
+ * Esta función se llama después de cargar/procesar datos
+ */
+function verificarYRepararIntegridad() {
+    const verificacion = verificarIntegridadDatos();
+
+    if (!verificacion.esValido) {
+        console.warn('⚠️ Integridad comprometida, iniciando reparación automática...');
+        const reparados = repararDuplicadosEnAgrupaciones();
+
+        // Verificar nuevamente después de reparar
+        const verificacionPost = verificarIntegridadDatos();
+
+        if (!verificacionPost.esValido) {
+            // Si aún hay discrepancias, mostrar advertencia al usuario
+            mostrarNotificacion(
+                `⚠️ Advertencia: Se detectaron discrepancias en los datos. Diferencia en Debe: ${formatearMoneda(verificacionPost.diferenciaDebe)}, Haber: ${formatearMoneda(verificacionPost.diferenciaHaber)}`,
+                'warning'
+            );
+        } else if (reparados > 0) {
+            mostrarNotificacion(
+                `✅ Se repararon ${reparados} registros duplicados automáticamente`,
+                'success'
+            );
+        }
+
+        return { reparados, verificacionPost };
+    }
+
+    return { reparados: 0, verificacion };
+}
+
+/**
  * Calcular y cachear totales de Deudores/Proveedores
  */
 function calcularTotalesDPCache() {
@@ -13910,6 +14114,9 @@ async function inicializarPanelDeudoresProveedores() {
 
     // Procesar agrupaciones (asíncrono para no bloquear UI)
     await procesarAgrupacionesRazonSocial();
+
+    // Verificar y reparar integridad
+    verificarYRepararIntegridad();
 
     // Renderizar
     renderizarPanelDeudoresProveedores();
