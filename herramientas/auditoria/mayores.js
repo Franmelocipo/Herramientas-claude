@@ -1183,6 +1183,8 @@ async function procesarActualizacionMayor() {
         // Procesar registros nuevos
         const registrosNuevos = [];
         const asientosNuevosSet = new Set();
+        // Set para evitar duplicados dentro del archivo de actualización
+        const clavesNuevas = new Set();
 
         jsonData.forEach((row, index) => {
             const fecha = buscarColumna(row, 'Fecha asien', 'Fecha', 'FECHA', 'fecha');
@@ -1197,11 +1199,20 @@ async function procesarActualizacionMayor() {
 
             // Solo agregar si es un asiento nuevo y tiene movimiento
             if (asientoStr && !asientosExistentes.has(asientoStr) && (debe > 0 || haber > 0)) {
+                // Verificar duplicados dentro del archivo de actualización
+                const fechaParsed = parsearFecha(fecha);
+                const claveUnica = `${asientoStr}|${fechaParsed ? fechaParsed.getTime() : ''}|${debe}|${haber}|${descripcion || ''}`;
+                if (clavesNuevas.has(claveUnica)) {
+                    console.log(`⚠️ Registro duplicado en archivo de actualización omitido: Asiento ${asientoStr}`);
+                    return; // Saltar este registro
+                }
+                clavesNuevas.add(claveUnica);
+
                 asientosNuevosSet.add(asientoStr);
 
                 registrosNuevos.push({
                     id: `reg_${Date.now()}_${index}_new`,
-                    fecha: parsearFecha(fecha),
+                    fecha: fechaParsed,
                     fechaOriginal: fecha,
                     asiento: asientoStr,
                     descripcion: descripcion || '',
@@ -1494,8 +1505,25 @@ async function procesarMayor() {
             };
         }).filter(r => r.debe > 0 || r.haber > 0);
 
-        stateMayores.registrosMayor = registros;
-        stateMayores.registrosOriginales = JSON.parse(JSON.stringify(registros));
+        // Eliminar duplicados del archivo Excel (misma combinación asiento+fecha+debe+haber+descripción)
+        const registrosUnicos = new Map();
+        const registrosSinDuplicados = [];
+        let duplicadosEliminados = 0;
+        for (const r of registros) {
+            const claveUnica = `${r.asiento}|${r.fecha ? r.fecha.getTime() : ''}|${r.debe}|${r.haber}|${r.descripcion}`;
+            if (!registrosUnicos.has(claveUnica)) {
+                registrosUnicos.set(claveUnica, true);
+                registrosSinDuplicados.push(r);
+            } else {
+                duplicadosEliminados++;
+            }
+        }
+        if (duplicadosEliminados > 0) {
+            console.log(`⚠️ Se eliminaron ${duplicadosEliminados} registros duplicados del archivo Excel`);
+        }
+
+        stateMayores.registrosMayor = registrosSinDuplicados;
+        stateMayores.registrosOriginales = JSON.parse(JSON.stringify(registrosSinDuplicados));
         stateMayores.vinculaciones = [];
 
         // Cerrar modal
@@ -11661,6 +11689,11 @@ async function procesarAgrupacionesRazonSocial() {
     stateMayores.dpTotalesCache = null;
     stateMayores.agrupacionesOrdenadas = [];
 
+    // Set para detectar duplicados por ID de registro
+    const registrosProcesados = new Set();
+    // Set adicional para detectar duplicados por combinación única (asiento+fecha+debe+haber+descripción)
+    const registrosUnicos = new Set();
+
     // Mapa de claves de agrupación a razón social canónica
     const claveACanonica = new Map();
 
@@ -11673,6 +11706,22 @@ async function procesarAgrupacionesRazonSocial() {
 
         // Procesar lote
         for (const registro of lote) {
+            // Verificar duplicados por ID
+            if (registrosProcesados.has(registro.id)) {
+                continue; // Saltar registro duplicado
+            }
+
+            // Verificar duplicados por combinación única (asiento + fecha + debe + haber + descripción)
+            const claveUnica = `${registro.asiento}|${registro.fecha ? registro.fecha.getTime() : ''}|${registro.debe}|${registro.haber}|${registro.descripcion}`;
+            if (registrosUnicos.has(claveUnica)) {
+                console.log(`⚠️ Registro duplicado detectado y omitido: Asiento ${registro.asiento}`);
+                continue; // Saltar registro duplicado
+            }
+
+            // Marcar como procesado
+            registrosProcesados.add(registro.id);
+            registrosUnicos.add(claveUnica);
+
             // Si el registro ya tiene una razón social asignada manualmente, usarla directamente
             let razonSocial = registro.razonSocialAsignada ||
                               extraerRazonSocialDeLeyenda(registro.descripcion);
