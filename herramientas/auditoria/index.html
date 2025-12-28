@@ -763,6 +763,12 @@
                                         <span id="nombreArchivoSaldosInicio" class="dp-saldo-archivo-nombre">No cargado</span>
                                         <span id="totalSaldosInicioDisplay" class="dp-saldo-total"></span>
                                     </div>
+                                    <div class="dp-checkbox-apertura">
+                                        <label class="checkbox-label" title="Marcar si el mayor contable ya incluye el asiento de apertura con los saldos iniciales. Esto evita que se duplique el saldo.">
+                                            <input type="checkbox" id="checkMayorIncluyeApertura" onchange="actualizarCalculoConApertura()">
+                                            <span>El mayor incluye asiento de apertura</span>
+                                        </label>
+                                    </div>
                                 </div>
                                 <div class="dp-saldo-archivo">
                                     <label class="dp-saldo-label">Saldos al Cierre:</label>
