@@ -4665,7 +4665,10 @@ async function cargarConciliacionesMayorGuardadas() {
                     saldos_inicio: c.saldos_inicio || null,
                     saldos_cierre: c.saldos_cierre || null,
                     archivo_saldos_inicio: c.archivo_saldos_inicio || null,
-                    archivo_saldos_cierre: c.archivo_saldos_cierre || null
+                    archivo_saldos_cierre: c.archivo_saldos_cierre || null,
+                    ajustes_auditoria: c.ajustes_auditoria || null,
+                    notas_ajustes_auditoria: c.notas_ajustes_auditoria || null,
+                    mayor_incluye_apertura: c.mayor_incluye_apertura || false
                 }));
             } else {
                 console.log('📊 No hay conciliaciones en Supabase para este cliente/tipo');
@@ -4700,7 +4703,10 @@ async function cargarConciliacionesMayorGuardadas() {
                         saldos_inicio: c.saldos_inicio || null,
                         saldos_cierre: c.saldos_cierre || null,
                         archivo_saldos_inicio: c.archivo_saldos_inicio || null,
-                        archivo_saldos_cierre: c.archivo_saldos_cierre || null
+                        archivo_saldos_cierre: c.archivo_saldos_cierre || null,
+                        ajustes_auditoria: c.ajustes_auditoria || null,
+                        notas_ajustes_auditoria: c.notas_ajustes_auditoria || null,
+                        mayor_incluye_apertura: c.mayor_incluye_apertura || false
                     }));
                 }
                 return [];
@@ -4972,7 +4978,10 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
         saldos_inicio: conciliacion.saldos_inicio ? Object.keys(conciliacion.saldos_inicio).length : 'NO',
         saldos_cierre: conciliacion.saldos_cierre ? Object.keys(conciliacion.saldos_cierre).length : 'NO',
         archivo_saldos_inicio: conciliacion.archivo_saldos_inicio || 'NO',
-        archivo_saldos_cierre: conciliacion.archivo_saldos_cierre || 'NO'
+        archivo_saldos_cierre: conciliacion.archivo_saldos_cierre || 'NO',
+        ajustes_auditoria: conciliacion.ajustes_auditoria ? Object.keys(conciliacion.ajustes_auditoria).length : 'NO',
+        notas_ajustes_auditoria: conciliacion.notas_ajustes_auditoria ? Object.keys(conciliacion.notas_ajustes_auditoria).length : 'NO',
+        mayor_incluye_apertura: conciliacion.mayor_incluye_apertura || false
     });
 
     // Restaurar fechas como objetos Date
