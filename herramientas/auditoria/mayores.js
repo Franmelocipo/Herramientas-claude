@@ -85,7 +85,9 @@ const stateMayores = {
     // Filtros internos por agrupación: { agrupacionId: { fecha: '', asiento: '', descripcion: '', debe: '', haber: '' } }
     filtrosInternosAgrupacion: {},
     // Ajustes de auditoría por razón social: { razonSocialNormalizada: valor }
-    ajustesAuditoria: {}
+    ajustesAuditoria: {},
+    // Notas de ajustes de auditoría por razón social: { razonSocialNormalizada: 'nota' }
+    notasAjustesAuditoria: {}
 };
 
 // Variables para gestión de conciliaciones
@@ -5255,6 +5257,20 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
             console.log(`📂 Saldos de cierre restaurados: ${Object.keys(saldosCierre).length}`);
         }
 
+        // Restaurar ajustes de auditoría si están guardados
+        const ajustesAuditoria = conciliacion.ajustes_auditoria || conciliacion.ajustesAuditoria;
+        if (ajustesAuditoria && Object.keys(ajustesAuditoria).length > 0) {
+            stateMayores.ajustesAuditoria = ajustesAuditoria;
+            console.log(`📂 Ajustes de auditoría restaurados: ${Object.keys(ajustesAuditoria).length}`);
+        }
+
+        // Restaurar notas de ajustes si están guardadas
+        const notasAjustes = conciliacion.notas_ajustes_auditoria || conciliacion.notasAjustesAuditoria;
+        if (notasAjustes && Object.keys(notasAjustes).length > 0) {
+            stateMayores.notasAjustesAuditoria = notasAjustes;
+            console.log(`📂 Notas de ajustes restauradas: ${Object.keys(notasAjustes).length}`);
+        }
+
         // Vincular saldos con agrupaciones
         vincularSaldosConAgrupaciones();
 
@@ -5783,6 +5799,8 @@ async function ejecutarGuardarConciliacionMayor() {
     let registrosSinAsignarParaGuardar = null;
     let saldosInicioParaGuardar = null;
     let saldosCierreParaGuardar = null;
+    let ajustesAuditoriaParaGuardar = null;
+    let notasAjustesParaGuardar = null;
 
     if (tipoMayorId === 'deudores_proveedores') {
         // Convertir Sets de variantes a Arrays para poder serializar
@@ -5796,12 +5814,16 @@ async function ejecutarGuardarConciliacionMayor() {
         registrosSinAsignarParaGuardar = stateMayores.registrosSinAsignar || [];
         saldosInicioParaGuardar = stateMayores.saldosInicio || {};
         saldosCierreParaGuardar = stateMayores.saldosCierre || {};
+        ajustesAuditoriaParaGuardar = stateMayores.ajustesAuditoria || {};
+        notasAjustesParaGuardar = stateMayores.notasAjustesAuditoria || {};
 
         // Log para depuración
         console.log(`📋 Datos de D/P a guardar:`);
         console.log(`   - Agrupaciones: ${Object.keys(agrupacionesParaGuardar).length}`);
         console.log(`   - Saldos inicio: ${Object.keys(saldosInicioParaGuardar).length}`);
         console.log(`   - Saldos cierre: ${Object.keys(saldosCierreParaGuardar).length}`);
+        console.log(`   - Ajustes auditoría: ${Object.keys(ajustesAuditoriaParaGuardar).length}`);
+        console.log(`   - Notas ajustes: ${Object.keys(notasAjustesParaGuardar).length}`);
     }
 
     const registro = {
@@ -5825,6 +5847,8 @@ async function ejecutarGuardarConciliacionMayor() {
         saldos_cierre: saldosCierreParaGuardar,
         archivo_saldos_inicio: stateMayores.archivoSaldosInicio || null,
         archivo_saldos_cierre: stateMayores.archivoSaldosCierre || null,
+        ajustes_auditoria: ajustesAuditoriaParaGuardar,
+        notas_ajustes_auditoria: notasAjustesParaGuardar,
         fecha_guardado: esNueva ? ahora : undefined,
         fecha_modificado: ahora
     };
@@ -5858,7 +5882,9 @@ ADD COLUMN IF NOT EXISTS registros_sin_asignar JSONB,
 ADD COLUMN IF NOT EXISTS saldos_inicio JSONB,
 ADD COLUMN IF NOT EXISTS saldos_cierre JSONB,
 ADD COLUMN IF NOT EXISTS archivo_saldos_inicio TEXT,
-ADD COLUMN IF NOT EXISTS archivo_saldos_cierre TEXT;
+ADD COLUMN IF NOT EXISTS archivo_saldos_cierre TEXT,
+ADD COLUMN IF NOT EXISTS ajustes_auditoria JSONB,
+ADD COLUMN IF NOT EXISTS notas_ajustes_auditoria JSONB;
                     `);
                 }
 
@@ -14801,6 +14827,10 @@ function renderizarCuadroComparativo() {
         const ajusteValue = ajuste !== 0 ? ajuste : '';
         const claseAjuste = ajuste > 0 ? 'ajuste-positivo' : (ajuste < 0 ? 'ajuste-negativo' : '');
 
+        // Nota del ajuste
+        const notaAjuste = stateMayores.notasAjustesAuditoria[claveAjuste] || '';
+        const tieneNota = notaAjuste.trim().length > 0;
+
         // Botones de reasignar saldos
         const razonEscaped = escapeHtml(e.razonSocial).replace(/'/g, "\\'");
 
@@ -14832,12 +14862,19 @@ function renderizarCuadroComparativo() {
                 <td class="col-numero haber">${formatearMoneda(e.haber)}</td>
                 <td class="col-numero ${e.saldoCalculado >= 0 ? 'debe' : 'haber'}">${formatearMoneda(e.saldoCalculado)}</td>
                 <td class="col-numero col-ajuste">
-                    <input type="text" class="input-ajuste-auditoria ${claseAjuste}"
-                           value="${ajusteValue}"
-                           data-razon="${escapeHtml(e.razonSocial)}"
-                           placeholder="0"
-                           onchange="actualizarAjusteAuditoria(this)"
-                           onkeypress="return validarInputNumerico(event)">
+                    <div class="ajuste-container">
+                        <input type="text" class="input-ajuste-auditoria ${claseAjuste}"
+                               value="${ajusteValue}"
+                               data-razon="${escapeHtml(e.razonSocial)}"
+                               placeholder="0"
+                               onchange="actualizarAjusteAuditoria(this)"
+                               onkeypress="return validarInputNumerico(event)">
+                        <button class="btn-nota-ajuste ${tieneNota ? 'tiene-nota' : ''}"
+                                onclick="mostrarModalNotaAjuste('${razonEscaped}', ${ajuste})"
+                                title="${tieneNota ? escapeHtml(notaAjuste) : 'Agregar nota'}">
+                            ${tieneNota ? '📝' : '📋'}
+                        </button>
+                    </div>
                 </td>
                 <td class="col-numero ${saldoCierreEfectivo >= 0 ? 'debe' : 'haber'}">${formatearMoneda(saldoCierreEfectivo)}</td>
                 <td class="col-numero ${tieneDiferencia ? 'diferencia' : ''}">${formatearMoneda(diferenciaConAjuste)}</td>
@@ -14937,6 +14974,72 @@ function validarInputNumerico(event) {
     return false;
 }
 
+// Variable para guardar la razón social del modal de nota actual
+let notaAjusteRazonActual = null;
+
+/**
+ * Mostrar modal para agregar/editar nota de ajuste
+ * @param {string} razonSocial - Razón social del ajuste
+ * @param {number} ajuste - Valor del ajuste actual
+ */
+function mostrarModalNotaAjuste(razonSocial, ajuste) {
+    const modal = document.getElementById('modalNotaAjuste');
+    if (!modal) return;
+
+    notaAjusteRazonActual = razonSocial;
+
+    // Mostrar info
+    document.getElementById('notaAjusteRazonSocial').textContent = razonSocial;
+    document.getElementById('notaAjusteImporte').textContent = formatearMoneda(ajuste || 0);
+
+    // Cargar nota existente
+    const clave = normalizarRazonSocial(razonSocial);
+    const notaExistente = stateMayores.notasAjustesAuditoria[clave] || '';
+    document.getElementById('textareaNotaAjuste').value = notaExistente;
+
+    modal.classList.remove('hidden');
+
+    // Enfocar el textarea
+    setTimeout(() => {
+        document.getElementById('textareaNotaAjuste').focus();
+    }, 100);
+}
+
+/**
+ * Cerrar modal de nota de ajuste
+ */
+function cerrarModalNotaAjuste() {
+    const modal = document.getElementById('modalNotaAjuste');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    notaAjusteRazonActual = null;
+}
+
+/**
+ * Guardar nota de ajuste
+ */
+function guardarNotaAjuste() {
+    if (!notaAjusteRazonActual) {
+        cerrarModalNotaAjuste();
+        return;
+    }
+
+    const nota = document.getElementById('textareaNotaAjuste').value.trim();
+    const clave = normalizarRazonSocial(notaAjusteRazonActual);
+
+    if (nota) {
+        stateMayores.notasAjustesAuditoria[clave] = nota;
+        mostrarNotificacion('Nota guardada correctamente', 'success');
+    } else {
+        delete stateMayores.notasAjustesAuditoria[clave];
+        mostrarNotificacion('Nota eliminada', 'info');
+    }
+
+    cerrarModalNotaAjuste();
+    renderizarCuadroComparativo();
+}
+
 /**
  * Exportar cuadro comparativo a Excel
  */
@@ -14954,7 +15057,7 @@ function exportarCuadroComparativo() {
         ['Cliente:', stateMayores.clienteActual?.nombre || '-'],
         ['Fecha de exportación:', new Date().toLocaleString('es-AR')],
         [],
-        ['Razón Social', 'Saldo Inicio', 'Debe', 'Haber', 'Saldo Calculado', 'Ajustes Auditoría', 'Saldo Reportado', 'Diferencia', 'Estado']
+        ['Razón Social', 'Saldo Inicio', 'Debe', 'Haber', 'Saldo Calculado', 'Ajustes Auditoría', 'Nota Ajuste', 'Saldo Reportado', 'Diferencia', 'Estado']
     ];
 
     let totalSaldoInicio = 0;
@@ -14972,6 +15075,7 @@ function exportarCuadroComparativo() {
         const saldoCalculado = (a.saldoInicio || 0) + a.saldo;
         const claveAjuste = normalizarRazonSocial(a.razonSocial);
         const ajuste = stateMayores.ajustesAuditoria[claveAjuste] || 0;
+        const notaAjuste = stateMayores.notasAjustesAuditoria[claveAjuste] || '';
         const diferenciaConAjuste = a.saldoCierre !== null ? (saldoCalculado + ajuste) - a.saldoCierre : null;
         const tieneDiferencia = diferenciaConAjuste !== null && Math.abs(diferenciaConAjuste) >= 0.01;
 
@@ -14989,6 +15093,7 @@ function exportarCuadroComparativo() {
             a.saldoHaber,
             saldoCalculado,
             ajuste !== 0 ? ajuste : '',
+            notaAjuste,
             a.saldoCierre !== null ? a.saldoCierre : '',
             diferenciaConAjuste !== null ? diferenciaConAjuste : '',
             estado
@@ -15007,6 +15112,7 @@ function exportarCuadroComparativo() {
         if (!saldoInicio.vinculado) {
             const claveAjuste = normalizarRazonSocial(saldoInicio.razonSocial);
             const ajuste = stateMayores.ajustesAuditoria[claveAjuste] || 0;
+            const notaAjuste = stateMayores.notasAjustesAuditoria[claveAjuste] || '';
             data.push([
                 saldoInicio.razonSocial,
                 saldoInicio.saldo,
@@ -15014,6 +15120,7 @@ function exportarCuadroComparativo() {
                 0,
                 saldoInicio.saldo,
                 ajuste !== 0 ? ajuste : '',
+                notaAjuste,
                 '',
                 '',
                 'SIN MOVIMIENTOS'
@@ -15028,6 +15135,7 @@ function exportarCuadroComparativo() {
         if (!saldoCierre.vinculado) {
             const claveAjuste = normalizarRazonSocial(saldoCierre.razonSocial);
             const ajuste = stateMayores.ajustesAuditoria[claveAjuste] || 0;
+            const notaAjuste = stateMayores.notasAjustesAuditoria[claveAjuste] || '';
             const diferenciaConAjuste = (0 + ajuste) - saldoCierre.saldo;
             data.push([
                 saldoCierre.razonSocial,
@@ -15036,6 +15144,7 @@ function exportarCuadroComparativo() {
                 0,
                 0,
                 ajuste !== 0 ? ajuste : '',
+                notaAjuste,
                 saldoCierre.saldo,
                 diferenciaConAjuste,
                 'SOLO EN CIERRE'
@@ -15054,6 +15163,7 @@ function exportarCuadroComparativo() {
         totalHaber,
         totalSaldoCalculado,
         totalAjustes !== 0 ? totalAjustes : '',
+        '', // Columna de notas vacía en totales
         totalSaldoCierre,
         (totalSaldoCalculado + totalAjustes) - totalSaldoCierre,
         ''
