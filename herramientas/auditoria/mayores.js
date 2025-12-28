@@ -12557,7 +12557,10 @@ function fusionarAgrupaciones(origenId, destinoId) {
     if (agrupacionOrigen.saldoInicio) {
         agrupacionDestino.saldoInicio = (agrupacionDestino.saldoInicio || 0) + agrupacionOrigen.saldoInicio;
     }
-    agrupacionDestino.saldoCalculado = (agrupacionDestino.saldoInicio || 0) + agrupacionDestino.saldo;
+    // Considerar configuración de apertura
+    agrupacionDestino.saldoCalculado = stateMayores.mayorIncluyeApertura
+        ? agrupacionDestino.saldo
+        : ((agrupacionDestino.saldoInicio || 0) + agrupacionDestino.saldo);
 
     // Eliminar la agrupación origen
     delete stateMayores.agrupacionesRazonSocial[claveOrigen];
@@ -14027,8 +14030,10 @@ function confirmarReasignarSaldoInicio() {
             console.log(`   ✓ Desvinculando de agrupación: "${agrup.razonSocial}"`);
             agrup.saldoInicio = 0;
             agrup.razonSocialSaldoInicio = null;
-            // Recalcular saldo calculado
-            agrup.saldoCalculado = agrup.saldoInicio + agrup.saldoDebe - agrup.saldoHaber;
+            // Recalcular saldo calculado (considerar configuración de apertura)
+            agrup.saldoCalculado = stateMayores.mayorIncluyeApertura
+                ? agrup.saldo
+                : (agrup.saldoInicio + agrup.saldo);
             if (agrup.saldoCierre !== null) {
                 agrup.diferencia = agrup.saldoCalculado - agrup.saldoCierre;
             }
@@ -14677,7 +14682,7 @@ function construirEntidadesComparativo() {
             saldoInicio: agrupacion.saldoInicio || 0,
             debe: agrupacion.saldoDebe,
             haber: agrupacion.saldoHaber,
-            saldoCalculado: agrupacion.saldoCalculado || agrupacion.saldo,
+            saldoCalculado: agrupacion.saldoCalculado !== undefined ? agrupacion.saldoCalculado : agrupacion.saldo,
             saldoCierre: agrupacion.saldoCierre,
             diferencia: agrupacion.diferencia,
             estado: estado
@@ -15230,7 +15235,10 @@ function exportarCuadroComparativo() {
         .sort((a, b) => a.razonSocial.localeCompare(b.razonSocial));
 
     for (const a of agrupaciones) {
-        const saldoCalculado = (a.saldoInicio || 0) + a.saldo;
+        // Considerar configuración de apertura para calcular saldo
+        const saldoCalculado = stateMayores.mayorIncluyeApertura
+            ? a.saldo
+            : ((a.saldoInicio || 0) + a.saldo);
         const claveAjuste = normalizarRazonSocial(a.razonSocial);
         const ajuste = stateMayores.ajustesAuditoria[claveAjuste] || 0;
         const notaAjuste = stateMayores.notasAjustesAuditoria[claveAjuste] || '';
