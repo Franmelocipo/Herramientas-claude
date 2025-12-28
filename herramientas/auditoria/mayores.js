@@ -87,7 +87,9 @@ const stateMayores = {
     // Ajustes de auditoría por razón social: { razonSocialNormalizada: valor }
     ajustesAuditoria: {},
     // Notas de ajustes de auditoría por razón social: { razonSocialNormalizada: 'nota' }
-    notasAjustesAuditoria: {}
+    notasAjustesAuditoria: {},
+    // Indica si el mayor incluye asiento de apertura (evita duplicar saldo inicio)
+    mayorIncluyeApertura: false
 };
 
 // Variables para gestión de conciliaciones
@@ -5271,6 +5273,15 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
             console.log(`📂 Notas de ajustes restauradas: ${Object.keys(notasAjustes).length}`);
         }
 
+        // Restaurar configuración de apertura
+        const mayorIncluyeApertura = conciliacion.mayor_incluye_apertura || conciliacion.mayorIncluyeApertura || false;
+        stateMayores.mayorIncluyeApertura = mayorIncluyeApertura;
+        const checkApertura = document.getElementById('checkMayorIncluyeApertura');
+        if (checkApertura) {
+            checkApertura.checked = mayorIncluyeApertura;
+        }
+        console.log(`📂 Mayor incluye apertura: ${mayorIncluyeApertura}`);
+
         // Vincular saldos con agrupaciones
         vincularSaldosConAgrupaciones();
 
@@ -5849,6 +5860,7 @@ async function ejecutarGuardarConciliacionMayor() {
         archivo_saldos_cierre: stateMayores.archivoSaldosCierre || null,
         ajustes_auditoria: ajustesAuditoriaParaGuardar,
         notas_ajustes_auditoria: notasAjustesParaGuardar,
+        mayor_incluye_apertura: stateMayores.mayorIncluyeApertura || false,
         fecha_guardado: esNueva ? ahora : undefined,
         fecha_modificado: ahora
     };
@@ -5884,7 +5896,8 @@ ADD COLUMN IF NOT EXISTS saldos_cierre JSONB,
 ADD COLUMN IF NOT EXISTS archivo_saldos_inicio TEXT,
 ADD COLUMN IF NOT EXISTS archivo_saldos_cierre TEXT,
 ADD COLUMN IF NOT EXISTS ajustes_auditoria JSONB,
-ADD COLUMN IF NOT EXISTS notas_ajustes_auditoria JSONB;
+ADD COLUMN IF NOT EXISTS notas_ajustes_auditoria JSONB,
+ADD COLUMN IF NOT EXISTS mayor_incluye_apertura BOOLEAN DEFAULT FALSE;
                     `);
                 }
 
@@ -14483,8 +14496,13 @@ function vincularSaldosConAgrupaciones() {
             }
         }
 
-        // Calcular saldo calculado (inicio + movimientos)
-        agrupacion.saldoCalculado = agrupacion.saldoInicio + agrupacion.saldo;
+        // Calcular saldo calculado
+        // Si el mayor incluye asiento de apertura, NO sumar saldoInicio porque ya está en los movimientos
+        if (stateMayores.mayorIncluyeApertura) {
+            agrupacion.saldoCalculado = agrupacion.saldo; // Solo movimientos del mayor
+        } else {
+            agrupacion.saldoCalculado = agrupacion.saldoInicio + agrupacion.saldo; // Inicio + movimientos
+        }
 
         // Calcular diferencia con saldo de cierre
         if (agrupacion.saldoCierre !== null) {
@@ -14496,6 +14514,26 @@ function vincularSaldosConAgrupaciones() {
 
     // Invalidar cache de totales
     stateMayores.dpTotalesCache = null;
+}
+
+/**
+ * Actualizar cálculo cuando cambia el checkbox de apertura
+ * Se llama desde el checkbox "El mayor incluye asiento de apertura"
+ */
+function actualizarCalculoConApertura() {
+    const checkbox = document.getElementById('checkMayorIncluyeApertura');
+    stateMayores.mayorIncluyeApertura = checkbox?.checked || false;
+
+    console.log(`📊 Mayor incluye apertura: ${stateMayores.mayorIncluyeApertura}`);
+
+    // Recalcular saldos
+    vincularSaldosConAgrupaciones();
+
+    // Actualizar vistas
+    renderizarPanelDeudoresProveedores();
+    if (document.getElementById('vistaComparativoDP')?.style.display !== 'none') {
+        renderizarCuadroComparativo();
+    }
 }
 
 /**
