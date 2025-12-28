@@ -12557,10 +12557,8 @@ function fusionarAgrupaciones(origenId, destinoId) {
     if (agrupacionOrigen.saldoInicio) {
         agrupacionDestino.saldoInicio = (agrupacionDestino.saldoInicio || 0) + agrupacionOrigen.saldoInicio;
     }
-    // Considerar configuración de apertura
-    agrupacionDestino.saldoCalculado = stateMayores.mayorIncluyeApertura
-        ? agrupacionDestino.saldo
-        : ((agrupacionDestino.saldoInicio || 0) + agrupacionDestino.saldo);
+    // Siempre incluir saldo inicio en el cálculo individual
+    agrupacionDestino.saldoCalculado = (agrupacionDestino.saldoInicio || 0) + agrupacionDestino.saldo;
 
     // Eliminar la agrupación origen
     delete stateMayores.agrupacionesRazonSocial[claveOrigen];
@@ -14030,10 +14028,8 @@ function confirmarReasignarSaldoInicio() {
             console.log(`   ✓ Desvinculando de agrupación: "${agrup.razonSocial}"`);
             agrup.saldoInicio = 0;
             agrup.razonSocialSaldoInicio = null;
-            // Recalcular saldo calculado (considerar configuración de apertura)
-            agrup.saldoCalculado = stateMayores.mayorIncluyeApertura
-                ? agrup.saldo
-                : (agrup.saldoInicio + agrup.saldo);
+            // Recalcular saldo calculado (siempre incluir saldo inicio)
+            agrup.saldoCalculado = agrup.saldoInicio + agrup.saldo;
             if (agrup.saldoCierre !== null) {
                 agrup.diferencia = agrup.saldoCalculado - agrup.saldoCierre;
             }
@@ -14618,13 +14614,9 @@ function vincularSaldosConAgrupaciones() {
             }
         }
 
-        // Calcular saldo calculado
-        // Si el mayor incluye asiento de apertura, NO sumar saldoInicio porque ya está en los movimientos
-        if (stateMayores.mayorIncluyeApertura) {
-            agrupacion.saldoCalculado = agrupacion.saldo; // Solo movimientos del mayor
-        } else {
-            agrupacion.saldoCalculado = agrupacion.saldoInicio + agrupacion.saldo; // Inicio + movimientos
-        }
+        // Calcular saldo calculado - SIEMPRE incluir saldo inicio para que coincida con saldo cierre
+        // El checkbox mayorIncluyeApertura solo afecta el resumen del encabezado, no los cálculos individuales
+        agrupacion.saldoCalculado = agrupacion.saldoInicio + agrupacion.saldo;
 
         // Calcular diferencia con saldo de cierre
         if (agrupacion.saldoCierre !== null) {
@@ -15080,6 +15072,35 @@ function renderizarCuadroComparativo() {
 
     // Actualizar resumen
     const movimientos = totalDebe - totalHaber;
+
+    // Cuando checkbox está marcado, el saldo inicio ya está incluido en los movimientos
+    // Por lo que el resumen muestra solo movimientos (que ya incluyen apertura)
+    const itemSaldoInicio = document.getElementById('resumenSaldoInicio')?.closest('.comparativo-resumen-item');
+    const labelMovimientos = document.querySelector('.comparativo-resumen-item .resumen-label')?.closest('.comparativo-resumen-item')?.querySelector('.resumen-label');
+
+    if (stateMayores.mayorIncluyeApertura) {
+        // Ocultar o atenuar el saldo inicio en el resumen (ya está en movimientos)
+        if (itemSaldoInicio) {
+            itemSaldoInicio.style.opacity = '0.4';
+            itemSaldoInicio.style.textDecoration = 'line-through';
+        }
+        // Actualizar label de movimientos para indicar que incluye apertura
+        const labelMov = document.getElementById('resumenMovimientos')?.closest('.comparativo-resumen-item')?.querySelector('.resumen-label');
+        if (labelMov) {
+            labelMov.textContent = '= Movimientos (incluye apertura):';
+        }
+    } else {
+        // Mostrar normal
+        if (itemSaldoInicio) {
+            itemSaldoInicio.style.opacity = '1';
+            itemSaldoInicio.style.textDecoration = 'none';
+        }
+        const labelMov = document.getElementById('resumenMovimientos')?.closest('.comparativo-resumen-item')?.querySelector('.resumen-label');
+        if (labelMov) {
+            labelMov.textContent = '+ Movimientos (Debe - Haber):';
+        }
+    }
+
     document.getElementById('resumenSaldoInicio').textContent = formatearMoneda(totalSaldoInicio);
     document.getElementById('resumenMovimientos').textContent = formatearMoneda(movimientos);
     document.getElementById('resumenSaldoCalculado').textContent = formatearMoneda(totalSaldoCalculado);
@@ -15235,10 +15256,8 @@ function exportarCuadroComparativo() {
         .sort((a, b) => a.razonSocial.localeCompare(b.razonSocial));
 
     for (const a of agrupaciones) {
-        // Considerar configuración de apertura para calcular saldo
-        const saldoCalculado = stateMayores.mayorIncluyeApertura
-            ? a.saldo
-            : ((a.saldoInicio || 0) + a.saldo);
+        // Siempre incluir saldo inicio en el cálculo individual
+        const saldoCalculado = (a.saldoInicio || 0) + a.saldo;
         const claveAjuste = normalizarRazonSocial(a.razonSocial);
         const ajuste = stateMayores.ajustesAuditoria[claveAjuste] || 0;
         const notaAjuste = stateMayores.notasAjustesAuditoria[claveAjuste] || '';
