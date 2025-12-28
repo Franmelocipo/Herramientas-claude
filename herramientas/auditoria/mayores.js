@@ -11744,7 +11744,8 @@ async function procesarAgrupacionesRazonSocial() {
             }
 
             // Verificar duplicados por combinación única (asiento + fecha + debe + haber + descripción)
-            const claveUnica = `${registro.asiento}|${registro.fecha ? registro.fecha.getTime() : ''}|${registro.debe}|${registro.haber}|${registro.descripcion}`;
+            const fechaKey = registro.fecha instanceof Date ? registro.fecha.getTime() : (registro.fecha || '');
+            const claveUnica = `${registro.asiento}|${fechaKey}|${registro.debe}|${registro.haber}|${registro.descripcion}`;
             if (registrosUnicos.has(claveUnica)) {
                 console.log(`⚠️ Registro duplicado detectado y omitido: Asiento ${registro.asiento}`);
                 continue; // Saltar registro duplicado
@@ -11975,8 +11976,9 @@ function repararDuplicadosEnAgrupaciones() {
                 continue;
             }
 
-            // Verificar por combinación única
-            const claveUnica = `${registro.asiento}|${registro.fecha ? registro.fecha.getTime() : ''}|${registro.debe}|${registro.haber}|${registro.descripcion}`;
+            // Verificar por combinación única (manejar fecha como string o Date)
+            const fechaKey = registro.fecha instanceof Date ? registro.fecha.getTime() : (registro.fecha || '');
+            const claveUnica = `${registro.asiento}|${fechaKey}|${registro.debe}|${registro.haber}|${registro.descripcion}`;
             if (clavesVistas.has(claveUnica)) {
                 duplicadosEliminados++;
                 console.log(`   ❌ Duplicado eliminado (clave): Asiento ${registro.asiento} en "${clave}"`);
@@ -12013,7 +12015,8 @@ function repararDuplicadosEnAgrupaciones() {
             continue;
         }
 
-        const claveUnica = `${registro.asiento}|${registro.fecha ? registro.fecha.getTime() : ''}|${registro.debe}|${registro.haber}|${registro.descripcion}`;
+        const fechaKey = registro.fecha instanceof Date ? registro.fecha.getTime() : (registro.fecha || '');
+        const claveUnica = `${registro.asiento}|${fechaKey}|${registro.debe}|${registro.haber}|${registro.descripcion}`;
         if (clavesSinAsignar.has(claveUnica)) {
             duplicadosEliminados++;
             continue;
