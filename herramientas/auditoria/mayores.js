@@ -1264,8 +1264,10 @@ async function procesarActualizacionMayor() {
 
                 // Invalidar cache de totales
                 stateMayores.dpTotalesCache = null;
-                // Reprocesar agrupaciones con los nuevos registros
-                await procesarAgrupacionesRazonSocial();
+
+                // En lugar de reprocesar TODO, solo agregar los nuevos registros a las agrupaciones existentes
+                // Esto preserva los grupos personalizados y las asignaciones manuales
+                await agregarRegistrosNuevosAAgrupaciones(registrosNuevos);
 
                 // Verificar y reparar integridad
                 verificarYRepararIntegridad();
@@ -11712,6 +11714,112 @@ function generarIdAgrupacion(razonSocial) {
         .toLowerCase()
         .replace(/[^a-z0-9]/g, '_')
         .substring(0, 50) + '_' + Date.now().toString(36);
+}
+
+/**
+ * Agregar registros nuevos a las agrupaciones existentes SIN destruir las agrupaciones
+ * Esto preserva los grupos personalizados y las asignaciones manuales
+ * @param {Array} registrosNuevos - Lista de registros nuevos a agregar
+ */
+async function agregarRegistrosNuevosAAgrupaciones(registrosNuevos) {
+    console.log(`📥 Agregando ${registrosNuevos.length} registros nuevos a agrupaciones existentes...`);
+
+    // Crear mapa de claves existentes para búsqueda rápida
+    const claveAAgrupacion = new Map();
+    for (const [razonSocial, agrupacion] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
+        const clavePrincipal = generarClaveAgrupacion(razonSocial);
+        claveAAgrupacion.set(clavePrincipal, razonSocial);
+
+        // También indexar variantes
+        if (agrupacion.variantes) {
+            for (const variante of agrupacion.variantes) {
+                const claveVariante = generarClaveAgrupacion(variante);
+                claveAAgrupacion.set(claveVariante, razonSocial);
+            }
+        }
+    }
+
+    let agregadosAGrupos = 0;
+    let agregadosASinAsignar = 0;
+    let nuevosGruposCreados = 0;
+
+    for (const registro of registrosNuevos) {
+        // Extraer razón social del registro
+        const razonSocialExtraida = extraerRazonSocialDeLeyenda(registro.descripcion);
+        registro.razonSocialExtraida = razonSocialExtraida;
+
+        if (razonSocialExtraida === 'Sin Asignar') {
+            // Agregar a sin asignar
+            stateMayores.registrosSinAsignar.push(registro);
+            agregadosASinAsignar++;
+            continue;
+        }
+
+        // Generar clave para buscar agrupación existente
+        const claveNuevo = generarClaveAgrupacion(razonSocialExtraida);
+
+        // Buscar si hay una agrupación existente que coincida
+        let agrupacionDestino = null;
+
+        // Primero buscar coincidencia exacta por clave
+        if (claveAAgrupacion.has(claveNuevo)) {
+            agrupacionDestino = claveAAgrupacion.get(claveNuevo);
+        } else {
+            // Buscar por similitud
+            for (const [claveExistente, razonCanonica] of claveAAgrupacion.entries()) {
+                const similitud = calcularSimilitud(claveNuevo, claveExistente);
+                if (similitud >= 0.75) {
+                    agrupacionDestino = razonCanonica;
+                    // Cachear para futuras búsquedas
+                    claveAAgrupacion.set(claveNuevo, razonCanonica);
+                    break;
+                }
+            }
+        }
+
+        if (agrupacionDestino && stateMayores.agrupacionesRazonSocial[agrupacionDestino]) {
+            // Agregar a agrupación existente
+            const agrupacion = stateMayores.agrupacionesRazonSocial[agrupacionDestino];
+            agrupacion.registros.push(registro);
+            agrupacion.variantes.add(razonSocialExtraida);
+
+            // Recalcular saldos
+            agrupacion.saldoDebe += registro.debe || 0;
+            agrupacion.saldoHaber += registro.haber || 0;
+            agrupacion.saldo = agrupacion.saldoDebe - agrupacion.saldoHaber;
+
+            agregadosAGrupos++;
+        } else {
+            // Crear nueva agrupación para este registro
+            const nuevaAgrupacion = {
+                id: generarIdAgrupacion(razonSocialExtraida),
+                razonSocial: razonSocialExtraida,
+                registros: [registro],
+                variantes: new Set([razonSocialExtraida]),
+                saldoDebe: registro.debe || 0,
+                saldoHaber: registro.haber || 0,
+                saldo: (registro.debe || 0) - (registro.haber || 0)
+            };
+
+            stateMayores.agrupacionesRazonSocial[razonSocialExtraida] = nuevaAgrupacion;
+            claveAAgrupacion.set(claveNuevo, razonSocialExtraida);
+
+            nuevosGruposCreados++;
+            agregadosAGrupos++;
+        }
+    }
+
+    // Recalcular y cachear totales
+    calcularTotalesDPCache();
+
+    // Reordenar agrupaciones
+    stateMayores.agrupacionesOrdenadas = Object.values(stateMayores.agrupacionesRazonSocial)
+        .sort((a, b) => Math.abs(b.saldo) - Math.abs(a.saldo));
+
+    console.log(`✅ Registros agregados:`);
+    console.log(`   - A grupos existentes/nuevos: ${agregadosAGrupos}`);
+    console.log(`   - A sin asignar: ${agregadosASinAsignar}`);
+    console.log(`   - Nuevos grupos creados: ${nuevosGruposCreados}`);
 }
 
 /**
