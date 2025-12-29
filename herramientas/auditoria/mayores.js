@@ -11381,6 +11381,7 @@ function esDeudoresProveedores() {
 /**
  * Extraer razón social de una leyenda de movimiento
  * Busca patrones comunes y extrae el nombre de la empresa/persona
+ * IMPORTANTE: Ignora palabras comunes como COMPRA, VENTA, ORDEN DE PAGO, etc.
  * @param {string} leyenda - Leyenda del movimiento
  * @returns {string} Razón social extraída o 'Sin Asignar'
  */
@@ -11390,158 +11391,161 @@ function extraerRazonSocialDeLeyenda(leyenda) {
     let texto = leyenda.trim();
 
     // ============================================
+    // Lista de palabras/frases comunes que NO son razones sociales
+    // ============================================
+    const palabrasComunesSet = new Set([
+        'COMPRA', 'VENTA', 'COBRO', 'PAGO', 'COBRANZA',
+        'ORDEN DE PAGO', 'ORDEN PAGO', 'OP',
+        'FACTURA', 'FACT', 'FC', 'FA', 'FB', 'FE',
+        'NOTA DE CREDITO', 'NOTA CREDITO', 'NC',
+        'NOTA DE DEBITO', 'NOTA DEBITO', 'ND',
+        'RECIBO', 'REC', 'CHEQUE', 'CH',
+        'TRANSFERENCIA', 'TRANSF', 'TRF',
+        'DEPOSITO', 'DEPÓSITO', 'DEP',
+        'RETENCION', 'RETENCIÓN', 'RET',
+        'CANCELACION', 'CANCELACIÓN',
+        'APLICACION', 'APLICACIÓN',
+        'CONTADO', 'CREDITO', 'CRÉDITO',
+        'COMP', 'SEGUN', 'SEGÚN', 'S/COMPROBANTE',
+        'AJUSTE', 'DIFERENCIA', 'REDONDEO',
+        'DEVOLUCION', 'DEVOLUCIÓN', 'DEV',
+        'ANTICIPO', 'ANT', 'A CUENTA',
+        'PERCEPCION', 'PERCEPCIÓN', 'PERC',
+        'DEBITO', 'DÉBITO', 'ACREDITACION', 'ACREDITACIÓN'
+    ]);
+
+    // Función auxiliar para verificar si un texto es palabra común
+    const esPalabraComun = (txt) => {
+        if (!txt) return true;
+        const txtUpper = txt.toUpperCase().trim();
+        // Verificar coincidencia exacta
+        if (palabrasComunesSet.has(txtUpper)) return true;
+        // Verificar si es solo números/códigos
+        if (/^[\d\-\.\/\s]+$/.test(txtUpper)) return true;
+        // Verificar si es muy corto (menos de 3 caracteres significativos)
+        if (txtUpper.replace(/[^A-Z]/g, '').length < 3) return true;
+        // Verificar patrones de códigos de factura/comprobante
+        if (/^[A-Z]?\s*[\d]{4,}[\-\d]*$/.test(txtUpper)) return true;
+        // Verificar si empieza con palabras comunes
+        if (/^(?:COMPRA|VENTA|COBRO|PAGO|OP|ORDEN|FACTURA|FACT|FC|NC|ND|REC)\b/i.test(txtUpper)) return true;
+        return false;
+    };
+
+    // Función para verificar si parece una razón social válida
+    const pareceRazonSocial = (txt) => {
+        if (!txt || txt.length < 3) return false;
+        const txtUpper = txt.toUpperCase().trim();
+        // Tiene al menos 2 letras consecutivas
+        if (!/[A-Z]{2,}/.test(txtUpper)) return false;
+        // No es una palabra común
+        if (esPalabraComun(txtUpper)) return false;
+        // No es solo un código
+        if (/^[A-Z]{1,2}[\d\-\.]+$/.test(txtUpper)) return false;
+        return true;
+    };
+
+    // ============================================
     // PASO 0: Extraer razón social de paréntesis al final (prioridad máxima)
     // Patrones como: "COMP COMPRA CONTADO Factura 00004-00001889 (OLATTE GRUP SAS)"
     // ============================================
 
-    // Si el texto termina con paréntesis y tiene contenido significativo dentro
     const matchParentesisFinal = texto.match(/\(([^)]{3,})\)\s*$/);
     if (matchParentesisFinal) {
         const contenidoParentesis = matchParentesisFinal[1].trim();
-        // Verificar que el contenido parece ser una razón social (no es solo un código o número)
-        const pareceRazonSocial = /[A-Za-z]{2,}/.test(contenidoParentesis) &&
-                                  !/^[\d\-\.\/]+$/.test(contenidoParentesis);
-
-        // Verificar que el texto antes del paréntesis es una descripción genérica
-        const textoAntes = texto.substring(0, texto.lastIndexOf('(')).trim();
-        const esDescripcionGenerica = /^(?:COMP\s+)?(?:COMPRA|VENTA|COBRO|PAGO)/i.test(textoAntes) ||
-                                      /(?:FACTURA|FACT|FC|RECIBO|REC|OP)\s*[\d\-]+/i.test(textoAntes);
-
-        if (pareceRazonSocial && esDescripcionGenerica) {
+        if (pareceRazonSocial(contenidoParentesis)) {
             return normalizarRazonSocial(contenidoParentesis);
         }
     }
 
     // ============================================
-    // PASO 1: Eliminar prefijos de tipo documento con sus números
+    // PASO 1: Dividir por separadores comunes (-, /, |) y buscar razón social
     // ============================================
 
-    // Patrones de prefijos a eliminar (con sus números asociados)
-    const patronesPrefijo = [
-        // "Compra según comprobante - A-0001-00000435 -" -> extraer lo que viene después
-        /^(?:COMPRA|VENTA|COBRO|PAGO)\s+(?:SEGUN|SEGÚN)\s+(?:COMPROBANTE|COMPROB|COMP)\s*[-–—]\s*[A-Z]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // "Compra s/comprobante - A-0001-00000435 -"
-        /^(?:COMPRA|VENTA|COBRO|PAGO)\s+S\/\s*(?:COMPROBANTE|COMPROB|COMP)\s*[-–—]\s*[A-Z]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // "Compra según factura - A-0001-00000435 -"
-        /^(?:COMPRA|VENTA|COBRO|PAGO)\s+(?:SEGUN|SEGÚN|S\/)\s*(?:FACTURA|FACT|FC|FA|FB|RECIBO|REC)\s*[-–—]?\s*[A-Z]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // "S/Factura A-0001-00000435 -" o "Según Factura A-0001-00000435 -"
-        /^(?:SEGUN|SEGÚN|S\/)\s*(?:FACTURA|FACT|FC|FA|FB|RECIBO|REC|OP|COMPROBANTE)\s*[A-Z]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // OP N°0001-00009078 - , OP 0001-00009078 - , OP N° 0001-00009078 -
-        /^OP\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // RECIBO N° 0001 - , REC 0001 -
-        /^(?:RECIBO|REC)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // FC A 0001-00001234 - , FACT A-0001-00001234 -
-        /^(?:FACTURA|FACT|FC|FA|FB|FE)\s*[A-Z]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // NC A 0001-00001234 - , ND A-0001-00001234 -
-        /^(?:NC|ND|NOTA\s*(?:DE\s*)?(?:CREDITO|DEBITO))\s*[A-Z]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // PAGO N° 123 - , COBRO 123 -
-        /^(?:PAGO|COBRO|COBRANZA)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // CHEQUE N° 12345678 - , CH 12345678 -
-        /^(?:CHEQUE|CH)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // TRANSF 123 - , TRANSFERENCIA N° 123 -
-        /^(?:TRANSF|TRANSFERENCIA)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // DEP 123 - , DEPOSITO N° 123 -
-        /^(?:DEP|DEPOSITO|DEPÓSITO)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // RET 123 - , RETENCION N° 123 -
-        /^(?:RET|RETENCION|RETENCIÓN)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // ORDEN DE PAGO 123 -
-        /^(?:ORDEN\s*(?:DE\s*)?PAGO)\s*N[°º]?\s*[\d\-\.]+\s*[-–—]\s*/i,
-        // Cualquier código alfanumérico seguido de guión al inicio: ABC-123 - , A-0001-00000435 -
-        /^[A-Z]{1,4}\s*[\d\-\.]{4,20}\s*[-–—]\s*/i,
-        // Solo número al inicio seguido de guión: 0001-00001234 -
-        /^[\d\-\.]{4,20}\s*[-–—]\s*/
-    ];
+    // Dividir por guiones, barras y pipes
+    const partes = texto.split(/\s*[-–—\/\|]\s*/).filter(p => p.trim().length > 0);
 
-    // Aplicar cada patrón para limpiar prefijos
-    for (const patron of patronesPrefijo) {
-        texto = texto.replace(patron, '');
-    }
+    // Buscar la primera parte que parezca una razón social válida
+    for (let i = 0; i < partes.length; i++) {
+        let parte = partes[i].trim();
 
-    texto = texto.trim();
+        // Quitar prefijos numéricos (como "0000000004445")
+        parte = parte.replace(/^[\d\s]+/, '').trim();
 
-    // ============================================
-    // PASO 1.5: Si el texto comienza con frases genéricas sin número, quitarlas
-    // ============================================
-    const frasesGenericas = [
-        /^(?:COMPRA|VENTA|COBRO|PAGO)\s+(?:SEGUN|SEGÚN|S\/)\s*(?:COMPROBANTE|COMPROB|COMP|FACTURA|FACT|FC|FA|FB|RECIBO|REC)\s*[-–—]?\s*/i,
-        /^(?:SEGUN|SEGÚN|S\/)\s*(?:COMPROBANTE|COMPROB|FACTURA|FACT|FC|RECIBO|REC)\s*[-–—]?\s*/i,
-        /^(?:CANCELACION|CANCELACIÓN)\s*(?:DE)?\s*[-–—]?\s*/i,
-        /^(?:APLICACION|APLICACIÓN)\s*(?:DE)?\s*[-–—]?\s*/i
-    ];
-
-    for (const patron of frasesGenericas) {
-        texto = texto.replace(patron, '');
-    }
-
-    texto = texto.trim();
-
-    // Si después de limpiar no queda nada útil
-    if (texto.length < 3) {
-        return 'Sin Asignar';
-    }
-
-    // ============================================
-    // PASO 2: Extraer la razón social del texto limpio
-    // ============================================
-
-    // Patrón A: Si hay un guión, tomar todo lo que hay antes o incluir parte después si es tipo societario
-    // Ejemplo: "CORVEN - S.A.C.I.F. (AMORTIGUADORES)" -> "CORVEN - S.A.C.I.F. (AMORTIGUADORES)"
-    // Ejemplo: "EMPRESA SA - Pago factura" -> "EMPRESA SA"
-
-    const partes = texto.split(/\s*[-–—]\s*/);
-
-    if (partes.length >= 2) {
-        // Verificar si la segunda parte parece ser parte del nombre (tipo societario o similar)
-        const primeraParte = partes[0].trim();
-        const segundaParte = partes[1].trim();
-
-        // Patrones que indican que la segunda parte es parte del nombre
-        const esTipoSocietario = /^(?:S\.?A\.?C\.?I\.?F\.?|S\.?A\.?|S\.?R\.?L\.?|S\.?A\.?S\.?|S\.?C\.?|S\.?H\.?|INC|LLC|LTDA?|CIA|COMP)/i.test(segundaParte);
-        const tieneParentesis = segundaParte.startsWith('(');
-
-        if (esTipoSocietario || tieneParentesis) {
-            // Incluir también la segunda parte
-            // Buscar hasta encontrar otra palabra clave que indique fin del nombre
-            let nombreCompleto = primeraParte + ' - ' + segundaParte;
-
-            // Si hay más partes, verificar si también son parte del nombre
-            for (let i = 2; i < partes.length && i < 4; i++) {
-                const parte = partes[i].trim();
-                if (parte.startsWith('(') || /^(?:S\.?A|S\.?R\.?L|DIV|SUC)/i.test(parte)) {
-                    nombreCompleto += ' - ' + parte;
-                } else {
-                    break;
+        // Si esta parte parece una razón social
+        if (pareceRazonSocial(parte)) {
+            // Verificar si la siguiente parte es un tipo societario
+            let nombreCompleto = parte;
+            if (i + 1 < partes.length) {
+                const siguienteParte = partes[i + 1].trim();
+                const esTipoSocietario = /^(?:S\.?A\.?C\.?I\.?F\.?|S\.?A\.?|S\.?R\.?L\.?|S\.?A\.?S\.?|S\.?C\.?|S\.?H\.?|INC|LLC|LTDA?|CIA)/i.test(siguienteParte);
+                const empiezaConParentesis = siguienteParte.startsWith('(');
+                if (esTipoSocietario || empiezaConParentesis) {
+                    nombreCompleto = parte + ' ' + siguienteParte;
                 }
             }
-
             return normalizarRazonSocial(nombreCompleto);
         }
+    }
 
-        // Si la segunda parte no parece parte del nombre, usar solo la primera
-        if (primeraParte.length >= 3) {
-            return normalizarRazonSocial(primeraParte);
+    // ============================================
+    // PASO 2: Eliminar prefijos conocidos y buscar de nuevo
+    // ============================================
+
+    const patronesPrefijo = [
+        /^(?:COMPRA|VENTA|COBRO|PAGO)\s+(?:SEGUN|SEGÚN|S\/)\s*(?:COMPROBANTE|COMPROB|COMP|FACTURA|FACT|FC|RECIBO|REC)\s*[-–—\/]?\s*/i,
+        /^(?:ORDEN\s*(?:DE\s*)?PAGO)\s*(?:N[°º]?)?\s*[\d\-\.\/]*\s*[-–—\/]?\s*/i,
+        /^OP\s*N[°º]?\s*[\d\-\.\/]+\s*[-–—\/]?\s*/i,
+        /^(?:FACTURA|FACT|FC|FA|FB|FE|NC|ND)\s*[A-Z]?\s*[\d\-\.\/]+\s*[-–—\/]?\s*/i,
+        /^(?:RECIBO|REC|CHEQUE|CH)\s*N[°º]?\s*[\d\-\.\/]+\s*[-–—\/]?\s*/i,
+        /^(?:COMPRA|VENTA|COBRO|PAGO|COMP)\s+(?:CONTADO|CREDITO|CRÉDITO)?\s*[-–—\/]?\s*/i,
+        /^(?:CANCELACION|CANCELACIÓN|APLICACION|APLICACIÓN)\s*(?:DE)?\s*[-–—\/]?\s*/i,
+        /^[A-Z]{1,2}[\d\-\.\/]{6,}\s*[-–—\/]?\s*/i,
+        /^[\d\-\.\/]{4,}\s*[-–—\/]?\s*/
+    ];
+
+    let textoLimpio = texto;
+    for (const patron of patronesPrefijo) {
+        textoLimpio = textoLimpio.replace(patron, '');
+    }
+    textoLimpio = textoLimpio.trim();
+
+    // Si quedó algo útil después de limpiar
+    if (textoLimpio.length >= 3) {
+        // Dividir de nuevo y buscar razón social
+        const partesLimpias = textoLimpio.split(/\s*[-–—\/\|]\s*/).filter(p => p.trim().length > 0);
+        for (const parte of partesLimpias) {
+            const parteClean = parte.replace(/^[\d\s]+/, '').trim();
+            if (pareceRazonSocial(parteClean)) {
+                return normalizarRazonSocial(parteClean);
+            }
+        }
+
+        // Si no encontramos con separadores, usar el texto limpio completo si es válido
+        if (pareceRazonSocial(textoLimpio) && textoLimpio.length <= 80) {
+            return normalizarRazonSocial(textoLimpio);
         }
     }
 
-    // Patrón B: Si no hay guión claro, buscar patrones de "A:", "DE:", etc.
-    let match = texto.match(/(?:^|\s)(?:A|DE|CLIENTE|PROVEEDOR|PROV|CLI|PARA):\s*(.+?)(?:\s*[-–—]|$)/i);
-    if (match && match[1].length >= 3) {
+    // ============================================
+    // PASO 3: Buscar patrones específicos
+    // ============================================
+
+    // Patrón: "A:", "DE:", "CLIENTE:", "PROVEEDOR:"
+    let match = texto.match(/(?:^|\s)(?:A|DE|CLIENTE|PROVEEDOR|PROV|CLI|PARA):\s*(.+?)(?:\s*[-–—\/]|$)/i);
+    if (match && pareceRazonSocial(match[1])) {
         return normalizarRazonSocial(match[1].trim());
     }
 
-    // Patrón C: Buscar "S/FACTURA", "S/RECIBO", etc. y tomar lo que está antes
-    match = texto.match(/^(.+?)\s+S\/(?:FACTURA|FACT|FC|REC|RECIBO|OP|PAGO)/i);
-    if (match && match[1].length >= 3) {
-        return normalizarRazonSocial(match[1].trim());
-    }
+    // ============================================
+    // PASO 4: Último recurso
+    // ============================================
 
-    // Patrón D: Si el texto es relativamente corto, usarlo como razón social
-    if (texto.length <= 60) {
+    if (texto.length <= 60 && pareceRazonSocial(texto)) {
         return normalizarRazonSocial(texto);
     }
 
-    // Patrón E: Truncar texto largo
-    return normalizarRazonSocial(texto.substring(0, 60));
+    // Si nada funcionó
+    return 'Sin Asignar';
 }
 
 /**
