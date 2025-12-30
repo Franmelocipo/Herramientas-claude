@@ -4987,9 +4987,15 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
     // Restaurar fechas como objetos Date
     let registros = conciliacion.registros || [];
 
-    // Si los registros fueron guardados por separado, cargarlos desde la tabla auxiliar
-    if (conciliacion.registros_guardados_separado && window.supabaseDB) {
-        console.log('📂 Cargando registros desde tabla auxiliar...');
+    // Intentar cargar registros desde tabla auxiliar si:
+    // 1. El flag registros_guardados_separado es true, O
+    // 2. No hay registros en el campo principal pero sabemos que deberían existir (registros_count > 0)
+    const deberiaCargarRegistrosAuxiliares =
+        conciliacion.registros_guardados_separado ||
+        (registros.length === 0 && (conciliacion.registros_count > 0 || conciliacion.id));
+
+    if (deberiaCargarRegistrosAuxiliares && window.supabaseDB) {
+        console.log('📂 Intentando cargar registros desde tabla auxiliar...');
         try {
             const { data: chunks, error } = await window.supabaseDB
                 .from('registros_mayor_detalle')
@@ -5006,12 +5012,16 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
                     }
                 }
                 console.log(`✅ Registros cargados desde tabla auxiliar: ${registros.length} registros en ${chunks.length} chunks`);
-            } else if (error) {
+            } else if (error && !error.message.includes('does not exist')) {
                 console.warn('⚠️ No se pudieron cargar registros auxiliares:', error.message);
-                console.warn('   Nota: Si los registros no están, deberá recargar el archivo del mayor');
+            } else if (!chunks || chunks.length === 0) {
+                console.log('📂 No hay registros en tabla auxiliar para esta conciliación');
             }
         } catch (e) {
-            console.warn('⚠️ Error cargando registros auxiliares:', e.message);
+            // Ignorar error si la tabla no existe
+            if (!e.message.includes('does not exist')) {
+                console.warn('⚠️ Error cargando registros auxiliares:', e.message);
+            }
         }
     }
 
@@ -5234,9 +5244,16 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
         // Restaurar agrupaciones si están guardadas en la conciliación (desde Supabase)
         let agrupacionesGuardadas = conciliacion.agrupaciones_razon_social || conciliacion.agrupacionesRazonSocial;
 
-        // Si las agrupaciones fueron guardadas por separado, cargarlas desde la tabla auxiliar
-        if (conciliacion.agrupaciones_guardadas_separado && window.supabaseDB) {
-            console.log('📂 Cargando agrupaciones desde tabla auxiliar...');
+        // Intentar cargar agrupaciones desde tabla auxiliar si:
+        // 1. El flag agrupaciones_guardadas_separado es true, O
+        // 2. No hay agrupaciones en el campo principal pero tenemos ID de conciliación
+        const noHayAgrupacionesEnPrincipal = !agrupacionesGuardadas || Object.keys(agrupacionesGuardadas).length === 0;
+        const deberiaCargarAgrupacionesAuxiliares =
+            conciliacion.agrupaciones_guardadas_separado ||
+            (noHayAgrupacionesEnPrincipal && conciliacion.id);
+
+        if (deberiaCargarAgrupacionesAuxiliares && window.supabaseDB) {
+            console.log('📂 Intentando cargar agrupaciones desde tabla auxiliar...');
             try {
                 const { data, error } = await window.supabaseDB
                     .from('agrupaciones_mayor_detalle')
@@ -5247,11 +5264,17 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
                 if (!error && data && data.agrupaciones) {
                     agrupacionesGuardadas = data.agrupaciones;
                     console.log(`✅ Agrupaciones cargadas desde tabla auxiliar: ${Object.keys(agrupacionesGuardadas).length}`);
-                } else if (error) {
+                } else if (error && !error.message.includes('does not exist') && error.code !== 'PGRST116') {
+                    // PGRST116 = no rows returned, lo cual es normal si no hay datos
                     console.warn('⚠️ No se pudieron cargar agrupaciones auxiliares:', error.message);
+                } else {
+                    console.log('📂 No hay agrupaciones en tabla auxiliar para esta conciliación');
                 }
             } catch (e) {
-                console.warn('⚠️ Error cargando agrupaciones auxiliares:', e.message);
+                // Ignorar error si la tabla no existe
+                if (!e.message.includes('does not exist')) {
+                    console.warn('⚠️ Error cargando agrupaciones auxiliares:', e.message);
+                }
             }
         }
 
