@@ -5290,8 +5290,40 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
                 if (agrupacion.variantes && !(agrupacion.variantes instanceof Set)) {
                     agrupacion.variantes = new Set(agrupacion.variantes);
                 }
+
+                stateMayores.agrupacionesRazonSocial[key] = {
+                    razonSocial: agrupGuardada.razonSocial,
+                    variantes: agrupGuardada.variantes ? new Set(agrupGuardada.variantes) : new Set(),
+                    registros: registrosAgrupacion,
+                    saldoDebe: agrupGuardada.saldoDebe || 0,
+                    saldoHaber: agrupGuardada.saldoHaber || 0,
+                    saldo: agrupGuardada.saldo || 0,
+                    saldoInicio: agrupGuardada.saldoInicio || 0,
+                    saldoCierre: agrupGuardada.saldoCierre,
+                    saldoCalculado: agrupGuardada.saldoCalculado || 0,
+                    diferencia: agrupGuardada.diferencia,
+                    razonSocialSaldoInicio: agrupGuardada.razonSocialSaldoInicio || null,
+                    razonSocialSaldoCierre: agrupGuardada.razonSocialSaldoCierre || null
+                };
             }
-            stateMayores.registrosSinAsignar = conciliacion.registros_sin_asignar || conciliacion.registrosSinAsignar || [];
+
+            // Restaurar registros sin asignar
+            const registrosSinAsignarGuardados = conciliacion.registros_sin_asignar || conciliacion.registrosSinAsignar || [];
+            if (Array.isArray(registrosSinAsignarGuardados) && registrosSinAsignarGuardados.length > 0) {
+                // Verificar si son IDs o registros completos
+                if (typeof registrosSinAsignarGuardados[0] === 'string') {
+                    // Son IDs: reconstruir
+                    stateMayores.registrosSinAsignar = registrosSinAsignarGuardados
+                        .map(id => registrosPorId.get(id))
+                        .filter(r => r !== undefined);
+                } else {
+                    // Son registros completos
+                    stateMayores.registrosSinAsignar = registrosSinAsignarGuardados;
+                }
+            } else {
+                stateMayores.registrosSinAsignar = [];
+            }
+
             console.log(`📂 Agrupaciones restauradas desde Supabase: ${Object.keys(stateMayores.agrupacionesRazonSocial).length}`);
         } else {
             // Si no hay agrupaciones guardadas, procesarlas desde los registros
@@ -5929,22 +5961,38 @@ async function ejecutarGuardarConciliacionMayor() {
     let notasAjustesParaGuardar = null;
 
     if (tipoMayorId === 'deudores_proveedores') {
-        // Convertir Sets de variantes a Arrays para poder serializar
+        // Optimización: NO guardar el array completo de registros en cada agrupación
+        // Solo guardamos metadatos esenciales para reducir el tamaño del payload
         agrupacionesParaGuardar = {};
         for (const [key, agrup] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
+            // Guardar solo datos esenciales, SIN el array de registros
             agrupacionesParaGuardar[key] = {
-                ...agrup,
-                variantes: agrup.variantes ? Array.from(agrup.variantes) : []
+                razonSocial: agrup.razonSocial,
+                variantes: agrup.variantes ? Array.from(agrup.variantes) : [],
+                // Guardar solo IDs de registros en lugar del array completo
+                registroIds: (agrup.registros || []).map(r => r.id),
+                cantidadRegistros: (agrup.registros || []).length,
+                // Saldos calculados
+                saldoDebe: agrup.saldoDebe || 0,
+                saldoHaber: agrup.saldoHaber || 0,
+                saldo: agrup.saldo || 0,
+                saldoInicio: agrup.saldoInicio || 0,
+                saldoCierre: agrup.saldoCierre,
+                saldoCalculado: agrup.saldoCalculado || 0,
+                diferencia: agrup.diferencia,
+                // Referencias de saldos
+                razonSocialSaldoInicio: agrup.razonSocialSaldoInicio || null,
+                razonSocialSaldoCierre: agrup.razonSocialSaldoCierre || null
             };
         }
-        registrosSinAsignarParaGuardar = stateMayores.registrosSinAsignar || [];
+        registrosSinAsignarParaGuardar = (stateMayores.registrosSinAsignar || []).map(r => r.id);
         saldosInicioParaGuardar = stateMayores.saldosInicio || {};
         saldosCierreParaGuardar = stateMayores.saldosCierre || {};
         ajustesAuditoriaParaGuardar = stateMayores.ajustesAuditoria || {};
         notasAjustesParaGuardar = stateMayores.notasAjustesAuditoria || {};
 
         // Log para depuración
-        console.log(`📋 Datos de D/P a guardar:`);
+        console.log(`📋 Datos de D/P a guardar (optimizado):`);
         console.log(`   - Agrupaciones: ${Object.keys(agrupacionesParaGuardar).length}`);
         console.log(`   - Saldos inicio: ${Object.keys(saldosInicioParaGuardar).length}`);
         console.log(`   - Saldos cierre: ${Object.keys(saldosCierreParaGuardar).length}`);
