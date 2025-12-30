@@ -12687,7 +12687,8 @@ function crearElementoAgrupacion(agrupacion) {
 let draggedAgrupacionId = null;
 let draggedElement = null;
 let currentDragOverElement = null;
-let dragDelegationInitialized = false;
+// Usamos WeakMap para trackear contenedores inicializados (evita memory leaks)
+const initializedContainers = new WeakSet();
 
 /**
  * Throttle function para limitar llamadas frecuentes
@@ -12705,19 +12706,29 @@ function throttle(func, limit) {
 
 /**
  * Inicializar event delegation para drag & drop
- * Se llama una sola vez cuando se carga la página
+ * Se llama cada vez que se renderiza la lista, pero solo agrega listeners una vez por contenedor
  */
 function initDragDropDelegation() {
-    if (dragDelegationInitialized) return;
-
     const container = document.getElementById('listaAgrupacionesDP');
-    if (!container) return;
+    if (!container) {
+        console.warn('⚠️ No se encontró el contenedor listaAgrupacionesDP para drag & drop');
+        return;
+    }
+
+    // Verificar si este contenedor ya tiene listeners
+    if (initializedContainers.has(container)) {
+        return; // Ya inicializado
+    }
 
     // Dragstart - delegado
     container.addEventListener('dragstart', (e) => {
         const agrupacionItem = e.target.closest('.agrupacion-item');
-        if (!agrupacionItem) return;
+        if (!agrupacionItem) {
+            console.log('Dragstart ignorado - no es agrupacion-item');
+            return;
+        }
 
+        console.log('🎯 Dragstart:', agrupacionItem.dataset.razonSocial);
         draggedAgrupacionId = agrupacionItem.dataset.id;
         draggedElement = agrupacionItem;
         agrupacionItem.classList.add('dragging');
@@ -12728,6 +12739,7 @@ function initDragDropDelegation() {
 
     // Dragend - delegado
     container.addEventListener('dragend', (e) => {
+        console.log('🎯 Dragend');
         if (draggedElement) {
             draggedElement.classList.remove('dragging');
         }
@@ -12786,17 +12798,26 @@ function initDragDropDelegation() {
     // Drop - delegado
     container.addEventListener('drop', (e) => {
         const agrupacionItem = e.target.closest('.agrupacion-item');
-        if (!agrupacionItem) return;
+        if (!agrupacionItem) {
+            console.log('Drop ignorado - no es agrupacion-item');
+            return;
+        }
 
         e.preventDefault();
+        console.log('🎯 Drop en:', agrupacionItem.dataset.razonSocial);
         agrupacionItem.classList.remove('drag-over');
         currentDragOverElement = null;
 
         const origenId = e.dataTransfer.getData('text/plain');
         const destinoId = agrupacionItem.dataset.id;
 
+        console.log('Fusionando:', origenId, '->', destinoId);
+
         // No fusionar consigo mismo
-        if (origenId === destinoId) return;
+        if (origenId === destinoId) {
+            console.log('Fusión cancelada - mismo elemento');
+            return;
+        }
 
         // Obtener nombres para confirmación
         const origenRazonSocial = draggedElement?.dataset.razonSocial || 'Origen';
@@ -12807,7 +12828,7 @@ function initDragDropDelegation() {
         }
     });
 
-    dragDelegationInitialized = true;
+    initializedContainers.add(container);
     console.log('✅ Event delegation para drag & drop inicializado');
 }
 
