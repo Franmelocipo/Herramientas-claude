@@ -11,12 +11,23 @@ CREATE TABLE IF NOT EXISTS conciliaciones_mayor (
     nombre TEXT NOT NULL,
     registros JSONB NOT NULL DEFAULT '[]'::jsonb,
     vinculaciones JSONB NOT NULL DEFAULT '[]'::jsonb,
+    movimientos_eliminados JSONB DEFAULT '[]'::jsonb,
     listado_cheques_guardado_id TEXT,
     listado_cheques_incorporado BOOLEAN DEFAULT FALSE,
     listado_cheques_cargados JSONB DEFAULT '[]'::jsonb,
     meses_disponibles JSONB DEFAULT '[]'::jsonb,
     meses_procesados JSONB DEFAULT '{}'::jsonb,
     meses_procesados_resumen JSONB DEFAULT '{}'::jsonb,
+    -- Columnas para Deudores/Proveedores
+    agrupaciones_razon_social JSONB,
+    registros_sin_asignar JSONB,
+    saldos_inicio JSONB,
+    saldos_cierre JSONB,
+    archivo_saldos_inicio TEXT,
+    archivo_saldos_cierre TEXT,
+    ajustes_auditoria JSONB,
+    notas_ajustes_auditoria JSONB,
+    mayor_incluye_apertura BOOLEAN DEFAULT FALSE,
     fecha_guardado TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     fecha_modificado TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
@@ -43,6 +54,88 @@ BEGIN
         ALTER TABLE conciliaciones_mayor
         ADD COLUMN meses_procesados JSONB DEFAULT '{}'::jsonb;
         RAISE NOTICE 'Columna meses_procesados agregada';
+    END IF;
+
+    -- Agregar columna movimientos_eliminados si no existe
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'conciliaciones_mayor'
+                   AND column_name = 'movimientos_eliminados') THEN
+        ALTER TABLE conciliaciones_mayor
+        ADD COLUMN movimientos_eliminados JSONB DEFAULT '[]'::jsonb;
+        RAISE NOTICE 'Columna movimientos_eliminados agregada';
+    END IF;
+
+    -- Agregar columnas de Deudores/Proveedores
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'conciliaciones_mayor'
+                   AND column_name = 'agrupaciones_razon_social') THEN
+        ALTER TABLE conciliaciones_mayor
+        ADD COLUMN agrupaciones_razon_social JSONB;
+        RAISE NOTICE 'Columna agrupaciones_razon_social agregada';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'conciliaciones_mayor'
+                   AND column_name = 'registros_sin_asignar') THEN
+        ALTER TABLE conciliaciones_mayor
+        ADD COLUMN registros_sin_asignar JSONB;
+        RAISE NOTICE 'Columna registros_sin_asignar agregada';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'conciliaciones_mayor'
+                   AND column_name = 'saldos_inicio') THEN
+        ALTER TABLE conciliaciones_mayor
+        ADD COLUMN saldos_inicio JSONB;
+        RAISE NOTICE 'Columna saldos_inicio agregada';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'conciliaciones_mayor'
+                   AND column_name = 'saldos_cierre') THEN
+        ALTER TABLE conciliaciones_mayor
+        ADD COLUMN saldos_cierre JSONB;
+        RAISE NOTICE 'Columna saldos_cierre agregada';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'conciliaciones_mayor'
+                   AND column_name = 'archivo_saldos_inicio') THEN
+        ALTER TABLE conciliaciones_mayor
+        ADD COLUMN archivo_saldos_inicio TEXT;
+        RAISE NOTICE 'Columna archivo_saldos_inicio agregada';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'conciliaciones_mayor'
+                   AND column_name = 'archivo_saldos_cierre') THEN
+        ALTER TABLE conciliaciones_mayor
+        ADD COLUMN archivo_saldos_cierre TEXT;
+        RAISE NOTICE 'Columna archivo_saldos_cierre agregada';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'conciliaciones_mayor'
+                   AND column_name = 'ajustes_auditoria') THEN
+        ALTER TABLE conciliaciones_mayor
+        ADD COLUMN ajustes_auditoria JSONB;
+        RAISE NOTICE 'Columna ajustes_auditoria agregada';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'conciliaciones_mayor'
+                   AND column_name = 'notas_ajustes_auditoria') THEN
+        ALTER TABLE conciliaciones_mayor
+        ADD COLUMN notas_ajustes_auditoria JSONB;
+        RAISE NOTICE 'Columna notas_ajustes_auditoria agregada';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'conciliaciones_mayor'
+                   AND column_name = 'mayor_incluye_apertura') THEN
+        ALTER TABLE conciliaciones_mayor
+        ADD COLUMN mayor_incluye_apertura BOOLEAN DEFAULT FALSE;
+        RAISE NOTICE 'Columna mayor_incluye_apertura agregada';
     END IF;
 END $$;
 
