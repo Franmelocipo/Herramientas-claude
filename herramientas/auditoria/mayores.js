@@ -5987,6 +5987,8 @@ async function ejecutarGuardarConciliacionMayor() {
 
     try {
         let guardadoExitoso = false;
+        let registrosGuardadosEnAuxiliar = false;
+        let agrupacionesGuardadasEnAuxiliar = false;
 
         // Intentar guardar en Supabase primero
         if (window.supabaseDB) {
@@ -5994,10 +5996,10 @@ async function ejecutarGuardarConciliacionMayor() {
             console.log('🔄 Iniciando guardado en Supabase...');
             const tiempoInicio = Date.now();
 
-            // Si hay datos grandes excluidos, guardarlos primero en tablas auxiliares
+            // Si hay datos grandes, intentar guardarlos primero en tablas auxiliares
             if (excluirRegistrosMayor && registrosCount > 0) {
                 actualizarProgreso(`Guardando ${registrosCount} registros...`);
-                console.log(`📤 Guardando ${registrosCount} registros del mayor en tabla auxiliar...`);
+                console.log(`📤 Intentando guardar ${registrosCount} registros en tabla auxiliar...`);
                 try {
                     // Guardar en chunks de 5000 registros
                     const CHUNK_SIZE = 5000;
@@ -6010,6 +6012,7 @@ async function ejecutarGuardarConciliacionMayor() {
                         .delete()
                         .eq('conciliacion_id', conciliacionId);
 
+                    let todosChunksGuardados = true;
                     for (let i = 0; i < totalChunks; i++) {
                         const chunk = registrosDelMayor.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
                         const registrosChunk = {
@@ -6027,22 +6030,30 @@ async function ejecutarGuardarConciliacionMayor() {
 
                         if (chunkError) {
                             console.warn(`⚠️ Error guardando chunk ${i + 1}/${totalChunks}:`, chunkError.message);
-                            // Continuar sin los registros detallados
+                            todosChunksGuardados = false;
                             break;
                         } else {
                             console.log(`   ✓ Chunk ${i + 1}/${totalChunks} guardado`);
+                            actualizarProgreso(`Guardando registros... ${i + 1}/${totalChunks}`);
                         }
                     }
+
+                    if (todosChunksGuardados) {
+                        registrosGuardadosEnAuxiliar = true;
+                        console.log('✅ Todos los registros guardados en tabla auxiliar');
+                    } else {
+                        console.warn('⚠️ No se pudieron guardar todos los chunks, se incluirán en guardado principal');
+                    }
                 } catch (e) {
-                    console.warn('⚠️ No se pudieron guardar registros en tabla auxiliar (puede que no exista):', e.message);
-                    console.warn('   Para habilitar, ejecute: CREATE TABLE registros_mayor_detalle (id TEXT PRIMARY KEY, conciliacion_id TEXT, chunk_index INT, total_chunks INT, registros JSONB, created_at TIMESTAMPTZ);');
+                    console.warn('⚠️ Tabla auxiliar no disponible:', e.message);
+                    console.warn('   Los registros se incluirán en el guardado principal (puede ser lento)');
                 }
             }
 
-            // Si hay agrupaciones grandes excluidas, guardarlas por separado
+            // Si hay agrupaciones grandes, intentar guardarlas por separado
             if (excluirAgrupaciones && agrupacionesCount > 0) {
                 actualizarProgreso(`Guardando ${agrupacionesCount} agrupaciones...`);
-                console.log(`📤 Guardando ${agrupacionesCount} agrupaciones en tabla auxiliar...`);
+                console.log(`📤 Intentando guardar ${agrupacionesCount} agrupaciones en tabla auxiliar...`);
                 try {
                     const agrupacionesData = {
                         id: `agrup_${conciliacionId}`,
@@ -6055,16 +6066,35 @@ async function ejecutarGuardarConciliacionMayor() {
                         .from('agrupaciones_mayor_detalle')
                         .upsert(agrupacionesData, { onConflict: 'id' });
 
-                    if (agrupError) {
-                        console.warn('⚠️ No se pudieron guardar agrupaciones en tabla auxiliar:', agrupError.message);
+                    if (!agrupError) {
+                        agrupacionesGuardadasEnAuxiliar = true;
+                        console.log('✅ Agrupaciones guardadas en tabla auxiliar');
                     } else {
-                        console.log('   ✓ Agrupaciones guardadas en tabla auxiliar');
+                        console.warn('⚠️ No se pudieron guardar agrupaciones en tabla auxiliar:', agrupError.message);
                     }
                 } catch (e) {
-                    console.warn('⚠️ No se pudieron guardar agrupaciones en tabla auxiliar:', e.message);
-                    console.warn('   Para habilitar, ejecute: CREATE TABLE agrupaciones_mayor_detalle (id TEXT PRIMARY KEY, conciliacion_id TEXT, agrupaciones JSONB, created_at TIMESTAMPTZ);');
+                    console.warn('⚠️ Tabla auxiliar de agrupaciones no disponible:', e.message);
                 }
             }
+
+            // Actualizar el registro según lo que realmente se guardó en tablas auxiliares
+            if (excluirRegistrosMayor && !registrosGuardadosEnAuxiliar) {
+                // Si no se guardaron en auxiliar, incluirlos en el principal
+                console.log('📦 Incluyendo registros en guardado principal...');
+                registro.registros = stateMayores.registrosMayor || [];
+                registro.registros_guardados_separado = false;
+            }
+
+            if (excluirAgrupaciones && !agrupacionesGuardadasEnAuxiliar) {
+                // Si no se guardaron en auxiliar, incluirlas en el principal
+                console.log('📦 Incluyendo agrupaciones en guardado principal...');
+                registro.agrupaciones_razon_social = agrupacionesParaGuardar;
+                registro.agrupaciones_guardadas_separado = false;
+            }
+
+            // Recalcular tamaño del payload actualizado
+            const payloadFinal = JSON.stringify(registro).length;
+            console.log(`📦 Tamaño del payload final: ${(payloadFinal / 1024 / 1024).toFixed(2)} MB`);
 
             actualizarProgreso('Guardando conciliación principal...');
             console.log('📤 Guardando registro principal...');
