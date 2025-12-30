@@ -5280,8 +5280,13 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
 
         if (agrupacionesGuardadas && Object.keys(agrupacionesGuardadas).length > 0) {
             stateMayores.agrupacionesRazonSocial = agrupacionesGuardadas;
-            // Restaurar variantes como Sets
-            for (const agrupacion of Object.values(stateMayores.agrupacionesRazonSocial)) {
+            // Restaurar variantes como Sets y asegurar que cada agrupación tenga ID
+            for (const [clave, agrupacion] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
+                // Asegurar que tenga un ID
+                if (!agrupacion.id) {
+                    agrupacion.id = generarIdAgrupacion(agrupacion.razonSocial || clave);
+                }
+                // Restaurar variantes como Sets
                 if (agrupacion.variantes && !(agrupacion.variantes instanceof Set)) {
                     agrupacion.variantes = new Set(agrupacion.variantes);
                 }
