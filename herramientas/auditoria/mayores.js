@@ -6095,10 +6095,17 @@ ADD COLUMN IF NOT EXISTS archivo_saldos_cierre TEXT,
 ADD COLUMN IF NOT EXISTS ajustes_auditoria JSONB,
 ADD COLUMN IF NOT EXISTS notas_ajustes_auditoria JSONB,
 ADD COLUMN IF NOT EXISTS mayor_incluye_apertura BOOLEAN DEFAULT FALSE;
+
+-- Columnas para guardado optimizado:
+ALTER TABLE conciliaciones_mayor
+ADD COLUMN IF NOT EXISTS registros_count INTEGER,
+ADD COLUMN IF NOT EXISTS registros_guardados_separado BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS agrupaciones_count INTEGER,
+ADD COLUMN IF NOT EXISTS agrupaciones_guardadas_separado BOOLEAN DEFAULT FALSE;
                     `);
                 }
 
-                // Crear registro sin las columnas nuevas de D/P
+                // Crear registro sin las columnas nuevas de D/P ni las de optimización
                 const registroBasico = {
                     id: registro.id,
                     cliente_id: registro.cliente_id,
