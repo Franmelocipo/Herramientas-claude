@@ -5279,25 +5279,16 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
         }
 
         if (agrupacionesGuardadas && Object.keys(agrupacionesGuardadas).length > 0) {
-            // Crear mapa de registros por ID para búsqueda rápida
-            const registrosPorId = new Map();
-            for (const reg of stateMayores.registrosMayor) {
-                registrosPorId.set(reg.id, reg);
-            }
-
-            // Restaurar agrupaciones reconstruyendo los registros desde IDs
-            stateMayores.agrupacionesRazonSocial = {};
-            for (const [key, agrupGuardada] of Object.entries(agrupacionesGuardadas)) {
-                // Verificar si es formato optimizado (tiene registroIds) o formato antiguo (tiene registros)
-                let registrosAgrupacion = [];
-                if (agrupGuardada.registroIds && Array.isArray(agrupGuardada.registroIds)) {
-                    // Formato optimizado: reconstruir registros desde IDs
-                    registrosAgrupacion = agrupGuardada.registroIds
-                        .map(id => registrosPorId.get(id))
-                        .filter(r => r !== undefined);
-                } else if (agrupGuardada.registros && Array.isArray(agrupGuardada.registros)) {
-                    // Formato antiguo: usar registros directamente
-                    registrosAgrupacion = agrupGuardada.registros;
+            stateMayores.agrupacionesRazonSocial = agrupacionesGuardadas;
+            // Restaurar variantes como Sets y asegurar que cada agrupación tenga ID
+            for (const [clave, agrupacion] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
+                // Asegurar que tenga un ID
+                if (!agrupacion.id) {
+                    agrupacion.id = generarIdAgrupacion(agrupacion.razonSocial || clave);
+                }
+                // Restaurar variantes como Sets
+                if (agrupacion.variantes && !(agrupacion.variantes instanceof Set)) {
+                    agrupacion.variantes = new Set(agrupacion.variantes);
                 }
 
                 stateMayores.agrupacionesRazonSocial[key] = {
