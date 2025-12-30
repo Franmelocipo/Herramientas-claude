@@ -1910,10 +1910,19 @@
             </div>
         </div>
         <div class="modal-eliminar-footer">
-            <button class="btn-cancelar" onclick="cerrarModalGuardarConciliacionMayor()">Cancelar</button>
-            <button class="btn-confirmar-eliminar" style="background: #28a745;" onclick="ejecutarGuardarConciliacionMayor()">💾 Guardar</button>
+            <button id="btnCancelarGuardarConciliacion" class="btn-cancelar" onclick="cerrarModalGuardarConciliacionMayor()">Cancelar</button>
+            <button id="btnEjecutarGuardarConciliacion" class="btn-confirmar-eliminar" style="background: #28a745;" onclick="ejecutarGuardarConciliacionMayor()">💾 Guardar</button>
+        </div>
+        <div id="progresoGuardadoConciliacion" style="display: none; padding: 16px; text-align: center;">
+            <div style="margin-bottom: 10px;">
+                <div class="spinner" style="display: inline-block; width: 24px; height: 24px; border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            </div>
+            <p id="textoProgresoGuardado" style="margin: 0; color: #666;">Guardando conciliación...</p>
         </div>
     </div>
+    <style>
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 
     <!-- Modal para vinculación manual de cheques/asientos -->
     <div id="overlay-vincular-manual" class="overlay-eliminar"></div>

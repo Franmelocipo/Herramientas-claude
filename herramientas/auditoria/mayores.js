@@ -4985,7 +4985,36 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
     });
 
     // Restaurar fechas como objetos Date
-    const registros = conciliacion.registros || [];
+    let registros = conciliacion.registros || [];
+
+    // Si los registros fueron guardados por separado, cargarlos desde la tabla auxiliar
+    if (conciliacion.registros_guardados_separado && window.supabaseDB) {
+        console.log('📂 Cargando registros desde tabla auxiliar...');
+        try {
+            const { data: chunks, error } = await window.supabaseDB
+                .from('registros_mayor_detalle')
+                .select('*')
+                .eq('conciliacion_id', conciliacion.id)
+                .order('chunk_index');
+
+            if (!error && chunks && chunks.length > 0) {
+                // Combinar todos los chunks en un solo array
+                registros = [];
+                for (const chunk of chunks) {
+                    if (chunk.registros) {
+                        registros = registros.concat(chunk.registros);
+                    }
+                }
+                console.log(`✅ Registros cargados desde tabla auxiliar: ${registros.length} registros en ${chunks.length} chunks`);
+            } else if (error) {
+                console.warn('⚠️ No se pudieron cargar registros auxiliares:', error.message);
+                console.warn('   Nota: Si los registros no están, deberá recargar el archivo del mayor');
+            }
+        } catch (e) {
+            console.warn('⚠️ Error cargando registros auxiliares:', e.message);
+        }
+    }
+
     registros.forEach(r => {
         if (r.fecha) {
             r.fecha = new Date(r.fecha);
@@ -5203,7 +5232,28 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
     // Procesar agrupaciones para deudores/proveedores
     if (stateMayores.tipoMayorActual?.id === 'deudores_proveedores') {
         // Restaurar agrupaciones si están guardadas en la conciliación (desde Supabase)
-        const agrupacionesGuardadas = conciliacion.agrupaciones_razon_social || conciliacion.agrupacionesRazonSocial;
+        let agrupacionesGuardadas = conciliacion.agrupaciones_razon_social || conciliacion.agrupacionesRazonSocial;
+
+        // Si las agrupaciones fueron guardadas por separado, cargarlas desde la tabla auxiliar
+        if (conciliacion.agrupaciones_guardadas_separado && window.supabaseDB) {
+            console.log('📂 Cargando agrupaciones desde tabla auxiliar...');
+            try {
+                const { data, error } = await window.supabaseDB
+                    .from('agrupaciones_mayor_detalle')
+                    .select('*')
+                    .eq('conciliacion_id', conciliacion.id)
+                    .single();
+
+                if (!error && data && data.agrupaciones) {
+                    agrupacionesGuardadas = data.agrupaciones;
+                    console.log(`✅ Agrupaciones cargadas desde tabla auxiliar: ${Object.keys(agrupacionesGuardadas).length}`);
+                } else if (error) {
+                    console.warn('⚠️ No se pudieron cargar agrupaciones auxiliares:', error.message);
+                }
+            } catch (e) {
+                console.warn('⚠️ Error cargando agrupaciones auxiliares:', e.message);
+            }
+        }
 
         if (agrupacionesGuardadas && Object.keys(agrupacionesGuardadas).length > 0) {
             // Crear mapa de registros por ID para búsqueda rápida
@@ -5795,6 +5845,32 @@ async function ejecutarGuardarConciliacionMayor() {
         return;
     }
 
+    // Mostrar indicador de progreso
+    const btnGuardar = document.getElementById('btnEjecutarGuardarConciliacion');
+    const btnCancelar = document.getElementById('btnCancelarGuardarConciliacion');
+    const progresoDiv = document.getElementById('progresoGuardadoConciliacion');
+    const textoProgreso = document.getElementById('textoProgresoGuardado');
+    const footerModal = document.querySelector('#modal-guardar-conciliacion-mayor .modal-eliminar-footer');
+
+    const actualizarProgreso = (texto) => {
+        if (textoProgreso) textoProgreso.textContent = texto;
+        console.log(`📌 ${texto}`);
+    };
+
+    if (btnGuardar) btnGuardar.style.display = 'none';
+    if (btnCancelar) btnCancelar.style.display = 'none';
+    if (progresoDiv) progresoDiv.style.display = 'block';
+    if (footerModal) footerModal.style.display = 'none';
+
+    const restaurarUI = () => {
+        if (btnGuardar) btnGuardar.style.display = '';
+        if (btnCancelar) btnCancelar.style.display = '';
+        if (progresoDiv) progresoDiv.style.display = 'none';
+        if (footerModal) footerModal.style.display = '';
+    };
+
+    actualizarProgreso('Preparando datos...');
+
     console.log('💾 Guardando conciliación en Supabase...');
     console.log(`📋 Cheques a guardar: ${(stateMayores.listadoChequesCargados || []).length}`);
 
@@ -5910,12 +5986,33 @@ async function ejecutarGuardarConciliacionMayor() {
         console.log(`   - Notas ajustes: ${Object.keys(notasAjustesParaGuardar).length}`);
     }
 
+    // Calcular tamaños para decidir estrategia de guardado
+    const registrosCount = (stateMayores.registrosMayor || []).length;
+    const agrupacionesCount = Object.keys(agrupacionesParaGuardar || {}).length;
+    const registrosSinAsignarCount = (registrosSinAsignarParaGuardar || []).length;
+
+    // Límites para evitar payloads gigantes (Supabase tiene límite de ~6MB por request)
+    const LIMITE_REGISTROS = 10000;
+    const LIMITE_AGRUPACIONES = 1000;
+
+    // Determinar si hay que excluir datos grandes del guardado principal
+    const excluirRegistrosMayor = registrosCount > LIMITE_REGISTROS;
+    const excluirAgrupaciones = agrupacionesCount > LIMITE_AGRUPACIONES;
+
+    console.log(`📊 Análisis de datos a guardar:`);
+    console.log(`   - Registros del mayor: ${registrosCount} ${excluirRegistrosMayor ? '(se guardarán por separado)' : ''}`);
+    console.log(`   - Agrupaciones: ${agrupacionesCount} ${excluirAgrupaciones ? '(se guardarán por separado)' : ''}`);
+    console.log(`   - Registros sin asignar: ${registrosSinAsignarCount}`);
+
     const registro = {
         id: conciliacionId,
         cliente_id: clienteId,
         tipo_mayor_id: tipoMayorId,
         nombre: nombre,
-        registros: stateMayores.registrosMayor || [],
+        // Solo incluir registros si son pocos, sino guardar referencia
+        registros: excluirRegistrosMayor ? [] : (stateMayores.registrosMayor || []),
+        registros_count: registrosCount, // Siempre guardar el conteo
+        registros_guardados_separado: excluirRegistrosMayor,
         vinculaciones: stateMayores.vinculaciones || [],
         movimientos_eliminados: stateMayores.movimientosEliminados || [],
         listado_cheques_guardado_id: stateMayores.listadoChequesGuardadoId || null,
@@ -5925,7 +6022,10 @@ async function ejecutarGuardarConciliacionMayor() {
         meses_procesados: mesesProcesadosOptimizados,
         meses_procesados_resumen: mesesProcesadosResumen,
         // Datos específicos de deudores/proveedores
-        agrupaciones_razon_social: agrupacionesParaGuardar,
+        // Solo incluir agrupaciones si son pocas
+        agrupaciones_razon_social: excluirAgrupaciones ? null : agrupacionesParaGuardar,
+        agrupaciones_count: agrupacionesCount,
+        agrupaciones_guardadas_separado: excluirAgrupaciones,
         registros_sin_asignar: registrosSinAsignarParaGuardar,
         saldos_inicio: saldosInicioParaGuardar,
         saldos_cierre: saldosCierreParaGuardar,
@@ -5938,6 +6038,10 @@ async function ejecutarGuardarConciliacionMayor() {
         fecha_modificado: ahora
     };
 
+    // Calcular tamaño aproximado del payload
+    const payloadSize = JSON.stringify(registro).length;
+    console.log(`📦 Tamaño del payload principal: ${(payloadSize / 1024 / 1024).toFixed(2)} MB`);
+
     // Remover fecha_guardado si es actualización (no queremos sobrescribirla)
     if (!esNueva) {
         delete registro.fecha_guardado;
@@ -5948,9 +6052,91 @@ async function ejecutarGuardarConciliacionMayor() {
 
         // Intentar guardar en Supabase primero
         if (window.supabaseDB) {
+            actualizarProgreso('Conectando con Supabase...');
+            console.log('🔄 Iniciando guardado en Supabase...');
+            const tiempoInicio = Date.now();
+
+            // Si hay datos grandes excluidos, guardarlos primero en tablas auxiliares
+            if (excluirRegistrosMayor && registrosCount > 0) {
+                actualizarProgreso(`Guardando ${registrosCount} registros...`);
+                console.log(`📤 Guardando ${registrosCount} registros del mayor en tabla auxiliar...`);
+                try {
+                    // Guardar en chunks de 5000 registros
+                    const CHUNK_SIZE = 5000;
+                    const registrosDelMayor = stateMayores.registrosMayor || [];
+                    const totalChunks = Math.ceil(registrosDelMayor.length / CHUNK_SIZE);
+
+                    // Primero eliminar registros anteriores de esta conciliación
+                    await window.supabaseDB
+                        .from('registros_mayor_detalle')
+                        .delete()
+                        .eq('conciliacion_id', conciliacionId);
+
+                    for (let i = 0; i < totalChunks; i++) {
+                        const chunk = registrosDelMayor.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+                        const registrosChunk = {
+                            id: `${conciliacionId}_chunk_${i}`,
+                            conciliacion_id: conciliacionId,
+                            chunk_index: i,
+                            total_chunks: totalChunks,
+                            registros: chunk,
+                            created_at: new Date().toISOString()
+                        };
+
+                        const { error: chunkError } = await window.supabaseDB
+                            .from('registros_mayor_detalle')
+                            .upsert(registrosChunk, { onConflict: 'id' });
+
+                        if (chunkError) {
+                            console.warn(`⚠️ Error guardando chunk ${i + 1}/${totalChunks}:`, chunkError.message);
+                            // Continuar sin los registros detallados
+                            break;
+                        } else {
+                            console.log(`   ✓ Chunk ${i + 1}/${totalChunks} guardado`);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('⚠️ No se pudieron guardar registros en tabla auxiliar (puede que no exista):', e.message);
+                    console.warn('   Para habilitar, ejecute: CREATE TABLE registros_mayor_detalle (id TEXT PRIMARY KEY, conciliacion_id TEXT, chunk_index INT, total_chunks INT, registros JSONB, created_at TIMESTAMPTZ);');
+                }
+            }
+
+            // Si hay agrupaciones grandes excluidas, guardarlas por separado
+            if (excluirAgrupaciones && agrupacionesCount > 0) {
+                actualizarProgreso(`Guardando ${agrupacionesCount} agrupaciones...`);
+                console.log(`📤 Guardando ${agrupacionesCount} agrupaciones en tabla auxiliar...`);
+                try {
+                    const agrupacionesData = {
+                        id: `agrup_${conciliacionId}`,
+                        conciliacion_id: conciliacionId,
+                        agrupaciones: agrupacionesParaGuardar,
+                        created_at: new Date().toISOString()
+                    };
+
+                    const { error: agrupError } = await window.supabaseDB
+                        .from('agrupaciones_mayor_detalle')
+                        .upsert(agrupacionesData, { onConflict: 'id' });
+
+                    if (agrupError) {
+                        console.warn('⚠️ No se pudieron guardar agrupaciones en tabla auxiliar:', agrupError.message);
+                    } else {
+                        console.log('   ✓ Agrupaciones guardadas en tabla auxiliar');
+                    }
+                } catch (e) {
+                    console.warn('⚠️ No se pudieron guardar agrupaciones en tabla auxiliar:', e.message);
+                    console.warn('   Para habilitar, ejecute: CREATE TABLE agrupaciones_mayor_detalle (id TEXT PRIMARY KEY, conciliacion_id TEXT, agrupaciones JSONB, created_at TIMESTAMPTZ);');
+                }
+            }
+
+            actualizarProgreso('Guardando conciliación principal...');
+            console.log('📤 Guardando registro principal...');
             let { error } = await window.supabaseDB
                 .from('conciliaciones_mayor')
                 .upsert(registro, { onConflict: 'id' });
+
+            const tiempoGuardado = ((Date.now() - tiempoInicio) / 1000).toFixed(1);
+            console.log(`⏱️ Tiempo de guardado: ${tiempoGuardado}s`);
+            actualizarProgreso('Verificando guardado...');
 
             // Si falla por columnas faltantes de D/P, mostrar mensaje y guardar sin ellas
             if (error && error.message && (error.message.includes('Could not find') || error.code === '42703')) {
@@ -6190,22 +6376,27 @@ ADD COLUMN IF NOT EXISTS mayor_incluye_apertura BOOLEAN DEFAULT FALSE;
         stateMayores.conciliacionCargadaId = conciliacionId;
         stateMayores.conciliacionCargadaNombre = nombre;
 
+        actualizarProgreso('Actualizando listas...');
+
         // Recargar lista de conciliaciones
         conciliacionesMayorGuardadasLista = await cargarConciliacionesMayorGuardadas();
 
         // Guardar meses procesados por separado si hay datos
         if (Object.keys(stateMayores.mesesProcesados || {}).length > 0) {
+            actualizarProgreso('Guardando meses procesados...');
             await guardarMesesProcesadosSupabase();
         }
 
         // Actualizar botón
         actualizarBotonGestionConciliacionesMayor();
 
+        restaurarUI();
         cerrarModalGuardarConciliacionMayor();
         mostrarNotificacion('Conciliación guardada correctamente', 'success');
 
     } catch (error) {
         console.error('Error guardando conciliación:', error);
+        restaurarUI();
         alert('Error al guardar: ' + error.message);
     }
 }
