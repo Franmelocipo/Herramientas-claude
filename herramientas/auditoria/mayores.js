@@ -12667,10 +12667,14 @@ function renderizarPanelDeudoresProveedores() {
     } else {
         listaContainer.appendChild(fragment);
     }
+
+    // Inicializar event delegation para drag & drop (solo una vez)
+    initDragDropDelegation();
 }
 
 /**
  * Crear elemento DOM para una agrupación
+ * NOTA: Los event listeners de drag & drop se manejan por delegación en el contenedor padre
  */
 function crearElementoAgrupacion(agrupacion) {
     const expandida = stateMayores.agrupacionesExpandidas.has(agrupacion.id);
@@ -12679,13 +12683,8 @@ function crearElementoAgrupacion(agrupacion) {
     div.dataset.id = agrupacion.id;
     div.dataset.razonSocial = agrupacion.razonSocial;
 
-    // Hacer el elemento arrastrable
+    // Hacer el elemento arrastrable (los eventos se manejan por delegación)
     div.draggable = true;
-    div.addEventListener('dragstart', handleDragStartAgrupacion);
-    div.addEventListener('dragend', handleDragEndAgrupacion);
-    div.addEventListener('dragover', handleDragOverAgrupacion);
-    div.addEventListener('dragleave', handleDragLeaveAgrupacion);
-    div.addEventListener('drop', handleDropAgrupacion);
 
     const claseSaldo = agrupacion.saldo >= 0 ? 'debe' : 'haber';
     const iconoExpansion = expandida ? '▼' : '▶';
@@ -12721,83 +12720,151 @@ function crearElementoAgrupacion(agrupacion) {
 
 // ============================================
 // FUNCIONES DE DRAG & DROP PARA FUSIONAR GRUPOS
+// (Optimizado con Event Delegation y Throttling)
 // ============================================
 
 let draggedAgrupacionId = null;
+let draggedElement = null;
+let currentDragOverElement = null;
+let dragDelegationInitialized = false;
 
 /**
- * Manejar inicio de arrastre de agrupación
+ * Throttle function para limitar llamadas frecuentes
  */
-function handleDragStartAgrupacion(e) {
-    draggedAgrupacionId = this.dataset.id;
-    this.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', this.dataset.id);
-
-    // Añadir clase al contenedor para indicar modo de arrastre
-    document.getElementById('listaAgrupacionesDP')?.classList.add('drag-mode');
+function throttle(func, limit) {
+    let inThrottle;
+    return function(...args) {
+        if (!inThrottle) {
+            func.apply(this, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    };
 }
 
 /**
- * Manejar fin de arrastre de agrupación
+ * Inicializar event delegation para drag & drop
+ * Se llama una sola vez cuando se carga la página
  */
-function handleDragEndAgrupacion(e) {
-    this.classList.remove('dragging');
-    draggedAgrupacionId = null;
+function initDragDropDelegation() {
+    if (dragDelegationInitialized) return;
 
-    // Quitar clase de modo arrastre
-    document.getElementById('listaAgrupacionesDP')?.classList.remove('drag-mode');
+    const container = document.getElementById('listaAgrupacionesDP');
+    if (!container) return;
 
-    // Limpiar todos los indicadores de drop
-    document.querySelectorAll('.agrupacion-item.drag-over').forEach(el => {
-        el.classList.remove('drag-over');
+    // Dragstart - delegado
+    container.addEventListener('dragstart', (e) => {
+        const agrupacionItem = e.target.closest('.agrupacion-item');
+        if (!agrupacionItem) return;
+
+        draggedAgrupacionId = agrupacionItem.dataset.id;
+        draggedElement = agrupacionItem;
+        agrupacionItem.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', agrupacionItem.dataset.id);
+        container.classList.add('drag-mode');
     });
+
+    // Dragend - delegado
+    container.addEventListener('dragend', (e) => {
+        if (draggedElement) {
+            draggedElement.classList.remove('dragging');
+        }
+        draggedAgrupacionId = null;
+        draggedElement = null;
+        container.classList.remove('drag-mode');
+
+        // Limpiar indicador de drop anterior de forma eficiente
+        if (currentDragOverElement) {
+            currentDragOverElement.classList.remove('drag-over');
+            currentDragOverElement = null;
+        }
+    });
+
+    // Dragover - delegado con throttling (máximo 30 veces por segundo)
+    const throttledDragOver = throttle((e, agrupacionItem) => {
+        // Limpiar elemento anterior
+        if (currentDragOverElement && currentDragOverElement !== agrupacionItem) {
+            currentDragOverElement.classList.remove('drag-over');
+        }
+
+        // No permitir soltar sobre sí mismo
+        if (agrupacionItem.dataset.id === draggedAgrupacionId) {
+            currentDragOverElement = null;
+            return;
+        }
+
+        agrupacionItem.classList.add('drag-over');
+        currentDragOverElement = agrupacionItem;
+    }, 33); // ~30fps
+
+    container.addEventListener('dragover', (e) => {
+        const agrupacionItem = e.target.closest('.agrupacion-item');
+        if (!agrupacionItem || !draggedAgrupacionId) return;
+
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        throttledDragOver(e, agrupacionItem);
+    });
+
+    // Dragleave - delegado
+    container.addEventListener('dragleave', (e) => {
+        const agrupacionItem = e.target.closest('.agrupacion-item');
+        if (!agrupacionItem) return;
+
+        // Solo quitar la clase si realmente salimos del elemento
+        const relatedTarget = e.relatedTarget?.closest('.agrupacion-item');
+        if (relatedTarget !== agrupacionItem) {
+            agrupacionItem.classList.remove('drag-over');
+            if (currentDragOverElement === agrupacionItem) {
+                currentDragOverElement = null;
+            }
+        }
+    });
+
+    // Drop - delegado
+    container.addEventListener('drop', (e) => {
+        const agrupacionItem = e.target.closest('.agrupacion-item');
+        if (!agrupacionItem) return;
+
+        e.preventDefault();
+        agrupacionItem.classList.remove('drag-over');
+        currentDragOverElement = null;
+
+        const origenId = e.dataTransfer.getData('text/plain');
+        const destinoId = agrupacionItem.dataset.id;
+
+        // No fusionar consigo mismo
+        if (origenId === destinoId) return;
+
+        // Obtener nombres para confirmación
+        const origenRazonSocial = draggedElement?.dataset.razonSocial || 'Origen';
+        const destinoRazonSocial = agrupacionItem.dataset.razonSocial || 'Destino';
+
+        if (confirm(`¿Fusionar "${origenRazonSocial}" con "${destinoRazonSocial}"?\n\nTodos los registros de "${origenRazonSocial}" se moverán a "${destinoRazonSocial}".`)) {
+            fusionarAgrupaciones(origenId, destinoId);
+        }
+    });
+
+    dragDelegationInitialized = true;
+    console.log('✅ Event delegation para drag & drop inicializado');
 }
 
-/**
- * Manejar arrastre sobre una agrupación
- */
+// Funciones legacy mantenidas para compatibilidad (ya no se usan directamente)
+function handleDragStartAgrupacion(e) {
+    // Manejado por delegación
+}
+function handleDragEndAgrupacion(e) {
+    // Manejado por delegación
+}
 function handleDragOverAgrupacion(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-
-    // No permitir soltar sobre sí mismo
-    if (this.dataset.id === draggedAgrupacionId) {
-        return;
-    }
-
-    this.classList.add('drag-over');
+    // Manejado por delegación
 }
-
-/**
- * Manejar salida del arrastre de una agrupación
- */
 function handleDragLeaveAgrupacion(e) {
-    this.classList.remove('drag-over');
+    // Manejado por delegación
 }
-
-/**
- * Manejar soltar sobre una agrupación (fusionar)
- */
 function handleDropAgrupacion(e) {
-    e.preventDefault();
-    this.classList.remove('drag-over');
-
-    const origenId = e.dataTransfer.getData('text/plain');
-    const destinoId = this.dataset.id;
-
-    // No fusionar consigo mismo
-    if (origenId === destinoId) {
-        return;
-    }
-
-    // Confirmar fusión
-    const origenRazonSocial = document.querySelector(`.agrupacion-item[data-id="${origenId}"]`)?.dataset.razonSocial || 'Origen';
-    const destinoRazonSocial = this.dataset.razonSocial || 'Destino';
-
-    if (confirm(`¿Fusionar "${origenRazonSocial}" con "${destinoRazonSocial}"?\n\nTodos los registros de "${origenRazonSocial}" se moverán a "${destinoRazonSocial}".`)) {
-        fusionarAgrupaciones(origenId, destinoId);
-    }
+    // Manejado por delegación
 }
 
 /**
