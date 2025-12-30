@@ -5206,14 +5206,60 @@ async function cargarConciliacionMayorGuardada(conciliacionId) {
         const agrupacionesGuardadas = conciliacion.agrupaciones_razon_social || conciliacion.agrupacionesRazonSocial;
 
         if (agrupacionesGuardadas && Object.keys(agrupacionesGuardadas).length > 0) {
-            stateMayores.agrupacionesRazonSocial = agrupacionesGuardadas;
-            // Restaurar variantes como Sets
-            for (const agrupacion of Object.values(stateMayores.agrupacionesRazonSocial)) {
-                if (agrupacion.variantes && !(agrupacion.variantes instanceof Set)) {
-                    agrupacion.variantes = new Set(agrupacion.variantes);
-                }
+            // Crear mapa de registros por ID para búsqueda rápida
+            const registrosPorId = new Map();
+            for (const reg of stateMayores.registrosMayor) {
+                registrosPorId.set(reg.id, reg);
             }
-            stateMayores.registrosSinAsignar = conciliacion.registros_sin_asignar || conciliacion.registrosSinAsignar || [];
+
+            // Restaurar agrupaciones reconstruyendo los registros desde IDs
+            stateMayores.agrupacionesRazonSocial = {};
+            for (const [key, agrupGuardada] of Object.entries(agrupacionesGuardadas)) {
+                // Verificar si es formato optimizado (tiene registroIds) o formato antiguo (tiene registros)
+                let registrosAgrupacion = [];
+                if (agrupGuardada.registroIds && Array.isArray(agrupGuardada.registroIds)) {
+                    // Formato optimizado: reconstruir registros desde IDs
+                    registrosAgrupacion = agrupGuardada.registroIds
+                        .map(id => registrosPorId.get(id))
+                        .filter(r => r !== undefined);
+                } else if (agrupGuardada.registros && Array.isArray(agrupGuardada.registros)) {
+                    // Formato antiguo: usar registros directamente
+                    registrosAgrupacion = agrupGuardada.registros;
+                }
+
+                stateMayores.agrupacionesRazonSocial[key] = {
+                    razonSocial: agrupGuardada.razonSocial,
+                    variantes: agrupGuardada.variantes ? new Set(agrupGuardada.variantes) : new Set(),
+                    registros: registrosAgrupacion,
+                    saldoDebe: agrupGuardada.saldoDebe || 0,
+                    saldoHaber: agrupGuardada.saldoHaber || 0,
+                    saldo: agrupGuardada.saldo || 0,
+                    saldoInicio: agrupGuardada.saldoInicio || 0,
+                    saldoCierre: agrupGuardada.saldoCierre,
+                    saldoCalculado: agrupGuardada.saldoCalculado || 0,
+                    diferencia: agrupGuardada.diferencia,
+                    razonSocialSaldoInicio: agrupGuardada.razonSocialSaldoInicio || null,
+                    razonSocialSaldoCierre: agrupGuardada.razonSocialSaldoCierre || null
+                };
+            }
+
+            // Restaurar registros sin asignar
+            const registrosSinAsignarGuardados = conciliacion.registros_sin_asignar || conciliacion.registrosSinAsignar || [];
+            if (Array.isArray(registrosSinAsignarGuardados) && registrosSinAsignarGuardados.length > 0) {
+                // Verificar si son IDs o registros completos
+                if (typeof registrosSinAsignarGuardados[0] === 'string') {
+                    // Son IDs: reconstruir
+                    stateMayores.registrosSinAsignar = registrosSinAsignarGuardados
+                        .map(id => registrosPorId.get(id))
+                        .filter(r => r !== undefined);
+                } else {
+                    // Son registros completos
+                    stateMayores.registrosSinAsignar = registrosSinAsignarGuardados;
+                }
+            } else {
+                stateMayores.registrosSinAsignar = [];
+            }
+
             console.log(`📂 Agrupaciones restauradas desde Supabase: ${Object.keys(stateMayores.agrupacionesRazonSocial).length}`);
         } else {
             // Si no hay agrupaciones guardadas, procesarlas desde los registros
@@ -5825,22 +5871,38 @@ async function ejecutarGuardarConciliacionMayor() {
     let notasAjustesParaGuardar = null;
 
     if (tipoMayorId === 'deudores_proveedores') {
-        // Convertir Sets de variantes a Arrays para poder serializar
+        // Optimización: NO guardar el array completo de registros en cada agrupación
+        // Solo guardamos metadatos esenciales para reducir el tamaño del payload
         agrupacionesParaGuardar = {};
         for (const [key, agrup] of Object.entries(stateMayores.agrupacionesRazonSocial)) {
+            // Guardar solo datos esenciales, SIN el array de registros
             agrupacionesParaGuardar[key] = {
-                ...agrup,
-                variantes: agrup.variantes ? Array.from(agrup.variantes) : []
+                razonSocial: agrup.razonSocial,
+                variantes: agrup.variantes ? Array.from(agrup.variantes) : [],
+                // Guardar solo IDs de registros en lugar del array completo
+                registroIds: (agrup.registros || []).map(r => r.id),
+                cantidadRegistros: (agrup.registros || []).length,
+                // Saldos calculados
+                saldoDebe: agrup.saldoDebe || 0,
+                saldoHaber: agrup.saldoHaber || 0,
+                saldo: agrup.saldo || 0,
+                saldoInicio: agrup.saldoInicio || 0,
+                saldoCierre: agrup.saldoCierre,
+                saldoCalculado: agrup.saldoCalculado || 0,
+                diferencia: agrup.diferencia,
+                // Referencias de saldos
+                razonSocialSaldoInicio: agrup.razonSocialSaldoInicio || null,
+                razonSocialSaldoCierre: agrup.razonSocialSaldoCierre || null
             };
         }
-        registrosSinAsignarParaGuardar = stateMayores.registrosSinAsignar || [];
+        registrosSinAsignarParaGuardar = (stateMayores.registrosSinAsignar || []).map(r => r.id);
         saldosInicioParaGuardar = stateMayores.saldosInicio || {};
         saldosCierreParaGuardar = stateMayores.saldosCierre || {};
         ajustesAuditoriaParaGuardar = stateMayores.ajustesAuditoria || {};
         notasAjustesParaGuardar = stateMayores.notasAjustesAuditoria || {};
 
         // Log para depuración
-        console.log(`📋 Datos de D/P a guardar:`);
+        console.log(`📋 Datos de D/P a guardar (optimizado):`);
         console.log(`   - Agrupaciones: ${Object.keys(agrupacionesParaGuardar).length}`);
         console.log(`   - Saldos inicio: ${Object.keys(saldosInicioParaGuardar).length}`);
         console.log(`   - Saldos cierre: ${Object.keys(saldosCierreParaGuardar).length}`);
