@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Convertidor de Extractos - Mercado Pago</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- PDF.js para parsear PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <!-- CDN de Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Configuración de Supabase -->
@@ -51,8 +53,9 @@
             <div class="selector-formato-container">
                 <label for="selector-formato">Formato del archivo:</label>
                 <select id="selector-formato" class="selector-cliente">
-                    <option value="liquidaciones">Liquidaciones (TIPO DE REGISTRO, DESCRIPCIÓN...)</option>
-                    <option value="operaciones">Operaciones (TIPO DE OPERACIÓN, VALOR DE LA COMPRA...)</option>
+                    <option value="liquidaciones">Excel - Liquidaciones (TIPO DE REGISTRO, DESCRIPCIÓN...)</option>
+                    <option value="operaciones">Excel - Operaciones (TIPO DE OPERACIÓN, VALOR DE LA COMPRA...)</option>
+                    <option value="pdf">PDF - Resumen de Cuenta</option>
                 </select>
                 <div class="formato-descripcion" id="formatoDescripcion">
                     Formato estándar de liquidaciones de Mercado Pago
@@ -60,16 +63,16 @@
             </div>
 
             <div class="file-input-wrapper">
-                <label>Seleccionar archivo(s) de Excel de Mercado Pago</label>
+                <label id="fileInputLabel">Seleccionar archivo(s) de Mercado Pago</label>
                 <div id="dropZone">
                     <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
                     <div style="font-size: 16px; color: #4a5568; margin-bottom: 10px;">
                         <strong>Arrastra archivos aquí</strong> o haz clic para seleccionar
                     </div>
-                    <div style="font-size: 14px; color: #718096;">
-                        Puedes seleccionar múltiples archivos (Ctrl+Click o Cmd+Click)
+                    <div style="font-size: 14px; color: #718096;" id="fileTypeHint">
+                        Puedes seleccionar múltiples archivos Excel (Ctrl+Click o Cmd+Click)
                     </div>
-                    <input type="file" id="fileInput" accept=".xlsx,.xls" multiple style="display: none;">
+                    <input type="file" id="fileInput" accept=".xlsx,.xls,.pdf" multiple style="display: none;">
                 </div>
                 <div id="fileList">
                     <strong>Archivos seleccionados:</strong>
@@ -84,12 +87,17 @@
             <div class="info-box">
                 <h3>ℹ️ Instrucciones:</h3>
                 <ul>
-                    <li>Puedes seleccionar uno o varios archivos de Excel simultáneamente</li>
-                    <li><strong>Formato Liquidaciones:</strong> Procesa registros de tipo "Dinero liquidado" (Pago, Extracción, Devolución, Rendimientos, Cashback)</li>
-                    <li><strong>Formato Operaciones:</strong> Procesa registros con columnas TIPO DE OPERACIÓN, VALOR DE LA COMPRA (Pagos aprobados)</li>
-                    <li>Cada movimiento se desagrega mostrando comisiones, impuestos y reintegros</li>
-                    <li>Los reintegros por cupones/descuentos (OPERATION_TAGS) se muestran como créditos</li>
+                    <li><strong>Excel - Liquidaciones:</strong> Procesa registros de tipo "Dinero liquidado" (Pago, Extracción, Devolución, Rendimientos, Cashback)</li>
+                    <li><strong>Excel - Operaciones:</strong> Procesa registros con columnas TIPO DE OPERACIÓN, VALOR DE LA COMPRA (Pagos aprobados)</li>
+                    <li><strong>PDF - Resumen de Cuenta:</strong> Extrae movimientos del PDF "Resumen de Cuenta" de Mercado Pago</li>
+                    <li>Para Excel puedes seleccionar múltiples archivos. Para PDF solo uno a la vez.</li>
                 </ul>
+            </div>
+
+            <!-- Metadata del PDF (solo visible cuando se procesa PDF) -->
+            <div id="pdfMetadata" class="info-box hidden" style="background: #e6fffa; border-left: 4px solid #38b2ac;">
+                <h3>📄 Información del Resumen</h3>
+                <div id="pdfMetadataContent"></div>
             </div>
         </div>
 
