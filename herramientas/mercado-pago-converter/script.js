@@ -333,7 +333,8 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
         return tipoOp.includes('pago aprobado') ||
                tipoOp.includes('devolución') ||
                tipoOp.includes('cashback') ||
-               tipoOp.includes('rendimiento');
+               tipoOp.includes('rendimiento') ||
+               tipoOp.includes('payouts');
     });
 
     console.log(`  Registros filtrados (formato operaciones): ${filteredData.length}`);
