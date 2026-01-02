@@ -141,6 +141,30 @@ h1 {
     border-color: #0ea5e9;
 }
 
+/* Selector de formato */
+.selector-formato-container {
+    background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
+    border: 2px solid #eab308;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.selector-formato-container label {
+    display: block;
+    font-size: 15px;
+    font-weight: 600;
+    color: #a16207;
+    margin-bottom: 12px;
+}
+
+.formato-descripcion {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #78716c;
+    font-style: italic;
+}
+
 .file-input-wrapper {
     margin: 20px 0;
 }
