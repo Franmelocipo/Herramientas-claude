@@ -380,8 +380,8 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
             saldoAcumulado += montoNeto;
 
             // Comisiones y costos
+            // COMISIÓN MÁS IVA y COMISIÓN DE MERCADO LIBRE MÁS IVA son el mismo dato en diferentes columnas, usar solo una
             const comisionMP = Math.abs(parseFloat(row['COMISIÓN MÁS IVA']) || 0);
-            const comisionML = Math.abs(parseFloat(row['COMISIÓN DE MERCADO LIBRE MÁS IVA']) || 0);
             const comisionCuotas = Math.abs(parseFloat(row['COMISIÓN POR OFRECER CUOTAS SIN INTERÉS']) || 0);
             const costoEnvio = Math.abs(parseFloat(row['COSTO DE ENVÍO']) || 0);
             const impuestosIIBB = Math.abs(parseFloat(row['IMPUESTOS COBRADOS POR RETENCIONES IIBB']) || 0);
@@ -411,14 +411,13 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
             }
 
             // Comisión MP
-            const comisionTotal = comisionMP + comisionML;
-            if (comisionTotal > 0) {
+            if (comisionMP > 0) {
                 movimientosOperacion.push({
                     fecha,
                     descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Comisión Mercado Pago (incluye IVA)' : 'Comisión Mercado Pago (incluye IVA)'),
                     origen: 'Mercado Pago',
-                    credito: esDevolucion ? comisionTotal : 0,
-                    debito: esDevolucion ? 0 : comisionTotal,
+                    credito: esDevolucion ? comisionMP : 0,
+                    debito: esDevolucion ? 0 : comisionMP,
                     saldo: saldoAcumulado
                 });
             }
