@@ -513,9 +513,10 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
                     }
                 });
             } else if (impuestosIIBB > 0) {
+                // Si no hay detalle de impuestos, todo corresponde a Imp. Ley 25.413
                 movimientos.push({
                     fecha,
-                    descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Retenciones de Impuestos' : 'Retenciones de Impuestos'),
+                    descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Imp. Ley 25.413 - Débitos y Créditos Bancarios' : 'Imp. Ley 25.413 - Débitos y Créditos Bancarios'),
                     origen: 'Mercado Pago',
                     credito: esDevolucion ? impuestosIIBB : 0,
                     debito: esDevolucion ? 0 : impuestosIIBB,
