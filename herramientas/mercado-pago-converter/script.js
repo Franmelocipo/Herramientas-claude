@@ -513,9 +513,10 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
                     }
                 });
             } else if (impuestosIIBB > 0) {
+                // Si no hay detalle de impuestos, todo corresponde a Imp. Ley 25.413
                 movimientos.push({
                     fecha,
-                    descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Retenciones de Impuestos' : 'Retenciones de Impuestos'),
+                    descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Imp. Ley 25.413 - Débitos y Créditos Bancarios' : 'Imp. Ley 25.413 - Débitos y Créditos Bancarios'),
                     origen: 'Mercado Pago',
                     credito: esDevolucion ? impuestosIIBB : 0,
                     debito: esDevolucion ? 0 : impuestosIIBB,
@@ -862,28 +863,17 @@ async function processFile() {
 
         console.log('Total movimientos generados:', todosLosMovimientos.length);
 
-        // Ordenar movimientos por fecha ascendente (más antiguo primero)
-        todosLosMovimientos.sort((a, b) => {
-            // Convertir fecha DD/MM/YYYY a objeto Date para comparar
-            const parseFecha = (fechaStr) => {
-                if (!fechaStr) return new Date(0);
-                const partes = fechaStr.split('/');
-                if (partes.length === 3) {
-                    return new Date(partes[2], partes[1] - 1, partes[0]);
-                }
-                return new Date(0);
-            };
-            return parseFecha(a.fecha) - parseFecha(b.fecha);
-        });
+        // Invertir el orden de los movimientos (el último del archivo será el primero)
+        todosLosMovimientos.reverse();
 
-        // Recalcular saldos después del ordenamiento
+        // Recalcular saldos después de invertir el orden
         let saldoRecalculado = 0;
         todosLosMovimientos.forEach(mov => {
             saldoRecalculado += (mov.credito || 0) - (mov.debito || 0);
             mov.saldo = saldoRecalculado;
         });
 
-        console.log('Movimientos ordenados por fecha ascendente');
+        console.log('Movimientos invertidos (orden ascendente)');
 
         processedData = {
             movimientos: todosLosMovimientos,
