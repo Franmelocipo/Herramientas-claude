@@ -147,14 +147,37 @@ document.addEventListener('DOMContentLoaded', async () => {
         selectorFormato.addEventListener('change', (e) => {
             formatoSeleccionado = e.target.value;
 
-            // Actualizar descripción
+            // Actualizar descripción y configuración según formato
+            const fileTypeHint = document.getElementById('fileTypeHint');
+
             if (formatoDescripcion) {
                 if (formatoSeleccionado === 'liquidaciones') {
                     formatoDescripcion.textContent = 'Formato estándar de liquidaciones de Mercado Pago (columnas: TIPO DE REGISTRO, DESCRIPCIÓN, MONTO BRUTO...)';
-                } else {
+                    if (fileTypeHint) fileTypeHint.textContent = 'Puedes seleccionar múltiples archivos Excel (Ctrl+Click o Cmd+Click)';
+                    fileInput.accept = '.xlsx,.xls';
+                    fileInput.multiple = true;
+                } else if (formatoSeleccionado === 'operaciones') {
                     formatoDescripcion.textContent = 'Formato de operaciones (columnas: TIPO DE OPERACIÓN, VALOR DE LA COMPRA, MONTO NETO DE LA OPERACIÓN...)';
+                    if (fileTypeHint) fileTypeHint.textContent = 'Puedes seleccionar múltiples archivos Excel (Ctrl+Click o Cmd+Click)';
+                    fileInput.accept = '.xlsx,.xls';
+                    fileInput.multiple = true;
+                } else if (formatoSeleccionado === 'pdf') {
+                    formatoDescripcion.textContent = 'Resumen de Cuenta en PDF descargado desde Mercado Pago';
+                    if (fileTypeHint) fileTypeHint.textContent = 'Selecciona un archivo PDF de Resumen de Cuenta';
+                    fileInput.accept = '.pdf';
+                    fileInput.multiple = false;
                 }
             }
+
+            // Limpiar archivos seleccionados al cambiar formato
+            selectedFiles = [];
+            fileList.style.display = 'none';
+            fileListItems.innerHTML = '';
+            processBtn.disabled = true;
+
+            // Ocultar metadata de PDF si no es formato PDF
+            const pdfMetadata = document.getElementById('pdfMetadata');
+            if (pdfMetadata) pdfMetadata.classList.add('hidden');
 
             console.log('Formato seleccionado:', formatoSeleccionado);
         });
@@ -203,30 +226,63 @@ fileInput.addEventListener('change', (e) => {
 });
 
 function handleFiles(files) {
-    selectedFiles = Array.from(files).filter(file =>
-        file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
-    );
+    // Filtrar según el formato seleccionado
+    if (formatoSeleccionado === 'pdf') {
+        selectedFiles = Array.from(files).filter(file =>
+            file.name.toLowerCase().endsWith('.pdf')
+        );
 
-    if (selectedFiles.length > 0) {
-        processBtn.disabled = false;
-        processBtn.textContent = selectedFiles.length === 1
-            ? 'Procesar archivo'
-            : `Procesar ${selectedFiles.length} archivos`;
+        if (selectedFiles.length > 1) {
+            selectedFiles = [selectedFiles[0]]; // Solo permitir un PDF
+        }
 
-        // Mostrar lista de archivos
-        fileListItems.innerHTML = '';
-        selectedFiles.forEach((file, index) => {
+        if (selectedFiles.length > 0) {
+            processBtn.disabled = false;
+            processBtn.textContent = 'Procesar PDF';
+
+            fileListItems.innerHTML = '';
             const li = document.createElement('li');
-            li.textContent = `${index + 1}. ${file.name}`;
+            li.textContent = `1. ${selectedFiles[0].name}`;
             li.style.padding = '5px 0';
             fileListItems.appendChild(li);
-        });
-        fileList.style.display = 'block';
+            fileList.style.display = 'block';
 
-        errorBox.classList.add('hidden');
-        resultCard.classList.add('hidden');
+            errorBox.classList.add('hidden');
+            resultCard.classList.add('hidden');
+
+            // Ocultar metadata anterior
+            const pdfMetadata = document.getElementById('pdfMetadata');
+            if (pdfMetadata) pdfMetadata.classList.add('hidden');
+        } else {
+            alert('Por favor selecciona un archivo PDF válido');
+        }
     } else {
-        alert('Por favor selecciona archivos Excel válidos (.xlsx o .xls)');
+        // Excel
+        selectedFiles = Array.from(files).filter(file =>
+            file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+        );
+
+        if (selectedFiles.length > 0) {
+            processBtn.disabled = false;
+            processBtn.textContent = selectedFiles.length === 1
+                ? 'Procesar archivo'
+                : `Procesar ${selectedFiles.length} archivos`;
+
+            // Mostrar lista de archivos
+            fileListItems.innerHTML = '';
+            selectedFiles.forEach((file, index) => {
+                const li = document.createElement('li');
+                li.textContent = `${index + 1}. ${file.name}`;
+                li.style.padding = '5px 0';
+                fileListItems.appendChild(li);
+            });
+            fileList.style.display = 'block';
+
+            errorBox.classList.add('hidden');
+            resultCard.classList.add('hidden');
+        } else {
+            alert('Por favor selecciona archivos Excel válidos (.xlsx o .xls)');
+        }
     }
 }
 
@@ -317,6 +373,278 @@ function formatNumber(num) {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     }).format(num);
+}
+
+// ============================================
+// FUNCIONES PARA PROCESAR PDF
+// ============================================
+
+// Configurar PDF.js worker
+if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// Parsear número en formato argentino (1.234,56 o -1.234,56)
+function parsearNumeroArgentino(str) {
+    if (!str) return 0;
+    // Limpiar el string: quitar $ y espacios
+    let limpio = str.replace(/\$/g, '').trim();
+    // Detectar si es negativo
+    const esNegativo = limpio.includes('-');
+    limpio = limpio.replace(/-/g, '');
+    // Quitar puntos de miles y reemplazar coma por punto
+    limpio = limpio.replace(/\./g, '').replace(',', '.');
+    const numero = parseFloat(limpio) || 0;
+    return esNegativo ? -numero : numero;
+}
+
+// Extraer texto de todas las páginas del PDF
+async function extraerTextoPDF(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    let textoCompleto = [];
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+
+        // Obtener items con sus posiciones
+        const items = textContent.items.map(item => ({
+            text: item.str,
+            x: item.transform[4],
+            y: item.transform[5],
+            width: item.width
+        }));
+
+        textoCompleto.push({
+            pagina: i,
+            items: items
+        });
+    }
+
+    return textoCompleto;
+}
+
+// Procesar PDF de Resumen de Cuenta de Mercado Pago
+async function procesarPDF(file) {
+    console.log('=== PROCESANDO PDF ===');
+
+    const paginasTexto = await extraerTextoPDF(file);
+    console.log(`PDF tiene ${paginasTexto.length} páginas`);
+
+    // Extraer metadata de la primera página
+    const metadata = extraerMetadataPDF(paginasTexto[0]);
+    console.log('Metadata extraída:', metadata);
+
+    // Extraer movimientos de todas las páginas
+    const movimientos = [];
+
+    for (const pagina of paginasTexto) {
+        const movsPagina = extraerMovimientosPagina(pagina);
+        movimientos.push(...movsPagina);
+    }
+
+    console.log(`Total movimientos extraídos: ${movimientos.length}`);
+
+    return {
+        metadata,
+        movimientos
+    };
+}
+
+// Extraer metadata del PDF (titular, CVU, CUIT, período, saldos)
+function extraerMetadataPDF(primeraPagina) {
+    const items = primeraPagina.items;
+    const textoCompleto = items.map(i => i.text).join(' ');
+
+    const metadata = {
+        titular: '',
+        cvu: '',
+        cuit: '',
+        periodo: '',
+        saldoInicial: 0,
+        entradas: 0,
+        salidas: 0,
+        saldoFinal: 0
+    };
+
+    // Buscar patrones en el texto
+    for (let i = 0; i < items.length; i++) {
+        const texto = items[i].text.trim();
+
+        // CVU
+        if (texto === 'CVU:' && items[i + 1]) {
+            metadata.cvu = items[i + 1].text.trim();
+        }
+
+        // CUIT/CUIL
+        if ((texto === 'CUIT/CUIL:' || texto.includes('CUIT')) && items[i + 1]) {
+            const siguiente = items[i + 1].text.trim();
+            if (/^\d{11}$/.test(siguiente.replace(/-/g, ''))) {
+                metadata.cuit = siguiente;
+            }
+        }
+
+        // Período
+        if (texto === 'Período:' || texto.startsWith('Del ')) {
+            if (texto.startsWith('Del ')) {
+                metadata.periodo = texto;
+            } else if (items[i + 1]) {
+                metadata.periodo = items[i + 1].text.trim();
+            }
+        }
+
+        // Saldo inicial
+        if (texto === 'Saldo inicial:' && items[i + 1]) {
+            metadata.saldoInicial = parsearNumeroArgentino(items[i + 1].text);
+        }
+
+        // Entradas
+        if (texto === 'Entradas:' && items[i + 1]) {
+            metadata.entradas = parsearNumeroArgentino(items[i + 1].text);
+        }
+
+        // Salidas
+        if (texto === 'Salidas:' && items[i + 1]) {
+            metadata.salidas = parsearNumeroArgentino(items[i + 1].text);
+        }
+
+        // Saldo final
+        if (texto === 'Saldo final:' && items[i + 1]) {
+            metadata.saldoFinal = parsearNumeroArgentino(items[i + 1].text);
+        }
+    }
+
+    // Buscar titular (generalmente está después de "RESUMEN DE CUENTA")
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].text.includes('RESUMEN DE CUENTA') && items[i + 1]) {
+            // El siguiente texto que no sea vacío es probablemente el titular
+            for (let j = i + 1; j < Math.min(i + 5, items.length); j++) {
+                const posibleTitular = items[j].text.trim();
+                if (posibleTitular && !posibleTitular.includes('CVU') && posibleTitular.length > 3) {
+                    metadata.titular = posibleTitular;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    return metadata;
+}
+
+// Extraer movimientos de una página
+function extraerMovimientosPagina(pagina) {
+    const items = pagina.items;
+    const movimientos = [];
+
+    // Agrupar items por línea (mismo valor Y aproximado)
+    const lineas = {};
+    const toleranciaY = 3;
+
+    items.forEach(item => {
+        // Redondear Y para agrupar
+        const yKey = Math.round(item.y / toleranciaY) * toleranciaY;
+        if (!lineas[yKey]) {
+            lineas[yKey] = [];
+        }
+        lineas[yKey].push(item);
+    });
+
+    // Ordenar líneas de arriba a abajo (Y mayor = más arriba en PDF)
+    const lineasOrdenadas = Object.keys(lineas)
+        .map(Number)
+        .sort((a, b) => b - a)
+        .map(y => {
+            // Ordenar items de izquierda a derecha
+            return lineas[y].sort((a, b) => a.x - b.x);
+        });
+
+    // Regex para detectar fecha DD-MM-YYYY
+    const regexFecha = /^\d{2}-\d{2}-\d{4}$/;
+    // Regex para detectar ID de operación (11 dígitos)
+    const regexId = /^\d{10,12}$/;
+    // Regex para detectar valor monetario
+    const regexValor = /^\$\s*-?[\d.,]+$/;
+
+    let descripcionPendiente = '';
+
+    for (let i = 0; i < lineasOrdenadas.length; i++) {
+        const linea = lineasOrdenadas[i];
+        const textoLinea = linea.map(item => item.text.trim()).filter(t => t);
+
+        // Ignorar encabezados y pie de página
+        const textoCompleto = textoLinea.join(' ');
+        if (textoCompleto.includes('Fecha') && textoCompleto.includes('Descripción') && textoCompleto.includes('Saldo')) {
+            continue; // Es el header de columnas
+        }
+        if (textoCompleto.includes('Fecha de generación') || textoCompleto.includes('Mercado Libre S.R.L')) {
+            continue; // Es pie de página
+        }
+        if (/^\d+\/\d+$/.test(textoCompleto.trim())) {
+            continue; // Es número de página
+        }
+
+        // Buscar si la línea tiene una fecha al inicio
+        let fecha = null;
+        let descripcion = '';
+        let idOperacion = '';
+        let valor = null;
+        let saldo = null;
+
+        for (const item of linea) {
+            const texto = item.text.trim();
+
+            if (regexFecha.test(texto)) {
+                fecha = texto;
+            } else if (regexId.test(texto)) {
+                idOperacion = texto;
+            } else if (regexValor.test(texto)) {
+                // Si ya tenemos un valor, este es el saldo
+                if (valor !== null) {
+                    saldo = parsearNumeroArgentino(texto);
+                } else {
+                    valor = parsearNumeroArgentino(texto);
+                }
+            } else if (texto && !texto.includes('mercado pago') && texto.length > 1) {
+                // Es parte de la descripción
+                if (descripcion) {
+                    descripcion += ' ' + texto;
+                } else {
+                    descripcion = texto;
+                }
+            }
+        }
+
+        // Si tenemos fecha, es una línea de movimiento
+        if (fecha && valor !== null) {
+            // Si había descripción pendiente de línea anterior, concatenarla
+            if (descripcionPendiente) {
+                descripcion = descripcion + ' ' + descripcionPendiente;
+                descripcionPendiente = '';
+            }
+
+            movimientos.push({
+                fecha: fecha.replace(/-/g, '/'), // Convertir a DD/MM/YYYY
+                descripcion: descripcion.trim(),
+                idOperacion: idOperacion,
+                valor: valor,
+                saldo: saldo || 0,
+                credito: valor > 0 ? valor : 0,
+                debito: valor < 0 ? Math.abs(valor) : 0,
+                origen: 'Mercado Pago'
+            });
+        } else if (!fecha && descripcion && movimientos.length > 0) {
+            // Línea sin fecha = continuación de descripción del movimiento anterior
+            movimientos[movimientos.length - 1].descripcion += ' ' + descripcion.trim();
+        } else if (!fecha && descripcion && movimientos.length === 0) {
+            // Guardar como descripción pendiente
+            descripcionPendiente = descripcion;
+        }
+    }
+
+    return movimientos;
 }
 
 // Función para procesar formato de operaciones (nueva estructura)
@@ -558,11 +886,103 @@ async function processFile() {
     errorBox.classList.add('hidden');
     resultCard.classList.add('hidden');
 
+    // Ocultar metadata de PDF
+    const pdfMetadata = document.getElementById('pdfMetadata');
+    if (pdfMetadata) pdfMetadata.classList.add('hidden');
+
     try {
         let todosLosMovimientos = [];
         let totalRegistrosProcesados = 0;
         let saldoAcumulado = 0;
 
+        // ===== FORMATO PDF =====
+        if (formatoSeleccionado === 'pdf') {
+            const file = selectedFiles[0];
+            console.log(`Procesando PDF: ${file.name}`);
+
+            const resultado = await procesarPDF(file);
+
+            // Mostrar metadata
+            if (pdfMetadata && resultado.metadata) {
+                const meta = resultado.metadata;
+                const pdfMetadataContent = document.getElementById('pdfMetadataContent');
+                if (pdfMetadataContent) {
+                    pdfMetadataContent.innerHTML = `
+                        <p><strong>Titular:</strong> ${meta.titular || 'No detectado'}</p>
+                        <p><strong>CVU:</strong> ${meta.cvu || 'No detectado'}</p>
+                        <p><strong>CUIT/CUIL:</strong> ${meta.cuit || 'No detectado'}</p>
+                        <p><strong>Período:</strong> ${meta.periodo || 'No detectado'}</p>
+                        <p><strong>Saldo inicial:</strong> ${formatNumber(meta.saldoInicial)}</p>
+                        <p><strong>Entradas:</strong> ${formatNumber(meta.entradas)}</p>
+                        <p><strong>Salidas:</strong> ${formatNumber(meta.salidas)}</p>
+                        <p><strong>Saldo final:</strong> ${formatNumber(meta.saldoFinal)}</p>
+                    `;
+                }
+                pdfMetadata.classList.remove('hidden');
+            }
+
+            // Los movimientos del PDF ya vienen en orden cronológico (de más viejo a más nuevo)
+            // No necesitamos invertirlos
+            todosLosMovimientos = resultado.movimientos;
+            totalRegistrosProcesados = resultado.movimientos.length;
+
+            // Recalcular saldos basándonos en el saldo inicial del PDF
+            let saldoRecalculado = resultado.metadata.saldoInicial || 0;
+            todosLosMovimientos.forEach(mov => {
+                saldoRecalculado += (mov.credito || 0) - (mov.debito || 0);
+                mov.saldo = saldoRecalculado;
+            });
+
+            console.log('Total movimientos PDF:', todosLosMovimientos.length);
+
+            // Saltar al final del procesamiento
+            processedData = {
+                movimientos: todosLosMovimientos,
+                totalRegistros: totalRegistrosProcesados,
+                totalMovimientos: todosLosMovimientos.length,
+                totalArchivos: 1,
+                esPDF: true,
+                metadata: resultado.metadata
+            };
+
+            // Mostrar resultados
+            resultStats.innerHTML = `
+                PDF procesado - ${processedData.totalMovimientos} movimientos extraídos
+                <br><small>Saldo inicial: ${formatNumber(resultado.metadata.saldoInicial)} → Saldo final: ${formatNumber(resultado.metadata.saldoFinal)}</small>
+            `;
+
+            // Limpiar tabla
+            tableBody.innerHTML = '';
+
+            // Mostrar primeros 100 movimientos
+            const movimientosAMostrar = processedData.movimientos.slice(0, 100);
+            movimientosAMostrar.forEach(mov => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${mov.fecha}</td>
+                    <td>${mov.descripcion}${mov.idOperacion ? ` <small style="color:#888">(${mov.idOperacion})</small>` : ''}</td>
+                    <td>${mov.origen}</td>
+                    <td class="text-right text-green">${mov.credito !== 0 ? formatNumber(mov.credito) : ''}</td>
+                    <td class="text-right text-red">${mov.debito !== 0 ? formatNumber(mov.debito) : ''}</td>
+                    <td class="text-right"><strong>${formatNumber(mov.saldo)}</strong></td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            if (processedData.movimientos.length > 100) {
+                tableFooter.textContent = `Mostrando los primeros 100 movimientos de ${processedData.movimientos.length} totales. Descarga el Excel para ver todos los movimientos.`;
+            } else {
+                tableFooter.textContent = '';
+            }
+
+            resultCard.classList.remove('hidden');
+
+            processBtn.innerHTML = 'Procesar PDF';
+            processBtn.disabled = false;
+            return;
+        }
+
+        // ===== FORMATOS EXCEL (liquidaciones y operaciones) =====
         // Procesar cada archivo
         for (let fileIndex = 0; fileIndex < selectedFiles.length; fileIndex++) {
             const file = selectedFiles[fileIndex];
