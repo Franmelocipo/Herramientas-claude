@@ -321,7 +321,7 @@ function formatNumber(num) {
 
 // Función para procesar formato de operaciones (nueva estructura)
 function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) {
-    const movimientos = [];
+    const gruposMovimientos = []; // Array de grupos (cada grupo es un array de movimientos de la misma operación)
     let saldoAcumulado = saldoAcumuladoInicial;
 
     // Filtrar registros - Solo pagos aprobados
@@ -341,6 +341,8 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
     // Procesar cada registro
     filteredData.forEach((row, index) => {
         try {
+            const movimientosOperacion = []; // Movimientos de esta operación
+
             // Usar FECHA DE LIBERACIÓN DEL DINERO o FECHA DE ORIGEN
             const fechaRaw = row['FECHA DE LIBERACIÓN DEL DINERO'] || row['FECHA DE ORIGEN'] || row['FECHA DE APROBACIÓN'];
             const fecha = formatFecha(fechaRaw);
@@ -397,7 +399,7 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
 
             // Solo agregar movimiento principal si tiene monto
             if (valorCompra !== 0) {
-                movimientos.push({
+                movimientosOperacion.push({
                     fecha,
                     descripcion: descripcionCompleta,
                     origen: 'Mercado Pago',
@@ -410,7 +412,7 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
             // Comisión MP
             const comisionTotal = comisionMP + comisionML;
             if (comisionTotal > 0) {
-                movimientos.push({
+                movimientosOperacion.push({
                     fecha,
                     descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Comisión Mercado Pago (incluye IVA)' : 'Comisión Mercado Pago (incluye IVA)'),
                     origen: 'Mercado Pago',
@@ -421,7 +423,7 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
             }
 
             if (comisionCuotas > 0) {
-                movimientos.push({
+                movimientosOperacion.push({
                     fecha,
                     descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Comisión por ofrecer cuotas sin interés' : 'Comisión por ofrecer cuotas sin interés'),
                     origen: 'Mercado Pago',
@@ -432,7 +434,7 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
             }
 
             if (costoEnvio > 0) {
-                movimientos.push({
+                movimientosOperacion.push({
                     fecha,
                     descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Costo de envío' : 'Costo de envío'),
                     origen: 'Mercado Pago',
@@ -447,7 +449,7 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
                 const esCuponDebito = cuponDescuento < 0;
                 const montoAbsoluto = Math.abs(cuponDescuento);
 
-                movimientos.push({
+                movimientosOperacion.push({
                     fecha,
                     descripcion: agregarIdOperacion('Cupón de descuento'),
                     origen: 'Mercado Pago',
@@ -477,7 +479,7 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
                                     ? 'Reintegro por cupón/descuento'
                                     : 'Reintegro';
 
-                                movimientos.push({
+                                movimientosOperacion.push({
                                     fecha,
                                     descripcion: agregarIdOperacion(descripcionReintegro),
                                     origen: 'Mercado Pago',
@@ -502,7 +504,7 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
                         const tipoImpuesto = getTipoImpuesto(impuesto.tipo, impuesto.entidad);
                         const descripcionImpuesto = esDevolucion ? `Devolución - ${tipoImpuesto}` : tipoImpuesto;
 
-                        movimientos.push({
+                        movimientosOperacion.push({
                             fecha,
                             descripcion: agregarIdOperacion(descripcionImpuesto),
                             origen: 'Mercado Pago',
@@ -514,7 +516,7 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
                 });
             } else if (impuestosIIBB > 0) {
                 // Si no hay detalle de impuestos, todo corresponde a Imp. Ley 25.413
-                movimientos.push({
+                movimientosOperacion.push({
                     fecha,
                     descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Imp. Ley 25.413 - Débitos y Créditos Bancarios' : 'Imp. Ley 25.413 - Débitos y Créditos Bancarios'),
                     origen: 'Mercado Pago',
@@ -524,13 +526,18 @@ function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) 
                 });
             }
 
+            // Agregar el grupo de movimientos de esta operación
+            if (movimientosOperacion.length > 0) {
+                gruposMovimientos.push(movimientosOperacion);
+            }
+
         } catch (rowError) {
             console.error('Error procesando fila (formato operaciones):', rowError);
         }
     });
 
     return {
-        movimientos,
+        gruposMovimientos,
         registrosProcesados: filteredData.length,
         saldoFinal: saldoAcumulado
     };
@@ -572,7 +579,13 @@ async function processFile() {
             // ===== FORMATO OPERACIONES =====
             if (formatoSeleccionado === 'operaciones') {
                 const resultado = procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumulado);
-                todosLosMovimientos = todosLosMovimientos.concat(resultado.movimientos);
+
+                // Invertir el orden de los grupos (operaciones) y luego aplanar
+                // Esto mantiene los movimientos de cada operación juntos pero invierte el orden de las operaciones
+                const gruposInvertidos = resultado.gruposMovimientos.reverse();
+                const movimientosAplanados = gruposInvertidos.flat();
+
+                todosLosMovimientos = todosLosMovimientos.concat(movimientosAplanados);
                 totalRegistrosProcesados += resultado.registrosProcesados;
                 saldoAcumulado = resultado.saldoFinal;
 
@@ -863,17 +876,21 @@ async function processFile() {
 
         console.log('Total movimientos generados:', todosLosMovimientos.length);
 
-        // Invertir el orden de los movimientos (el último del archivo será el primero)
-        todosLosMovimientos.reverse();
+        // Solo invertir para formato liquidaciones (operaciones ya se invierte al procesar grupos)
+        if (formatoSeleccionado === 'liquidaciones') {
+            // Invertir el orden de los movimientos (el último del archivo será el primero)
+            todosLosMovimientos.reverse();
+            console.log('Movimientos invertidos (formato liquidaciones)');
+        }
 
-        // Recalcular saldos después de invertir el orden
+        // Recalcular saldos después de invertir/reordenar
         let saldoRecalculado = 0;
         todosLosMovimientos.forEach(mov => {
             saldoRecalculado += (mov.credito || 0) - (mov.debito || 0);
             mov.saldo = saldoRecalculado;
         });
 
-        console.log('Movimientos invertidos (orden ascendente)');
+        console.log('Saldos recalculados');
 
         processedData = {
             movimientos: todosLosMovimientos,
