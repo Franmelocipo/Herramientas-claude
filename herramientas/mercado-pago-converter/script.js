@@ -433,6 +433,13 @@ async function procesarPDF(file) {
     const paginasTexto = await extraerTextoPDF(file);
     console.log(`PDF tiene ${paginasTexto.length} páginas`);
 
+    // Debug: mostrar todo el texto de la primera página
+    if (paginasTexto.length > 0) {
+        console.log('=== CONTENIDO PRIMERA PÁGINA ===');
+        const textosPagina1 = paginasTexto[0].items.map(i => i.text).filter(t => t.trim());
+        console.log('Textos encontrados:', textosPagina1.slice(0, 100));
+    }
+
     // Extraer metadata de la primera página
     const metadata = extraerMetadataPDF(paginasTexto[0]);
     console.log('Metadata extraída:', metadata);
@@ -442,6 +449,7 @@ async function procesarPDF(file) {
 
     for (const pagina of paginasTexto) {
         const movsPagina = extraerMovimientosPagina(pagina);
+        console.log(`Página ${pagina.pagina}: ${movsPagina.length} movimientos`);
         movimientos.push(...movsPagina);
     }
 
@@ -456,7 +464,10 @@ async function procesarPDF(file) {
 // Extraer metadata del PDF (titular, CVU, CUIT, período, saldos)
 function extraerMetadataPDF(primeraPagina) {
     const items = primeraPagina.items;
-    const textoCompleto = items.map(i => i.text).join(' ');
+    const textos = items.map(i => i.text.trim()).filter(t => t);
+    const textoCompleto = textos.join(' ');
+
+    console.log('=== BUSCANDO METADATA ===');
 
     const metadata = {
         titular: '',
@@ -469,61 +480,76 @@ function extraerMetadataPDF(primeraPagina) {
         saldoFinal: 0
     };
 
-    // Buscar patrones en el texto
-    for (let i = 0; i < items.length; i++) {
-        const texto = items[i].text.trim();
+    // Buscar en el texto completo usando regex
+    // CVU
+    const cvuMatch = textoCompleto.match(/CVU[:\s]*(\d{22,24})/i);
+    if (cvuMatch) {
+        metadata.cvu = cvuMatch[1];
+        console.log('CVU encontrado:', metadata.cvu);
+    }
 
-        // CVU
-        if (texto === 'CVU:' && items[i + 1]) {
-            metadata.cvu = items[i + 1].text.trim();
-        }
+    // CUIT/CUIL
+    const cuitMatch = textoCompleto.match(/CUIT[\/CUIL:\s]*(\d{2}-?\d{8}-?\d{1}|\d{11})/i);
+    if (cuitMatch) {
+        metadata.cuit = cuitMatch[1];
+        console.log('CUIT encontrado:', metadata.cuit);
+    }
 
-        // CUIT/CUIL
-        if ((texto === 'CUIT/CUIL:' || texto.includes('CUIT')) && items[i + 1]) {
-            const siguiente = items[i + 1].text.trim();
-            if (/^\d{11}$/.test(siguiente.replace(/-/g, ''))) {
-                metadata.cuit = siguiente;
+    // Período
+    const periodoMatch = textoCompleto.match(/(?:Período[:\s]*)?Del\s+\d+\s+al\s+\d+\s+de\s+\w+\s+de\s+\d{4}/i);
+    if (periodoMatch) {
+        metadata.periodo = periodoMatch[0].replace(/^Período[:\s]*/i, '');
+        console.log('Período encontrado:', metadata.periodo);
+    }
+
+    // Buscar valores monetarios con etiquetas
+    for (let i = 0; i < textos.length; i++) {
+        const texto = textos[i].toLowerCase();
+
+        // Buscar el valor en los siguientes items
+        const buscarValor = (inicio) => {
+            for (let j = inicio; j < Math.min(inicio + 3, textos.length); j++) {
+                const valor = textos[j];
+                if (valor.includes('$') || /^-?[\d.,]+$/.test(valor.replace(/\s/g, ''))) {
+                    return parsearNumeroArgentino(valor);
+                }
             }
-        }
+            return 0;
+        };
 
-        // Período
-        if (texto === 'Período:' || texto.startsWith('Del ')) {
-            if (texto.startsWith('Del ')) {
-                metadata.periodo = texto;
-            } else if (items[i + 1]) {
-                metadata.periodo = items[i + 1].text.trim();
-            }
+        if (texto.includes('saldo inicial')) {
+            metadata.saldoInicial = buscarValor(i + 1);
+            console.log('Saldo inicial:', metadata.saldoInicial);
         }
-
-        // Saldo inicial
-        if (texto === 'Saldo inicial:' && items[i + 1]) {
-            metadata.saldoInicial = parsearNumeroArgentino(items[i + 1].text);
+        if (texto === 'entradas:' || texto === 'entradas') {
+            metadata.entradas = buscarValor(i + 1);
+            console.log('Entradas:', metadata.entradas);
         }
-
-        // Entradas
-        if (texto === 'Entradas:' && items[i + 1]) {
-            metadata.entradas = parsearNumeroArgentino(items[i + 1].text);
+        if (texto === 'salidas:' || texto === 'salidas') {
+            metadata.salidas = buscarValor(i + 1);
+            console.log('Salidas:', metadata.salidas);
         }
-
-        // Salidas
-        if (texto === 'Salidas:' && items[i + 1]) {
-            metadata.salidas = parsearNumeroArgentino(items[i + 1].text);
-        }
-
-        // Saldo final
-        if (texto === 'Saldo final:' && items[i + 1]) {
-            metadata.saldoFinal = parsearNumeroArgentino(items[i + 1].text);
+        if (texto.includes('saldo final')) {
+            metadata.saldoFinal = buscarValor(i + 1);
+            console.log('Saldo final:', metadata.saldoFinal);
         }
     }
 
     // Buscar titular (generalmente está después de "RESUMEN DE CUENTA")
-    for (let i = 0; i < items.length; i++) {
-        if (items[i].text.includes('RESUMEN DE CUENTA') && items[i + 1]) {
-            // El siguiente texto que no sea vacío es probablemente el titular
-            for (let j = i + 1; j < Math.min(i + 5, items.length); j++) {
-                const posibleTitular = items[j].text.trim();
-                if (posibleTitular && !posibleTitular.includes('CVU') && posibleTitular.length > 3) {
+    for (let i = 0; i < textos.length; i++) {
+        if (textos[i].includes('RESUMEN DE CUENTA') || textos[i].includes('RESUMEN')) {
+            // El siguiente texto que no sea vacío y parezca un nombre
+            for (let j = i + 1; j < Math.min(i + 10, textos.length); j++) {
+                const posibleTitular = textos[j];
+                if (posibleTitular &&
+                    !posibleTitular.includes('CVU') &&
+                    !posibleTitular.includes('CUIT') &&
+                    !posibleTitular.includes('$') &&
+                    !posibleTitular.match(/^\d+$/) &&
+                    posibleTitular.length > 3 &&
+                    posibleTitular.match(/[A-Z]/i)) {
                     metadata.titular = posibleTitular;
+                    console.log('Titular encontrado:', metadata.titular);
                     break;
                 }
             }
@@ -541,9 +567,11 @@ function extraerMovimientosPagina(pagina) {
 
     // Agrupar items por línea (mismo valor Y aproximado)
     const lineas = {};
-    const toleranciaY = 3;
+    const toleranciaY = 5; // Aumentar tolerancia
 
     items.forEach(item => {
+        if (!item.text.trim()) return; // Ignorar items vacíos
+
         // Redondear Y para agrupar
         const yKey = Math.round(item.y / toleranciaY) * toleranciaY;
         if (!lineas[yKey]) {
@@ -561,22 +589,34 @@ function extraerMovimientosPagina(pagina) {
             return lineas[y].sort((a, b) => a.x - b.x);
         });
 
-    // Regex para detectar fecha DD-MM-YYYY
-    const regexFecha = /^\d{2}-\d{2}-\d{4}$/;
-    // Regex para detectar ID de operación (11 dígitos)
-    const regexId = /^\d{10,12}$/;
-    // Regex para detectar valor monetario
-    const regexValor = /^\$\s*-?[\d.,]+$/;
+    // Debug primera página
+    if (pagina.pagina === 1) {
+        console.log(`Página 1: ${lineasOrdenadas.length} líneas detectadas`);
+        lineasOrdenadas.slice(0, 20).forEach((linea, idx) => {
+            const textos = linea.map(i => i.text).join(' | ');
+            console.log(`Línea ${idx}: ${textos}`);
+        });
+    }
 
-    let descripcionPendiente = '';
+    // Regex más flexibles
+    const regexFecha = /^\d{2}-\d{2}-\d{4}$/;
+    const regexId = /^\d{9,12}$/;
+    // Regex más flexible para valores monetarios - puede o no tener $
+    const esValorMonetario = (texto) => {
+        // Detectar patrones como: $ 110.233,24 o -5.000.000,00 o $ -1.234,56
+        const limpio = texto.replace(/\s/g, '');
+        return /^\$?-?[\d.]+,\d{2}$/.test(limpio) || /^-?\$[\d.]+,\d{2}$/.test(limpio);
+    };
+
+    let ultimoMovimiento = null;
 
     for (let i = 0; i < lineasOrdenadas.length; i++) {
         const linea = lineasOrdenadas[i];
         const textoLinea = linea.map(item => item.text.trim()).filter(t => t);
+        const textoCompleto = textoLinea.join(' ');
 
         // Ignorar encabezados y pie de página
-        const textoCompleto = textoLinea.join(' ');
-        if (textoCompleto.includes('Fecha') && textoCompleto.includes('Descripción') && textoCompleto.includes('Saldo')) {
+        if (textoCompleto.includes('Descripción') && textoCompleto.includes('Saldo')) {
             continue; // Es el header de columnas
         }
         if (textoCompleto.includes('Fecha de generación') || textoCompleto.includes('Mercado Libre S.R.L')) {
@@ -585,29 +625,30 @@ function extraerMovimientosPagina(pagina) {
         if (/^\d+\/\d+$/.test(textoCompleto.trim())) {
             continue; // Es número de página
         }
+        if (textoCompleto.includes('RESUMEN DE CUENTA') || textoCompleto.includes('CVU:') || textoCompleto.includes('CUIT')) {
+            continue; // Es header del documento
+        }
+        if (textoCompleto.includes('Saldo inicial') || textoCompleto.includes('Entradas:') || textoCompleto.includes('Salidas:') || textoCompleto.includes('Saldo final')) {
+            continue; // Es resumen
+        }
 
         // Buscar si la línea tiene una fecha al inicio
         let fecha = null;
         let descripcion = '';
         let idOperacion = '';
-        let valor = null;
-        let saldo = null;
+        let valores = [];
 
         for (const item of linea) {
             const texto = item.text.trim();
+            if (!texto) continue;
 
             if (regexFecha.test(texto)) {
                 fecha = texto;
             } else if (regexId.test(texto)) {
                 idOperacion = texto;
-            } else if (regexValor.test(texto)) {
-                // Si ya tenemos un valor, este es el saldo
-                if (valor !== null) {
-                    saldo = parsearNumeroArgentino(texto);
-                } else {
-                    valor = parsearNumeroArgentino(texto);
-                }
-            } else if (texto && !texto.includes('mercado pago') && texto.length > 1) {
+            } else if (esValorMonetario(texto)) {
+                valores.push(parsearNumeroArgentino(texto));
+            } else if (texto.length > 1 && !texto.match(/^[\d\/]+$/) && texto !== 'mercado pago') {
                 // Es parte de la descripción
                 if (descripcion) {
                     descripcion += ' ' + texto;
@@ -617,30 +658,27 @@ function extraerMovimientosPagina(pagina) {
             }
         }
 
-        // Si tenemos fecha, es una línea de movimiento
-        if (fecha && valor !== null) {
-            // Si había descripción pendiente de línea anterior, concatenarla
-            if (descripcionPendiente) {
-                descripcion = descripcion + ' ' + descripcionPendiente;
-                descripcionPendiente = '';
-            }
+        // Si tenemos fecha y al menos un valor, es una línea de movimiento
+        if (fecha && valores.length >= 1) {
+            const valor = valores[0];
+            const saldo = valores.length >= 2 ? valores[1] : 0;
 
-            movimientos.push({
+            const mov = {
                 fecha: fecha.replace(/-/g, '/'), // Convertir a DD/MM/YYYY
                 descripcion: descripcion.trim(),
                 idOperacion: idOperacion,
                 valor: valor,
-                saldo: saldo || 0,
+                saldo: saldo,
                 credito: valor > 0 ? valor : 0,
                 debito: valor < 0 ? Math.abs(valor) : 0,
                 origen: 'Mercado Pago'
-            });
-        } else if (!fecha && descripcion && movimientos.length > 0) {
+            };
+
+            movimientos.push(mov);
+            ultimoMovimiento = mov;
+        } else if (!fecha && descripcion && ultimoMovimiento) {
             // Línea sin fecha = continuación de descripción del movimiento anterior
-            movimientos[movimientos.length - 1].descripcion += ' ' + descripcion.trim();
-        } else if (!fecha && descripcion && movimientos.length === 0) {
-            // Guardar como descripción pendiente
-            descripcionPendiente = descripcion;
+            ultimoMovimiento.descripcion += ' ' + descripcion.trim();
         }
     }
 
