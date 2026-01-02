@@ -5,6 +5,9 @@ let processedData = null;
 let clienteSeleccionadoId = null;
 let clienteSeleccionadoNombre = '';
 
+// Formato seleccionado
+let formatoSeleccionado = 'liquidaciones';
+
 const fileInput = document.getElementById('fileInput');
 const processBtn = document.getElementById('processBtn');
 const downloadBtn = document.getElementById('downloadBtn');
@@ -135,6 +138,27 @@ function habilitarCarga() {
 document.addEventListener('DOMContentLoaded', async () => {
     await cargarClientesEnSelector();
     deshabilitarCarga();
+
+    // Configurar selector de formato
+    const selectorFormato = document.getElementById('selector-formato');
+    const formatoDescripcion = document.getElementById('formatoDescripcion');
+
+    if (selectorFormato) {
+        selectorFormato.addEventListener('change', (e) => {
+            formatoSeleccionado = e.target.value;
+
+            // Actualizar descripción
+            if (formatoDescripcion) {
+                if (formatoSeleccionado === 'liquidaciones') {
+                    formatoDescripcion.textContent = 'Formato estándar de liquidaciones de Mercado Pago (columnas: TIPO DE REGISTRO, DESCRIPCIÓN, MONTO BRUTO...)';
+                } else {
+                    formatoDescripcion.textContent = 'Formato de operaciones (columnas: TIPO DE OPERACIÓN, VALOR DE LA COMPRA, MONTO NETO DE LA OPERACIÓN...)';
+                }
+            }
+
+            console.log('Formato seleccionado:', formatoSeleccionado);
+        });
+    }
 });
 
 // Click en la zona de arrastre abre el selector de archivos
@@ -295,9 +319,226 @@ function formatNumber(num) {
     }).format(num);
 }
 
+// Función para procesar formato de operaciones (nueva estructura)
+function procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumuladoInicial) {
+    const movimientos = [];
+    let saldoAcumulado = saldoAcumuladoInicial;
+
+    // Filtrar registros - Solo pagos aprobados
+    const filteredData = jsonData.filter(row => {
+        const tipoOperacion = row['TIPO DE OPERACIÓN'] || '';
+        const tipoOp = String(tipoOperacion).toLowerCase();
+
+        // Incluir pagos aprobados y otros tipos relevantes
+        return tipoOp.includes('pago aprobado') ||
+               tipoOp.includes('devolución') ||
+               tipoOp.includes('cashback') ||
+               tipoOp.includes('rendimiento');
+    });
+
+    console.log(`  Registros filtrados (formato operaciones): ${filteredData.length}`);
+
+    // Procesar cada registro
+    filteredData.forEach((row, index) => {
+        try {
+            // Usar FECHA DE LIBERACIÓN DEL DINERO o FECHA DE ORIGEN
+            const fechaRaw = row['FECHA DE LIBERACIÓN DEL DINERO'] || row['FECHA DE ORIGEN'] || row['FECHA DE APROBACIÓN'];
+            const fecha = formatFecha(fechaRaw);
+
+            const tipoOperacion = row['TIPO DE OPERACIÓN'] || 'Movimiento';
+
+            // ID de operación
+            let idOperacion = '';
+            if (row['ID DE OPERACIÓN EN MERCADO PAGO']) {
+                const id = row['ID DE OPERACIÓN EN MERCADO PAGO'];
+                idOperacion = Math.floor(id).toString();
+            }
+
+            const plataforma = row['PLATAFORMA DE COBRO'] || '';
+            const pagador = row['PAGADOR'] || '';
+            const medioPago = row['MEDIO DE PAGO'] || '';
+
+            // Construir descripción completa
+            let descripcionCompleta = tipoOperacion;
+            const detalles = [];
+            if (idOperacion) detalles.push(idOperacion);
+            if (plataforma) detalles.push(plataforma);
+            if (pagador) detalles.push(pagador);
+            if (detalles.length > 0) {
+                descripcionCompleta = `${tipoOperacion} - ${detalles.join(' - ')}`;
+            }
+
+            // Montos - usar nombres de columnas del nuevo formato
+            const valorCompra = parseFloat(row['VALOR DE LA COMPRA']) || 0;
+            const montoNeto = parseFloat(row['MONTO NETO DE LA OPERACIÓN QUE IMPACTÓ TU DINERO']) ||
+                              parseFloat(row['MONTO NETO DE OPERACIÓN']) || 0;
+
+            // Calcular saldo acumulado
+            saldoAcumulado += montoNeto;
+
+            // Comisiones y costos
+            const comisionMP = Math.abs(parseFloat(row['COMISIÓN MÁS IVA']) || 0);
+            const comisionML = Math.abs(parseFloat(row['COMISIÓN DE MERCADO LIBRE MÁS IVA']) || 0);
+            const comisionCuotas = Math.abs(parseFloat(row['COMISIÓN POR OFRECER CUOTAS SIN INTERÉS']) || 0);
+            const costoEnvio = Math.abs(parseFloat(row['COSTO DE ENVÍO']) || 0);
+            const impuestosIIBB = Math.abs(parseFloat(row['IMPUESTOS COBRADOS POR RETENCIONES IIBB']) || 0);
+            const cuponDescuento = parseFloat(row['CUPÓN DE DESCUENTO']) || 0;
+
+            // Determinar si es crédito o débito
+            const esCredito = valorCompra > 0;
+
+            // Detectar si es una devolución
+            const esDevolucion = String(tipoOperacion).toLowerCase().includes('devolución');
+
+            // Función auxiliar para agregar ID de operación a la descripción
+            const agregarIdOperacion = (desc) => {
+                return idOperacion ? `${desc} - ${idOperacion}` : desc;
+            };
+
+            // Solo agregar movimiento principal si tiene monto
+            if (valorCompra !== 0) {
+                movimientos.push({
+                    fecha,
+                    descripcion: descripcionCompleta,
+                    origen: 'Mercado Pago',
+                    credito: esCredito ? valorCompra : 0,
+                    debito: !esCredito ? Math.abs(valorCompra) : 0,
+                    saldo: saldoAcumulado
+                });
+            }
+
+            // Comisión MP
+            const comisionTotal = comisionMP + comisionML;
+            if (comisionTotal > 0) {
+                movimientos.push({
+                    fecha,
+                    descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Comisión Mercado Pago (incluye IVA)' : 'Comisión Mercado Pago (incluye IVA)'),
+                    origen: 'Mercado Pago',
+                    credito: esDevolucion ? comisionTotal : 0,
+                    debito: esDevolucion ? 0 : comisionTotal,
+                    saldo: saldoAcumulado
+                });
+            }
+
+            if (comisionCuotas > 0) {
+                movimientos.push({
+                    fecha,
+                    descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Comisión por ofrecer cuotas sin interés' : 'Comisión por ofrecer cuotas sin interés'),
+                    origen: 'Mercado Pago',
+                    credito: esDevolucion ? comisionCuotas : 0,
+                    debito: esDevolucion ? 0 : comisionCuotas,
+                    saldo: saldoAcumulado
+                });
+            }
+
+            if (costoEnvio > 0) {
+                movimientos.push({
+                    fecha,
+                    descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Costo de envío' : 'Costo de envío'),
+                    origen: 'Mercado Pago',
+                    credito: esDevolucion ? costoEnvio : 0,
+                    debito: esDevolucion ? 0 : costoEnvio,
+                    saldo: saldoAcumulado
+                });
+            }
+
+            // Cupón de descuento (si es negativo es débito, si es positivo es crédito)
+            if (cuponDescuento !== 0) {
+                const esCuponDebito = cuponDescuento < 0;
+                const montoAbsoluto = Math.abs(cuponDescuento);
+
+                movimientos.push({
+                    fecha,
+                    descripcion: agregarIdOperacion('Cupón de descuento'),
+                    origen: 'Mercado Pago',
+                    credito: esCuponDebito ? 0 : montoAbsoluto,
+                    debito: esCuponDebito ? montoAbsoluto : 0,
+                    saldo: saldoAcumulado
+                });
+            }
+
+            // Procesar OPERATION_TAGS para reintegros/cupones
+            const operationTags = row['OPERATION_TAGS'];
+            if (operationTags && String(operationTags) !== 'nan' && String(operationTags) !== '') {
+                try {
+                    let tagsStr = String(operationTags);
+                    if (tagsStr.startsWith('"') && tagsStr.endsWith('"')) {
+                        tagsStr = tagsStr.slice(1, -1);
+                    }
+                    tagsStr = tagsStr.replace(/\\"/g, '"');
+
+                    const tags = JSON.parse(tagsStr);
+
+                    if (Array.isArray(tags)) {
+                        tags.forEach(tag => {
+                            if (tag.amount && tag.amount > 0) {
+                                const tipoReintegro = tag.coupon_type || 'reintegro';
+                                const descripcionReintegro = tipoReintegro === 'coupon'
+                                    ? 'Reintegro por cupón/descuento'
+                                    : 'Reintegro';
+
+                                movimientos.push({
+                                    fecha,
+                                    descripcion: agregarIdOperacion(descripcionReintegro),
+                                    origen: 'Mercado Pago',
+                                    credito: tag.amount,
+                                    debito: 0,
+                                    saldo: saldoAcumulado
+                                });
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Error parseando OPERATION_TAGS:', operationTags, e);
+                }
+            }
+
+            // Impuestos desagregados
+            const impuestosDesagregados = parseImpuestosDesagregados(row['IMPUESTOS DESAGREGADOS']);
+
+            if (impuestosDesagregados.length > 0) {
+                impuestosDesagregados.forEach(impuesto => {
+                    if (impuesto.monto > 0) {
+                        const tipoImpuesto = getTipoImpuesto(impuesto.tipo, impuesto.entidad);
+                        const descripcionImpuesto = esDevolucion ? `Devolución - ${tipoImpuesto}` : tipoImpuesto;
+
+                        movimientos.push({
+                            fecha,
+                            descripcion: agregarIdOperacion(descripcionImpuesto),
+                            origen: 'Mercado Pago',
+                            credito: esDevolucion ? impuesto.monto : 0,
+                            debito: esDevolucion ? 0 : impuesto.monto,
+                            saldo: saldoAcumulado
+                        });
+                    }
+                });
+            } else if (impuestosIIBB > 0) {
+                movimientos.push({
+                    fecha,
+                    descripcion: agregarIdOperacion(esDevolucion ? 'Devolución - Retenciones de Impuestos' : 'Retenciones de Impuestos'),
+                    origen: 'Mercado Pago',
+                    credito: esDevolucion ? impuestosIIBB : 0,
+                    debito: esDevolucion ? 0 : impuestosIIBB,
+                    saldo: saldoAcumulado
+                });
+            }
+
+        } catch (rowError) {
+            console.error('Error procesando fila (formato operaciones):', rowError);
+        }
+    });
+
+    return {
+        movimientos,
+        registrosProcesados: filteredData.length,
+        saldoFinal: saldoAcumulado
+    };
+}
+
 async function processFile() {
     console.log('=== INICIANDO PROCESAMIENTO ===');
     console.log('Archivos seleccionados:', selectedFiles.length);
+    console.log('Formato seleccionado:', formatoSeleccionado);
 
     if (selectedFiles.length === 0) {
         alert('No hay archivos seleccionados');
@@ -327,6 +568,18 @@ async function processFile() {
 
             console.log(`  Total registros leídos: ${jsonData.length}`);
 
+            // ===== FORMATO OPERACIONES =====
+            if (formatoSeleccionado === 'operaciones') {
+                const resultado = procesarFormatoOperaciones(jsonData, fileIndex, saldoAcumulado);
+                todosLosMovimientos = todosLosMovimientos.concat(resultado.movimientos);
+                totalRegistrosProcesados += resultado.registrosProcesados;
+                saldoAcumulado = resultado.saldoFinal;
+
+                console.log(`  Movimientos generados hasta ahora: ${todosLosMovimientos.length}`);
+                continue; // Pasar al siguiente archivo
+            }
+
+            // ===== FORMATO LIQUIDACIONES (original) =====
             // Buscar el saldo inicial (Dinero disponible del período anterior)
             const periodoAnterior = jsonData.find(row =>
                 row['TIPO DE REGISTRO'] === 'Dinero disponible del período anterior'
